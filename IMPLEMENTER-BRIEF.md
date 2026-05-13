@@ -16,8 +16,6 @@ Don't restate it; read it.
 4. `IMPLEMENTATION.md` (reference TS types, schemas, registry sketch — the
    skeleton you're fleshing out)
 
-Skim `HOOKS-DESIGN-QUESTIONS.md` only if curious; it's historical rationale.
-
 `SPEC.md` is the only normative source. If `SPEC.md` and `IMPLEMENTATION.md`
 disagree, follow SPEC and flag the divergence in `NOTES.md` (see below).
 
@@ -208,7 +206,7 @@ node apps/caplet/dist/bin/caplet.js emit packages/core/test/fixtures/minimal --t
 ## What not to do
 
 - Do not modify root-level `SPEC.md`, `IMPLEMENTATION.md`, `CONTEXT.md`,
-  `README.md`, `HOOKS-DESIGN-QUESTIONS.md`. Those are the spec. If something
+  or `README.md`. Those are the spec. If something
   in them is wrong, write it up in `NOTES.md` and let the human decide.
 - Do not push to remote. Just commit on your branch.
 - Do not run destructive git ops (rebase root, force push, branch delete).

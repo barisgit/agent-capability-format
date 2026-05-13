@@ -188,5 +188,3 @@ may later become a sibling specification.
 - [IMPLEMENTATION.md](./IMPLEMENTATION.md) — TypeScript reference
   implementation notes: registry, schemas, resolver, caplet config, emission
   pipeline, diagnostics.
-- [HOOKS-DESIGN-QUESTIONS.md](./HOOKS-DESIGN-QUESTIONS.md) — decision
-  worksheet used to land the hook design (now consumed by SPEC.md).
