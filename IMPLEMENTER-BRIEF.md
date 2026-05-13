@@ -53,28 +53,49 @@ packages/
 
 If a slice doesn't fit cleanly, deviate — but document why in `NOTES.md`.
 
-## Tech choices (locked)
+## Tech choices (your call)
 
-- **Runtime**: Node 20+. Avoid Bun-only APIs.
-- **Package manager**: pnpm with workspaces. `pnpm-workspace.yaml` at repo root.
-- **Build tool**: Turborepo (`turbo.json`).
-- **Language**: TypeScript 5+. Strict mode on. No `any` without justification comment.
-- **Schema**: Zod.
-- **Test framework**: Vitest.
-- **Lint**: ESLint + `@typescript-eslint`. Prettier for formatting.
-- **YAML**: `yaml` package.
-- **Markdown frontmatter**: `gray-matter` is fine.
-- **Hashing**: Node `crypto`, no external deps.
-- **Git for fetch**: shell out to `git` binary. No libgit2.
+Not locked. Weigh the options and pick what produces the strongest reference
+implementation. Justify non-obvious picks in `NOTES.md`. Treat this as a real
+design decision, not a default-to-the-first-thing-Google-suggests pick.
 
-Pick library versions current as of 2026-05. Pin them.
+Dimensions to deliberate before writing the first `package.json`:
+
+- **Runtime / package manager** — Node + npm/pnpm/yarn, Bun, Deno. Tradeoffs:
+  install speed, binary distribution, native TS, ecosystem reach, what your
+  CI/host realistically runs.
+- **Monorepo orchestration** — Turborepo, Nx, plain workspaces, none. Cost vs
+  benefit at this size; don't over-tool a 3-package repo.
+- **Language / type safety strategy** — vanilla TS strict, or push further
+  with libraries that give richer type-driven invariants (Effect, ts-pattern,
+  branded types, etc.). If a library buys real correctness for a parsing/
+  validation/diagnostics-heavy spec implementation, weigh it seriously —
+  don't reach for it just because it's trendy.
+- **Schema validation** — Zod, Valibot, ArkType, Effect Schema, hand-rolled.
+  Diagnostic message shape, perf, tree-shake, integration with chosen
+  type-safety library.
+- **CLI framework** — citty, commander, oclif, cac, yargs, hand-rolled. The
+  CLI surface is small (≈10 commands); a heavy framework may be overkill.
+  Hand-rolled with a tiny arg parser is a defensible answer.
+- **Test framework** — Vitest, Bun's built-in, Node's built-in, Jest. Match
+  to runtime. Snapshot support matters for emit fixtures.
+- **Lint / format** — ESLint + Prettier, Biome, dprint, oxlint. Pick one
+  combo and commit.
+- **YAML / Markdown frontmatter parsing** — there are several mature options;
+  pick the one whose error positions are easiest to surface in diagnostics.
+- **Hashing** — should be a runtime built-in. No external dep.
+- **Git for fetch** — shell out to `git` binary or use a JS implementation
+  (isomorphic-git). Shelling out is simpler; pure-JS gives platform
+  independence. Pick and document.
+
+Pin versions. No floating ranges in `package.json`.
 
 ## Success criteria (verifiable, do these in order)
 
 ### Must pass
 
-1. **Repo bootstraps**: `pnpm install && pnpm build && pnpm test && pnpm lint`
-   from a clean clone exits 0.
+1. **Repo bootstraps**: your documented install / build / test / lint
+   commands all exit 0 from a clean clone.
 2. **Minimal fixture**: A fixture under `packages/core/test/fixtures/minimal/`
    containing one capability with one of each facet family (skill, agent,
    command, instruction, hook entry, MCP server). It must parse cleanly with
@@ -151,8 +172,8 @@ Pick library versions current as of 2026-05. Pin them.
   list in your branch.
 - **Error messages** include the source path and a one-line fix hint where
   reasonable.
-- **No new top-level deps** unless absolutely necessary. Justify any added
-  dep in `NOTES.md`.
+- **Keep dep footprint reasonable**. You're picking your stack; justify each
+  non-trivial dep in `NOTES.md`.
 
 ## Process discipline
 
@@ -191,17 +212,17 @@ either merge yours, cherry-pick across, or respec based on common gaps.
 # you start here:
 cd $(git rev-parse --show-toplevel)
 pwd  # should be the worktree dir, not main
-
-# do the work...
-pnpm install
-pnpm build
-pnpm test
-pnpm lint
-
-# manual verification of adapters:
-node apps/caplet/dist/bin/caplet.js check packages/core/test/fixtures/minimal
-node apps/caplet/dist/bin/caplet.js emit packages/core/test/fixtures/minimal --target claude --out /tmp/acf-claude
 ```
+
+Document your bootstrap commands in `RESULTS.md` so the human can reproduce.
+Whatever stack you pick, expose:
+
+- a single install command
+- a single build command (or none if your runtime executes TS directly)
+- a single test command
+- a single lint/format-check command
+- `caplet check <path>` and `caplet emit <path> --target <id> --out <dir>` as
+  the manual-verification entry points
 
 ## What not to do
 
@@ -217,7 +238,8 @@ node apps/caplet/dist/bin/caplet.js emit packages/core/test/fixtures/minimal --t
 
 ## Definition of done
 
-`pnpm install && pnpm build && pnpm test && pnpm lint` from a clean
-clone of your branch exits 0, `RESULTS.md` is filled in honestly, `NOTES.md`
-documents every non-obvious decision, and at least the Must Pass criteria
-are green. Commit. Stop. Wait for human review.
+From a clean clone of your branch, your documented install / build / test /
+lint commands all exit 0. `RESULTS.md` is filled in honestly, `NOTES.md`
+documents every non-obvious decision (including stack choices), and at
+least the Must Pass criteria are green. Commit. Stop. Wait for human
+review.
