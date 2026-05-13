@@ -59,6 +59,11 @@ Not locked. Weigh the options and pick what produces the strongest reference
 implementation. Justify non-obvious picks in `NOTES.md`. Treat this as a real
 design decision, not a default-to-the-first-thing-Google-suggests pick.
 
+Guiding principle: prefer **type safety** and **simplicity through delegation**
+over hand-rolled clever code. Simple often means letting a well-scoped package
+own a hard problem (arg parsing, schema validation, YAML, git) rather than
+reinventing it. Don't bloat the dep tree, but don't NIH either.
+
 Dimensions to deliberate before writing the first `package.json`:
 
 - **Runtime / package manager** — Node + npm/pnpm/yarn, Bun, Deno. Tradeoffs:
@@ -74,9 +79,11 @@ Dimensions to deliberate before writing the first `package.json`:
 - **Schema validation** — Zod, Valibot, ArkType, Effect Schema, hand-rolled.
   Diagnostic message shape, perf, tree-shake, integration with chosen
   type-safety library.
-- **CLI framework** — citty, commander, oclif, cac, yargs, hand-rolled. The
-  CLI surface is small (≈10 commands); a heavy framework may be overkill.
-  Hand-rolled with a tiny arg parser is a defensible answer.
+- **CLI framework** — pick a typed CLI library (citty, commander, oclif,
+  cac, yargs, etc.). Do NOT hand-roll arg parsing. Type safety and battle-
+  tested help/error UX matter; "simple" here means delegating complexity to
+  a package, not reinventing it. Pick the lightest one that gives strong
+  types on commands/flags.
 - **Test framework** — Vitest, Bun's built-in, Node's built-in, Jest. Match
   to runtime. Snapshot support matters for emit fixtures.
 - **Lint / format** — ESLint + Prettier, Biome, dprint, oxlint. Pick one
