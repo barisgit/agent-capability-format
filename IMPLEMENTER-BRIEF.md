@@ -53,49 +53,46 @@ packages/
 
 If a slice doesn't fit cleanly, deviate — but document why in `NOTES.md`.
 
-## Tech choices (your call)
+## Tech stack (locked)
 
-Not locked. Weigh the options and pick what produces the strongest reference
-implementation. Justify non-obvious picks in `NOTES.md`. Treat this as a real
-design decision, not a default-to-the-first-thing-Google-suggests pick.
+Guiding principles:
 
-Guiding principle: prefer **type safety** and **simplicity through delegation**
-over hand-rolled clever code. Simple often means letting a well-scoped package
-own a hard problem (arg parsing, schema validation, YAML, git) rather than
-reinventing it. Don't bloat the dep tree, but don't NIH either.
+- **Type safety first.** Strict TS, schema validation everywhere, no `any`.
+- **Simplicity through delegation.** Let well-scoped packages own hard
+  problems (arg parsing, schema validation, YAML, git). Don't NIH.
+- **Runtime-agnostic libraries, Bun in apps.** `@acf/core`, `@acf/adapters`,
+  `@acf/runtime-taxonomy` must NOT import `Bun.*` — use `node:*` and pure JS
+  so the libraries work under either runtime. `apps/caplet` MAY use `Bun.*`
+  where it earns its keep (process spawn, file IO, hashing).
 
-Dimensions to deliberate before writing the first `package.json`:
+| Dimension | Choice |
+|---|---|
+| Runtime / PM | **Bun ≥1.1** |
+| Monorepo | **Turborepo** (`turbo.json` at root) — webapp/db slices land later, set up properly day 1 |
+| Workspaces | Bun workspaces (`workspaces` in root `package.json`) |
+| Language | **TypeScript 5+**, strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` |
+| Schema | **Zod v4** |
+| CLI framework | **citty** |
+| Test runner | **`bun test`** |
+| Lint / format | **Biome** (single tool, no ESLint+Prettier) |
+| YAML parser | **`yaml`** (eemeli/yaml) — best diagnostic positions |
+| Markdown frontmatter | **gray-matter** |
+| Hashing | `Bun.CryptoHasher` in apps; `node:crypto` in libraries |
+| Git for fetch | shell out to `git` binary (no isomorphic-git) |
+| Optional | **Effect** is allowed if it genuinely earns weight in resolver/diagnostics; not required. Justify in `NOTES.md` if used. |
 
-- **Runtime / package manager** — Node + npm/pnpm/yarn, Bun, Deno. Tradeoffs:
-  install speed, binary distribution, native TS, ecosystem reach, what your
-  CI/host realistically runs.
-- **Monorepo orchestration** — Turborepo, Nx, plain workspaces, none. Cost vs
-  benefit at this size; don't over-tool a 3-package repo.
-- **Language / type safety strategy** — vanilla TS strict, or push further
-  with libraries that give richer type-driven invariants (Effect, ts-pattern,
-  branded types, etc.). If a library buys real correctness for a parsing/
-  validation/diagnostics-heavy spec implementation, weigh it seriously —
-  don't reach for it just because it's trendy.
-- **Schema validation** — Zod, Valibot, ArkType, Effect Schema, hand-rolled.
-  Diagnostic message shape, perf, tree-shake, integration with chosen
-  type-safety library.
-- **CLI framework** — pick a typed CLI library (citty, commander, oclif,
-  cac, yargs, etc.). Do NOT hand-roll arg parsing. Type safety and battle-
-  tested help/error UX matter; "simple" here means delegating complexity to
-  a package, not reinventing it. Pick the lightest one that gives strong
-  types on commands/flags.
-- **Test framework** — Vitest, Bun's built-in, Node's built-in, Jest. Match
-  to runtime. Snapshot support matters for emit fixtures.
-- **Lint / format** — ESLint + Prettier, Biome, dprint, oxlint. Pick one
-  combo and commit.
-- **YAML / Markdown frontmatter parsing** — there are several mature options;
-  pick the one whose error positions are easiest to surface in diagnostics.
-- **Hashing** — should be a runtime built-in. No external dep.
-- **Git for fetch** — shell out to `git` binary or use a JS implementation
-  (isomorphic-git). Shelling out is simpler; pure-JS gives platform
-  independence. Pick and document.
+Pin versions. No floating ranges in any `package.json`.
 
-Pin versions. No floating ranges in `package.json`.
+### Repo bootstrap (your `package.json` scripts should expose these)
+
+```bash
+bun install
+bun run build      # via turbo
+bun test           # via turbo or directly
+bunx biome check . # or `bun run lint`
+```
+
+Don't add ESLint, Prettier, tsx, ts-node, Vitest, Jest, or pnpm/npm files.
 
 ## Success criteria (verifiable, do these in order)
 
@@ -179,8 +176,8 @@ Pin versions. No floating ranges in `package.json`.
   list in your branch.
 - **Error messages** include the source path and a one-line fix hint where
   reasonable.
-- **Keep dep footprint reasonable**. You're picking your stack; justify each
-  non-trivial dep in `NOTES.md`.
+- **Keep dep footprint reasonable**. Stack is locked above; only add deps
+  that earn their weight, and justify each in `NOTES.md`.
 
 ## Process discipline
 
@@ -207,7 +204,7 @@ In your branch root, on top of the code:
 - `RESULTS.md` — required. Verification matrix:
   - For each Must Pass / Should Pass / Stretch item above: status
     (pass / partial / skip), one-line note, command to reproduce.
-  - Final summary: `pnpm install && pnpm test && pnpm lint` output, doc'd.
+  - Final summary: `bun install && bun run build && bun test && bunx biome check .` output, doc'd.
 
 If you finish everything, propose the next slice in NOTES.md. The user
 will compare your branch with the other two implementers' branches and
@@ -221,15 +218,23 @@ cd $(git rev-parse --show-toplevel)
 pwd  # should be the worktree dir, not main
 ```
 
-Document your bootstrap commands in `RESULTS.md` so the human can reproduce.
-Whatever stack you pick, expose:
+Stack is locked (Bun + Turborepo + Biome + Zod v4 + citty). Standard
+bootstrap:
 
-- a single install command
-- a single build command (or none if your runtime executes TS directly)
-- a single test command
-- a single lint/format-check command
-- `caplet check <path>` and `caplet emit <path> --target <id> --out <dir>` as
-  the manual-verification entry points
+```bash
+bun install
+bun run build
+bun test
+bunx biome check .
+```
+
+Manual adapter verification:
+
+```bash
+bun apps/caplet/src/bin/caplet.ts check packages/core/test/fixtures/minimal
+bun apps/caplet/src/bin/caplet.ts emit packages/core/test/fixtures/minimal \
+  --target claude --out /tmp/acf-claude
+```
 
 ## What not to do
 
@@ -245,8 +250,8 @@ Whatever stack you pick, expose:
 
 ## Definition of done
 
-From a clean clone of your branch, your documented install / build / test /
-lint commands all exit 0. `RESULTS.md` is filled in honestly, `NOTES.md`
-documents every non-obvious decision (including stack choices), and at
-least the Must Pass criteria are green. Commit. Stop. Wait for human
-review.
+From a clean clone of your branch:
+`bun install && bun run build && bun test && bunx biome check .` exits 0.
+`RESULTS.md` is filled in honestly, `NOTES.md` documents every non-obvious
+decision, and at least the Must Pass criteria are green. Commit. Stop.
+Wait for human review.
