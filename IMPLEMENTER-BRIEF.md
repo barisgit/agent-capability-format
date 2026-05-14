@@ -94,6 +94,23 @@ bunx biome check . # or `bun run lint`
 
 Don't add ESLint, Prettier, tsx, ts-node, Vitest, Jest, or pnpm/npm files.
 
+### Local reference projects
+
+Sibling repos next to this one already use the locked stack. Skim them
+before wiring up tooling, not for design ideas — just for working
+`turbo.json`, `biome.json`, `tsconfig.json`, `package.json` script shape,
+workspace layout, and citty command wiring. Resolve them relative to
+this repo:
+
+```
+../sessionloom
+../context-overflow
+```
+
+If either is absent on the host you're running on, skip them and proceed
+with stack defaults. Do NOT copy their domain code, names, or types —
+only the tooling shape.
+
 ## Success criteria (verifiable, do these in order)
 
 ### Must pass
