@@ -28,8 +28,10 @@ agent-capability-format/
   apps/
     caplet/               # reference CLI binary
   packages/
-    core/                 # data model, parsing, validation, diagnostics, resolver
-    adapters/             # adapter contract + built-in target adapters
+    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission orchestrator, per-target extension schemas, canonical EmitOptions
+    adapters/             # per-target emit functions + shared file utilities
+    installer/            # git + network fetch (capabilities.yml resolution, lockfile writes)
+    sdk/                  # convenience helpers for direct consumers; re-exports core + adapters + installer
     runtime-taxonomy/     # reserved; may move to a sibling repo later
   openspec/               # change proposals and capability specs
     changes/
@@ -40,6 +42,16 @@ agent-capability-format/
   IMPLEMENTATION.md
   README.md
 ```
+
+Five packages and one app. Boundaries follow consumer needs, not arbitrary
+splits:
+
+- A CI linter or browser validator imports `@acf/core` only — pure JS, no
+  network, no git, no `Bun.*`.
+- The caplet CLI imports `@acf/sdk` (or core + adapters + installer
+  directly) — needs everything.
+- A direct consumer (Pi extension, OpenCode extension) imports `@acf/sdk`
+  for the convenience API (`getSkills`, `getFacets`, auto-fetch).
 
 Turborepo convention: `apps/` for runnable end-user binaries, `packages/` for
 libraries. `runtime-taxonomy/` is a stub placeholder; if the taxonomy
@@ -52,7 +64,7 @@ specs instead of ADRs. Hard decisions live in OpenSpec change artifacts;
 
 ### apps/caplet
 
-Reference CLI. Uses `@acf/core` + `@acf/adapters` to:
+Reference CLI. Uses `@acf/sdk` (or core + adapters + installer directly) to:
 
 - validate capabilities and `capabilities.yml`,
 - resolve and fetch remote capabilities,
@@ -66,35 +78,93 @@ The CLI is an implementation, not part of the spec. Hot-path runtime helpers
 evaluated separately. Additional apps (docs site, web playground, MCP server
 exposing caplet) are explicitly deferred until there is a concrete user.
 
+`apps/caplet` is the only place where `Bun.*` APIs MAY appear in this
+repo (for CLI ergonomics). Everything else stays on `node:*`.
+
 ### packages/core
 
 Owns:
 
 - the canonical ACF data model (§3),
 - YAML parsing and Markdown-frontmatter parsing,
-- schema validation (Zod or equivalent),
+- schema validation (Zod v4),
 - the diagnostic data type (§11),
 - the normalized capability representation produced by the reader (§5),
-- the resolver (§7) including `capabilities.yml` parsing, lockfile management,
-  and source fetchers,
-- caplet configuration parsing (§8),
+- **local-only resolver** (§7): scope discovery, autoload, shadowing,
+  collisions, applicability cascade — but NOT fetching,
+- caplet configuration parsing (§8) — caplet schema lives here so other
+  tools can read caplet config when needed,
 - the asset reference resolver (§9),
-- the applicability cascade (§10).
+- the applicability cascade (§10),
+- **per-target extension schemas** (§4.5) for `targets.<target>` validation,
+- **canonical `EmitOptions`** type (§4.2).
+
+Core invariants:
+
+- No `Bun.*` imports.
+- No `node:child_process`, no `node:process.argv`, no CLI concerns.
+- No logger; returns structured `Diagnostic[]` only.
+- No network or git.
+- `node:fs`, `node:path`, `node:crypto`, `node:url` allowed, kept thin.
+- Pure JS; usable in any modern host including the browser (with the obvious
+  caveat that disk reads require a host-provided FS port).
 
 ### packages/adapters
 
 Owns:
 
-- the `TargetAdapter` contract (§4),
-- the target registry (§4),
+- the `TargetAdapter` contract (§4.2),
 - built-in target adapters (`claude`, `codex`, `cursor`, `opencode`, `pi`),
-- per-target facet support metadata,
 - per-target install paths for user and project scope,
 - per-target hook event / instruction trigger / MCP location mapping tables,
-- per-target, per-family extension schemas.
+- **shared file utilities** under `src/common/` (`patchJson`, `patchYaml`,
+  `appendSection`, `FileDiff` type) — used by adapters; not in core.
 
 For v1 all built-in adapters live together. They MAY be split into
 `@acf/adapter-claude` etc. only when dependency boundaries justify it.
+
+Adapters import `@acf/core` for types, capability shape, and the per-target
+extension schemas defined there. Adding a target requires:
+
+1. an entry in `@acf/core/targets/registry.ts` (id + extension schema), and
+2. an adapter file in `@acf/adapters/<id>/adapter.ts`.
+
+The registry uses a TypeScript exhaustiveness check so a missing pair fails
+typecheck (§4.4).
+
+### packages/installer
+
+Owns:
+
+- `capabilities.yml` source-by-source resolution (§7.4),
+- the git client (`node:child_process` shelling to `git`),
+- HTTPS source fetching (deferred — placeholder for archive support),
+- lockfile writes coordinated with content hash (§7.5),
+- materializing fetched capabilities into a scope's `capabilities/` directory.
+
+Installer invariants:
+
+- imports `@acf/core` for types and schemas; never the inverse,
+- uses `node:child_process` for `git`; never `Bun.spawn`,
+- emits structured `Diagnostic[]`; no console output.
+
+### packages/sdk
+
+Owns the direct-consumer convenience API. Re-exports:
+
+- everything from `@acf/core`,
+- adapter functions from `@acf/adapters`,
+- fetch helpers from `@acf/installer`.
+
+Adds:
+
+- `getSkills`, `getAgents`, `getCommands`, `getInstructions`, `getHooks`,
+  `getMcpServers`, `getFacets` (§13a),
+- `fetch: 'auto' | 'never' | 'force'` opt for transparent install,
+- diagnostic capture pattern.
+
+This is what Pi extension, OpenCode extension, and similar direct consumers
+import. Strict tools (CI linter, browser validator) import `@acf/core` only.
 
 ### packages/runtime-taxonomy
 
@@ -114,15 +184,68 @@ validate semantic mapping into their host.
 
 ## 2. Tooling assumptions
 
-- TypeScript 5+, strict mode.
-- pnpm workspaces in a Turborepo.
-- Zod (or equivalent) for runtime schema validation; emit canonical diagnostics
-  from validation errors.
-- `yaml` package for YAML parsing with line/column information.
-- `gray-matter` (or equivalent) for Markdown frontmatter extraction.
-- `isomorphic-git` or shelling out to `git` for source fetching; the resolver
-  module hides the choice behind a `GitClient` interface.
-- `ESM`, Node ≥ 20 for the CLI.
+The stack is **locked** (no per-implementer choice). Empirical evidence from
+the first round of parallel implementers showed that open stack questions
+produced inconsistent and lower-quality results.
+
+| Dimension | Choice |
+|---|---|
+| Runtime / PM | Bun ≥ 1.3 |
+| Monorepo | Turborepo (`turbo.json` at root); workspaces in root `package.json` |
+| Language | TypeScript 5+ strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` |
+| Module resolution | `"Bundler"` |
+| Typecheck | `tsgo --noEmit` (10× faster than tsc; production-ready) |
+| Build (dev) | SWC per package, `types: "./src/index.ts"`, no `.d.ts` |
+| Build (publish) | `tsup src/index.ts --format esm --dts --clean` + `publishConfig` override |
+| Schema validation | Zod v4 |
+| CLI framework | `citty` |
+| Test runner | `bun test` |
+| Lint / format | Biome (single tool; no ESLint+Prettier) |
+| YAML parser | `yaml` (eemeli/yaml) — best diagnostic positions |
+| Markdown frontmatter | `gray-matter` |
+| Hashing | `node:crypto` everywhere (also runs under Bun) |
+| Globbing | `picomatch` |
+| Semver | `semver` |
+| Logger | `consola` in `apps/caplet` only; libraries return `Diagnostic[]` |
+| Process spawn | `node:child_process` in `apps/caplet` and `@acf/installer`; never in core/adapters/sdk |
+| Git for fetch | shell out to `git` binary via `node:child_process`; no `isomorphic-git` |
+| Engines | root: `"bun": ">=1.3.0"`; library packages also `"node": ">=20"` |
+
+Guiding principles:
+
+- **Type safety first.** No `any`, no disabled strict flags. If a check is
+  inconvenient, fix the code, not the config.
+- **Simplicity through delegation.** Prefer well-scoped packages over
+  hand-rolled cleverness. No hand-rolled argv parser, no hand-rolled YAML
+  parser, no hand-rolled glob.
+- **Libraries runtime-agnostic.** Only `apps/caplet` may use `Bun.*` APIs.
+  Core, adapters, installer, sdk default to `node:*`. Bun implements the
+  Node API, so this loses nothing on Bun; it keeps libraries portable.
+
+Reference implementations using this exact stack live in sibling repos
+(`../sessionloom`, `../context-overflow`) and can be skimmed for working
+`turbo.json`, `biome.json`, `tsconfig.json`, `.swcrc`, and `package.json`
+script shapes. Domain code, names, and types MUST NOT be copied.
+
+Canonical root `package.json` scripts:
+
+```json
+{
+  "scripts": {
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test --force",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "ci": "turbo run check-types lint test build --force"
+  }
+}
+```
+
+Every package MUST declare a `test` script. Packages with no tests yet use a
+non-failing placeholder (`echo 'no tests for @acf/<pkg>'`) so
+`turbo run test --force` succeeds. The `--force` flag is the canonical audit
+form — cached evidence does not count.
 
 No Rust component is planned for v1. If a future generic hook runner needs
 process-level performance, evaluate a separate native runner instead of
@@ -589,15 +712,24 @@ registry treats it opaquely; the validation layer (§5.3) calls into it.
 
 ### 4.2 Adapter contract
 
+Adapters do not write files directly. They return a list of `FileDiff`s
+between current and desired content. Caplet (or any consumer) applies the
+diffs and tracks ownership in a `.acf-managed.json` sidecar (§4.6).
+
+This design is universal across file formats (JSON, YAML, Markdown, MDC,
+TOML, anything text-based), makes dry-run and `caplet diff` trivial, and
+keeps adapters declarative.
+
 ```ts
 export type TargetAdapter<Id extends string> = {
   id: Id
 
   /**
-   * Emit native artifacts for one capability into one scope.
-   * Adapters MUST NOT mutate the input capability.
+   * Compute file diffs for emitting one capability into one scope.
+   * Adapters MUST NOT mutate the input capability and MUST NOT write to
+   * disk. They use the read-only `fs` port to inspect existing files.
    */
-  emit(input: EmitInput): Promise<EmitResult>
+  emit(input: EmitInput, fs: ReadOnlyFs): Promise<EmitResult>
 
   /**
    * Optional pre-emit validation pass; runs after generic validation.
@@ -609,25 +741,115 @@ export type EmitInput = {
   capability: AcfCapability
   scope: Scope
   installRoot: string                  // resolved absolute install path for this target+scope
-  options?: EmitOptions
+  options: EmitOptions
 }
 
+// Canonical EmitOptions lives in @acf/core; identical for every target.
+// Per-target divergence is expressed via degradation diagnostics, not new
+// options. Per-target *extension data* on facets (e.g. `targets.claude.foo`)
+// remains per-target and is validated by the per-target extension schemas
+// in @acf/core/targets/<target>.ts.
 export type EmitOptions = {
   cleanBeforeEmit?: boolean
   dryRun?: boolean
 }
 
 export type EmitResult = {
-  files: EmittedFile[]
+  diffs: FileDiff[]
   diagnostics: Diagnostic[]
 }
 
-export type EmittedFile = {
-  path: string                         // absolute path
-  contents: Buffer | string
-  mode?: number                        // POSIX mode bits where relevant
+/** Read-only filesystem port. Caplet implements it over real fs; tests use
+ *  in-memory implementations. Adapters call this to read existing native
+ *  artifacts before computing desired content. */
+export type ReadOnlyFs = {
+  exists(absPath: string): Promise<boolean>
+  readText(absPath: string): Promise<string | null>  // null if missing
+  readBytes(absPath: string): Promise<Uint8Array | null>
+  listDir(absPath: string): Promise<string[]>         // [] if missing
+}
+
+/** A file-level diff. Adapters return one of these per file they want to
+ *  produce, modify, or delete. Caplet applies them, captures them for
+ *  `--dry-run` and `caplet diff`, and updates `.acf-managed.json`. */
+export type FileDiff = {
+  path: string                           // absolute path on disk
+  before: string | null                  // null = file did not exist
+  after: string | null                   // null = delete file
+  // The set of ACF-owned regions inside this file. For fully-owned files
+  // (Cursor .mdc rules, ACF-generated YAML), `owns` is the single string
+  // "file". For intertwined files (Claude settings.json), `owns` lists the
+  // JSON pointers or markers that ACF claims authorship of.
+  owns: AcfOwnership[]
+}
+
+export type AcfOwnership =
+  | { kind: "file" }                                  // adapter owns the whole file
+  | { kind: "json-pointer"; pointer: string }         // "/mcpServers/foo"
+  | { kind: "yaml-pointer"; pointer: string }
+  | { kind: "toml-pointer"; pointer: string }
+  | { kind: "marker"; name: string }                  // "<!-- acf:managed name=foo -->" block in text files
+```
+
+### 4.2.1 Shared file utilities
+
+Adapters share read-modify-serialize utilities. They live in
+`packages/adapters/src/common/` (not in core) and are imported by every
+adapter that needs them:
+
+```ts
+import {
+  patchJson,
+  patchYaml,
+  patchToml,
+  appendSection,
+  removeJsonPointer,
+  removeMarkerSection,
+  type FileDiff,
+  type AcfOwnership,
+} from "@acf/adapters/common"
+
+// Example: insert an MCP server entry into Claude's settings.json
+const before = await fs.readText(`${installRoot}/settings.json`)
+const after = patchJson(before ?? "{}", "/mcpServers/my-server", { command: "x" })
+const diff: FileDiff = {
+  path: `${installRoot}/settings.json`,
+  before,
+  after,
+  owns: [{ kind: "json-pointer", pointer: "/mcpServers/my-server" }],
 }
 ```
+
+Utilities preserve comments in YAML/TOML where the parser supports it.
+Adapters MUST NOT reformat parts of the file outside their owned pointers/
+markers.
+
+### 4.2.2 Ownership sidecar (`.acf-managed.json`)
+
+At each `installRoot`, caplet maintains an `.acf-managed.json` sidecar listing
+every `(path, AcfOwnership)` tuple ACF currently owns at that root. On
+subsequent emits and on `caplet remove`, the sidecar lets caplet:
+
+- delete ACF-managed pointers/markers without nuking unrelated user content,
+- detect drift where the user has manually edited an ACF-managed region,
+- support `caplet emit --clean` (remove all ACF content, then re-apply).
+
+Shape:
+
+```ts
+export type AcfManagedSidecar = {
+  acf: 1
+  managed: Array<{
+    path: string             // relative to the sidecar directory
+    owns: AcfOwnership[]
+    capability: string       // capability name that produced this entry
+    facet?: { family: FacetFamily; name: string }
+    hash: string             // sha256 of the rendered content for drift detection
+  }>
+}
+```
+
+Adapters do not write the sidecar. Caplet writes it after applying diffs.
 
 ### 4.3 Registry sketch
 
@@ -1967,52 +2189,91 @@ export type Diagnostic = {
 
 ### 11.2 Code namespace
 
-Diagnostic codes follow `acf.<area>.<topic>[.<subtopic>]`:
+Diagnostic codes follow `acf.<area>.<topic>[.<subtopic>]`. The set below is
+the normative starting set for `acf: 1`; conformance matrix in `SPEC.md`
+§14 lists severity/phase/trigger/source.path/recovery for each. Readers
+MUST emit at least the listed code with the listed severity when its
+trigger holds, MAY emit additional more-specific codes, and MUST NOT
+collapse listed codes into more generic ones.
 
 ```txt
+# Manifest
 acf.manifest.invalid-name
 acf.manifest.acf-version-unknown
 acf.manifest.only-and-except
+acf.manifest.duplicate-file                  # acf.yml AND acf.yaml both present
 
-acf.capability.shadowed
-acf.capability.name-collision
+# Capability
+acf.capability.shadowed                      # project shadows user (info)
+acf.capability.name-collision                # same-scope same-name (error)
 
+# Facet
 acf.facet.name-mismatch
 acf.facet.primary-missing
 acf.facet.duplicate
 
+# Layout
+acf.layout.singular-facet-folder             # root `skill/`, `agent/`, etc. (error)
+
+# Family-specific
 acf.skill.shape.not-directory
 acf.instruction.debounce.requires-repeat-always
-acf.applicability.empty
+acf.instruction.invalid-regex                # `paths` or `conditions` regex doesn't compile (error)
+acf.applicability.empty                      # facet+capability applicability intersection is empty
 
-acf.hook.match.required
-acf.hook.effect.not-allowed
-acf.hook.run.args-and-shell
-acf.hook.target-native-event.unknown-schema
+acf.markdown.unknown-frontmatter-field       # ACF.md or facet frontmatter has unknown key (info)
 
-acf.mcp.transport.missing-url
+# Hooks
+acf.hook.match.required                      # match required for pre_tool/post_tool/permission_request
+acf.hook.effect.not-allowed                  # effect not in hook type's matrix
+acf.hook.run.args-and-shell                  # `args` and `shell` are mutually exclusive
+acf.hook.target-native-event.unknown-schema  # `targets.<target>.hooks.<event>` shape unknown
 
+# MCP
+acf.mcp.transport.missing-url                # http/sse without `url`
+acf.mcp.transport.missing-command            # stdio without `command`
+
+# Asset references
 acf.path.absolute
 acf.path.traversal
 
+# Target dispatch
 acf.target.unknown-id
 acf.target.extension.unknown-field
 
-acf.adapter.scope-unsupported
+# Adapter degradation (all `lossy`)
+acf.adapter.scope-unsupported                # target has no installPath for requested scope
+acf.adapter.effect-degraded                  # canonical effect maps to weaker native effect
+acf.adapter.hook-event-unsupported           # canonical hook event has no native equivalent
+acf.adapter.trigger-unsupported              # instruction trigger unsupported by target
+acf.adapter.mcp-unsupported                  # MCP not supported by target (e.g. Cursor)
+acf.adapter.facet-unsupported                # entire facet family unsupported by target
+acf.adapter.not-registered                   # target id has no adapter (impl error)
+acf.adapter.superseded                       # emit target has a direct-consumer extension available (info)
 
-acf.scope.project-not-found
+# Scope discovery
+acf.scope.project-not-found                  # caplet asked for project scope outside a project (info)
 
-acf.runtime.unknown-operation
-acf.runtime.case-folding
-acf.runtime.turn-granularity
+# Runtime/taxonomy
+acf.runtime.unknown-operation                # operation not in SPEC §24 provisional set
+acf.runtime.case-folding                     # path matching outcome may differ on case-insensitive FS
+acf.runtime.turn-granularity                 # host cannot distinguish turn boundaries
+acf.runtime.family-unsupported               # direct consumer doesn't handle a facet family (lossy)
+acf.runtime.trigger-unsupported              # direct consumer trigger fired but not handled (lossy)
+acf.taxonomy.operation.unmapped              # internal alias used in adapter-side mapping diagnostics
 
-acf.taxonomy.operation.unmapped
-
+# capabilities.yml + lockfile
 acf.capabilities-yml.source.unknown-scheme
 acf.capabilities-yml.duplicate-entry
-
 acf.lock.drift
 acf.lock.missing-entry
+acf.lock.unsupported-version
+
+# Emission
+acf.emit.drift                               # disk hash no longer matches sidecar.hash (info)
+
+# CLI
+acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
 ```
 
 Codes SHOULD be stable across versions. New codes are additive.
@@ -2032,6 +2293,11 @@ Behavior is defined in `SPEC.md` §14.2. Implementation convention:
 
 ## 12. Emission pipeline
 
+The emission pipeline is **scope × target**, with per-capability
+applicability filtering and per-capability adapter calls. Adapters return
+`FileDiff[]`. Caplet collects, optionally shows (`--dry-run`/`diff`), and
+applies them via a writer that updates `.acf-managed.json`.
+
 ```ts
 export type EmitRequest = {
   scopes: ScopeRoot[]                  // from resolver §7.1, filtered by --scope
@@ -2043,7 +2309,10 @@ export type EmitReport = {
   perScopeTarget: Record<string, EmitResult>   // key = `${scope}:${target}`
 }
 
-export async function emit(req: EmitRequest): Promise<EmitReport> {
+export async function emit(
+  req: EmitRequest,
+  fs: ReadOnlyFs,
+): Promise<EmitReport> {
   const report: EmitReport = { perScopeTarget: {} }
 
   for (const scopeRoot of req.scopes) {
@@ -2054,7 +2323,7 @@ export async function emit(req: EmitRequest): Promise<EmitReport> {
       const installRoot = resolveInstallRoot(target, scopeRoot.scope)
       if (installRoot === null) {
         report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          files: [],
+          diffs: [],
           diagnostics: [{
             severity: "lossy",
             code: "acf.adapter.scope-unsupported",
@@ -2064,24 +2333,27 @@ export async function emit(req: EmitRequest): Promise<EmitReport> {
         continue
       }
 
-      const allFiles: EmittedFile[] = []
+      const allDiffs: FileDiff[] = []
       const allDiags: Diagnostic[] = []
 
       for (const cap of capabilities) {
         const filtered = applyApplicability(cap, targetId)
         if (filtered === null) continue   // capability fully excluded
-        const result = await target.adapter.emit({
-          capability: filtered,
-          scope: scopeRoot.scope,
-          installRoot,
-          options: req.options,
-        })
-        allFiles.push(...result.files)
+        const result = await target.adapter.emit(
+          {
+            capability: filtered,
+            scope: scopeRoot.scope,
+            installRoot,
+            options: req.options,
+          },
+          fs,
+        )
+        allDiffs.push(...result.diffs)
         allDiags.push(...result.diagnostics)
       }
 
       report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-        files: allFiles,
+        diffs: allDiffs,
         diagnostics: allDiags,
       }
     }
@@ -2108,39 +2380,78 @@ function resolveInstallRoot(target: TargetDefinition<TargetId>, scope: Scope): s
    support matrix,
 5. returns the filtered capability.
 
+### 12.1 Diff application
+
+Caplet applies `FileDiff[]` after the entire emit pipeline completes
+(diagnostics surface first; nothing is written if there are `error`
+diagnostics).
+
+```ts
+export async function applyDiffs(
+  diffs: FileDiff[],
+  installRoot: string,
+  options: { dryRun?: boolean } = {},
+): Promise<ApplyReport> {
+  // 1. Read existing sidecar from `${installRoot}/.acf-managed.json` if any.
+  // 2. For each diff:
+  //    - if `after === null` and a prior sidecar entry exists: delete the
+  //      owned regions (not the entire file unless `owns: [{ kind: "file" }]`).
+  //    - else: write `after` to `path`.
+  // 3. Rewrite the sidecar with the new (path, owns, hash) tuples.
+  // 4. Detect drift: any prior sidecar entry whose disk hash no longer
+  //    matches sidecar.hash emits `acf.emit.drift` info.
+}
+```
+
+`--dry-run` skips steps 2–3 and prints the diff list instead.
+
+### 12.2 Determinism
+
+Diff ordering matters for snapshot tests. Within one `(scope, target)` pair,
+emit MUST iterate capabilities in lexicographic order by capability name and
+facets in lexicographic order by `(family, name)`. Diagnostics are sorted
+lexicographically by `(source.path, source.line, code)`.
+
 ## 13. Adapter authoring guide
 
 Adapters MUST:
 
 - never mutate the input capability,
-- never read native artifacts as if they were ACF source,
-- diagnose every unrepresentable canonical field as `lossy`,
+- never write to disk directly; return `FileDiff[]` only,
+- use the provided `ReadOnlyFs` port for any reads of existing native files,
+- diagnose every unrepresentable canonical field as `lossy` with a
+  registry-listed code (`acf.adapter.effect-degraded`,
+  `acf.adapter.hook-event-unsupported`, `acf.adapter.trigger-unsupported`,
+  `acf.adapter.mcp-unsupported`, `acf.adapter.facet-unsupported`),
 - preserve hook order where the host allows it,
 - map canonical instruction triggers to native equivalents where supported,
   else emit `lossy`,
 - treat `targets.<target>` as the only sanctioned place for native-only knobs,
 - substitute `${ACF_CAPABILITY_DIR}`, `${ACF_PACKAGE_DIR}`, and
-  `${ACF_HOOK_DIR}` placeholders at emit time, in the slots listed in §3.10.
+  `${ACF_HOOK_DIR}` placeholders at emit time, in the slots listed in §3.10,
+- declare `AcfOwnership` for every `FileDiff` so caplet can track ACF-owned
+  regions.
 
 Recommended adapter file shape:
 
 ```ts
 import type { TargetAdapter } from "@acf/adapters"
+import { patchJson } from "@acf/adapters/common"
 
 export const claudeAdapter: TargetAdapter<"claude"> = {
   id: "claude",
-  async emit({ capability, scope, installRoot }) {
-    const files: EmittedFile[] = []
+  async emit({ capability, scope, installRoot }, fs) {
+    const diffs: FileDiff[] = []
     const diagnostics: Diagnostic[] = []
 
-    files.push(...emitClaudeSkills(capability, installRoot, diagnostics))
-    files.push(...emitClaudeAgents(capability, installRoot, diagnostics))
-    files.push(...emitClaudeCommands(capability, installRoot, diagnostics))
-    files.push(...emitClaudeInstructions(capability, installRoot, diagnostics))
-    files.push(...emitClaudeHooks(capability, installRoot, scope, diagnostics))
-    files.push(...emitClaudeMcp(capability, installRoot, scope, diagnostics))
+    diffs.push(...await emitClaudeSkills(capability, installRoot, fs, diagnostics))
+    diffs.push(...await emitClaudeAgents(capability, installRoot, fs, diagnostics))
+    diffs.push(...await emitClaudeCommands(capability, installRoot, fs, diagnostics))
+    diffs.push(...await emitClaudeInstructions(capability, installRoot, fs, diagnostics))
+    diffs.push(...await emitClaudeHooks(capability, installRoot, scope, fs, diagnostics))
+    diffs.push(...await emitClaudeMcp(capability, installRoot, scope, fs, diagnostics))
 
-    return { files, diagnostics }
+    return { diffs, diagnostics }
   },
 }
 ```
@@ -2148,53 +2459,239 @@ export const claudeAdapter: TargetAdapter<"claude"> = {
 Adapters should consult `targetMap[targetId].mappings` for canonical-to-native
 event/trigger translation; they SHOULD NOT hardcode the table locally.
 
+### 13.0 Adapter staging
+
+Implementers MUST ship adapters serially — one target at a time, fully
+completed before starting the next. No "skeleton across N targets"
+submissions: the first audit caught implementers spreading thin and leaving
+every adapter half-baked.
+
+| Milestone | Target | Notes |
+|---|---|---|
+| M1 | `claude` | Richest surface; flushes design issues early |
+| M2 | `codex` | `project: null` lossy; native event names |
+| M3 | `pi` | 1:1 native names; validates pipeline; clean win |
+| M4 | `opencode` | Hook event remapping (`tool.execute.before`, etc.) |
+| M5 | `cursor` | Mostly lossy by design; rules-only host |
+
+Gating rule: an adapter milestone is **complete** only when
+
+1. emit produces correct native artifacts for all 6 facet families on a real
+   capability tree,
+2. adapter-level fixture tests pass
+   (`packages/adapters/tests/fixtures/<target>/` with input + expected
+   output),
+3. caplet-level smoke test passes
+   (`apps/caplet/tests/fixtures/commands/<target>-emit/` produces expected
+   files),
+4. every degraded effect/event/trigger emits the listed lossy diagnostic
+   code,
+5. gaps are documented in `RESULTS.md` and map to listed diagnostic codes
+   (no silent omission).
+
+Implementers MAY skip ahead with documented reason but the skip itself is
+recorded in `RESULTS.md`.
+
+### 13.1 Direct ACF consumers (deferred extensions)
+
+Pi and OpenCode are emit targets in v1, but the long-term plan is
+**direct-consumer extensions**: Pi extension and OpenCode plugin would
+import `@acf/sdk`, read facets from the resolved capability tree natively,
+and bypass the emit pipeline entirely. Until those extensions ship, the emit
+adapter pipeline serves them.
+
+See SPEC §22b for the normative direct-consumer contract. See §13a for the
+consumer-facing convenience API.
+
+## 13a. SDK convenience API (`@acf/sdk`)
+
+Direct consumers (Pi extension, OpenCode extension, future webapp,
+third-party tooling) import `@acf/sdk` for a high-level facet-fetching API
+that hides the resolve/applicability/fetch pipeline.
+
+Power users that need finer control still drop down to `@acf/core`,
+`@acf/adapters`, and `@acf/installer` directly. The SDK re-exports those.
+
+### 13a.1 Helper functions
+
+```ts
+// per-family
+export function getSkills(opts: FacetQueryOptions): Promise<ResolvedFacet<"skill">[]>
+export function getAgents(opts: FacetQueryOptions): Promise<ResolvedFacet<"agent">[]>
+export function getCommands(opts: FacetQueryOptions): Promise<ResolvedFacet<"command">[]>
+export function getInstructions(opts: FacetQueryOptions): Promise<ResolvedFacet<"instruction">[]>
+export function getHooks(opts: FacetQueryOptions): Promise<ResolvedFacet<"hook">[]>
+export function getMcpServers(opts: FacetQueryOptions): Promise<ResolvedFacet<"mcp">[]>
+
+// all families at once
+export function getFacets(opts: FacetQueryOptions): Promise<{
+  skills:       ResolvedFacet<"skill">[]
+  agents:       ResolvedFacet<"agent">[]
+  commands:     ResolvedFacet<"command">[]
+  instructions: ResolvedFacet<"instruction">[]
+  hooks:        ResolvedFacet<"hook">[]
+  mcpServers:   ResolvedFacet<"mcp">[]
+}>
+
+export type FacetQueryOptions = {
+  /** Adapter id. REQUIRED: direct consumers know their own target and pass
+   *  it explicitly. CLI/CI may use ACF_TARGET env var. No magic inference. */
+  target: TargetId
+
+  /** Which scope to read. Defaults to `"all"`. */
+  scope?: "all" | "user" | "project"
+
+  /** Working directory used for project-scope discovery. Defaults to
+   *  process.cwd(). */
+  cwd?: string
+
+  /** Fetch policy for declared sources that are not materialized yet.
+   *  - `"auto"`  (default): fetch transparently via `@acf/installer`.
+   *  - `"never"`: return what's already on disk plus diagnostics.
+   *  - `"force"`: re-fetch everything, ignore lockfile.
+   */
+  fetch?: "auto" | "never" | "force"
+
+  /** Include the full diagnostic list in the return value. Default false:
+   *  helpers return facets only. */
+  includeDiagnostics?: boolean
+}
+
+export type ResolvedFacet<F extends FacetFamily> = {
+  family: F
+  name: string
+  capability: { name: string; scope: "user" | "project"; root: string }
+  frontmatter: FrontmatterFor<F>
+  body?: string                          // for markdown-backed facets
+  assets: AssetRef[]
+  // family-specific extras:
+  //   instruction → activation
+  //   hook → match, run, effect
+  //   mcp → transport
+}
+```
+
+### 13a.2 Diagnostic capture
+
+The SDK never throws on `lossy`/`warn`/`info` diagnostics. By default it
+logs nothing and returns only facets, so a Pi extension that calls
+`getSkills` gets clean output.
+
+Two opt-in patterns for diagnostics:
+
+```ts
+// return-with-options
+const { facets, diagnostics } = await getSkills({
+  target: "pi",
+  includeDiagnostics: true,
+})
+
+// global subscription (per-process)
+import { onDiagnostic } from "@acf/sdk"
+const unsub = onDiagnostic((d) => log.warn(d.code, d.message))
+```
+
+`error` diagnostics still cause the helper to reject with an `AcfError`
+carrying `diagnostics`.
+
+### 13a.3 Statelessness
+
+The SDK is stateless. Every call re-reads disk. There is no cache in v1.
+Consumers that call helpers in a hot loop are responsible for their own
+memoization — hold the result in a variable and re-call on a known trigger
+(file watcher, button press, periodic refresh).
+
+If perf becomes a real bottleneck, an opt-in `cache: true` may be added
+later; it is intentionally not in v1.
+
+### 13a.4 Example: Pi extension consuming skills
+
+```ts
+import { getSkills } from "@acf/sdk"
+
+const skills = await getSkills({
+  target: "pi",        // Pi extension hardcodes its target
+  scope: "all",        // user + project
+  fetch: "auto",       // auto-fetch missing sources
+})
+
+for (const skill of skills) {
+  registerWithPiSkillRouter({
+    name: skill.name,
+    invocation: skill.frontmatter.invocation,
+    body: skill.body,
+    assets: skill.assets,
+  })
+}
+```
+
+No subprocess to caplet. No two-step install. One import.
+
 ## 14. CLI surface (`caplet`)
 
-Per `SPEC.md` §21:
+Per `SPEC.md` §21. All 11 commands are **required in v1**. Stubs that exit
+0 without doing anything are forbidden — the first audit caught this and it
+lets agents fake-pass. If an implementer cannot fully implement a command,
+they MUST:
+
+- document the gap in `RESULTS.md`,
+- emit a structured `Diagnostic` with `severity: "error"` and code
+  `acf.cli.partial-implementation` explaining what's missing,
+- exit with code `1` (validation/diagnostic errors).
+
+Never silent exit 0.
 
 ### 14.1 Mutating commands
 
-- `caplet add <source>[@<ref>][:<path>] [--scope user|project] [--include …] [--exclude …]`
-  Mutates `capabilities.yml`. Does not fetch unless `--fetch` is passed.
-- `caplet remove <name> [--scope …]` — removes an entry by capability name or
-  source id.
-- `caplet update [<name>…] [--scope …]` — bumps `ref` (interactive picker if
-  omitted).
+- `caplet add <source>[@<ref>][:<path>] [--scope user|project] [--include …] [--exclude …] [--fetch]`
+  Mutates `capabilities.yml`. Fetches when `--fetch` is passed.
+- `caplet remove <name> [--scope …]` — removes an entry by capability name
+  or source id. With `--purge`, also deletes the materialized
+  `capabilities/<name>/` directory.
+- `caplet update [<name>…] [--scope …]` — moves lockfile entry to the latest
+  ref matching the declared `ref` spec; refetches. Interactive picker when
+  `<name>` is omitted.
 
 ### 14.2 Reconcile commands
 
 - `caplet fetch [--scope …] [--prune] [--force]` — reads `capabilities.yml`,
   fetches missing/changed entries, updates the lockfile. `--prune` removes
-  entries no longer listed.
+  lock entries no longer listed and deletes their `capabilities/` trees.
 - `caplet emit [--target <id>…] [--scope …] [--out <dir>] [--dry-run]` —
   emits native artifacts.
 - `caplet apply [--scope …] [--target …]` — `fetch` followed by `emit`.
 
 ### 14.3 Inspection commands
 
-- `caplet check [path]` — read + validate without emitting; print diagnostics.
+- `caplet check [path]` — read + validate without emitting; print
+  diagnostics.
 - `caplet inspect [path|--scope …]` — print resolved capability tree
   (capabilities, facets, hooks, MCP servers, assets, applicable targets) as
   JSON.
 - `caplet ls [--scope …] [--family …]` — list resolved capabilities and
   facets. Human-readable.
-- `caplet diff [--scope …] [--target …]` — show what `emit` would change on
-  disk (file-level diff between current installRoot and would-be output).
-- `caplet doctor` — environment checks (yaml parser, git availability, target
-  registry health, scope discovery, lockfile drift).
+- `caplet diff [--scope …] [--target …]` — show what `emit` would change
+  on disk (file-level diff between current installRoot and would-be output).
+- `caplet doctor` — environment checks (yaml parser, git availability,
+  target registry health, scope discovery, lockfile drift, network
+  reachability for known source hosts). Each subcheck reports pass/warn/fail
+  with a remediation hint.
 
 ### 14.4 Exit codes
 
-| Code | Meaning                                                   |
-| ---- | --------------------------------------------------------- |
-| 0    | Success, no `error` diagnostics.                          |
-| 1    | Validation errors present (or `lossy` with `failOnLossy`). |
-| 2    | Usage error.                                              |
-| 3    | I/O error.                                                |
-| 4    | Network error during fetch.                               |
+| Code | Meaning                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| 0    | Success, no `error` diagnostics.                                              |
+| 1    | Validation errors present (or `lossy` with `failOnLossy`); partial impl.      |
+| 2    | IO / path / input failure (missing file, bad CLI args, permission denied).    |
+| 4    | Network or git fetch failure.                                                 |
 
-`warn`, `lossy`, and `info` diagnostics are printed (subject to caplet config
-toggles) but do not affect exit code unless `failOnLossy` is set.
+`warn`, `lossy`, and `info` diagnostics are printed (subject to caplet
+config toggles) but do not affect exit code unless `failOnLossy` is set.
+
+`caplet --help` and `<command> --help` MUST exit 0 with non-empty help text.
+Every command MUST emit a structured diagnostic on failure, not a free-form
+error string.
 
 ## 15. Migration and forward compatibility
 

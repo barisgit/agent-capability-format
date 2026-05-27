@@ -1627,15 +1627,30 @@ Implementations MUST follow this namespace convention:
 | ------------------------------------ | ------------------------------------------------ |
 | `acf.manifest.*`                     | Manifest validation.                             |
 | `acf.skill.*`, `acf.agent.*`, etc.   | Facet family validation.                         |
+| `acf.command.*`, `acf.instruction.*` | Per-family validation for commands/instructions. |
 | `acf.hook.*`, `acf.mcp.*`            | Family-level validation.                         |
+| `acf.markdown.*`                     | Markdown frontmatter and body validation.        |
+| `acf.layout.*`                       | Capability directory layout violations.          |
 | `acf.applicability.*`                | `only`/`except` cascade and unknowns.            |
 | `acf.target.*`                       | Target id and extension validation.              |
 | `acf.runtime.*`                      | Runtime taxonomy reference validation.           |
 | `acf.assets.*`                       | Asset reference resolution.                      |
 | `acf.resolve.*`                      | Resolver / `capabilities.yml` validation.        |
+| `acf.capabilities-yml.*`             | Resolver source spec validation.                 |
 | `acf.lock.*`                         | Lockfile validation.                             |
-| `acf.emit.*`                         | Emission and adapter-specific diagnostics.       |
-| `acf.lossy.*`                        | Lossy emission diagnostics.                      |
+| `acf.emit.*`                         | Emission orchestrator and diff application.      |
+| `acf.adapter.*`                      | Adapter-specific degradation diagnostics.        |
+| `acf.cli.*`                          | CLI-host reported diagnostics.                   |
+| `acf.scope.*`                        | Scope discovery diagnostics.                     |
+| `acf.capability.*`                   | Cross-capability diagnostics (shadow, collision).|
+| `acf.facet.*`                        | Cross-facet diagnostics (name mismatch, duplicates).|
+| `acf.lossy.*`                        | Cross-cutting lossy emission diagnostics.        |
+
+The authoritative code list (with severity, phase, trigger, source.path,
+and recovery columns) is maintained in `IMPLEMENTATION.md` §11.2 as the
+reader conformance matrix. Implementations MUST emit codes from that
+matrix; they MAY emit additional, more specific codes under these
+namespaces; they MUST NOT collapse listed codes into broader ones.
 
 ## 15. Reserved fields and forward compatibility
 
@@ -2076,7 +2091,7 @@ them per target and per scope. As an informative starting point:
 
 | Target     | User scope path        | Project scope path     | Notes                                  |
 | ---------- | ---------------------- | ---------------------- | -------------------------------------- |
-| `claude`   | `~/.claude/`           | `./.claude/`           | Plugins, skills, hooks, MCP.           |
+| `claude`   | `~/.claude/`           | `./.claude/`           | Plugins, hooks, MCP.                   |
 | `codex`    | `~/.codex/`            | `./.codex/`            | Plugins/apps, MCP.                     |
 | `cursor`   | `~/.cursor/`           | `./.cursor/`           | Rules, MCP.                            |
 | `opencode` | `~/.opencode/`         | `./.opencode/`         | Plugins, agents, MCP.                  |
@@ -2084,6 +2099,17 @@ them per target and per scope. As an informative starting point:
 
 Targets that do not support per-project install MUST declare `null` for
 that scope and emit a `lossy` diagnostic if asked to emit there.
+
+**Shared canonical location for the `skill` family.** The `skill` family
+uses an ecosystem-shared canonical install root at `~/.agents/skills/`
+(user scope) and `./.agents/skills/` (project scope) for every target
+that reads that location. Adapters for `claude`, `codex`, `opencode`,
+and `pi` SHOULD emit skill artifacts into the shared root rather than a
+per-target subtree. Adapters whose target refuses the shared root (e.g.
+`cursor` for skills, or `claude` historically for its own skill format)
+MUST emit `acf.adapter.facet-unsupported` (lossy) and either degrade to
+a per-target path or skip the facet. The shared root applies only to
+skills in `acf: 1`; other facets remain per-target.
 
 ### 22.3 Hook event mapping
 
@@ -2145,6 +2171,62 @@ and degrade as follows:
 | `continue`      | Degrade to `observe`; emit `lossy`.                       |
 | `block_result`  | Degrade to `observe`; emit `lossy`.                       |
 | `decide`        | Degrade to `observe`; emit `lossy`.                       |
+
+### 22.7 Adapter contract
+
+Adapter contract semantics (informative summary; the concrete TypeScript
+definition is normative in `IMPLEMENTATION.md` §4.2):
+
+- An adapter is a pure function from a resolved capability plus emit
+  options plus a read-only filesystem port to a list of file diffs and
+  diagnostics. Adapters MUST NOT write to disk directly; the caplet host
+  (or any other emit driver) applies diffs.
+- A diff carries `path`, `before` (current content or `null` if absent),
+  `after` (desired content or `null` if delete), and `owns` — a list of
+  ACF-owned regions inside the file. Ownership is either whole-file or
+  a structural pointer (JSON pointer, YAML pointer, TOML pointer, or a
+  named region marker).
+- The emit driver MUST record ownership in a per-install-root sidecar
+  named `.acf-managed.json` (canonical shape in `IMPLEMENTATION.md`
+  §4.2.2). The sidecar enables clean re-emit, removal of stale ACF
+  pointers, and drift detection without nuking user-authored content in
+  the same file.
+- Adapters MUST preserve unowned content byte-for-byte in any file they
+  patch. Reformatting outside owned regions is forbidden.
+- Adapters MUST emit the listed degradation diagnostics (`acf.adapter.*`,
+  `acf.lossy.*`) for every effect, hook event, instruction trigger, MCP
+  transport, or facet family they cannot fully honor.
+
+## 22b. Direct ACF consumers (informative)
+
+A host MAY consume ACF capabilities directly, without going through an
+emit adapter, by reading capabilities at runtime via the published SDK.
+Direct consumers operate on the resolved capability tree (§17) in place,
+the same tree that adapters consume.
+
+In `acf: 1` there are no direct consumers; `pi` and `opencode` are emit
+targets. Direct-consumer extensions for those hosts are planned but
+deferred. The rules below define the semantics that apply once they
+ship; they are informative for `acf: 1`.
+
+- A direct consumer reads `~/.agents/capabilities/` and the nearest
+  project's `./.agents/capabilities/` via `@acf/sdk`. It MUST apply the
+  same applicability cascade (§6.4) as adapters, with its own target id
+  passed explicitly.
+- A direct consumer MUST handle each facet family natively at runtime
+  (loading skills, registering hooks, mounting MCP servers, etc.). For
+  any facet family it cannot handle, it MUST emit
+  `acf.runtime.family-unsupported` (lossy) at the time the facet would
+  have applied.
+- For instruction activation, a direct consumer MUST emit
+  `acf.runtime.trigger-unsupported` (lossy) once per session when an
+  instruction declares a trigger the consumer does not implement, and
+  MUST NOT silently treat the instruction as always-on.
+- A direct consumer MUST NOT install or duplicate native artifacts that
+  the corresponding emit adapter would produce. If both a direct
+  consumer extension and an emit adapter are present for the same host,
+  caplet `emit --target <host>` SHOULD emit `acf.adapter.superseded`
+  (info) and skip emission, deferring to the extension.
 
 ## 23. Naming aliases
 

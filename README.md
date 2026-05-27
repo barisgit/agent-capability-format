@@ -124,6 +124,46 @@ The reference CLI `caplet` exposes both:
 Plus inspection: `caplet check`, `caplet inspect`, `caplet ls`, `caplet
 diff`, `caplet doctor`.
 
+## Packages
+
+The reference implementation ships as one app plus five libraries:
+
+| Package | Role |
+| --- | --- |
+| `apps/caplet` | CLI binary. Only place `Bun.*` is allowed. |
+| `packages/core` | Pure SPEC logic: types, schemas, reader, validator, applicability, hash, diagnostics, emission orchestrator. No network, no git, no logger, browser-safe modulo a filesystem port. |
+| `packages/adapters` | Per-target emit functions (claude, codex, cursor, opencode, pi). Shared file utilities live under `src/common/`. |
+| `packages/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
+| `packages/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
+| `packages/runtime-taxonomy` | Stub for the future sibling registry spec. |
+
+CI linters and browser validators import `@acf/core` only. Caplet and
+direct consumers import `@acf/sdk` for the ergonomic API.
+
+## SDK in 20 lines
+
+Direct ACF consumers (e.g. a future Pi extension) skip emit entirely and
+read the canonical capability tree at runtime via `@acf/sdk`:
+
+```ts
+import { getSkills, getInstructions, getMcpServers } from '@acf/sdk';
+
+const skills = await getSkills({
+  target: 'pi',          // required
+  scope: 'all',          // 'all' | 'user' | 'project' (default 'all')
+  cwd: process.cwd(),    // for project-scope discovery
+  fetch: 'auto',         // 'auto' | 'never' | 'force'
+});
+
+// Each entry: { family, name, capability:{name,scope,root},
+//               frontmatter, body, assets, ... }
+```
+
+Helpers are stateless; every call re-reads disk. Capture diagnostics
+either with `{facets, diagnostics} = await getSkills({includeDiagnostics:
+true})` or a global `onDiagnostic((d)=>{ ... })`. `error` diagnostics
+still throw `AcfError`.
+
 ## Instructions in one paragraph
 
 An instruction is either always-on (`activation: always`, system-surface

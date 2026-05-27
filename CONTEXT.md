@@ -395,3 +395,57 @@ applicability, or lossiness condition. Severity is one of `error`, `warn`,
 The reference CLI implementation for reading capabilities, fetching remote
 sources, and emitting native artifacts. Caplet is not the standard itself;
 its config (`caplet.yml`) is defined in `IMPLEMENTATION.md`, not `SPEC.md`.
+
+### SDK
+
+The `@acf/sdk` npm package. Re-exports `@acf/core`, `@acf/adapters`, and
+`@acf/installer` plus a small set of convenience helpers (`getSkills`,
+`getInstructions`, `getMcpServers`, `getFacets`, etc.) for direct ACF
+consumers. Direct consumers (e.g. a future Pi extension) import the SDK
+instead of subprocessing `caplet`; CI linters and browser validators
+import `@acf/core` only.
+
+### Installer
+
+The `@acf/installer` npm package. Handles git + network fetch of remote
+capability sources, resolves `capabilities.yml`, and writes the
+lockfile. Separated from `@acf/core` so that core stays pure (no
+network, no git, no `Bun.*`, no logger) and browser-safe modulo a
+filesystem port. Caplet and the SDK both depend on the installer.
+
+### Capability Tree
+
+The canonical, host-agnostic directory layout produced by resolution:
+`~/.agents/capabilities/<name>/` (user scope) and
+`./.agents/capabilities/<name>/` (project scope). One resolved copy
+serves every host. Adapters never produce the capability tree; emission
+is a separate phase that translates the tree into per-host native
+artifacts.
+
+### Installed Tree
+
+The per-host, host-specific output directory produced by an adapter
+(e.g. `~/.claude/...`, `./.cursor/...`). The installed tree mirrors the
+capability tree's logical content but in each host's native format.
+Distinct from the capability tree: deleting the installed tree does not
+delete the capability tree.
+
+### File Diff
+
+The unit of work returned by an adapter. A `FileDiff` carries `path`,
+`before` (current content or `null`), `after` (desired content or
+`null` to delete), and `owns` — a list of ACF-owned regions inside the
+file (whole file, JSON pointer, YAML pointer, TOML pointer, or named
+marker). Adapters return diffs; the emit driver applies them. This
+lets adapters cohabit non-ACF content inside the same file (`.mcp.json`,
+`settings.json`, target rules files) without nuking user-authored
+regions.
+
+### ACF Ownership Sidecar
+
+The `.acf-managed.json` file written at each install root by the emit
+driver. Records every `FileDiff` ownership (`{path, owns, capability,
+facet?, hash}`). Enables clean re-emit (remove stale pointers without
+touching unowned regions), drift detection (`acf.emit.drift`), and
+safe removal when a capability or facet is unfetched. Adapters do not
+write the sidecar; the emit driver writes it after diffs are applied.
