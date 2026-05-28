@@ -1,0 +1,6 @@
+servers:
+  - name: cap-a-stdio
+    description: Cap A stdio server
+    transport: stdio
+    command: cap-a-server
+    only: [pi]

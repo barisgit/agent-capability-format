@@ -1,0 +1,13 @@
+user_prompt_submit:
+  - name: cap-b-prompt
+    description: Prompt hook from cap-b
+    except: [claude]
+    run:
+      command: echo cap-b-prompt
+    effect: block
+session_start:
+  - name: cap-b-session
+    description: Session hook from cap-b
+    run:
+      command: echo cap-b-session
+    effect: observe
