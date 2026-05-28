@@ -11,6 +11,7 @@ import {
   type AcfCapability,
   type CapletConfig,
   type Diagnostic,
+  type EmitOptions,
   type FileDiff,
   type ScopeRoot,
   type TargetId,
@@ -96,7 +97,12 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
           });
           continue;
         }
-        const input = { capability: filtered, scope: scopeRoot.scope, installRoot, options: {} };
+        const input = {
+          capability: filtered,
+          scope: scopeRoot.scope,
+          installRoot,
+          options: emitOptionsForTarget(targetId, configResult.config),
+        };
         if (adapter.validate !== undefined) diagnostics.push(...(await adapter.validate(input)));
         const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
@@ -180,6 +186,13 @@ export function installRootFor(
   const candidate = configured ?? target?.installPaths[scopeRoot.scope] ?? null;
   if (candidate === null) return null;
   return path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
+}
+
+function emitOptionsForTarget(targetId: TargetId, config: CapletConfig): EmitOptions {
+  const options: EmitOptions = {};
+  const skills = config.targets?.[targetId]?.skills;
+  if (skills !== undefined) options.skills = skills;
+  return options;
 }
 
 async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {

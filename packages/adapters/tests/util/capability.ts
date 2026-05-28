@@ -1,5 +1,12 @@
 import path from "node:path";
-import { readCapability, type AcfCapability, type EmitInput, type Scope, type TargetAdapter } from "@acf/core";
+import {
+  readCapability,
+  type AcfCapability,
+  type EmitInput,
+  type EmitOptions,
+  type Scope,
+  type TargetAdapter,
+} from "@acf/core";
 import { makeInMemoryFs } from "./in-memory-fs";
 
 export const fixtureRoot = path.resolve("tests", "fixtures", "full");
@@ -8,8 +15,12 @@ export async function readFixtureCapability(scope: Scope = "project"): Promise<A
   return await readCapability(fixtureRoot, scope, { kind: "local", directory: fixtureRoot });
 }
 
-export function emitInput(capability: AcfCapability, installRoot: string): EmitInput {
-  return { capability, scope: capability.scope, installRoot, options: {} };
+export function emitInput(
+  capability: AcfCapability,
+  installRoot: string,
+  options: EmitOptions = {},
+): EmitInput {
+  return { capability, scope: capability.scope, installRoot, options };
 }
 
 export async function emitFixture(

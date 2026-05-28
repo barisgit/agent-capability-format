@@ -22,6 +22,11 @@ export type TargetDefinition<Id extends string = string> = {
   displayName: string;
   support: Partial<Record<FacetFamily, SupportLevel>>;
   installPaths: InstallPaths;
+  // Native per-target skills directory. SPEC §22.2: skills always emit to the
+  // canonical ~/.agents/skills (project ./.agents/skills) root; when a target
+  // also reads skills from its own native location, declare it here so caplet
+  // can dual-emit. `null` for both scopes means canonical-only (e.g. cursor).
+  skillInstallPaths?: InstallPaths | undefined;
   mappings: TargetMappings;
   extensions: TargetExtensionSchemas;
   adapter?: TargetAdapter<Id> | undefined;
@@ -45,7 +50,12 @@ export type EmitInput = {
   installRoot: string;
   options: EmitOptions;
 };
-export type EmitOptions = { cleanBeforeEmit?: boolean | undefined; dryRun?: boolean | undefined };
+export type SkillsEmitOptions = { native?: boolean | undefined; canonical?: boolean | undefined };
+export type EmitOptions = {
+  cleanBeforeEmit?: boolean | undefined;
+  dryRun?: boolean | undefined;
+  skills?: SkillsEmitOptions | undefined;
+};
 export type EmitResult = { diffs: FileDiff[]; diagnostics: Diagnostic[] };
 export type FileDiff = {
   path: string;
@@ -96,6 +106,7 @@ export type CapletConfig = {
           {
             out?: { user?: string | undefined; project?: string | undefined } | undefined;
             disabled?: boolean | undefined;
+            skills?: SkillsEmitOptions | undefined;
           }
         >
       >

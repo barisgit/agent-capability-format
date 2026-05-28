@@ -279,6 +279,11 @@ export const capabilitiesLockSchema = z.object({
   ),
 });
 
+const skillsEmitOptionsSchema = z.object({
+  native: z.boolean().optional(),
+  canonical: z.boolean().optional(),
+});
+
 export const capletConfigSchema = z.object({
   emit: z
     .object({
@@ -294,6 +299,7 @@ export const capletConfigSchema = z.object({
       z.object({
         out: z.object({ user: z.string().optional(), project: z.string().optional() }).optional(),
         disabled: z.boolean().optional(),
+        skills: skillsEmitOptionsSchema.optional(),
       }),
     )
     .optional(),

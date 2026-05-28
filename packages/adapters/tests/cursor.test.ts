@@ -8,6 +8,8 @@ test("cursor emits MCP and file_context rule while diagnosing unsupported hooks"
   expect(got).toContain("acf.adapter.facet-unsupported");
   expect(result.diagnostics.some((diag) => diag.code === "acf.adapter.facet-unsupported" && diag.family === "hook")).toBe(true);
   expect(result.diagnostics.some((diag) => diag.code === "acf.adapter.trigger-unsupported" && diag.message.includes("operation_result"))).toBe(true);
+  expect(result.diffs.some((diff) => diff.path.includes("/skills/") || diff.path.includes("\\skills\\"))).toBe(false);
+  expect(result.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
   const rule = byPath(result.diffs, ".cursor/rules/test-cap__triggered.mdc");
   expect(rule.after).toContain("globs:");
   expect(rule.after).toContain("**/*.ts");

@@ -8,6 +8,7 @@ import { makeInMemoryFs } from "./util/in-memory-fs";
 test("claude emits all native artifacts with marker and JSON pointer ownership", async () => {
   const result = await emitFixture(claudeAdapter, ".claude");
   expect(byPath(result.diffs, ".agents/skills/research/SKILL.md").after).toContain("Research skill");
+  expect(byPath(result.diffs, ".claude/skills/research/SKILL.md").after).toContain("Research skill");
   expect(byPath(result.diffs, ".claude/agents/reviewer.md").after).toContain("Review code");
   expect(byPath(result.diffs, ".claude/commands/fix.md").after).toContain("Fix an issue");
   const instructions = byPath(result.diffs, ".claude/CLAUDE.md");
@@ -37,4 +38,33 @@ test("claude preserves unrelated shared JSON text and uses absolute user skill r
   expect(settings.after).toContain('{"z":1,"hooks"');
   expect(settings.after).toContain('{"acfMarker":"manual","keep":true}');
   expect(result.diffs.some((diff) => diff.path === path.join(homedir(), ".agents", "skills", "research", "SKILL.md"))).toBe(true);
+  expect(result.diffs.some((diff) => diff.path === path.join(homedir(), ".claude", "skills", "research", "SKILL.md"))).toBe(true);
+});
+
+test("claude emits referenced skill assets to canonical and native skills roots", async () => {
+  const cap = await readFixtureCapability();
+  const assetPath = path.join(cap.root, "skills", "research", "references", "guide.md");
+  const result = await claudeAdapter.emit(
+    emitInput(cap, ".claude"),
+    makeInMemoryFs({ [assetPath]: "# Research Guide\n\nUse cited notes.\n" }),
+  );
+  expect(byPath(result.diffs, ".agents/skills/research/references/guide.md").after).toContain("Use cited notes");
+  expect(byPath(result.diffs, ".claude/skills/research/references/guide.md").after).toContain("Use cited notes");
+});
+
+test("claude skill emission can suppress canonical or native destinations", async () => {
+  const cap = await readFixtureCapability();
+  const canonicalOff = await claudeAdapter.emit(
+    emitInput(cap, ".claude", { skills: { canonical: false } }),
+    makeInMemoryFs(),
+  );
+  expect(canonicalOff.diffs.some((diff) => diff.path.endsWith(".agents/skills/research/SKILL.md"))).toBe(false);
+  expect(canonicalOff.diffs.some((diff) => diff.path.endsWith(".claude/skills/research/SKILL.md"))).toBe(true);
+
+  const nativeOff = await claudeAdapter.emit(
+    emitInput(cap, ".claude", { skills: { native: false } }),
+    makeInMemoryFs(),
+  );
+  expect(nativeOff.diffs.some((diff) => diff.path.endsWith(".agents/skills/research/SKILL.md"))).toBe(true);
+  expect(nativeOff.diffs.some((diff) => diff.path.endsWith(".claude/skills/research/SKILL.md"))).toBe(false);
 });

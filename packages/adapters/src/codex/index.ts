@@ -4,16 +4,20 @@ import {
   type EmitResult,
   type ReadOnlyFs,
   type TargetAdapter,
+  targetMap,
 } from "@acf/core";
 import { emitStandardAdapter, layoutFor } from "../common/emitter";
-import { emitSkillsCanonical } from "../common/skills";
+import { emitSkills } from "../common/skills";
+
+const codexTarget = targetMap.codex;
+if (codexTarget === undefined) throw new Error("missing target definition for codex");
 
 export const codexAdapter: TargetAdapter<"codex"> = {
   id: "codex",
   async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
     const diagnostics: Diagnostic[] = [];
     const diffs = [
-      ...(await emitSkillsCanonical(input.capability, input.scope, fs, input.capability.manifest.name)),
+      ...(await emitSkills(input.capability, input.scope, fs, codexTarget, input.options.skills, diagnostics)),
       ...(await emitStandardAdapter(input, fs, layoutFor("codex", input.installRoot, input.scope), diagnostics, {
         lossyPartialFamilies: ["command"],
       })),

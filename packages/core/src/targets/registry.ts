@@ -71,6 +71,10 @@ export const targets = defineTargets([
       mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".claude"), project: path.join(".", ".claude") },
+    skillInstallPaths: {
+      user: path.join(HOME, ".claude", "skills"),
+      project: path.join(".", ".claude", "skills"),
+    },
     mappings: {
       hookEvents: {
         session_start: ["SessionStart"],
@@ -106,6 +110,10 @@ export const targets = defineTargets([
       mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".codex"), project: path.join(".", ".codex") },
+    skillInstallPaths: {
+      user: path.join(HOME, ".codex", "skills"),
+      project: path.join(".", ".codex", "skills"),
+    },
     mappings: {
       hookEvents: {
         session_start: ["SessionStart"],
@@ -179,6 +187,10 @@ export const targets = defineTargets([
       user: path.join(HOME, ".config", "opencode"),
       project: path.join(".", ".opencode"),
     },
+    skillInstallPaths: {
+      user: path.join(HOME, ".config", "opencode", "skills"),
+      project: path.join(".", ".opencode", "skills"),
+    },
     mappings: {
       hookEvents: {
         session_start: ["session.start"],
@@ -214,6 +226,10 @@ export const targets = defineTargets([
       mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".pi"), project: path.join(".", ".pi") },
+    skillInstallPaths: {
+      user: path.join(HOME, ".pi", "skills"),
+      project: path.join(".", ".pi", "skills"),
+    },
     mappings: {
       hookEvents: {
         session_start: ["session_start"],
