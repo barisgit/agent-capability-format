@@ -1,0 +1,15 @@
+servers:
+  - name: fs
+    description: Filesystem
+    transport: stdio
+    command: node
+    args:
+      - "${ACF_CAPABILITY_DIR}/server.js"
+    env:
+      ROOT: "${ACF_PACKAGE_DIR}"
+  - name: docs
+    description: Docs
+    transport: http
+    url: https://mcp.example.com/docs
+    headers:
+      Authorization: "Bearer ${ACF_CAPABILITY_DIR}"

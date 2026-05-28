@@ -1,0 +1,4 @@
+acf: 1
+name: test-cap
+version: 1.0.0
+description: Test capability for adapter fixtures

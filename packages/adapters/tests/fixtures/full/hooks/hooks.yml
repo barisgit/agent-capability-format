@@ -1,0 +1,40 @@
+session_start:
+  - name: init
+    description: Initialize session
+    run:
+      command: "${ACF_HOOK_DIR}/init.sh"
+      args:
+        - "${ACF_CAPABILITY_DIR}"
+      env:
+        CAP: "${ACF_PACKAGE_DIR}"
+    effect: observe
+pre_tool:
+  - name: guard
+    description: Guard writes
+    match:
+      operation: file_write
+      paths:
+        - "**/*.ts"
+    run:
+      command: ./guard.sh
+      shell: bash
+    effect: block
+permission_request:
+  - name: ask
+    description: Decide permissions
+    match:
+      operation: shell
+      conditions:
+        - "prod"
+    run:
+      command: ./ask.ps1
+      shell: powershell
+    effect: decide
+pre_compact:
+  - name: compact
+    description: Preserve context
+    run:
+      command: node
+      args:
+        - ./compact.js
+    effect: add_context
