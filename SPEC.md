@@ -2100,16 +2100,44 @@ them per target and per scope. As an informative starting point:
 Targets that do not support per-project install MUST declare `null` for
 that scope and emit a `lossy` diagnostic if asked to emit there.
 
-**Shared canonical location for the `skill` family.** The `skill` family
-uses an ecosystem-shared canonical install root at `~/.agents/skills/`
-(user scope) and `./.agents/skills/` (project scope) for every target
-that reads that location. Adapters for `claude`, `codex`, `opencode`,
-and `pi` SHOULD emit skill artifacts into the shared root rather than a
-per-target subtree. Adapters whose target refuses the shared root (e.g.
-`cursor` for skills, or `claude` historically for its own skill format)
-MUST emit `acf.adapter.facet-unsupported` (lossy) and either degrade to
-a per-target path or skip the facet. The shared root applies only to
+**Skill family install roots (canonical + native dual-emit).** The
+`skill` family has an ecosystem-shared **canonical** install root at
+`~/.agents/skills/` (user scope) and `./.agents/skills/` (project scope)
+that every ACF-aware host reads. In addition, a target MAY declare a
+**native** skills directory (e.g. `~/.claude/skills/`, `~/.codex/skills/`,
+`~/.config/opencode/skills/`, `~/.pi/skills/`) via `skillInstallPaths` in
+the target registry. When a native directory is declared, adapters emit
+each skill to BOTH the canonical root and the native directory so that a
+host reading only its own native location still sees the skill. Both
+destinations are independent `file`-owned artifacts; they apply and
+remove idempotently.
+
+Emission to each destination is configurable per target via
+`caplet.yml`:
+
+```yaml
+targets:
+  claude:
+    skills:
+      canonical: true   # default true: emit to ~/.agents/skills
+      native: true      # default true: emit to the target's native dir
+```
+
+Both flags default to `true`. Setting `native: false` restores the
+canonical-only behavior; setting `canonical: false` emits only to the
+native directory. A target with no `skillInstallPaths` (e.g. `cursor`)
+is canonical-only regardless of the `native` flag. Adapters whose target
+refuses skills entirely MUST emit `acf.adapter.facet-unsupported`
+(lossy) and skip the facet. The canonical/native split applies only to
 skills in `acf: 1`; other facets remain per-target.
+
+**Skill assets (SPEC §16.4).** Referenced skill assets (Markdown-linked
+files and explicit frontmatter `assets`) are copied alongside `SKILL.md`
+into every skill destination, preserving their relative subpath under the
+skill directory. Text assets are transported verbatim. Binary assets
+(detected by a NUL byte) cannot be carried through the text-only
+`FileDiff` channel in `acf: 1` and MUST produce an
+`acf.adapter.facet-unsupported` (lossy) diagnostic and be skipped.
 
 ### 22.3 Hook event mapping
 

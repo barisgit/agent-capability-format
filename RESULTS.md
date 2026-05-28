@@ -42,6 +42,19 @@ Implementation of the Agent Capability Format reference monorepo on branch
   `~/.claude/settings.json`, `.mcp.json`, etc. are owned by JSON pointers,
   so user-authored keys survive `caplet emit`, `caplet apply`, and
   `caplet remove`. Tested in `apps/caplet/tests/integration/ownership.test.ts`.
+ - **Dual-emit skills (canonical + native)**: the `skill` family emits to
+   the ecosystem-shared canonical root (`~/.agents/skills/`,
+   `./.agents/skills/`) AND each target's native skills dir
+   (`~/.claude/skills/`, `~/.codex/skills/`, `~/.config/opencode/skills/`,
+   `~/.pi/skills/`) when declared. Per-target toggles live under
+   `caplet.yml` `targets.<id>.skills.{canonical,native}` (both default
+   true). `cursor` has no native skills dir (canonical-only). See SPEC
+   §22.2 and `packages/adapters/tests/claude.test.ts`.
+ - **Skill asset transport (SPEC §16.4)**: referenced skill assets
+   (Markdown links + frontmatter `assets`) are copied next to `SKILL.md`
+   in every destination. Text assets are carried verbatim; binary assets
+   emit `acf.adapter.facet-unsupported` (lossy) and are skipped (see open
+   items below).
 - **Marker ownership** for prose files: instruction `activation: always`
   emits a marker block inside the host's main rules file (e.g. `CLAUDE.md`)
   using `<!-- acf:begin <capability>.<name> --> ... <!-- acf:end ... -->`,
