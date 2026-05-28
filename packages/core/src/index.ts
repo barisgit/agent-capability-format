@@ -1,2 +1,13 @@
-// @acf/core — placeholder; real implementation lands in milestone m2.
-export const __acf_core_placeholder = true;
+export * from "./applicability";
+export * from "./assets";
+export * from "./caplet-config";
+export * from "./diagnostics";
+export * from "./emit";
+export * from "./hash";
+export * from "./reader";
+export * from "./resolver";
+export * from "./schemas";
+export * from "./targets";
+export * from "./types";
+export * from "./validator";
+export * from "./yaml";

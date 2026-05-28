@@ -1,0 +1,1 @@
+export { validateCapability } from "../reader";
