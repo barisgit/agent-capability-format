@@ -1,2 +1,14 @@
+node_modules/
+.turbo/
+dist/
+*.log
+*.tmp
+.DS_Store
+coverage/
+.env
+.env.local
 .pi/
 .worktrees/
+evidence/video/*.mov
+evidence/video/*.mp4
+evidence/video/*.cast

@@ -1,0 +1,30 @@
+{
+  "name": "@acf/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./common": "./src/common/index.ts",
+    "./claude": "./src/claude/index.ts",
+    "./codex": "./src/codex/index.ts",
+    "./cursor": "./src/cursor/index.ts",
+    "./opencode": "./src/opencode/index.ts",
+    "./pi": "./src/pi/index.ts"
+  },
+  "scripts": {
+    "build": "echo 'no build for @acf/adapters'",
+    "check-types": "tsgo --noEmit -p tsconfig.json",
+    "lint": "echo 'no lint for @acf/adapters'",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@acf/core": "workspace:*",
+    "@acf/runtime-taxonomy": "workspace:*",
+    "yaml": "2.8.1"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20251104.1",
+    "typescript": "5.9.3"
+  }
+}

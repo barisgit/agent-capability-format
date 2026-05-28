@@ -1,0 +1,31 @@
+{
+  "name": "caplet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "caplet": "./src/bin.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "echo 'no build for caplet'",
+    "check-types": "tsgo --noEmit -p tsconfig.json",
+    "lint": "echo 'no lint for caplet'",
+    "test": "bun test",
+    "start": "bun src/bin.ts"
+  },
+  "dependencies": {
+    "@acf/adapters": "workspace:*",
+    "@acf/core": "workspace:*",
+    "@acf/installer": "workspace:*",
+    "@acf/sdk": "workspace:*",
+    "citty": "0.1.6",
+    "consola": "3.4.0"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20251104.1",
+    "typescript": "5.9.3"
+  }
+}

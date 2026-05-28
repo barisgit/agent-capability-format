@@ -1,0 +1,24 @@
+{
+  "name": "@acf/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "echo 'no build for @acf/sdk'",
+    "check-types": "tsgo --noEmit -p tsconfig.json",
+    "lint": "echo 'no lint for @acf/sdk'",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@acf/adapters": "workspace:*",
+    "@acf/core": "workspace:*",
+    "@acf/installer": "workspace:*"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20251104.1",
+    "typescript": "5.9.3"
+  }
+}
