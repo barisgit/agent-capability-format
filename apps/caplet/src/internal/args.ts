@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import type { ArgsDef } from "citty";
 
@@ -30,7 +31,15 @@ export function readScope(args: Record<string, unknown>): ScopeSelection {
 export function readCwd(args: Record<string, unknown>): string {
   const value = args.cwd;
   const raw = typeof value === "string" && value.length > 0 ? value : ".";
-  return path.resolve(raw);
+  const resolved = path.resolve(raw);
+  // Canonicalize symlinks (e.g. macOS /var -> /private/var) so installRoot,
+  // process.chdir(), and process.cwd()-relative diff paths all agree. Without
+  // this, sidecar relative paths blow up into long ../../.. chains.
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 export function readFailOnLossy(args: Record<string, unknown>): boolean {

@@ -33,7 +33,8 @@ YML
 mkdir -p "$SRC/code-review/skills/review-pr" \
          "$SRC/code-review/instructions" \
          "$SRC/code-review/agents" \
-         "$SRC/code-review/mcp"
+         "$SRC/code-review/mcp" \
+         "$SRC/code-review/hooks"
 
 cat > "$SRC/code-review/skills/review-pr/SKILL.md" <<'MD'
 ---
@@ -70,6 +71,16 @@ servers:
     args: [server.js]
 YML
 
+cat > "$SRC/code-review/hooks/hooks.yml" <<'YML'
+pre_tool:
+  - name: guard-bash
+    effect: observe
+    run:
+      command: "echo reviewing"
+    match:
+      operation: "Bash"
+YML
+
 find "$SRC/code-review" -type f | sed "s|$SRC/||"
 pause 2
 
@@ -96,15 +107,15 @@ echo "Lockfile head:"
 head -20 "$PROJ/.agents/capabilities.lock"
 pause 3
 
-hdr "5. Pre-seed user-authored key inside ~/.claude/settings.json"
-mkdir -p "$HOME_FAKE/.claude"
-cat > "$HOME_FAKE/.claude/settings.json" <<'JSON'
+hdr "5. Pre-seed user-authored key inside the project .claude/settings.json"
+mkdir -p "$PROJ/.claude"
+cat > "$PROJ/.claude/settings.json" <<'JSON'
 {
   "user_key": "this must survive caplet apply + remove",
   "permissions": { "allow": ["Bash(*)", "Read(*)"] }
 }
 JSON
-cat "$HOME_FAKE/.claude/settings.json"
+cat "$PROJ/.claude/settings.json"
 pause 2
 
 hdr "6. caplet apply  (emit FileDiffs, write artifacts + sidecar)"
