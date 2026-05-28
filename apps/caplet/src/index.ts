@@ -1,2 +1,14 @@
-// caplet — placeholder; real implementation lands in milestone m6.
-export const __caplet_placeholder = true;
+export { applyDiffs, type ApplyResult } from "./apply/apply-diffs";
+export {
+  detectDrift,
+  hashOwnedRegions,
+  mergeSidecarEntry,
+  readSidecar,
+  relativeSidecarPath,
+  removeOwnedRegions,
+  writeSidecar,
+  type DriftFs,
+  type ManagedEntry,
+  type RemoveOwnedRegionsResult,
+} from "./apply/sidecar";
+export { rootCommand } from "./cli";
