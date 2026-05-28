@@ -11,4 +11,4 @@ coverage/
 .worktrees/
 evidence/video/*.mov
 evidence/video/*.mp4
-evidence/video/*.cast
+# .cast files are small text replayable artifacts; commit them.
