@@ -10,5 +10,4 @@ coverage/
 .pi/
 .worktrees/
 evidence/video/*.mov
-evidence/video/*.mp4
-# .cast files are small text replayable artifacts; commit them.
+# Small rendered artifacts (.cast/.gif/.mp4) ARE committed; large raw screen recordings are not.
