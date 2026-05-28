@@ -14,7 +14,9 @@
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for caplet'",
     "test": "bun test",
-    "start": "bun src/bin.ts"
+    "start": "bun src/bin.ts",
+    "caplet": "bun src/bin.ts",
+    "link": "bun link"
   },
   "dependencies": {
     "@acf/adapters": "workspace:*",

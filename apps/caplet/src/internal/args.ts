@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ArgsDef } from "citty";
 
 export type ScopeSelection = "user" | "project" | "all";
@@ -10,7 +11,7 @@ export const globalArgs = {
     default: "all",
     description: "scope to use: user, project, or all",
   },
-  cwd: { type: "string", default: process.cwd(), description: "project working directory" },
+  cwd: { type: "string", default: ".", description: "project working directory (default: current directory)" },
   quiet: { type: "boolean", default: false, description: "suppress non-error output" },
   verbose: { type: "boolean", default: false, description: "show info diagnostics" },
   "fail-on-lossy": {
@@ -28,7 +29,8 @@ export function readScope(args: Record<string, unknown>): ScopeSelection {
 
 export function readCwd(args: Record<string, unknown>): string {
   const value = args.cwd;
-  return typeof value === "string" && value.length > 0 ? value : process.cwd();
+  const raw = typeof value === "string" && value.length > 0 ? value : ".";
+  return path.resolve(raw);
 }
 
 export function readFailOnLossy(args: Record<string, unknown>): boolean {
