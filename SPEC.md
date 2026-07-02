@@ -2100,16 +2100,25 @@ them per target and per scope. As an informative starting point:
 Targets that do not support per-project install MUST declare `null` for
 that scope and emit a `lossy` diagnostic if asked to emit there.
 
-**Shared canonical location for the `skill` family.** The `skill` family
-uses an ecosystem-shared canonical install root at `~/.agents/skills/`
-(user scope) and `./.agents/skills/` (project scope) for every target
-that reads that location. Adapters for `claude`, `codex`, `opencode`,
-and `pi` SHOULD emit skill artifacts into the shared root rather than a
-per-target subtree. Adapters whose target refuses the shared root (e.g.
-`cursor` for skills, or `claude` historically for its own skill format)
-MUST emit `acf.adapter.facet-unsupported` (lossy) and either degrade to
-a per-target path or skip the facet. The shared root applies only to
-skills in `acf: 1`; other facets remain per-target.
+**Skill family install roots (canonical + native dual-emit).** The
+`skill` family has an ecosystem-shared canonical install root at
+`~/.agents/skills/` (user scope) and `./.agents/skills/` (project scope).
+For each requested scope, adapters MUST emit every supported skill to the
+canonical root. If the target declares a native skill install path for
+that scope, adapters MUST also emit the same skill to that native
+directory. The default behavior is therefore dual-emit for targets with
+native skill install paths and canonical-only for targets without native
+skill install paths. Targets without native skill install paths MUST NOT
+skip skills merely because no native location exists.
+
+Each destination is an independent `file`-owned artifact; implementations
+MUST apply and remove the canonical and native copies idempotently.
+Referenced skill assets follow §16.4 and MUST be transported to every
+emitted skill destination so Markdown paths resolve in each copy.
+Implementations MAY offer configuration to suppress canonical or native
+emission for a target, but the default behavior MUST remain canonical
+plus native when both destinations exist. The canonical/native split
+applies only to skills in `acf: 1`; other facets remain per-target.
 
 ### 22.3 Hook event mapping
 

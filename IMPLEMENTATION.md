@@ -691,6 +691,9 @@ export type TargetDefinition<Id extends string> = {
 
   support: Partial<Record<FacetFamily, SupportLevel>>
   installPaths: InstallPaths
+  // Native skill install paths, when the target has target-specific skill
+  // directories. Omitted = skills emit only to the canonical shared root.
+  skillInstallPaths?: InstallPaths
   mappings: TargetMappings
 
   extensions: {
@@ -877,6 +880,11 @@ export const targets = defineTargets([
       project: `./.claude`,
     },
 
+    skillInstallPaths: {
+      user:    `${HOME}/.claude/skills`,
+      project: `./.claude/skills`,
+    },
+
     mappings: {
       hookEvents: {
         session_start:      ["SessionStart"],
@@ -930,6 +938,11 @@ export const targets = defineTargets([
       project: null,                         // Codex has no per-project scope today
     },
 
+    skillInstallPaths: {
+      user:    `${HOME}/.codex/skills`,
+      project: `./.codex/skills`,
+    },
+
     mappings: {
       hookEvents: {
         session_start:      ["SessionStart"],
@@ -980,6 +993,10 @@ export const targets = defineTargets([
       user:    `${HOME}/.config/opencode`,
       project: `./.opencode`,
     },
+    skillInstallPaths: {
+      user:    `${HOME}/.config/opencode/skills`,
+      project: `./.opencode/skills`,
+    },
     mappings: {
       hookEvents: {
         session_start:      ["session.start"],
@@ -1028,6 +1045,7 @@ export const targets = defineTargets([
       user:    `${HOME}/.cursor`,
       project: `./.cursor`,
     },
+    // No skillInstallPaths: Cursor receives skills via the canonical shared root only.
     mappings: {
       hookEvents: {
         session_start:      [],
@@ -1074,6 +1092,10 @@ export const targets = defineTargets([
     installPaths: {
       user:    `${HOME}/.pi`,
       project: `./.pi`,
+    },
+    skillInstallPaths: {
+      user:    `${HOME}/.pi/skills`,
+      project: `./.pi/skills`,
     },
     mappings: {
       hookEvents: {
@@ -2015,6 +2037,10 @@ export type CapletConfig = {
   targets?: Partial<Record<TargetId, {
     out?: { user?: string; project?: string }   // override adapter defaults; absolute paths
     disabled?: boolean
+    skills?: {
+      native?: boolean                   // default: true when target has skillInstallPaths
+      canonical?: boolean                // default: true
+    }
   }>>
   auth?: {
     github?: { kind: "gh" | "token" | "ssh"; token?: string }
@@ -2032,6 +2058,11 @@ export type CapletConfig = {
   }
 }
 
+const skillsEmitOptionsSchema = z.object({
+  native: z.boolean().optional(),
+  canonical: z.boolean().optional(),
+})
+
 export const capletConfigSchema = z.object({
   emit: z.object({
     scope: z.enum(["all", "user", "project"]).optional(),
@@ -2045,6 +2076,7 @@ export const capletConfigSchema = z.object({
       project: z.string().optional(),
     }).optional(),
     disabled: z.boolean().optional(),
+    skills: skillsEmitOptionsSchema.optional(),
   })).optional(),
   auth: z.object({
     github: z.object({
@@ -2068,6 +2100,9 @@ export const capletConfigSchema = z.object({
 
 The config never restates what an adapter already knows (`installPaths` live
 in the target registry). `targets.<id>.out` is purely an override.
+`targets.<id>.skills.canonical` and `targets.<id>.skills.native` toggle the
+two skill emission destinations; both default to `true`, and `native` has no
+effect for targets without `skillInstallPaths`.
 
 ### 8.3 Scope handling
 
@@ -2236,6 +2271,8 @@ acf.mcp.transport.missing-command            # stdio without `command`
 # Asset references
 acf.path.absolute
 acf.path.traversal
+acf.assets.missing                          # referenced asset file does not exist (error)
+acf.assets.unsupported                      # asset cannot be emitted, e.g. binary asset in text-only channel (lossy)
 
 # Target dispatch
 acf.target.unknown-id
