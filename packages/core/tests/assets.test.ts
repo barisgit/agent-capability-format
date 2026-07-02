@@ -19,12 +19,13 @@ test("asset absolute path, traversal, and missing file are diagnosed", async () 
   const { cap, dir } = await readTempCapability({
     "acf.yml": baseManifest,
     "skills/bad/SKILL.md":
-      "---\nname: bad\ndescription: Bad\nassets: ['/abs.png', '../outside.png', './missing.png']\n---\nbody\n",
+      "---\nname: bad\ndescription: Bad\nassets: ['/abs.png', '../../../outside.png', './missing.png']\n---\nbody\n",
   });
   try {
     const got = codes(cap);
     expect(got).toContain("acf.path.absolute");
-    expect(got.filter((code) => code === "acf.path.traversal").length).toBeGreaterThanOrEqual(2);
+    expect(got).toContain("acf.assets.missing");
+    expect(got.filter((code) => code === "acf.path.traversal").length).toBeGreaterThanOrEqual(1);
   } finally {
     await cleanup(dir);
   }

@@ -123,7 +123,7 @@ async function validateAndNormalize(
     if (!(await exists(abs))) {
       diagnostics.push({
         severity: "error",
-        code: "acf.path.traversal",
+        code: "acf.assets.missing",
         message: `asset file does not exist: ${ref.rawPath}`,
         path: ref.rawPath,
       });

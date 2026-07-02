@@ -28,6 +28,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.mcp.transport.missing-command",
   "acf.path.absolute",
   "acf.path.traversal",
+  "acf.assets.missing",
+  "acf.assets.unsupported",
   "acf.target.unknown-id",
   "acf.target.extension.unknown-field",
   "acf.adapter.scope-unsupported",
