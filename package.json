@@ -11,7 +11,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "ci": "turbo run check-types lint test build --force",
-    "caplet": "bunx caplet",
+    "caplet": "bun run --cwd apps/caplet caplet",
     "caplet:link": "bun run --filter caplet link"
   },
   "engines": {
