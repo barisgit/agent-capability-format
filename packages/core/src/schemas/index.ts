@@ -231,15 +231,25 @@ const selectorSchema = z.record(
   z.array(z.string()),
 );
 
-const sourceSpecSchema = z.string().transform((raw, ctx) => {
-  if (raw.startsWith("github:"))
-    return { kind: "github" as const, repo: raw.slice("github:".length) };
-  if (raw.startsWith("git:")) return { kind: "git" as const, url: raw.slice("git:".length) };
-  if (raw.startsWith("path:"))
-    return { kind: "path" as const, location: raw.slice("path:".length) };
-  ctx.addIssue({ code: "custom", message: `unknown source scheme: ${raw}` });
-  return z.NEVER;
-});
+const sourceSpecObjectSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("github"), repo: z.string().min(1) }),
+  z.object({ kind: z.literal("git"), url: z.string().min(1) }),
+  z.object({ kind: z.literal("path"), location: z.string().min(1) }),
+]);
+
+const sourceSpecSchema = z
+  .unknown()
+  .transform((raw, ctx) => {
+    if (typeof raw !== "string") return raw;
+    if (raw.startsWith("github:"))
+      return { kind: "github" as const, repo: raw.slice("github:".length) };
+    if (raw.startsWith("git:")) return { kind: "git" as const, url: raw.slice("git:".length) };
+    if (raw.startsWith("path:"))
+      return { kind: "path" as const, location: raw.slice("path:".length) };
+    ctx.addIssue({ code: "custom", message: `unknown source scheme: ${raw}` });
+    return z.NEVER;
+  })
+  .pipe(sourceSpecObjectSchema);
 
 export const capabilitiesYmlSchema = z.object({
   acf: z.literal(1),

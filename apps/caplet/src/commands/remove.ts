@@ -39,7 +39,10 @@ export const removeCommand = defineCommand({
         await writeSidecar(sidecarPath, result.sidecar);
         cleaned += result.written.length + result.deleted.length;
       }
-      reporter(context.args).log(`removed ${name}; cleaned ${cleaned} managed regions`);
+      const out = reporter(context.args);
+      out.heading("remove");
+      out.done(`Removed ${name}`);
+      out.details([["Managed", `${cleaned} managed ${cleaned === 1 ? "region" : "regions"} cleaned`]]);
     });
   },
 });

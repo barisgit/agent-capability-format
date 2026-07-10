@@ -16,35 +16,51 @@ export const doctorCommand = defineCommand({
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const diagnostics: Diagnostic[] = [];
-      const lines: string[] = [];
-      await checkGit(lines, diagnostics);
-      await checkAgentsReadable(lines, diagnostics);
-      checkTargets(lines, diagnostics);
-      await checkLockfiles(context.args, lines, diagnostics);
-      const code = finishWithDiagnostics(diagnostics, context.args);
+      const checks: DoctorCheck[] = [];
+      await checkGit(checks, diagnostics);
+      await checkAgentsReadable(checks, diagnostics);
+      checkTargets(checks, diagnostics);
+      await checkLockfiles(context.args, checks, diagnostics);
       const out = reporter(context.args);
-      for (const line of lines) out.log(line);
+      out.heading("doctor");
+      const code = finishWithDiagnostics(diagnostics, context.args);
+      for (const section of ["Environment", "Targets", "Lockfiles"] as const) {
+        if (section !== "Environment") out.log("");
+        out.section(section);
+        for (const check of checks.filter((item) => item.section === section)) {
+          out.status(check.status, check.message);
+        }
+      }
+      out.log("");
+      const passed = checks.filter((check) => check.status === "pass").length;
+      if (code === 0) out.done(`${passed} ${passed === 1 ? "check" : "checks"} passed`);
       process.exitCode = code;
     });
   },
 });
 
-async function checkGit(lines: string[], diagnostics: Diagnostic[]): Promise<void> {
+type DoctorCheck = {
+  section: "Environment" | "Targets" | "Lockfiles";
+  status: "pass" | "warn" | "fail";
+  message: string;
+};
+
+async function checkGit(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promise<void> {
   const proc = Bun.spawn(["git", "--version"], { stdout: "pipe", stderr: "pipe" });
   const code = await proc.exited;
   if (code === 0) {
-    lines.push("pass git available");
+    checks.push({ section: "Environment", status: "pass", message: "Git available" });
     return;
   }
   diagnostics.push({ severity: "error", code: "acf.doctor.git-missing", message: "git is not available" });
-  lines.push("fail git unavailable");
+  checks.push({ section: "Environment", status: "fail", message: "Git unavailable" });
 }
 
-async function checkAgentsReadable(lines: string[], diagnostics: Diagnostic[]): Promise<void> {
+async function checkAgentsReadable(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promise<void> {
   const agentsDir = path.join(homedir(), ".agents");
   try {
     await readdir(agentsDir);
-    lines.push(`pass readable ${agentsDir}`);
+    checks.push({ section: "Environment", status: "pass", message: `Agents directory readable (${agentsDir})` });
   } catch (error) {
     const severity = isErrno(error, "ENOENT") ? "warn" : "error";
     diagnostics.push({
@@ -53,15 +69,19 @@ async function checkAgentsReadable(lines: string[], diagnostics: Diagnostic[]): 
       message: `${agentsDir} is not readable`,
       path: agentsDir,
     });
-    lines.push(`${severity === "warn" ? "warn" : "fail"} unreadable ${agentsDir}`);
+    checks.push({
+      section: "Environment",
+      status: severity === "warn" ? "warn" : "fail",
+      message: `Agents directory unreadable (${agentsDir})`,
+    });
   }
 }
 
-function checkTargets(lines: string[], diagnostics: Diagnostic[]): void {
+function checkTargets(checks: DoctorCheck[], diagnostics: Diagnostic[]): void {
   for (const targetId of targetIds) {
     const target = targetMap[targetId];
     if (target?.adapter !== undefined) {
-      lines.push(`pass target ${targetId}`);
+      checks.push({ section: "Targets", status: "pass", message: `${target.displayName} adapter registered` });
       continue;
     }
     diagnostics.push({
@@ -70,20 +90,24 @@ function checkTargets(lines: string[], diagnostics: Diagnostic[]): void {
       message: `target adapter not registered: ${targetId}`,
       targetId,
     });
-    lines.push(`fail target ${targetId}`);
+    checks.push({
+      section: "Targets",
+      status: "fail",
+      message: `${target?.displayName ?? targetId} adapter unavailable`,
+    });
   }
 }
 
 async function checkLockfiles(
   args: Record<string, unknown>,
-  lines: string[],
+  checks: DoctorCheck[],
   diagnostics: Diagnostic[],
 ): Promise<void> {
   const cwd = readCwd(args);
   for (const root of await resolveScopeRoots(readScope(args), cwd)) {
     try {
       await readLockfile(root.lockPath);
-      lines.push(`pass lockfile ${root.scope}`);
+      checks.push({ section: "Lockfiles", status: "pass", message: `${capitalize(root.scope)} lockfile` });
     } catch (error) {
       diagnostics.push({
         severity: "error",
@@ -91,11 +115,15 @@ async function checkLockfiles(
         message: error instanceof Error ? error.message : "invalid lockfile",
         path: root.lockPath,
       });
-      lines.push(`fail lockfile ${root.scope}`);
+      checks.push({ section: "Lockfiles", status: "fail", message: `${capitalize(root.scope)} lockfile invalid` });
     }
   }
 }
 
 function isErrno(error: unknown, code: string): error is { code: string } {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

@@ -1,0 +1,220 @@
+import { expect, test } from "bun:test";
+import { cleanup, makeScope, runCaplet, writeText } from "../helpers";
+
+test("fetch presents a clear command header and result summary", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet fetch\n\nDONE  Fetched 2 capabilities");
+    expect(result.stdout).toContain("Scopes  project");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("diff groups file changes and ends with a pending summary", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet diff\n\nChanges\n");
+    expect(result.stdout).toMatch(/  CREATE  .*CLAUDE\.md/);
+    expect(result.stdout).toContain("project / claude / alpha-cap, beta-cap");
+    expect(result.stdout.match(/\.claude\/CLAUDE\.md/g)).toHaveLength(1);
+    expect(result.stdout).toContain("PENDING  4 files");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("ls presents capabilities as a scoped, readable inventory", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet ls\n\nProject");
+    expect(result.stdout).toContain("alpha-cap  1.0.0");
+    expect(result.stdout).toContain("agents 1, instructions 1, mcp 1");
+    expect(result.stdout).toContain("DONE  2 capabilities");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("ls gives an actionable empty state", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(scope.agentsDir + "/capabilities.yml", "acf: 1\ncapabilities: []\n");
+    const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("No capabilities found.");
+    expect(result.stdout).toContain("caplet add <source> --scope project");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("check reports what was validated", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet check\n\nDONE  Validation passed");
+    expect(result.stdout).toContain("Capabilities  2");
+    expect(result.stdout).toContain("Scopes        project");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("diagnostics separate the code, message, and recovery context", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["inspect", "missing-cap", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("FAIL  acf.caplet.not-found\n      Capability not found: missing-cap");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("emit dry-run uses the same change language without writing", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["emit", "--dry-run", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet emit\n\nChanges\n");
+    expect(result.stdout).toContain("PENDING  4 files");
+    expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(false);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("apply connects the change plan to an applied summary", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet apply\n\nChanges\n");
+    expect(result.stdout).toContain("DONE  Applied 4 files");
+    expect(result.stdout).toContain("Operations  6 writes, 0 deletes");
+    expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("add confirms the source and manifest it changed", async () => {
+  const scope = await makeScope();
+  try {
+    const source = "path:" + scope.sourceRoot + "/gamma";
+    const result = await runCaplet(scope, ["add", source, "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet add\n\nDONE  Added path source");
+    expect(result.stdout).toContain("Manifest  ");
+    expect(result.stdout).toContain("/.agents/capabilities.yml");
+    expect(result.stdout).toContain("Source    " + source);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("update makes the refreshed capability explicit", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, ["update", "alpha-cap", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet update\n\nDONE  Updated alpha-cap");
+    expect(result.stdout).toContain("Resolved  2 capabilities");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("remove reports both manifest removal and managed cleanup", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, ["remove", "alpha-cap", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet remove\n\nDONE  Removed alpha-cap");
+    expect(result.stdout).toMatch(/Managed  \d+ managed regions cleaned/);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("doctor organizes checks by concern and summarizes health", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["doctor", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet doctor\n\nEnvironment\n  PASS  Git available");
+    expect(result.stdout).toContain("\nTargets\n");
+    expect(result.stdout).toContain("\nLockfiles\n  PASS  Project lockfile");
+    expect(result.stdout).toMatch(/DONE  \d+ checks passed/);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("diff has a calm empty state when output is current", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Caplet diff\n\nNo changes\n");
+    expect(result.stdout).toContain("DONE  Output is up to date");
+    expect(result.stdout).not.toContain("PENDING  0 changes");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("quiet suppresses the complete success presentation", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["fetch", "--quiet", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("usage errors are concise, sentence-cased, and visible in quiet mode", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["add", "path:/tmp/example", "--quiet", "--cwd", scope.cwd]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("FAIL  Add requires --scope=user or --scope=project");
+  } finally {
+    await cleanup(scope);
+  }
+});

@@ -18,8 +18,13 @@ export const fetchCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const result = await fetchScopes(context.args, readFetchMode(context.args));
       const code = finishWithDiagnostics(result.diagnostics, context.args);
-      const count = result.results.reduce((sum, item) => sum + item.capabilities.length, 0);
-      reporter(context.args).log(`fetched ${count} capabilities across ${result.scopes.length} scopes`);
+      if (code === 0) {
+        const count = result.results.reduce((sum, item) => sum + item.capabilities.length, 0);
+        const out = reporter(context.args);
+        out.heading("fetch");
+        out.done(`Fetched ${count} ${count === 1 ? "capability" : "capabilities"}`);
+        out.details([["Scopes", result.scopes.map((scope) => scope.scope).join(", ")]]);
+      }
       process.exitCode = code;
     });
   },

@@ -15,17 +15,28 @@ export const checkCommand = defineCommand({
       const cwd = readCwd(context.args);
       process.chdir(cwd);
       const diagnostics: Diagnostic[] = [];
-      for (const scopeRoot of await resolveScopeRoots(readScope(context.args), cwd)) {
+      const scopeRoots = await resolveScopeRoots(readScope(context.args), cwd);
+      let capabilityCount = 0;
+      for (const scopeRoot of scopeRoots) {
         const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
         diagnostics.push(...manifest.diagnostics);
         const lock = await readLockfile(scopeRoot.lockPath);
         diagnostics.push(...detectLockDrift(manifest.value, lock));
         const resolved = await resolveScopeCapabilities(scopeRoot);
         diagnostics.push(...resolved.diagnostics);
+        capabilityCount += resolved.capabilities.length;
         for (const capability of resolved.capabilities) diagnostics.push(...capability.diagnostics);
       }
       const code = finishWithDiagnostics(diagnostics, context.args);
-      if (code === 0) reporter(context.args).log("check passed");
+      if (code === 0) {
+        const out = reporter(context.args);
+        out.heading("check");
+        out.done("Validation passed");
+        out.details([
+          ["Capabilities", capabilityCount],
+          ["Scopes", scopeRoots.map((scopeRoot) => scopeRoot.scope).join(", ")],
+        ]);
+      }
     });
   },
 });

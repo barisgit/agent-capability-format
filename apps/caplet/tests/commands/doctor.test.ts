@@ -7,9 +7,9 @@ test("caplet doctor checks environment", async () => {
     await fetchProject(scope);
     const result = await runCaplet(scope, ["doctor", "--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("pass git available");
-    expect(result.stdout).toContain("pass target claude");
-    expect(result.stdout).toContain("pass lockfile project");
+    expect(result.stdout).toContain("PASS  Git available");
+    expect(result.stdout).toContain("PASS  Claude Code adapter registered");
+    expect(result.stdout).toContain("PASS  Project lockfile");
   } finally {
     await cleanup(scope);
   }

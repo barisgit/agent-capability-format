@@ -19,7 +19,12 @@ export const updateCommand = defineCommand({
       const result = await fetchScopes(context.args, "force");
       const code = finishWithDiagnostics(result.diagnostics, context.args);
       const count = result.results.reduce((sum, item) => sum + item.capabilities.length, 0);
-      reporter(context.args).log(name === undefined ? `updated ${count} capabilities` : `updated ${name}`);
+      if (code === 0) {
+        const out = reporter(context.args);
+        out.heading("update");
+        out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
+        out.details([["Resolved", `${count} ${count === 1 ? "capability" : "capabilities"}`]]);
+      }
       process.exitCode = code;
     });
   },

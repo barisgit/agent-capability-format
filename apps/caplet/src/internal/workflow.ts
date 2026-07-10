@@ -41,6 +41,12 @@ export type EmitPlan = {
 
 export type ApplySummary = { results: ApplyResult[]; diagnostics: Diagnostic[] };
 
+export type DiffSummary = {
+  action: "create" | "update" | "delete";
+  path: string;
+  context: string;
+};
+
 export async function fetchScopes(
   args: Record<string, unknown>,
   mode: FetchMode,
@@ -135,11 +141,36 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
   return { results, diagnostics: plan.diagnostics };
 }
 
-export function summarizeDiffs(diffs: readonly EmittedDiff[]): string[] {
-  return diffs.map((item) => {
+export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
+  const groups = new Map<
+    string,
+    DiffSummary & { scope: string; target: string; capabilities: string[] }
+  >();
+  for (const item of diffs) {
     const action = item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
-    return `${action} ${item.diff.path} (${item.scopeRoot.scope}:${item.targetId}:${item.capabilityName})`;
-  });
+    const display = displayPath(item.diff.path);
+    const key = `${action}\0${display}\0${item.scopeRoot.scope}\0${item.targetId}`;
+    const group = groups.get(key) ?? {
+      action,
+      path: display,
+      context: "",
+      scope: item.scopeRoot.scope,
+      target: item.targetId,
+      capabilities: [],
+    };
+    if (!group.capabilities.includes(item.capabilityName)) group.capabilities.push(item.capabilityName);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({
+    action: group.action,
+    path: group.path,
+    context: `${group.scope} / ${group.target} / ${group.capabilities.join(", ")}`,
+  }));
+}
+
+function displayPath(filePath: string): string {
+  const relative = path.relative(process.cwd(), filePath);
+  return relative.length > 0 && !relative.startsWith("..") ? relative : filePath;
 }
 
 export function capabilitySummary(capability: AcfCapability, targets: readonly TargetId[]): unknown {

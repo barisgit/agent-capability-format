@@ -1,8 +1,8 @@
 import { defineCommand } from "citty";
 import { globalArgs } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { applyEmitPlan, buildEmitPlan, summarizeDiffs } from "../internal/workflow";
+import { exitCodeForDiagnostics, printChanges, printDiagnostics, reporter } from "../internal/output";
+import { applyEmitPlan, buildEmitPlan, describeDiffs } from "../internal/workflow";
 
 export const emitCommand = defineCommand({
   meta: { name: "emit", description: "emit FileDiffs to native target artifacts" },
@@ -21,15 +21,24 @@ export const emitCommand = defineCommand({
         return;
       }
       const out = reporter(context.args);
-      for (const line of summarizeDiffs(plan.diffs)) out.log(line);
+      const changes = describeDiffs(plan.diffs);
+      out.heading("emit");
+      printChanges(out, changes);
       if (context.args["dry-run"] === true) {
-        out.log(`${plan.diffs.length} pending diffs`);
+        if (changes.length === 0) {
+          out.log("");
+          out.done("Output is up to date");
+        } else {
+          out.pending(`${changes.length} ${changes.length === 1 ? "file" : "files"}`);
+        }
         return;
       }
       const applied = await applyEmitPlan(plan);
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
-      out.log(`applied ${written} writes and ${deleted} deletes`);
+      out.log("");
+      out.done(changes.length === 0 ? "Output is up to date" : `Applied ${changes.length} ${changes.length === 1 ? "file" : "files"}`);
+      if (changes.length > 0) out.details([["Operations", `${written} writes, ${deleted} deletes`]]);
     });
   },
 });

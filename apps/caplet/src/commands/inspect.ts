@@ -7,7 +7,7 @@ import { resolveScopeRoots } from "../internal/scopes";
 import { capabilitySummary } from "../internal/workflow";
 
 export const inspectCommand = defineCommand({
-  meta: { name: "inspect", description: "dump a capability's resolved facets" },
+  meta: { name: "inspect", description: "print a capability's resolved facets as JSON" },
   args: {
     ...globalArgs,
     name: { type: "positional", required: true, description: "capability name" },

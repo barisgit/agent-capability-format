@@ -27,7 +27,13 @@ export const addCommand = defineCommand({
         ref: readOptionalString(context.args, "ref"),
         rename: readOptionalString(context.args, "rename"),
       });
-      reporter(context.args).log(`added ${entry.source.kind} source to ${root.manifestPath}`);
+      const out = reporter(context.args);
+      out.heading("add");
+      out.done(`Added ${entry.source.kind} source`);
+      out.details([
+        ["Manifest", root.manifestPath],
+        ["Source", source],
+      ]);
     });
   },
 });

@@ -1,8 +1,8 @@
 import { defineCommand } from "citty";
 import { globalArgs } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { buildEmitPlan, summarizeDiffs } from "../internal/workflow";
+import { exitCodeForDiagnostics, printChanges, printDiagnostics, reporter } from "../internal/output";
+import { buildEmitPlan, describeDiffs } from "../internal/workflow";
 
 export const diffCommand = defineCommand({
   meta: { name: "diff", description: "show pending FileDiffs without applying" },
@@ -14,10 +14,22 @@ export const diffCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const plan = await buildEmitPlan(context.args);
       printDiagnostics(plan.diagnostics, context.args);
+      const code = exitCodeForDiagnostics(plan.diagnostics, context.args);
+      if (code !== 0) {
+        process.exitCode = code;
+        return;
+      }
       const out = reporter(context.args);
-      for (const line of summarizeDiffs(plan.diffs)) out.log(line);
-      out.log(`${plan.diffs.length} pending diffs`);
-      process.exitCode = exitCodeForDiagnostics(plan.diagnostics, context.args);
+      const changes = describeDiffs(plan.diffs);
+      out.heading("diff");
+      printChanges(out, changes);
+      if (changes.length === 0) {
+        out.log("");
+        out.done("Output is up to date");
+      } else {
+        out.pending(`${changes.length} ${changes.length === 1 ? "file" : "files"}`);
+      }
+      process.exitCode = code;
     });
   },
 });

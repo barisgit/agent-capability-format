@@ -7,7 +7,7 @@ test("caplet update refreshes lockfile", async () => {
     await fetchProject(scope);
     const result = await runCaplet(scope, ["update", "alpha-cap", "--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("updated alpha-cap");
+    expect(result.stdout).toContain("DONE  Updated alpha-cap");
   } finally {
     await cleanup(scope);
   }
