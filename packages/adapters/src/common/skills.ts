@@ -2,14 +2,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type {
   AcfCapability,
-  Diagnostic,
   FileDiff,
   ReadOnlyFs,
   Scope,
   SkillFacet,
   TargetDefinition,
 } from "@acf/core";
-import { assetsForFacet, readTextAssets } from "./assets";
+import { type AssetPayload, assetsForFacet, readAssets } from "./assets";
 import { makeFileDiff } from "./diff";
 import { renderMarkdownFile } from "./text";
 
@@ -21,7 +20,6 @@ export async function emitSkills(
   fs: ReadOnlyFs,
   target: TargetDefinition,
   opts: SkillEmitOptions = {},
-  diagnostics: Diagnostic[] = [],
 ): Promise<FileDiff[]> {
   const destinations = skillDestinations(scope, target, opts);
   if (destinations.length === 0) return [];
@@ -29,7 +27,7 @@ export async function emitSkills(
   const emittedPaths = new Set<string>();
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
-    const assets = await readSkillAssets(cap, skill, fs, target, diagnostics);
+    const assets = await readSkillAssets(cap, skill, fs);
     for (const root of destinations) {
       const skillRoot = path.join(root, skill.name);
       const skillPath = path.join(skillRoot, "SKILL.md");
@@ -42,12 +40,33 @@ export async function emitSkills(
       );
 
       for (const asset of assets) {
-        await pushTextDiff(
+        await pushAssetDiff(
           diffs,
           emittedPaths,
           fs,
           path.join(skillRoot, asset.relativePath),
-          asset.text,
+          asset,
+        );
+      }
+
+      async function pushAssetDiff(
+        diffs: FileDiff[],
+        emittedPaths: Set<string>,
+        fs: ReadOnlyFs,
+        outPath: string,
+        asset: AssetPayload,
+      ): Promise<void> {
+        if (emittedPaths.has(outPath)) return;
+        emittedPaths.add(outPath);
+        const [before, beforeMode] = await Promise.all([
+          fs.readBytes(outPath),
+          fs.readMode(outPath),
+        ]);
+        diffs.push(
+          makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
+            before: beforeMode,
+            after: asset.mode,
+          }),
         );
       }
     }
@@ -79,18 +98,9 @@ async function readSkillAssets(
   cap: AcfCapability,
   skill: SkillFacet,
   fs: ReadOnlyFs,
-  target: TargetDefinition,
-  diagnostics: Diagnostic[],
-): Promise<Array<{ relativePath: string; text: string }>> {
-  return await readTextAssets(
-    cap,
-    assetsForFacet(cap, "skill", skill.name),
-    fs,
-    target.id,
-    "skill",
-    skill.name,
-    diagnostics,
-    (assetPath) => relativeSkillAssetPath(skill, assetPath),
+): Promise<AssetPayload[]> {
+  return await readAssets(cap, assetsForFacet(cap, "skill", skill.name), fs, (assetPath) =>
+    relativeSkillAssetPath(skill, assetPath),
   );
 }
 

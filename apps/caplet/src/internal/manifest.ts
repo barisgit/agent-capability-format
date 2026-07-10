@@ -1,14 +1,15 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stringifyYml, type CapabilityEntry, type SourceSpec } from "@acf/core";
+import type { ScopeRoot } from "@acf/core";
+import { type CapabilityEntry, type SourceSpec, stringifyYml } from "@acf/core";
 import {
+  entrySourceId,
   readCapabilitiesYml,
   readLockfile,
   sourceId,
   sourceString,
   writeLockfile,
 } from "@acf/installer";
-import type { ScopeRoot } from "@acf/core";
 import { validationError } from "./args";
 
 export function parseSourceSpec(source: string): SourceSpec {
@@ -22,12 +23,14 @@ export function parseSourceSpec(source: string): SourceSpec {
 export async function addManifestEntry(
   root: ScopeRoot,
   source: string,
-  opts: { ref?: string | undefined; rename?: string | undefined },
+  opts: { ref?: string | undefined; path?: string | undefined; rename?: string | undefined },
 ): Promise<CapabilityEntry> {
   const manifest = await readCapabilitiesYml(root.manifestPath);
   const entry = buildEntry(source, opts);
   const duplicate = manifest.value.capabilities.some(
-    (candidate) => sourceId(candidate.source, path.dirname(root.manifestPath)) === sourceId(entry.source, path.dirname(root.manifestPath)),
+    (candidate) =>
+      entrySourceId(candidate, path.dirname(root.manifestPath)) ===
+      entrySourceId(entry, path.dirname(root.manifestPath)),
   );
   if (duplicate) throw validationError(`source already exists: ${sourceString(entry.source)}`);
   manifest.value.capabilities.push(entry);
@@ -40,14 +43,21 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
   const lock = await readLockfile(root.lockPath);
   const sourceIdsToRemove = new Set<string>();
   const kept = manifest.value.capabilities.filter((entry) => {
-    const id = sourceId(entry.source, path.dirname(root.manifestPath));
-    const lockEntry = lock?.entries.find((candidate) => candidate.sourceId === id);
+    const id = entrySourceId(entry, path.dirname(root.manifestPath));
+    const legacyId = sourceId(entry.source, path.dirname(root.manifestPath));
+    const lockEntry = lock?.entries.find(
+      (candidate) => candidate.sourceId === id || candidate.sourceId === legacyId,
+    );
     const names = lockEntry?.capabilityNames ?? namesFromEntry(entry);
     const remove = names.includes(name) || entry.rename === name;
-    if (remove) sourceIdsToRemove.add(id);
+    if (remove) {
+      sourceIdsToRemove.add(id);
+      sourceIdsToRemove.add(legacyId);
+    }
     return !remove;
   });
-  if (kept.length === manifest.value.capabilities.length) throw validationError(`unknown capability: ${name}`);
+  if (kept.length === manifest.value.capabilities.length)
+    throw validationError(`unknown capability: ${name}`);
   await writeCapabilitiesYml(root, kept);
   if (lock !== null) {
     await writeLockfile(root.lockPath, {
@@ -68,10 +78,11 @@ export async function writeCapabilitiesYml(
 
 function buildEntry(
   source: string,
-  opts: { ref?: string | undefined; rename?: string | undefined },
+  opts: { ref?: string | undefined; path?: string | undefined; rename?: string | undefined },
 ): CapabilityEntry {
   const entry: CapabilityEntry = { source: parseSourceSpec(source) };
   if (opts.ref !== undefined) entry.ref = opts.ref;
+  if (opts.path !== undefined) entry.path = opts.path;
   if (opts.rename !== undefined) entry.rename = opts.rename;
   if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
     throw validationError("git and github sources require --ref");

@@ -1,0 +1,6 @@
+Caplet add
+
+DONE  Added path source
+      Manifest  /Users/blaz/.agents/capabilities.yml
+      Source    path:/Users/blaz/Programming_local/Capatibilities
+      Path      capabilities/simplify

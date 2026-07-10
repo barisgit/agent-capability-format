@@ -27,3 +27,26 @@ test("yml entries missing from lock are diagnosed", () => {
     "acf.lock.missing-entry",
   ]);
 });
+
+test("legacy source-only lock ids remain valid for path entries", () => {
+  const yml: CapabilitiesYml = {
+    acf: 1,
+    capabilities: [
+      { source: { kind: "github", repo: "owner/capabilities" }, ref: "main", path: "alpha" },
+    ],
+  };
+  const lock: CapabilitiesLock = {
+    acf: 1,
+    entries: [
+      {
+        capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        capabilityNames: ["alpha"],
+        ref: "main",
+        resolvedSha: "abc123",
+        source: "github:owner/capabilities",
+        sourceId: "github:owner/capabilities",
+      },
+    ],
+  };
+  expect(detectLockDrift(yml, lock)).toEqual([]);
+});

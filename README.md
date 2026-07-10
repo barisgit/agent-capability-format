@@ -105,6 +105,15 @@ happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
 resolved by `rename:` or `exclude:`.
 
+For a monorepo source, set `path:` on the entry or use the equivalent CLI:
+
+```bash
+caplet add github:owner/capabilities --ref main --path capabilities/my-capability
+```
+
+Referenced assets are emitted byte-for-byte; executable permission bits are
+preserved in resolved and emitted trees.
+
 ## Resolve vs. emit
 
 ACF has two distinct phases:

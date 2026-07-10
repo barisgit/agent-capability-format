@@ -3,23 +3,23 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
-  applyApplicability,
-  readCapletConfig,
-  resolveScopeCapabilities,
-  targetIds,
-  targetMap,
   type AcfCapability,
+  applyApplicability,
   type CapletConfig,
   type Diagnostic,
   type EmitOptions,
   type FileDiff,
+  readCapletConfig,
+  resolveScopeCapabilities,
   type ScopeRoot,
   type TargetId,
+  targetIds,
+  targetMap,
 } from "@acf/core";
-import { resolveCapabilities, type ResolveResult } from "@acf/installer";
-import { applyDiffs, type ApplyResult } from "../apply/apply-diffs";
+import { type ResolveResult, readLockfile, resolveCapabilities } from "@acf/installer";
+import { type ApplyResult, applyDiffs } from "../apply/apply-diffs";
 import { detectDrift, readSidecar } from "../apply/sidecar";
-import { readCwd, readOptionalString, readScope, validationError, type FetchMode } from "./args";
+import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
 import { diskReadOnlyFs } from "./fs";
 import { resolveScopeRoots } from "./scopes";
 
@@ -50,6 +50,7 @@ export type DiffSummary = {
 export async function fetchScopes(
   args: Record<string, unknown>,
   mode: FetchMode,
+  capabilityName?: string,
 ): Promise<{ scopes: ScopeRoot[]; results: ResolveResult[]; diagnostics: Diagnostic[] }> {
   const cwd = path.resolve(readCwd(args));
   process.chdir(cwd);
@@ -58,7 +59,18 @@ export async function fetchScopes(
   const diagnostics: Diagnostic[] = [];
   for (const scopeRoot of scopes) {
     await mkdir(scopeRoot.agentsDir, { recursive: true });
-    const result = await resolveCapabilities({ scope: scopeRoot.scope, scopeRoot, mode });
+    const sourceIds =
+      capabilityName === undefined
+        ? undefined
+        : ((await readLockfile(scopeRoot.lockPath))?.entries
+            .filter((entry) => entry.capabilityNames.includes(capabilityName))
+            .map((entry) => entry.sourceId) ?? []);
+    const result = await resolveCapabilities({
+      scope: scopeRoot.scope,
+      scopeRoot,
+      mode,
+      sourceIds,
+    });
     results.push(result);
     diagnostics.push(...result.diagnostics);
   }
@@ -113,7 +125,7 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
         const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
         for (const diff of result.diffs) {
-          if (diff.before === diff.after) continue;
+          if (!fileDiffChanged(diff)) continue;
           diffs.push({
             scopeRoot,
             targetId,
@@ -147,7 +159,8 @@ export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
     DiffSummary & { scope: string; target: string; capabilities: string[] }
   >();
   for (const item of diffs) {
-    const action = item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
+    const action =
+      item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
     const display = displayPath(item.diff.path);
     const key = `${action}\0${display}\0${item.scopeRoot.scope}\0${item.targetId}`;
     const group = groups.get(key) ?? {
@@ -158,7 +171,8 @@ export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
       target: item.targetId,
       capabilities: [],
     };
-    if (!group.capabilities.includes(item.capabilityName)) group.capabilities.push(item.capabilityName);
+    if (!group.capabilities.includes(item.capabilityName))
+      group.capabilities.push(item.capabilityName);
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => ({
@@ -173,7 +187,10 @@ function displayPath(filePath: string): string {
   return relative.length > 0 && !relative.startsWith("..") ? relative : filePath;
 }
 
-export function capabilitySummary(capability: AcfCapability, targets: readonly TargetId[]): unknown {
+export function capabilitySummary(
+  capability: AcfCapability,
+  targets: readonly TargetId[],
+): unknown {
   return {
     name: capability.manifest.name,
     version: capability.manifest.version,
@@ -196,7 +213,8 @@ export function capabilitySummary(capability: AcfCapability, targets: readonly T
 
 export function targetSelection(args: Record<string, unknown>, config: CapletConfig): TargetId[] {
   const requested = readOptionalString(args, "target");
-  const values = requested === undefined ? (config.emit?.defaultTargets ?? [...targetIds]) : [requested];
+  const values =
+    requested === undefined ? (config.emit?.defaultTargets ?? [...targetIds]) : [requested];
   const out: TargetId[] = [];
   for (const value of values) {
     if (!targetIds.includes(value)) throw validationError(`unknown target: ${value}`);
@@ -233,13 +251,44 @@ async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {
       try {
         return readFileSync(path.resolve(installRoot, relativePath), "utf8");
       } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    readBytes(relativePath) {
+      try {
+        return readFileSync(path.resolve(installRoot, relativePath));
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
           return null;
         }
         throw error;
       }
     },
   });
+}
+
+function fileDiffChanged(diff: FileDiff): boolean {
+  if (diff.beforeMode !== diff.afterMode) {
+    const hasMode = diff.beforeMode !== undefined || diff.afterMode !== undefined;
+    if (hasMode) return true;
+  }
+  const { before, after } = diff;
+  if (before === null || after === null) return before !== after;
+  if (typeof before === "string" || typeof after === "string") return before !== after;
+  return before.length !== after.length || before.some((byte, index) => byte !== after[index]);
 }
 
 type ApplyGroup = { installRoot: string; capabilityName: string; diffs: FileDiff[] };

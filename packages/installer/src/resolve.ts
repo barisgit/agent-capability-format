@@ -15,6 +15,7 @@ import {
   type CapabilitiesLock,
   canonicalizeLock,
   canonicalizePathLocation,
+  entrySourceId,
   type LockEntry,
   readLockfile,
   sourceId,
@@ -26,6 +27,7 @@ export type ResolveOptions = {
   scope: "user" | "project";
   scopeRoot: ScopeRoot;
   mode: "auto" | "never" | "force";
+  sourceIds?: readonly string[] | undefined;
   updateLock?: boolean | undefined;
 };
 
@@ -59,17 +61,24 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
   const lockedBySource = new Map(
     (usableLock?.entries ?? []).map((entry) => [entry.sourceId, entry]),
   );
+  const selectedSourceIds = opts.sourceIds === undefined ? null : new Set(opts.sourceIds);
 
   for (const entry of yml.capabilities) {
-    const id = sourceId(entry.source);
-    const locked = lockedBySource.get(id);
+    const id = entrySourceId(entry);
+    const legacyId = sourceId(entry.source);
+    const locked = lockedBySource.get(id) ?? lockedBySource.get(legacyId);
+    const legacyLock = locked !== undefined && locked.sourceId !== id;
     if (requiresRef(entry) && entry.ref === undefined) {
       diagnostics.push(refRequiredDiagnostic(entry, id));
       continue;
     }
+    const selected =
+      selectedSourceIds === null || selectedSourceIds.has(id) || selectedSourceIds.has(legacyId);
     const fetchNeeded =
-      shouldFetch(opts.mode, entry, locked) ||
+      (selected &&
+        ((legacyLock && opts.mode !== "never") || shouldFetch(opts.mode, entry, locked))) ||
       (opts.mode === "auto" &&
+        selected &&
         locked !== undefined &&
         !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)));
     if (!fetchNeeded) {

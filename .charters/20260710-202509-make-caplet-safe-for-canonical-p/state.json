@@ -1,0 +1,77 @@
+{
+  "charterId": "20260710-202509-make-caplet-safe-for-canonical-p",
+  "schemaVersion": "file-interface",
+  "objective": "Make Caplet safe for canonical personal capability authoring, create ~/Programming_local/Capatibilities as the canonical Git repository, and migrate one live skill through a fully verified user-scope Pi workflow without losing content.",
+  "status": "completed",
+  "createdAt": "2026-07-10T20:25:09.795Z",
+  "updatedAt": "2026-07-10T21:19:41.486Z",
+  "sessionId": "019f4cdb-53c3-7438-8b40-31e3687c6c5b",
+  "completedAt": "2026-07-10T21:19:41.486Z",
+  "completionNote": "All criteria verified, final review approved, and REPORT.md curated with artifacts and follow-up.",
+  "nextSeq": 166,
+  "latestSourceSeq": 156,
+  "snapshotHash": "2f9603e79b814d058f5a77e0332a06e98af5682673ba9efdf370a6dfa4e89813",
+  "criteriaSnapshot": [
+    {
+      "id": "C1",
+      "title": "Caplet has regression-tested canonical authoring semantics",
+      "depends": [],
+      "evidence": {
+        "status": "pass",
+        "note": "target, add, update, source-id, drift, path-safety, and legacy-never regression tests passed in the full workspace run; the live lock migrated to `path:/Users/blaz/Programming_local/Capatibilities#path=capabilities%2Fsimplify` and remained clean (`work/live-lock-migration.txt`, `work/final-checks.txt`, 2026-07-10)."
+      },
+      "evidenceSeq": 161
+    },
+    {
+      "id": "C2",
+      "title": "Caplet preserves skill assets byte-for-byte and retains executable modes",
+      "depends": [],
+      "evidence": {
+        "status": "pass",
+        "note": "`binary-assets.test.ts` passed in the full workspace run, proving snapshot/canonical/Pi-native byte equality, mode 0755 retention, idempotence, mode-only drift detection, and repair (`work/final-checks.txt`, 2026-07-10)."
+      },
+      "evidenceSeq": 161
+    },
+    {
+      "id": "C3",
+      "title": "The requested canonical repository is a valid, documented Git repository",
+      "depends": [
+        "C1",
+        "C2"
+      ],
+      "evidence": {
+        "status": "pass",
+        "note": "clean Git repository at `/Users/blaz/Programming_local/Capatibilities`, root commit `e3fc7c2`, documented local/GitHub authoring loop, and valid `capabilities/simplify` source; Caplet check reported one valid capability (`work/live-verification.txt`, 2026-07-10)."
+      },
+      "evidenceSeq": 161
+    },
+    {
+      "id": "C4",
+      "title": "One real user-scope Pi capability is migrated reversibly through Caplet",
+      "depends": [
+        "C1",
+        "C2",
+        "C3"
+      ],
+      "evidence": {
+        "status": "pass",
+        "note": "linked `caplet` added/fetched/checked/diffed/applied `simplify`; canonical and Pi-native hashes match, parsed frontmatter/body match the source with zero diagnostics, final diff is clean, sidecar owns both outputs, and the original remains at `~/.agents/backups/caplet-migration-20260710/original-live-simplify` (`work/live-add.txt`, `work/live-fetch-check.txt`, `work/live-diff-before-apply.txt`, `work/live-apply.txt`, `work/live-verification.txt`, 2026-07-10)."
+      },
+      "evidenceSeq": 161
+    },
+    {
+      "id": "C5",
+      "title": "Relevant repository checks and an independent review pass",
+      "depends": [
+        "C1",
+        "C2",
+        "C4"
+      ],
+      "evidence": {
+        "status": "pass",
+        "note": "all 18 workspace type/test/build tasks passed, changed-file Biome error-level check passed, and `git diff --check` passed (`work/final-checks.txt`); final independent review approved with 0 critical/important issues after its never-fetch concern was fixed. Existing 43-error repository-wide formatting baseline is captured at `work/full-lint-baseline.txt` (2026-07-10)."
+      },
+      "evidenceSeq": 161
+    }
+  ]
+}

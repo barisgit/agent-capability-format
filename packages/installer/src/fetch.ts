@@ -2,7 +2,7 @@ import path from "node:path";
 import type { CapabilityEntry, SourceSpec } from "@acf/core";
 import { ensureCleanCache, getCachePath } from "./cache";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git";
-import { canonicalizePathLocation, sourceId } from "./lockfile";
+import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile";
 
 export type FetchOptions = {
   cacheDir: string;
@@ -18,17 +18,22 @@ export async function fetchCapability(
   opts: FetchOptions,
 ): Promise<FetchedCapability> {
   const normalized = normalizePublicPathEntry(entry);
-  const id = sourceId(normalized.source);
+  const repositoryId = sourceId(normalized.source);
+  const id = entrySourceId(normalized);
   switch (normalized.source.kind) {
     case "path": {
-      const root = entry.path
-        ? path.join(normalized.source.location, entry.path)
-        : normalized.source.location;
+      const root = resolveEntryPath(normalized.source.location, entry.path);
       return { root, commit: null, sourceId: id };
     }
     case "github":
-    case "git":
-      return await fetchGitCapability({ ...normalized, source: normalized.source }, id, opts);
+    case "git": {
+      const fetched = await fetchGitCapability(
+        { ...normalized, source: normalized.source },
+        repositoryId,
+        opts,
+      );
+      return { ...fetched, sourceId: id };
+    }
   }
 }
 
@@ -61,7 +66,7 @@ async function fetchGitCapability(
   });
   const commit = await revParseHead(destination);
   return {
-    root: entry.path ? path.join(destination, entry.path) : destination,
+    root: resolveEntryPath(destination, entry.path),
     commit,
     sourceId: id,
   };
@@ -74,6 +79,17 @@ function gitUrl(source: Extract<SourceSpec, { kind: "github" | "git" }>): string
     return `https://x-access-token:${encodeURIComponent(token)}@github.com/${source.repo}.git`;
   }
   return `https://github.com/${source.repo}.git`;
+}
+
+function resolveEntryPath(root: string, entryPath: string | undefined): string {
+  if (entryPath === undefined) return root;
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, entryPath);
+  const relative = path.relative(resolvedRoot, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`capability path escapes source root: ${entryPath}`);
+  }
+  return resolved;
 }
 
 async function retry(retries: number, fn: () => Promise<void>): Promise<void> {

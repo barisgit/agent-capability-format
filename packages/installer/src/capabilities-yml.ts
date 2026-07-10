@@ -9,7 +9,7 @@ import {
   parseYaml,
   pushZodIssues,
 } from "@acf/core";
-import { sourceId } from "./lockfile";
+import { entrySourceId } from "./lockfile";
 
 export async function readCapabilitiesYml(
   manifestPath: string,
@@ -95,7 +95,7 @@ function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string):
   const diagnostics: Diagnostic[] = [];
   const seen = new Set<string>();
   for (const entry of value.capabilities) {
-    const id = sourceId(entry.source, manifestDir);
+    const id = entrySourceId(entry, manifestDir);
     if (seen.has(id)) {
       diagnostics.push({
         severity: "error",

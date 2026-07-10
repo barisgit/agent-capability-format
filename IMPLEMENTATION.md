@@ -1090,11 +1090,11 @@ export const targets = defineTargets([
       mcp: "full",
     },
     installPaths: {
-      user:    `${HOME}/.pi`,
+      user:    `${HOME}/.pi/agent`,
       project: `./.pi`,
     },
     skillInstallPaths: {
-      user:    `${HOME}/.pi/skills`,
+      user:    `${HOME}/.pi/agent/skills`,
       project: `./.pi/skills`,
     },
     mappings: {
@@ -1114,7 +1114,7 @@ export const targets = defineTargets([
         file_context:     "full",
       },
       mcpInstallPath: {
-        user:    `${HOME}/.pi/mcp.json`,
+        user:    `${HOME}/.pi/agent/mcp.json`,
         project: `./.pi/mcp.json`,
       },
     },
@@ -2038,7 +2038,7 @@ export type CapletConfig = {
     out?: { user?: string; project?: string }   // override adapter defaults; absolute paths
     disabled?: boolean
     skills?: {
-      native?: boolean                   // default: true when target has skillInstallPaths
+      native?: boolean                   // target default; false for Pi, otherwise native-path dependent
       canonical?: boolean                // default: true
     }
   }>>
@@ -2101,8 +2101,10 @@ export const capletConfigSchema = z.object({
 The config never restates what an adapter already knows (`installPaths` live
 in the target registry). `targets.<id>.out` is purely an override.
 `targets.<id>.skills.canonical` and `targets.<id>.skills.native` toggle the
-two skill emission destinations; both default to `true`, and `native` has no
-effect for targets without `skillInstallPaths`.
+two skill emission destinations. `canonical` defaults to `true`. `native`
+defaults to `false` for Pi because Pi already discovers `.agents/skills`, and
+defaults to `true` for other targets with `skillInstallPaths`; it has no effect
+for targets without `skillInstallPaths`.
 
 ### 8.3 Scope handling
 
@@ -2272,7 +2274,7 @@ acf.mcp.transport.missing-command            # stdio without `command`
 acf.path.absolute
 acf.path.traversal
 acf.assets.missing                          # referenced asset file does not exist (error)
-acf.assets.unsupported                      # asset cannot be emitted, e.g. binary asset in text-only channel (lossy)
+acf.assets.unsupported                      # asset cannot be emitted by the selected target/facet channel (lossy)
 
 # Target dispatch
 acf.target.unknown-id

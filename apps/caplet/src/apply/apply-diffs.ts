@@ -1,7 +1,7 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@acf/adapters/common";
-import type { AcfManagedSidecar, AcfOwnership, FileDiff } from "@acf/core";
+import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@acf/core";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer";
 import {
   hashOwnedRegions,
@@ -32,7 +32,7 @@ export async function applyDiffs(
     const relativePath = relativeSidecarPath(opts.installRoot, absolutePath);
     const applied = await applyOneDiff(diff, absolutePath);
 
-    if (applied.text === null) {
+    if (applied.content === null) {
       sidecar.managed = sidecar.managed.filter(
         (entry) => !(entry.path === relativePath && entry.capability === opts.capabilityName),
       );
@@ -48,7 +48,7 @@ export async function applyDiffs(
       path: relativePath,
       owns: diff.owns,
       capability: opts.capabilityName,
-      hash: hashOwnedRegions(applied.text, diff.owns),
+      hash: hashOwnedRegions(applied.content, diff.owns),
     });
   }
 
@@ -64,26 +64,36 @@ export async function applyDiffs(
 async function applyOneDiff(
   diff: FileDiff,
   absolutePath: string,
-): Promise<{ text: string | null; changed: boolean }> {
-  const before = await readTextIfExists(absolutePath);
+): Promise<{ content: FileContent | null; changed: boolean }> {
   if (diff.owns.some((own) => own.kind === "file")) {
+    const byteOriented = diff.before instanceof Uint8Array || diff.after instanceof Uint8Array;
+    const before = byteOriented
+      ? await readBytesIfExists(absolutePath)
+      : await readTextIfExists(absolutePath);
+    const beforeMode = await readModeIfExists(absolutePath);
     if (diff.after === null) {
       await rm(absolutePath, { force: true });
-      return { text: null, changed: before !== null };
+      return { content: null, changed: before !== null };
     }
-    if (before !== diff.after) await writeText(absolutePath, diff.after);
-    return { text: diff.after, changed: before !== diff.after };
+    const contentChanged = !contentEquals(before, diff.after);
+    const afterMode = diff.afterMode;
+    const modeChanged = afterMode !== undefined && afterMode !== null && beforeMode !== afterMode;
+    if (contentChanged) await writeContent(absolutePath, diff.after);
+    if (modeChanged) await chmod(absolutePath, afterMode);
+    return { content: diff.after, changed: contentChanged || modeChanged };
   }
 
+  const before = await readTextIfExists(absolutePath);
+  const diffAfter = textContent(diff.after);
   let after = before ?? defaultTextFor(diff.owns);
   for (const own of diff.owns) {
-    if (own.kind === "json-pointer") after = applyJsonPointer(after, own.pointer, diff.after);
-    else if (own.kind === "marker") after = applyMarker(after, own.name, diff.after);
+    if (own.kind === "json-pointer") after = applyJsonPointer(after, own.pointer, diffAfter);
+    else if (own.kind === "marker") after = applyMarker(after, own.name, diffAfter);
     else throw new Error(`unsupported ownership kind for apply: ${own.kind}`);
   }
 
   if (after !== before) await writeText(absolutePath, after);
-  return { text: after, changed: after !== before };
+  return { content: after, changed: after !== before };
 }
 
 function applyJsonPointer(currentText: string, pointer: string, afterText: string | null): string {
@@ -109,6 +119,11 @@ async function writeText(filePath: string, text: string): Promise<void> {
   await Bun.write(filePath, text);
 }
 
+async function writeContent(filePath: string, content: FileContent): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await Bun.write(filePath, content);
+}
+
 async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf8");
@@ -116,6 +131,35 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
     if (isErrno(error, "ENOENT")) return null;
     throw error;
   }
+}
+
+async function readBytesIfExists(filePath: string): Promise<Uint8Array | null> {
+  try {
+    return await readFile(filePath);
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return null;
+    throw error;
+  }
+}
+
+async function readModeIfExists(filePath: string): Promise<number | null> {
+  try {
+    return (await stat(filePath)).mode & 0o777;
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return null;
+    throw error;
+  }
+}
+
+function textContent(content: FileContent | null): string | null {
+  if (content === null || typeof content === "string") return content;
+  throw new Error("structured ownership requires text content");
+}
+
+function contentEquals(left: FileContent | null, right: FileContent | null): boolean {
+  if (left === null || right === null) return left === right;
+  if (typeof left === "string" || typeof right === "string") return left === right;
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 function resolveDiffPath(installRoot: string, diffPath: string): string {

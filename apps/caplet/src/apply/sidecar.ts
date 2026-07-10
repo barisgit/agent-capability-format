@@ -2,11 +2,20 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock } from "@acf/adapters/common";
-import type { AcfManagedSidecar, AcfOwnership, Diagnostic, FacetFamily } from "@acf/core";
+import type {
+  AcfManagedSidecar,
+  AcfOwnership,
+  Diagnostic,
+  FacetFamily,
+  FileContent,
+} from "@acf/core";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer";
 
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
-export type DriftFs = { readText(filePath: string): string | null };
+export type DriftFs = {
+  readText(filePath: string): string | null;
+  readBytes?(filePath: string): Uint8Array | null;
+};
 export type RemoveOwnedRegionsResult = {
   written: string[];
   deleted: string[];
@@ -25,15 +34,15 @@ export async function readSidecar(sidecarPath: string): Promise<AcfManagedSideca
   return parseSidecar(JSON.parse(raw) as unknown, sidecarPath);
 }
 
-export async function writeSidecar(
-  sidecarPath: string,
-  sidecar: AcfManagedSidecar,
-): Promise<void> {
+export async function writeSidecar(sidecarPath: string, sidecar: AcfManagedSidecar): Promise<void> {
   await mkdir(path.dirname(sidecarPath), { recursive: true });
   await writeFile(sidecarPath, `${JSON.stringify(canonicalSidecar(sidecar), null, 2)}\n`, "utf8");
 }
 
-export function mergeSidecarEntry(sidecar: AcfManagedSidecar, entry: ManagedEntry): AcfManagedSidecar {
+export function mergeSidecarEntry(
+  sidecar: AcfManagedSidecar,
+  entry: ManagedEntry,
+): AcfManagedSidecar {
   const key = entryIdentity(entry);
   const managed = sidecar.managed.filter((candidate) => entryIdentity(candidate) !== key);
   managed.push(canonicalEntry(entry));
@@ -44,7 +53,10 @@ export function mergeSidecarEntry(sidecar: AcfManagedSidecar, entry: ManagedEntr
 export function detectDrift(sidecar: AcfManagedSidecar, fs: DriftFs): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   for (const entry of sidecar.managed) {
-    const current = fs.readText(entry.path);
+    const current =
+      entry.owns.some((own) => own.kind === "file") && fs.readBytes !== undefined
+        ? fs.readBytes(entry.path)
+        : fs.readText(entry.path);
     const hash = hashOwnedRegions(current, entry.owns);
     if (hash === entry.hash) continue;
     diagnostics.push({
@@ -98,16 +110,21 @@ export async function removeOwnedRegions(
     written.push(absolutePath);
   }
 
-  sidecar.managed = sortEntries(sidecar.managed.filter((entry) => entry.capability !== capabilityName));
+  sidecar.managed = sortEntries(
+    sidecar.managed.filter((entry) => entry.capability !== capabilityName),
+  );
   return { written: written.sort(), deleted: deleted.sort(), unchanged: unchanged.sort(), sidecar };
 }
 
-export function hashOwnedRegions(text: string | null, owns: readonly AcfOwnership[]): string {
+export function hashOwnedRegions(
+  content: FileContent | null,
+  owns: readonly AcfOwnership[],
+): string {
   const hash = createHash("sha256");
   for (const own of [...owns].sort((a, b) => ownershipKey(a).localeCompare(ownershipKey(b)))) {
     hash.update(ownershipKey(own));
     hash.update(Buffer.from([0]));
-    hash.update(regionText(text, own));
+    hash.update(regionContent(content, own));
     hash.update(Buffer.from([0]));
   }
   return `sha256-${hash.digest("hex")}`;
@@ -203,9 +220,13 @@ function ownershipKey(own: AcfOwnership): string {
   }
 }
 
-function regionText(text: string | null, own: AcfOwnership): string {
-  if (text === null) return "";
-  if (own.kind === "file") return text;
+function regionContent(content: FileContent | null, own: AcfOwnership): FileContent {
+  if (content === null) return "";
+  if (own.kind === "file") return content;
+  if (typeof content !== "string") {
+    throw new Error("structured ownership requires text content");
+  }
+  const text = content;
   if (own.kind === "marker") return extractMarkedBlock(text, own.name) ?? "";
   if (own.kind !== "json-pointer") return text;
   if (text.trim() === "") return "";

@@ -18,11 +18,19 @@ test("diff groups file changes and ends with a pending summary", async () => {
   const scope = await makeScope();
   try {
     await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const result = await runCaplet(scope, ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, [
+      "diff",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet diff\n\nChanges\n");
-    expect(result.stdout).toMatch(/  CREATE  .*CLAUDE\.md/);
+    expect(result.stdout).toMatch(/ {2}CREATE {2}.*CLAUDE\.md/);
     expect(result.stdout).toContain("project / claude / alpha-cap, beta-cap");
     expect(result.stdout.match(/\.claude\/CLAUDE\.md/g)).toHaveLength(1);
     expect(result.stdout).toContain("PENDING  4 files");
@@ -80,10 +88,19 @@ test("diagnostics separate the code, message, and recovery context", async () =>
   const scope = await makeScope();
   try {
     await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const result = await runCaplet(scope, ["inspect", "missing-cap", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "inspect",
+      "missing-cap",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("FAIL  acf.caplet.not-found\n      Capability not found: missing-cap");
+    expect(result.stderr).toContain(
+      "FAIL  acf.caplet.not-found\n      Capability not found: missing-cap",
+    );
   } finally {
     await cleanup(scope);
   }
@@ -93,7 +110,16 @@ test("emit dry-run uses the same change language without writing", async () => {
   const scope = await makeScope();
   try {
     await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const result = await runCaplet(scope, ["emit", "--dry-run", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, [
+      "emit",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet emit\n\nChanges\n");
@@ -107,7 +133,15 @@ test("emit dry-run uses the same change language without writing", async () => {
 test("apply connects the change plan to an applied summary", async () => {
   const scope = await makeScope();
   try {
-    const result = await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, [
+      "apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet apply\n\nChanges\n");
@@ -123,7 +157,14 @@ test("add confirms the source and manifest it changed", async () => {
   const scope = await makeScope();
   try {
     const source = "path:" + scope.sourceRoot + "/gamma";
-    const result = await runCaplet(scope, ["add", source, "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "add",
+      source,
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet add\n\nDONE  Added path source");
@@ -139,11 +180,18 @@ test("update makes the refreshed capability explicit", async () => {
   const scope = await makeScope();
   try {
     await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const result = await runCaplet(scope, ["update", "alpha-cap", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "update",
+      "alpha-cap",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet update\n\nDONE  Updated alpha-cap");
-    expect(result.stdout).toContain("Resolved  2 capabilities");
+    expect(result.stdout).toContain("Resolved  1 capability");
   } finally {
     await cleanup(scope);
   }
@@ -152,12 +200,29 @@ test("update makes the refreshed capability explicit", async () => {
 test("remove reports both manifest removal and managed cleanup", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
-    const result = await runCaplet(scope, ["remove", "alpha-cap", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    await runCaplet(scope, [
+      "apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    const result = await runCaplet(scope, [
+      "remove",
+      "alpha-cap",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet remove\n\nDONE  Removed alpha-cap");
-    expect(result.stdout).toMatch(/Managed  \d+ managed regions cleaned/);
+    expect(result.stdout).toMatch(/Managed {2}\d+ managed regions cleaned/);
   } finally {
     await cleanup(scope);
   }
@@ -172,7 +237,7 @@ test("doctor organizes checks by concern and summarizes health", async () => {
     expect(result.stdout).toContain("Caplet doctor\n\nEnvironment\n  PASS  Git available");
     expect(result.stdout).toContain("\nTargets\n");
     expect(result.stdout).toContain("\nLockfiles\n  PASS  Project lockfile");
-    expect(result.stdout).toMatch(/DONE  \d+ checks passed/);
+    expect(result.stdout).toMatch(/DONE {2}\d+ checks passed/);
   } finally {
     await cleanup(scope);
   }
@@ -181,8 +246,24 @@ test("doctor organizes checks by concern and summarizes health", async () => {
 test("diff has a calm empty state when output is current", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
-    const result = await runCaplet(scope, ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    await runCaplet(scope, [
+      "apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    const result = await runCaplet(scope, [
+      "diff",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet diff\n\nNo changes\n");
@@ -196,7 +277,14 @@ test("diff has a calm empty state when output is current", async () => {
 test("quiet suppresses the complete success presentation", async () => {
   const scope = await makeScope();
   try {
-    const result = await runCaplet(scope, ["fetch", "--quiet", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "fetch",
+      "--quiet",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("");
@@ -209,7 +297,13 @@ test("quiet suppresses the complete success presentation", async () => {
 test("usage errors are concise, sentence-cased, and visible in quiet mode", async () => {
   const scope = await makeScope();
   try {
-    const result = await runCaplet(scope, ["add", "path:/tmp/example", "--quiet", "--cwd", scope.cwd]);
+    const result = await runCaplet(scope, [
+      "add",
+      "path:/tmp/example",
+      "--quiet",
+      "--cwd",
+      scope.cwd,
+    ]);
 
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");

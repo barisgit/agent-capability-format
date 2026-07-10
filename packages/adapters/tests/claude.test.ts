@@ -1,6 +1,6 @@
+import { expect, test } from "bun:test";
 import { homedir } from "node:os";
 import path from "node:path";
-import { expect, test } from "bun:test";
 import { claudeAdapter } from "../src";
 import {
   byPath,
@@ -72,10 +72,10 @@ test("claude emits referenced skill assets to canonical and native skills roots"
     emitInput(cap, ".claude"),
     makeInMemoryFs({ [assetPath]: "# Research Guide\n\nUse cited notes.\n" }),
   );
-  expect(byPath(result.diffs, ".agents/skills/research/references/guide.md").after).toContain(
+  expect(textAfter(byPath(result.diffs, ".agents/skills/research/references/guide.md"))).toContain(
     "Use cited notes",
   );
-  expect(byPath(result.diffs, ".claude/skills/research/references/guide.md").after).toContain(
+  expect(textAfter(byPath(result.diffs, ".claude/skills/research/references/guide.md"))).toContain(
     "Use cited notes",
   );
 });
@@ -142,9 +142,11 @@ test("claude emits referenced prose assets beside emitted prose files", async ()
     }),
   );
 
-  expect(byPath(result.diffs, ".claude/agents/notes.md").after).toBe("agent notes\n");
-  expect(byPath(result.diffs, ".claude/commands/examples.md").after).toBe("command examples\n");
-  expect(byPath(result.diffs, ".claude/.acf/instructions/test-cap/context.md").after).toBe(
+  expect(textAfter(byPath(result.diffs, ".claude/agents/notes.md"))).toBe("agent notes\n");
+  expect(textAfter(byPath(result.diffs, ".claude/commands/examples.md"))).toBe(
+    "command examples\n",
+  );
+  expect(textAfter(byPath(result.diffs, ".claude/.acf/instructions/test-cap/context.md"))).toBe(
     "instruction context\n",
   );
 });
@@ -170,17 +172,18 @@ test("claude transports skill assets outside the skill directory with root-relat
     makeInMemoryFs({ [sharedAsset]: "shared asset\n" }),
   );
 
-  expect(byPath(result.diffs, ".agents/skills/research/shared/outside.md").after).toBe(
+  expect(textAfter(byPath(result.diffs, ".agents/skills/research/shared/outside.md"))).toBe(
     "shared asset\n",
   );
-  expect(byPath(result.diffs, ".claude/skills/research/shared/outside.md").after).toBe(
+  expect(textAfter(byPath(result.diffs, ".claude/skills/research/shared/outside.md"))).toBe(
     "shared asset\n",
   );
 });
 
-test("claude diagnoses unsupported binary assets with asset code", async () => {
+test("claude preserves binary asset bytes and executable mode", async () => {
   const cap = await readFixtureCapability();
   const binaryAsset = path.join(cap.root, "skills", "research", "image.png");
+  const bytes = Uint8Array.from([0, 255, 1, 128]);
   const result = await claudeAdapter.emit(
     emitInput(
       {
@@ -195,13 +198,16 @@ test("claude diagnoses unsupported binary assets with asset code", async () => {
       },
       ".claude",
     ),
-    makeInMemoryFs({ [binaryAsset]: "\0png" }),
+    makeInMemoryFs({ [binaryAsset]: { content: bytes, mode: 0o755 } }),
   );
 
-  expect(codes(result)).toContain("acf.assets.unsupported");
-  expect(
-    result.diagnostics.some(
-      (diag) => diag.code === "acf.assets.unsupported" && diag.path === "skills/research/image.png",
-    ),
-  ).toBe(true);
+  const diff = byPath(result.diffs, ".agents/skills/research/image.png");
+  expect(diff.after).toEqual(bytes);
+  expect(diff.afterMode).toBe(0o755);
+  expect(codes(result)).not.toContain("acf.assets.unsupported");
 });
+
+function textAfter(diff: { after: string | Uint8Array | null }): string {
+  if (diff.after === null) throw new Error("expected emitted content");
+  return typeof diff.after === "string" ? diff.after : new TextDecoder().decode(diff.after);
+}

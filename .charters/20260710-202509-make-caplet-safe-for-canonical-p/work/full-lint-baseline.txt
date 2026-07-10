@@ -1,0 +1,511 @@
+$ biome check .
+biome.json:12:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    10 │     "includes": [
+    11 │       "**",
+  > 12 │       "!**/dist/**",
+       │       ^^^^^^^^^^^^^
+    13 │       "!**/node_modules/**",
+    14 │       "!**/.turbo/**",
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/dist.
+  
+    12 │ ······"!**/dist/**",
+       │                ---  
+
+biome.json:13:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    11 │       "**",
+    12 │       "!**/dist/**",
+  > 13 │       "!**/node_modules/**",
+       │       ^^^^^^^^^^^^^^^^^^^^^
+    14 │       "!**/.turbo/**",
+    15 │       "!**/.pi/**",
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/node_modules.
+  
+    13 │ ······"!**/node_modules/**",
+       │                        ---  
+
+biome.json:14:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    12 │       "!**/dist/**",
+    13 │       "!**/node_modules/**",
+  > 14 │       "!**/.turbo/**",
+       │       ^^^^^^^^^^^^^^^
+    15 │       "!**/.pi/**",
+    16 │       "!**/fixtures/**",
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/.turbo.
+  
+    14 │ ······"!**/.turbo/**",
+       │                  ---  
+
+biome.json:15:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    13 │       "!**/node_modules/**",
+    14 │       "!**/.turbo/**",
+  > 15 │       "!**/.pi/**",
+       │       ^^^^^^^^^^^^
+    16 │       "!**/fixtures/**",
+    17 │       "!**/tests/fixtures/**"
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/.pi.
+  
+    15 │ ······"!**/.pi/**",
+       │               ---  
+
+biome.json:16:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    14 │       "!**/.turbo/**",
+    15 │       "!**/.pi/**",
+  > 16 │       "!**/fixtures/**",
+       │       ^^^^^^^^^^^^^^^^^
+    17 │       "!**/tests/fixtures/**"
+    18 │     ]
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/fixtures.
+  
+    16 │ ······"!**/fixtures/**",
+       │                    ---  
+
+biome.json:17:7 lint/suspicious/useBiomeIgnoreFolder  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Incorrect usage of ignore a folder found.
+  
+    15 │       "!**/.pi/**",
+    16 │       "!**/fixtures/**",
+  > 17 │       "!**/tests/fixtures/**"
+       │       ^^^^^^^^^^^^^^^^^^^^^^^
+    18 │     ]
+    19 │   },
+  
+  i Since version 2.2.0, ignoring folders doesn't require the use the trailing /**. This is a bug that affects version prior v2.2.0.
+  
+  i Safe fix: If you want to ignore a folder, use the following pattern instead: !**/tests/fixtures.
+  
+    17 │ ······"!**/tests/fixtures/**"
+       │                          --- 
+
+.charters/20260710-202509-make-caplet-safe-for-canonical-p/state.json format ━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+    34 34 │         "id": "C3",
+    35 35 │         "title": "The requested canonical repository is a valid, documented Git repository",
+    36    │ - ······"depends":·[
+    37    │ - ········"C1",
+    38    │ - ········"C2"
+    39    │ - ······],
+       36 │ + ······"depends":·["C1",·"C2"],
+    40 37 │         "evidence": {
+    41 38 │           "status": "none",
+    ····· │ 
+    47 44 │         "id": "C4",
+    48 45 │         "title": "One real user-scope Pi capability is migrated reversibly through Caplet",
+    49    │ - ······"depends":·[
+    50    │ - ········"C1",
+    51    │ - ········"C2",
+    52    │ - ········"C3"
+    53    │ - ······],
+       46 │ + ······"depends":·["C1",·"C2",·"C3"],
+    54 47 │         "evidence": {
+    55 48 │           "status": "none",
+    ····· │ 
+    61 54 │         "id": "C5",
+    62 55 │         "title": "Repository checks and an independent review pass",
+    63    │ - ······"depends":·[
+    64    │ - ········"C1",
+    65    │ - ········"C2",
+    66    │ - ········"C4"
+    67    │ - ······],
+       56 │ + ······"depends":·["C1",·"C2",·"C4"],
+    68 57 │         "evidence": {
+    69 58 │           "status": "none",
+  
+
+.slim/cartography.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+      4   4 │       "last_run": "2026-07-10T21:17:33.241284Z",
+      5   5 │       "root": "/Users/blaz/Programming_local/Projects/agent-capability-format",
+      6     │ - ····"include_patterns":·[
+      7     │ - ······"packages/*/src/**/*.ts",
+      8     │ - ······"apps/*/src/**/*.ts"
+      9     │ - ····],
+          6 │ + ····"include_patterns":·["packages/*/src/**/*.ts",·"apps/*/src/**/*.ts"],
+     10   7 │       "exclude_patterns": [
+     11   8 │         "**/*.test.ts",
+    ······· │ 
+    157 154 │       "packages/adapters/src/cursor": "82a0bde133f8fff03bca07f523a2a6fe"
+    158 155 │     }
+    159     │ - }
+        156 │ + }
+        157 │ + 
+  
+
+apps/caplet/src/apply/json-pointer.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+    174 174 │   }
+    175 175 │   
+    176     │ - function·findContainerClose(text:·string,·start:·number,·end:·number,·closeChar:·"}"·|·"]"):·number·{
+        176 │ + function·findContainerClose(
+        177 │ + ··text:·string,
+        178 │ + ··start:·number,
+        179 │ + ··end:·number,
+        180 │ + ··closeChar:·"}"·|·"]",
+        181 │ + ):·number·{
+    177 182 │     let cursor = trimEnd(text, end) - 1;
+    178 183 │     while (cursor > start && text[cursor] !== closeChar) cursor -= 1;
+    ······· │ 
+    183 188 │   function skipValue(text: string, start: number): number {
+    184 189 │     const char = text[start];
+    185     │ - ··if·(char·===·"\"")·return·readString(text,·start).end;
+        190 │ + ··if·(char·===·'"')·return·readString(text,·start).end;
+    186 191 │     if (char === "{" || char === "[") return skipContainer(text, start);
+    187 192 │     let cursor = start;
+    ······· │ 
+    197 202 │     while (cursor < text.length) {
+    198 203 │       const char = text[cursor];
+    199     │ - ····if·(char·===·"\"")·{
+        204 │ + ····if·(char·===·'"')·{
+    200 205 │         cursor = readString(text, cursor).end;
+    201 206 │         continue;
+    ······· │ 
+    219 224 │         continue;
+    220 225 │       }
+    221     │ - ····if·(char·===·"\"")·{
+        226 │ + ····if·(char·===·'"')·{
+    222 227 │         const value: unknown = JSON.parse(text.slice(start, cursor + 1));
+    223 228 │         if (typeof value !== "string") throw new Error("invalid JSON string");
+  
+
+apps/caplet/src/commands/apply.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     2  2 │   import { globalArgs, readFetchMode } from "../internal/args";
+     3  3 │   import { runCommandSafely } from "../internal/command";
+     4    │ - import·{·exitCodeForDiagnostics,·printChanges,·printDiagnostics,·reporter·}·from·"../internal/output";
+        4 │ + import·{
+        5 │ + ··exitCodeForDiagnostics,
+        6 │ + ··printChanges,
+        7 │ + ··printDiagnostics,
+        8 │ + ··reporter,
+        9 │ + }·from·"../internal/output";
+     5 10 │   import { applyEmitPlan, buildEmitPlan, describeDiffs, fetchScopes } from "../internal/workflow";
+     6 11 │   
+    ····· │ 
+    31 36 │         const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+    32 37 │         out.log("");
+    33    │ - ······out.done(changes.length·===·0·?·"Output·is·up·to·date"·:·`Applied·${changes.length}·${changes.length·===·1·?·"file"·:·"files"}`);
+    34    │ - ······if·(changes.length·>·0)·out.details([["Operations",·`${written}·writes,·${deleted}·deletes`]]);
+       38 │ + ······out.done(
+       39 │ + ········changes.length·===·0
+       40 │ + ··········?·"Output·is·up·to·date"
+       41 │ + ··········:·`Applied·${changes.length}·${changes.length·===·1·?·"file"·:·"files"}`,
+       42 │ + ······);
+       43 │ + ······if·(changes.length·>·0)
+       44 │ + ········out.details([["Operations",·`${written}·writes,·${deleted}·deletes`]]);
+    35 45 │       });
+    36 46 │     },
+  
+
+apps/caplet/src/commands/check.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import { readLockfile } from "@acf/installer";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { defineCommand } from "citty";
+    3 │ import { detectLockDrift, readCapabilitiesYml } from "@acf/installer";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+     1    │ - import·{·readLockfile·}·from·"@acf/installer";
+     2    │ - import·{·defineCommand·}·from·"citty";
+     3    │ - import·{·detectLockDrift,·readCapabilitiesYml·}·from·"@acf/installer";
+     4    │ - import·{·resolveScopeCapabilities,·type·Diagnostic·}·from·"@acf/core";
+        1 │ + import·{·type·Diagnostic,·resolveScopeCapabilities·}·from·"@acf/core";
+        2 │ + import·{·detectLockDrift,·readCapabilitiesYml,·readLockfile·}·from·"@acf/installer";
+        3 │ + import·{·defineCommand·}·from·"citty";
+     5  4 │   import { globalArgs, readCwd, readScope } from "../internal/args";
+     6  5 │   import { runCommandSafely } from "../internal/command";
+  
+
+apps/caplet/src/commands/diff.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     2  2 │   import { globalArgs } from "../internal/args";
+     3  3 │   import { runCommandSafely } from "../internal/command";
+     4    │ - import·{·exitCodeForDiagnostics,·printChanges,·printDiagnostics,·reporter·}·from·"../internal/output";
+        4 │ + import·{
+        5 │ + ··exitCodeForDiagnostics,
+        6 │ + ··printChanges,
+        7 │ + ··printDiagnostics,
+        8 │ + ··reporter,
+        9 │ + }·from·"../internal/output";
+     5 10 │   import { buildEmitPlan, describeDiffs } from "../internal/workflow";
+     6 11 │   
+  
+
+apps/caplet/src/commands/doctor.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import "@acf/adapters";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { readdir } from "node:fs/promises";
+    3 │ import { homedir } from "node:os";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+      3   3 │   import { homedir } from "node:os";
+      4   4 │   import path from "node:path";
+      5     │ - import·{·defineCommand·}·from·"citty";
+      6     │ - import·{·targetIds,·targetMap,·type·Diagnostic·}·from·"@acf/core";
+      7     │ - import·{·readLockfile·}·from·"@acf/installer";
+          5 │ + import·{·type·Diagnostic,·targetIds,·targetMap·}·from·"@acf/core";
+          6 │ + import·{·readLockfile·}·from·"@acf/installer";
+          7 │ + import·{·defineCommand·}·from·"citty";
+      8   8 │   import { globalArgs, readCwd, readScope } from "../internal/args";
+      9   9 │   import { runCommandSafely } from "../internal/command";
+  
+
+apps/caplet/src/commands/doctor.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     53  53 │       return;
+     54  54 │     }
+     55     │ - ··diagnostics.push({·severity:·"error",·code:·"acf.doctor.git-missing",·message:·"git·is·not·available"·});
+         55 │ + ··diagnostics.push({
+         56 │ + ····severity:·"error",
+         57 │ + ····code:·"acf.doctor.git-missing",
+         58 │ + ····message:·"git·is·not·available",
+         59 │ + ··});
+     56  60 │     checks.push({ section: "Environment", status: "fail", message: "Git unavailable" });
+     57  61 │   }
+     58  62 │   
+     59     │ - async·function·checkAgentsReadable(checks:·DoctorCheck[],·diagnostics:·Diagnostic[]):·Promise<void>·{
+         63 │ + async·function·checkAgentsReadable(
+         64 │ + ··checks:·DoctorCheck[],
+         65 │ + ··diagnostics:·Diagnostic[],
+         66 │ + ):·Promise<void>·{
+     60  67 │     const agentsDir = path.join(homedir(), ".agents");
+     61  68 │     try {
+     62  69 │       await readdir(agentsDir);
+     63     │ - ····checks.push({·section:·"Environment",·status:·"pass",·message:·`Agents·directory·readable·(${agentsDir})`·});
+         70 │ + ····checks.push({
+         71 │ + ······section:·"Environment",
+         72 │ + ······status:·"pass",
+         73 │ + ······message:·`Agents·directory·readable·(${agentsDir})`,
+         74 │ + ····});
+     64  75 │     } catch (error) {
+     65  76 │       const severity = isErrno(error, "ENOENT") ? "warn" : "error";
+    ······· │ 
+     82  93 │       const target = targetMap[targetId];
+     83  94 │       if (target?.adapter !== undefined) {
+     84     │ - ······checks.push({·section:·"Targets",·status:·"pass",·message:·`${target.displayName}·adapter·registered`·});
+         95 │ + ······checks.push({
+         96 │ + ········section:·"Targets",
+         97 │ + ········status:·"pass",
+         98 │ + ········message:·`${target.displayName}·adapter·registered`,
+         99 │ + ······});
+     85 100 │         continue;
+     86 101 │       }
+    ······· │ 
+    108 123 │       try {
+    109 124 │         await readLockfile(root.lockPath);
+    110     │ - ······checks.push({·section:·"Lockfiles",·status:·"pass",·message:·`${capitalize(root.scope)}·lockfile`·});
+        125 │ + ······checks.push({
+        126 │ + ········section:·"Lockfiles",
+        127 │ + ········status:·"pass",
+        128 │ + ········message:·`${capitalize(root.scope)}·lockfile`,
+        129 │ + ······});
+    111 130 │       } catch (error) {
+    112 131 │         diagnostics.push({
+    ······· │ 
+    116 135 │           path: root.lockPath,
+    117 136 │         });
+    118     │ - ······checks.push({·section:·"Lockfiles",·status:·"fail",·message:·`${capitalize(root.scope)}·lockfile·invalid`·});
+        137 │ + ······checks.push({
+        138 │ + ········section:·"Lockfiles",
+        139 │ + ········status:·"fail",
+        140 │ + ········message:·`${capitalize(root.scope)}·lockfile·invalid`,
+        141 │ + ······});
+    119 142 │       }
+    120 143 │     }
+  
+
+apps/caplet/src/commands/inspect.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import { defineCommand } from "citty";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { resolveScopeCapabilities, targetIds, type Diagnostic } from "@acf/core";
+    3 │ import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+     1    │ - import·{·defineCommand·}·from·"citty";
+     2    │ - import·{·resolveScopeCapabilities,·targetIds,·type·Diagnostic·}·from·"@acf/core";
+        1 │ + import·{·type·Diagnostic,·resolveScopeCapabilities,·targetIds·}·from·"@acf/core";
+        2 │ + import·{·defineCommand·}·from·"citty";
+     3  3 │   import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+     4  4 │   import { runCommandSafely } from "../internal/command";
+  
+
+apps/caplet/src/commands/ls.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import { defineCommand } from "citty";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { resolveScopeCapabilities, type AcfCapability, type Diagnostic } from "@acf/core";
+    3 │ import { globalArgs, readCwd, readScope } from "../internal/args";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+     1    │ - import·{·defineCommand·}·from·"citty";
+     2    │ - import·{·resolveScopeCapabilities,·type·AcfCapability,·type·Diagnostic·}·from·"@acf/core";
+        1 │ + import·{·type·AcfCapability,·type·Diagnostic,·resolveScopeCapabilities·}·from·"@acf/core";
+        2 │ + import·{·defineCommand·}·from·"citty";
+     3  3 │   import { globalArgs, readCwd, readScope } from "../internal/args";
+     4  4 │   import { runCommandSafely } from "../internal/command";
+  
+
+apps/caplet/src/commands/remove.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import path from "node:path";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { defineCommand } from "citty";
+    3 │ import { readCapletConfig, targetIds } from "@acf/core";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+     1  1 │   import path from "node:path";
+     2    │ - import·{·defineCommand·}·from·"citty";
+     3    │ - import·{·readCapletConfig,·targetIds·}·from·"@acf/core";
+        2 │ + import·{·readCapletConfig,·targetIds·}·from·"@acf/core";
+        3 │ + import·{·defineCommand·}·from·"citty";
+     4  4 │   import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";
+     5  5 │   import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+  
+
+apps/caplet/src/commands/remove.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+    29 29 │         await removeManifestEntry(root, name);
+    30 30 │         const config = (await readCapletConfig(cwd)).config;
+    31    │ - ······const·selectedTargets·=·typeof·context.args.target·===·"string"·?·[context.args.target]·:·[...targetIds];
+       31 │ + ······const·selectedTargets·=
+       32 │ + ········typeof·context.args.target·===·"string"·?·[context.args.target]·:·[...targetIds];
+    32 33 │         let cleaned = 0;
+    33 34 │         for (const targetId of selectedTargets) {
+    ····· │ 
+    43 44 │         out.heading("remove");
+    44 45 │         out.done(`Removed ${name}`);
+    45    │ - ······out.details([["Managed",·`${cleaned}·managed·${cleaned·===·1·?·"region"·:·"regions"}·cleaned`]]);
+       46 │ + ······out.details([
+       47 │ + ········["Managed",·`${cleaned}·managed·${cleaned·===·1·?·"region"·:·"regions"}·cleaned`],
+       48 │ + ······]);
+    46 49 │       });
+    47 50 │     },
+  
+
+apps/caplet/src/index.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ export { applyDiffs, type ApplyResult } from "./apply/apply-diffs";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ export {
+    3 │   detectDrift,
+  
+  i Safe fix: Organize Imports (Biome)
+  
+     1    │ - export·{·applyDiffs,·type·ApplyResult·}·from·"./apply/apply-diffs";
+        1 │ + export·{·type·ApplyResult,·applyDiffs·}·from·"./apply/apply-diffs";
+     2  2 │   export {
+     3    │ - ··detectDrift,
+     4    │ - ··hashOwnedRegions,
+     5    │ - ··mergeSidecarEntry,
+     6    │ - ··readSidecar,
+     7    │ - ··relativeSidecarPath,
+     8    │ - ··removeOwnedRegions,
+     9    │ - ··writeSidecar,
+    10    │ - ··type·DriftFs,
+    11    │ - ··type·ManagedEntry,
+    12    │ - ··type·RemoveOwnedRegionsResult,
+        3 │ + ··type·DriftFs,
+        4 │ + ··detectDrift,
+        5 │ + ··hashOwnedRegions,
+        6 │ + ··type·ManagedEntry,
+        7 │ + ··mergeSidecarEntry,
+        8 │ + ··type·RemoveOwnedRegionsResult,
+        9 │ + ··readSidecar,
+       10 │ + ··relativeSidecarPath,
+       11 │ + ··removeOwnedRegions,
+       12 │ + ··writeSidecar,
+    13 13 │   } from "./apply/sidecar";
+    14 14 │   export { rootCommand } from "./cli";
+  
+
+package.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     4  4 │     "private": true,
+     5  5 │     "packageManager": "bun@1.3.12",
+     6    │ - ··"workspaces":·["apps/*",·"packages/*"],
+        6 │ + ··"workspaces":·[
+        7 │ + ····"apps/*",
+        8 │ + ····"packages/*"
+        9 │ + ··],
+     7 10 │     "scripts": {
+     8 11 │       "build": "turbo run build",
+  
+
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+
+error: script "lint" exited with code 1
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 35.
+Checked 156 files in 50ms. No fixes applied.
+Found 43 errors.
+Found 7 warnings.
+
+
+Command exited with code 1

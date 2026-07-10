@@ -1,9 +1,9 @@
 import path from "node:path";
 import {
-  readCapability,
   type AcfCapability,
   type EmitInput,
   type EmitOptions,
+  readCapability,
   type Scope,
   type TargetAdapter,
 } from "@acf/core";
@@ -42,7 +42,10 @@ export function codes(result: { diagnostics: Array<{ code: string }> }): string[
   return result.diagnostics.map((diagnostic) => diagnostic.code);
 }
 
-export function parseJsonDiff(diff: { after: string | null }): Record<string, unknown> {
+export function parseJsonDiff(diff: {
+  after: string | Uint8Array | null;
+}): Record<string, unknown> {
   if (diff.after === null) throw new Error("diff has null after");
+  if (typeof diff.after !== "string") throw new Error("JSON diff has binary content");
   return JSON.parse(diff.after) as Record<string, unknown>;
 }

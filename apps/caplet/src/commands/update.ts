@@ -1,5 +1,5 @@
-import { defineCommand } from "citty";
 import { readLockfile } from "@acf/installer";
+import { defineCommand } from "citty";
 import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
@@ -16,9 +16,15 @@ export const updateCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const name = typeof context.args.name === "string" ? context.args.name : undefined;
       if (name !== undefined) await ensureKnownName(context.args, name);
-      const result = await fetchScopes(context.args, "force");
+      const result = await fetchScopes(context.args, "force", name);
       const code = finishWithDiagnostics(result.diagnostics, context.args);
-      const count = result.results.reduce((sum, item) => sum + item.capabilities.length, 0);
+      const count = result.results.reduce(
+        (sum, item) =>
+          sum +
+          item.capabilities.filter((capability) => name === undefined || capability.name === name)
+            .length,
+        0,
+      );
       if (code === 0) {
         const out = reporter(context.args);
         out.heading("update");

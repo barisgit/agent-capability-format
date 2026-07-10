@@ -1,12 +1,12 @@
 import type { CapabilitiesYml, Diagnostic } from "@acf/core";
 import type { CapabilitiesLock } from "./lockfile";
-import { sourceId } from "./lockfile";
+import { entrySourceId, sourceId } from "./lockfile";
 
 export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | null): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   if (lock === null) {
     for (const entry of yml.capabilities) {
-      diagnostics.push(missingEntryDiagnostic(sourceId(entry.source)));
+      diagnostics.push(missingEntryDiagnostic(entrySourceId(entry)));
     }
     return diagnostics;
   }
@@ -24,8 +24,8 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
 
   const entriesBySource = new Map(lock.entries.map((entry) => [entry.sourceId, entry]));
   for (const entry of yml.capabilities) {
-    const id = sourceId(entry.source);
-    const lockEntry = entriesBySource.get(id);
+    const id = entrySourceId(entry);
+    const lockEntry = entriesBySource.get(id) ?? entriesBySource.get(sourceId(entry.source));
     if (lockEntry === undefined) {
       diagnostics.push(missingEntryDiagnostic(id));
       continue;

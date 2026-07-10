@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { cp, readFile } from "node:fs/promises";
+import { cp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeContentHash } from "@acf/core/hash";
-import { readLockfile, resolveCapabilities } from "../src";
+import { fetchCapability, readLockfile, resolveCapabilities } from "../src";
 import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const fixture = fileURLToPath(new URL("./fixtures/local-cap", import.meta.url));
@@ -43,4 +43,13 @@ test("path source resolves into scope capabilities and is idempotent", async () 
   } finally {
     await cleanup(dir);
   }
+});
+
+test("capability paths cannot escape their source root", async () => {
+  await expect(
+    fetchCapability(
+      { source: { kind: "path", location: fixture }, path: "../outside" },
+      { cacheDir: path.join(fixture, ".cache") },
+    ),
+  ).rejects.toThrow("capability path escapes source root");
 });

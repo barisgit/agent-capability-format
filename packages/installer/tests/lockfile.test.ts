@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { type CapabilitiesLock, detectLockDrift, readLockfile, writeLockfile } from "../src";
+import {
+  type CapabilitiesLock,
+  detectLockDrift,
+  entrySourceId,
+  readLockfile,
+  writeLockfile,
+} from "../src";
 import { cleanup, tempDir } from "./helpers";
 
 test("lockfile round-trips with sorted entries and alphabetical entry keys", async () => {
@@ -60,6 +66,17 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
   } finally {
     await cleanup(dir);
   }
+});
+
+test("entry source ids distinguish monorepo paths", () => {
+  const source = { kind: "github" as const, repo: "owner/capabilities" };
+  expect(entrySourceId({ source })).toBe("github:owner/capabilities");
+  expect(entrySourceId({ source, path: "capabilities/alpha" })).toBe(
+    "github:owner/capabilities#path=capabilities%2Falpha",
+  );
+  expect(entrySourceId({ source, path: "capabilities\\alpha" })).toBe(
+    "github:owner/capabilities#path=capabilities%2Falpha",
+  );
 });
 
 test("unsupported lockfile version is diagnosed", () => {

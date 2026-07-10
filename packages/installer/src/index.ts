@@ -7,6 +7,7 @@ export type { CapabilitiesLock, LockEntry } from "./lockfile";
 export {
   canonicalizeLock,
   canonicalizePathLocation,
+  entrySourceId,
   readLockfile,
   sortLockEntries,
   sourceId,

@@ -1,0 +1,10 @@
+Caplet apply
+
+Changes
+  CREATE  /Users/blaz/.agents/skills/simplify/SKILL.md
+          user / pi / simplify
+  CREATE  /Users/blaz/.pi/agent/skills/simplify/SKILL.md
+          user / pi / simplify
+
+DONE  Applied 2 files
+      Operations  2 writes, 0 deletes

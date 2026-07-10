@@ -32,6 +32,13 @@ export function sourceId(spec: SourceSpec, baseDir = process.cwd()): string {
   return sourceString(spec, baseDir);
 }
 
+export function entrySourceId(entry: CapabilityEntry, baseDir = process.cwd()): string {
+  const source = sourceId(entry.source, baseDir);
+  if (entry.path === undefined) return source;
+  const normalizedPath = path.posix.normalize(entry.path.replaceAll("\\", "/"));
+  return `${source}#path=${encodeURIComponent(normalizedPath)}`;
+}
+
 export function sourceString(spec: SourceSpec, baseDir = process.cwd()): string {
   switch (spec.kind) {
     case "github":

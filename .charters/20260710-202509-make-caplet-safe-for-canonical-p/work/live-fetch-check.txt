@@ -1,0 +1,11 @@
+Caplet fetch
+
+DONE  Fetched 1 capability
+      Scopes  user
+
+
+Caplet check
+
+DONE  Validation passed
+      Capabilities  1
+      Scopes        user

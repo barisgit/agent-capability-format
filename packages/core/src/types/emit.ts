@@ -36,6 +36,7 @@ export type ReadOnlyFs = {
   exists(absPath: string): Promise<boolean>;
   readText(absPath: string): Promise<string | null>;
   readBytes(absPath: string): Promise<Uint8Array | null>;
+  readMode(absPath: string): Promise<number | null>;
   listDir(absPath: string): Promise<string[]>;
 };
 
@@ -57,10 +58,13 @@ export type EmitOptions = {
   skills?: SkillsEmitOptions | undefined;
 };
 export type EmitResult = { diffs: FileDiff[]; diagnostics: Diagnostic[] };
+export type FileContent = string | Uint8Array;
 export type FileDiff = {
   path: string;
-  before: string | null;
-  after: string | null;
+  before: FileContent | null;
+  after: FileContent | null;
+  beforeMode?: number | null | undefined;
+  afterMode?: number | null | undefined;
   owns: AcfOwnership[];
 };
 export type AcfOwnership =

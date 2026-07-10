@@ -1,8 +1,5 @@
 import path from "node:path";
 import {
-  defaultHookTimeoutMs,
-  hookEffectMatrix,
-  targetMap,
   type AcfCapability,
   type AcfOwnership,
   type AgentFacet,
@@ -10,21 +7,24 @@ import {
   type CanonicalTriggerName,
   type CommandFacet,
   type Diagnostic,
+  defaultHookTimeoutMs,
   type EmitInput,
   type FacetFamily,
   type FileDiff,
   type HookEffect,
   type HookEntry,
   type HookRun,
+  hookEffectMatrix,
   type InstructionFacet,
   type McpServer,
   type ReadOnlyFs,
   type Scope,
   type TargetId,
+  targetMap,
 } from "@acf/core";
-import { assetsForFacet, readTextAssets, relativeAssetPathFromBase } from "./assets";
-import { makeFileDiff } from "./diff";
+import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets";
 import { pushLossy } from "./diagnostics";
+import { makeFileDiff } from "./diff";
 import { jsonPointerEscape, mergeJson, readJsonObject } from "./json-merge";
 import { replaceMarkedBlock } from "./markers";
 import {
@@ -83,24 +83,10 @@ export async function emitStandardAdapter(
   const diffs: FileDiff[] = [];
   if (!options.cursorRulesOnly) {
     diffs.push(
-      ...(await emitProseFiles(
-        input.capability,
-        input.capability.agents,
-        layout.agentDir,
-        fs,
-        layout.targetId,
-        diagnostics,
-      )),
+      ...(await emitProseFiles(input.capability, input.capability.agents, layout.agentDir, fs)),
     );
     diffs.push(
-      ...(await emitProseFiles(
-        input.capability,
-        input.capability.commands,
-        layout.commandDir,
-        fs,
-        layout.targetId,
-        diagnostics,
-      )),
+      ...(await emitProseFiles(input.capability, input.capability.commands, layout.commandDir, fs)),
     );
   } else {
     diagnoseCursorProse(input.capability, layout.targetId, diagnostics);
@@ -119,8 +105,6 @@ export async function emitProseFiles(
   facets: readonly (AgentFacet | CommandFacet)[],
   dir: string | undefined,
   fs: ReadOnlyFs,
-  targetId: TargetId,
-  diagnostics: Diagnostic[],
 ): Promise<FileDiff[]> {
   if (dir === undefined) return [];
   const diffs: FileDiff[] = [];
@@ -132,11 +116,19 @@ export async function emitProseFiles(
         { kind: "file" },
       ]),
     );
-    const assets = await readProseAssets(cap, facet, fs, targetId, diagnostics);
+    const assets = await readProseAssets(cap, facet, fs);
     for (const asset of assets) {
       const assetPath = path.join(dir, asset.relativePath);
-      const assetBefore = await fs.readText(assetPath);
-      diffs.push(makeFileDiff(assetPath, assetBefore, asset.text, [{ kind: "file" }]));
+      const [assetBefore, beforeMode] = await Promise.all([
+        fs.readBytes(assetPath),
+        fs.readMode(assetPath),
+      ]);
+      diffs.push(
+        makeFileDiff(assetPath, assetBefore, asset.bytes, [{ kind: "file" }], {
+          before: beforeMode,
+          after: asset.mode,
+        }),
+      );
     }
   }
   return diffs;
@@ -180,8 +172,6 @@ export async function emitInstructions(
             instruction,
             fs,
             path.dirname(layout.alwaysInstructionFile),
-            layout.targetId,
-            diagnostics,
           )),
         );
         continue;
@@ -201,16 +191,7 @@ export async function emitInstructions(
       );
       const before = await fs.readText(outPath);
       diffs.push(makeFileDiff(outPath, before, renderCursorRule(instruction), [{ kind: "file" }]));
-      diffs.push(
-        ...(await instructionAssetDiffs(
-          input.capability,
-          instruction,
-          fs,
-          rulesDir,
-          layout.targetId,
-          diagnostics,
-        )),
-      );
+      diffs.push(...(await instructionAssetDiffs(input.capability, instruction, fs, rulesDir)));
       continue;
     }
     const triggeredDiff = await instructionFileDiff(input, fs, layout, instruction);
@@ -218,14 +199,7 @@ export async function emitInstructions(
       diffs.push(triggeredDiff);
       const instructionDir = path.dirname(triggeredDiff.path);
       diffs.push(
-        ...(await instructionAssetDiffs(
-          input.capability,
-          instruction,
-          fs,
-          instructionDir,
-          layout.targetId,
-          diagnostics,
-        )),
+        ...(await instructionAssetDiffs(input.capability, instruction, fs, instructionDir)),
       );
     }
   }
@@ -364,20 +338,11 @@ async function readProseAssets(
   cap: AcfCapability,
   facet: AgentFacet | CommandFacet | InstructionFacet,
   fs: ReadOnlyFs,
-  targetId: TargetId,
-  diagnostics: Diagnostic[],
 ) {
   const baseDir =
     facet.source.kind === "directory" ? facet.source.path : path.dirname(facet.source.primary);
-  return await readTextAssets(
-    cap,
-    assetsForFacet(cap, facet.family, facet.name),
-    fs,
-    targetId,
-    facet.family,
-    facet.name,
-    diagnostics,
-    (assetPath) => relativeAssetPathFromBase(cap, baseDir, assetPath),
+  return await readAssets(cap, assetsForFacet(cap, facet.family, facet.name), fs, (assetPath) =>
+    relativeAssetPathFromBase(cap, baseDir, assetPath),
   );
 }
 
@@ -386,15 +351,18 @@ async function instructionAssetDiffs(
   instruction: InstructionFacet,
   fs: ReadOnlyFs,
   outDir: string,
-  targetId: TargetId,
-  diagnostics: Diagnostic[],
 ): Promise<FileDiff[]> {
   const diffs: FileDiff[] = [];
-  const assets = await readProseAssets(cap, instruction, fs, targetId, diagnostics);
+  const assets = await readProseAssets(cap, instruction, fs);
   for (const asset of assets) {
     const outPath = path.join(outDir, asset.relativePath);
-    const before = await fs.readText(outPath);
-    diffs.push(makeFileDiff(outPath, before, asset.text, [{ kind: "file" }]));
+    const [before, beforeMode] = await Promise.all([fs.readBytes(outPath), fs.readMode(outPath)]);
+    diffs.push(
+      makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
+        before: beforeMode,
+        after: asset.mode,
+      }),
+    );
   }
   return diffs;
 }

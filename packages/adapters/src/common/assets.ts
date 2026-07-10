@@ -1,15 +1,7 @@
 import path from "node:path";
-import type {
-  AcfCapability,
-  AssetRef,
-  Diagnostic,
-  FacetFamily,
-  ReadOnlyFs,
-  TargetId,
-} from "@acf/core";
-import { pushLossy } from "./diagnostics";
+import type { AcfCapability, AssetRef, FacetFamily, ReadOnlyFs } from "@acf/core";
 
-export type TextAsset = { relativePath: string; text: string };
+export type AssetPayload = { relativePath: string; bytes: Uint8Array; mode: number };
 
 export function assetsForFacet(cap: AcfCapability, family: FacetFamily, name: string): AssetRef[] {
   return cap.assets.filter(
@@ -35,17 +27,13 @@ export function relativeAssetPathFromBase(
   return assetPath;
 }
 
-export async function readTextAssets(
+export async function readAssets(
   cap: AcfCapability,
   assets: readonly AssetRef[],
   fs: ReadOnlyFs,
-  targetId: TargetId,
-  family: FacetFamily,
-  name: string,
-  diagnostics: Diagnostic[],
   relativePathFor: (assetPath: string) => string | null,
-): Promise<TextAsset[]> {
-  const out: TextAsset[] = [];
+): Promise<AssetPayload[]> {
+  const out: AssetPayload[] = [];
   const seen = new Set<string>();
   for (const asset of [...assets].sort(
     (a, b) => a.path.localeCompare(b.path) || a.origin.localeCompare(b.origin),
@@ -54,26 +42,11 @@ export async function readTextAssets(
     if (relativePath === null || seen.has(relativePath)) continue;
     seen.add(relativePath);
     const assetSourcePath = path.join(cap.root, asset.path);
-    if (await isBinary(fs, assetSourcePath)) {
-      // FileDiff is text-only today; keep binary asset transport lossy until a bytes channel exists.
-      pushLossy(diagnostics, {
-        code: "acf.assets.unsupported",
-        message: `binary ${family} assets are not transported yet: ${asset.path}`,
-        targetId,
-        family,
-        path: asset.path,
-        data: { facet: name },
-      });
-      continue;
-    }
-    const text = await fs.readText(assetSourcePath);
-    if (text !== null) out.push({ relativePath, text });
+    const [bytes, mode] = await Promise.all([
+      fs.readBytes(assetSourcePath),
+      fs.readMode(assetSourcePath),
+    ]);
+    if (bytes !== null) out.push({ relativePath, bytes, mode: mode ?? 0o644 });
   }
   return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-}
-
-async function isBinary(fs: ReadOnlyFs, absPath: string): Promise<boolean> {
-  const bytes = await fs.readBytes(absPath);
-  if (bytes === null) return false;
-  return bytes.includes(0);
 }

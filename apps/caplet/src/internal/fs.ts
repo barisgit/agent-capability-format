@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ReadOnlyFs } from "@acf/core";
 
@@ -6,6 +6,14 @@ export function diskReadOnlyFs(): ReadOnlyFs {
   return {
     async exists(absPath) {
       return await exists(absPath);
+    },
+    async readMode(absPath) {
+      try {
+        return (await stat(absPath)).mode & 0o777;
+      } catch (error) {
+        if (isErrno(error, "ENOENT")) return null;
+        throw error;
+      }
     },
     async readText(absPath) {
       try {
@@ -43,7 +51,8 @@ export async function exists(filePath: string): Promise<boolean> {
     await readFile(filePath);
     return true;
   } catch (error) {
-    if (isErrno(error, "ENOENT") || isErrno(error, "EISDIR")) return await directoryExists(filePath);
+    if (isErrno(error, "ENOENT") || isErrno(error, "EISDIR"))
+      return await directoryExists(filePath);
     throw error;
   }
 }

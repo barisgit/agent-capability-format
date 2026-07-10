@@ -1,0 +1,35 @@
+Caplet update
+
+DONE  Updated simplify
+      Resolved  1 capability
+
+
+Caplet check
+
+DONE  Validation passed
+      Capabilities  1
+      Scopes        user
+
+
+Caplet diff
+
+No changes
+  Managed output already matches the resolved capabilities.
+
+DONE  Output is up to date
+
+
+{
+  "acf": 1,
+  "entries": [
+    {
+      "capabilityHash": "sha256-f2126321d3fd566a18b4f142657cca1fd11b43a53f87ae710099765fed16c28b",
+      "capabilityNames": [
+        "simplify"
+      ],
+      "resolvedAt": "2026-07-10T21:03:59.465Z",
+      "source": "path:/Users/blaz/Programming_local/Capatibilities",
+      "sourceId": "path:/Users/blaz/Programming_local/Capatibilities#path=capabilities%2Fsimplify"
+    }
+  ]
+}

@@ -225,9 +225,12 @@ export const targets = defineTargets([
       hook: "full",
       mcp: "full",
     },
-    installPaths: { user: path.join(HOME, ".pi"), project: path.join(".", ".pi") },
+    installPaths: {
+      user: path.join(HOME, ".pi", "agent"),
+      project: path.join(".", ".pi"),
+    },
     skillInstallPaths: {
-      user: path.join(HOME, ".pi", "skills"),
+      user: path.join(HOME, ".pi", "agent", "skills"),
       project: path.join(".", ".pi", "skills"),
     },
     mappings: {
@@ -247,7 +250,7 @@ export const targets = defineTargets([
         file_context: "partial",
       },
       mcpInstallPath: {
-        user: path.join(HOME, ".pi", "mcp.json"),
+        user: path.join(HOME, ".pi", "agent", "mcp.json"),
         project: path.join(".", ".pi", "mcp.json"),
       },
     },

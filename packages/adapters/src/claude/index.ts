@@ -1,8 +1,8 @@
 import {
-  registerAdapter,
   type Diagnostic,
   type EmitResult,
   type ReadOnlyFs,
+  registerAdapter,
   type TargetAdapter,
   targetMap,
 } from "@acf/core";
@@ -17,8 +17,13 @@ export const claudeAdapter: TargetAdapter<"claude"> = {
   async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
     const diagnostics: Diagnostic[] = [];
     const diffs = [
-      ...(await emitSkills(input.capability, input.scope, fs, claudeTarget, input.options.skills, diagnostics)),
-      ...(await emitStandardAdapter(input, fs, layoutFor("claude", input.installRoot, input.scope), diagnostics)),
+      ...(await emitSkills(input.capability, input.scope, fs, claudeTarget, input.options.skills)),
+      ...(await emitStandardAdapter(
+        input,
+        fs,
+        layoutFor("claude", input.installRoot, input.scope),
+        diagnostics,
+      )),
     ];
     return { diffs, diagnostics };
   },
