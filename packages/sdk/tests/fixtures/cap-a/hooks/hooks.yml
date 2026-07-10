@@ -1,0 +1,22 @@
+user_prompt_submit:
+  - name: cap-a-prompt
+    description: Pi prompt hook from cap-a
+    only: [pi]
+    run:
+      command: echo cap-a-prompt
+    effect: block
+  - name: cap-a-claude-prompt
+    description: Claude prompt hook from cap-a
+    only: [claude]
+    run:
+      command: echo cap-a-claude-prompt
+    effect: block
+pre_tool:
+  - name: cap-a-pre
+    description: Pre-tool hook from cap-a
+    except: [claude]
+    match:
+      operation: file_read
+    run:
+      command: echo cap-a-pre
+    effect: observe

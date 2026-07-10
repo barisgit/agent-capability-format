@@ -1,0 +1,5 @@
+acf: 1
+name: cap-b
+version: 1.0.0
+description: Capability B
+only: [pi, claude, codex]

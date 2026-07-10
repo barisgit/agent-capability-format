@@ -1,0 +1,23 @@
+{
+  "name": "@acf/installer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "echo 'no build for @acf/installer'",
+    "check-types": "tsgo --noEmit -p tsconfig.json",
+    "lint": "echo 'no lint for @acf/installer'",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@acf/core": "workspace:*",
+    "yaml": "2.8.1"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20251104.1",
+    "typescript": "5.9.3"
+  }
+}

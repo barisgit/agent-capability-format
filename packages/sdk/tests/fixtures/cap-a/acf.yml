@@ -1,0 +1,5 @@
+acf: 1
+name: cap-a
+version: 1.0.0
+description: Capability A
+except: [cursor]
