@@ -1,13 +1,12 @@
 import type { Diagnostic } from "@acf/core";
 import { colors } from "consola/utils";
-import { type ExitCode, readFailOnLossy, readQuiet, readVerbose } from "./args";
+import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args";
 import type { PlanView } from "./plan-view";
 import { columns, glyphs } from "./render";
 
 export type Reporter = {
   log(message: string): void;
   error(message: string): void;
-  heading(command: string): void;
   done(message: string): void;
   details(entries: ReadonlyArray<readonly [label: string, value: string | number]>): void;
   section(title: string): void;
@@ -20,6 +19,8 @@ export type Reporter = {
   diagnosticSummary(counts: { errors: number; warnings: number; lossy: number }): void;
   status(status: "pass" | "warn" | "fail", message: string): void;
   plan(view: PlanView): void;
+  failure(message: string): void;
+  hint(message: string): void;
 };
 
 export type ChangePresentation = {
@@ -46,9 +47,6 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     error(message) {
       writeStderr(`${label("FAIL", colors.red)}  ${sentenceCase(message)}`);
-    },
-    heading(command) {
-      if (!quiet) writeStdout(`${colors.bold(colors.cyan("Caplet"))} ${colors.dim(command)}\n`);
     },
     done(message) {
       if (!quiet) writeStdout(`${label("DONE", colors.green)}  ${message}`);
@@ -135,6 +133,12 @@ export function reporter(args: Record<string, unknown>): Reporter {
     plan(view) {
       for (const line of renderPlan(view, { quiet })) writeStdout(line);
     },
+    failure(message) {
+      writeStderr(`${colors.bold(colors.red(glyphs().fail))} ${sentenceCase(message)}`);
+    },
+    hint(message) {
+      if (!quiet) writeStdout(colors.dim(`  ${message}`));
+    },
   };
 }
 
@@ -185,7 +189,7 @@ export function exitCodeForDiagnostics(
   diagnostics: readonly Diagnostic[],
   args: Record<string, unknown>,
 ): ExitCode {
-  if (readFailOnLossy(args) && diagnostics.some((diagnostic) => diagnostic.severity === "lossy")) {
+  if (readStrict(args) && diagnostics.some((diagnostic) => diagnostic.severity === "lossy")) {
     return 4;
   }
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) return 2;

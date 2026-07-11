@@ -23,3 +23,12 @@ function isExitCodeError(error: unknown): error is Error & { exitCode: 1 | 2 | 4
     (error.exitCode === 1 || error.exitCode === 2 || error.exitCode === 4)
   );
 }
+
+export async function confirm(question: string): Promise<boolean> {
+  if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) return true;
+  process.stdout.write(`${question} [y/N] `);
+  for await (const line of console) {
+    return line.trim().toLowerCase() === "y" || line.trim().toLowerCase() === "yes";
+  }
+  return false;
+}

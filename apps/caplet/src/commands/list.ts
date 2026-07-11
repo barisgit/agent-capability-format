@@ -5,8 +5,8 @@ import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
 
-export const lsCommand = defineCommand({
-  meta: { name: "ls", description: "list known capabilities per scope" },
+export const listCommand = defineCommand({
+  meta: { name: "list", description: "list installed capabilities (alias: ls)" },
   args: globalArgs,
   async run(context) {
     await runCommandSafely(context.args, async () => {
@@ -26,7 +26,6 @@ export const lsCommand = defineCommand({
       const code = finishWithDiagnostics(diagnostics, context.args);
       if (code === 0) {
         const out = reporter(context.args);
-        out.heading("ls");
         let count = 0;
         for (const inventory of inventories) {
           out.group(capitalize(inventory.scope), inventory.path);

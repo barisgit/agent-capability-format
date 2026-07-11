@@ -9,7 +9,7 @@ test("apply is idempotent", async () => {
     expect(first.stdout + first.stderr).toContain("DONE  Applied 5 files");
     const second = await applyProject(scope);
     expect(second.exitCode).toBe(0);
-    expect(second.stdout + second.stderr).toContain("DONE  Output is up to date");
+    expect(second.stdout + second.stderr).toContain("DONE  Everything up to date");
     const diff = await runCaplet(scope, [
       "diff",
       "--cwd",
@@ -20,7 +20,7 @@ test("apply is idempotent", async () => {
       "claude",
     ]);
     expect(diff.exitCode).toBe(0);
-    expect(diff.stdout + diff.stderr).toContain("DONE  Output is up to date");
+    expect(diff.stdout + diff.stderr).toContain("DONE  Everything up to date");
   } finally {
     await cleanup(scope);
   }

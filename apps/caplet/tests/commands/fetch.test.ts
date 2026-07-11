@@ -7,7 +7,8 @@ test("caplet fetch materializes capability tree and lockfile", async () => {
   try {
     const result = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Fetched 2 capabilities");
+    expect(result.stderr).toContain("caplet fetch is deprecated");
+    expect(result.stdout).toContain("DONE  Updated 2 capabilities");
     expect(
       await Bun.file(path.join(scope.agentsDir, "capabilities", "alpha-cap", "acf.yml")).exists(),
     ).toBe(true);

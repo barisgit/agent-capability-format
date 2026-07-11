@@ -6,8 +6,8 @@ import { finishWithDiagnostics, reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
 import { capabilitySummary } from "../internal/workflow";
 
-export const inspectCommand = defineCommand({
-  meta: { name: "inspect", description: "print a capability's resolved facets as JSON" },
+export const showCommand = defineCommand({
+  meta: { name: "show", description: "show a capability's contents and target support" },
   args: {
     ...globalArgs,
     name: { type: "positional", required: true, description: "capability name" },

@@ -8,8 +8,9 @@ test("fetch presents a clear command header and result summary", async () => {
     const result = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet fetch\n\nDONE  Fetched 2 capabilities");
-    expect(result.stdout).toContain("Scopes  project");
+    expect(result.stderr).toContain("caplet fetch is deprecated");
+    expect(result.stdout).toContain("DONE  Updated 2 capabilities");
+    expect(result.stdout).toContain("Resolved  2 capabilities");
   } finally {
     await cleanup(scope);
   }
@@ -47,7 +48,7 @@ test("ls presents capabilities as a scoped, readable inventory", async () => {
     const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet ls\n\nProject");
+    expect(result.stdout).toContain("Project");
     expect(result.stdout).toContain("alpha-cap  1.0.0");
     expect(result.stdout).toContain("agents 1, instructions 1, mcp 1");
     expect(result.stdout).toContain("DONE  2 capabilities");
@@ -76,10 +77,8 @@ test("check reports what was validated", async () => {
     await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet check\n\nDONE  Validation passed");
-    expect(result.stdout).toContain("Capabilities  2");
-    expect(result.stdout).toContain("Scopes        project");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Outputs are stale");
   } finally {
     await cleanup(scope);
   }
@@ -157,6 +156,14 @@ test("add confirms the source and manifest it changed", async () => {
   const scope = await makeScope();
   try {
     const source = "path:" + scope.sourceRoot + "/gamma";
+    await writeText(
+      scope.sourceRoot + "/gamma/acf.yml",
+      "acf: 1\nname: gamma-cap\nversion: 1.0.0\ndescription: gamma\n",
+    );
+    await writeText(
+      scope.sourceRoot + "/gamma/instructions/always.md",
+      "---\nname: always\ndescription: G\nactivation: always\n---\nGamma.\n",
+    );
     const result = await runCaplet(scope, [
       "add",
       source,
@@ -167,8 +174,9 @@ test("add confirms the source and manifest it changed", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet add\n\nDONE  Added path source");
+    expect(result.stdout).toContain("DONE  Added path source (project scope)");
     expect(result.stdout).toContain("Manifest  ");
+    expect(result.stdout).toContain("DONE  Applied");
     expect(result.stdout).toContain("/.agents/capabilities.yml");
     expect(result.stdout).toContain("Source    " + source);
   } finally {
@@ -190,8 +198,7 @@ test("update makes the refreshed capability explicit", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet update\n\nDONE  Updated alpha-cap");
-    expect(result.stdout).toContain("Resolved  1 capability");
+    expect(result.stdout).toContain("DONE  Updated alpha-cap");
   } finally {
     await cleanup(scope);
   }
@@ -221,7 +228,7 @@ test("remove reports both manifest removal and managed cleanup", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet remove\n\nDONE  Removed alpha-cap");
+    expect(result.stdout).toContain("DONE  Removed alpha-cap (project scope)");
     expect(result.stdout).toMatch(/Managed {2}\d+ managed regions cleaned/);
   } finally {
     await cleanup(scope);
@@ -234,7 +241,7 @@ test("doctor organizes checks by concern and summarizes health", async () => {
     const result = await runCaplet(scope, ["doctor", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet doctor\n\nEnvironment\n  PASS  Git available");
+    expect(result.stdout).toContain("Environment\n  PASS  Git available");
     expect(result.stdout).toContain("\nTargets\n");
     expect(result.stdout).toContain("\nLockfiles\n  PASS  Project lockfile");
     expect(result.stdout).toMatch(/DONE {2}\d+ checks passed/);
@@ -266,7 +273,7 @@ test("diff has a calm empty state when output is current", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Output is up to date");
+    expect(result.stdout).toContain("DONE  Everything up to date");
     expect(result.stdout).not.toContain("PENDING  0 changes");
   } finally {
     await cleanup(scope);
@@ -277,7 +284,8 @@ test("quiet suppresses the complete success presentation", async () => {
   const scope = await makeScope();
   try {
     const result = await runCaplet(scope, [
-      "fetch",
+      "update",
+      "--no-apply",
       "--quiet",
       "--cwd",
       scope.cwd,
@@ -300,13 +308,15 @@ test("usage errors are concise, sentence-cased, and visible in quiet mode", asyn
       "add",
       "path:/tmp/example",
       "--quiet",
+      "--scope",
+      "all",
       "--cwd",
       scope.cwd,
     ]);
 
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("FAIL  Add requires --scope=user or --scope=project");
+    expect(result.stderr).toContain("Invalid --scope for this command: all");
   } finally {
     await cleanup(scope);
   }

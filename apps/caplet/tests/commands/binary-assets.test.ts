@@ -86,7 +86,7 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
       "pi",
     ]);
     expect(cleanDiff.exitCode).toBe(0);
-    expect(cleanDiff.stdout).toContain("Output is up to date");
+    expect(cleanDiff.stdout).toContain("Everything up to date");
 
     const canonicalScript = path.join(
       scope.home,

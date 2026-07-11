@@ -77,3 +77,12 @@ function isErrno(error: unknown, code: string): error is { code: string } {
 export function isScope(value: string): value is Scope {
   return value === "user" || value === "project";
 }
+
+export async function inferScope(
+  explicit: "user" | "project" | undefined,
+  cwd: string,
+): Promise<"user" | "project"> {
+  if (explicit !== undefined) return explicit;
+  const found = await findProjectAgentsDir(path.resolve(cwd));
+  return found === undefined ? "user" : "project";
+}

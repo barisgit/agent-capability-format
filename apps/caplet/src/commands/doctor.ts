@@ -22,7 +22,6 @@ export const doctorCommand = defineCommand({
       checkTargets(checks, diagnostics);
       await checkLockfiles(context.args, checks, diagnostics);
       const out = reporter(context.args);
-      out.heading("doctor");
       const code = finishWithDiagnostics(diagnostics, context.args);
       for (const section of ["Environment", "Targets", "Lockfiles"] as const) {
         if (section !== "Environment") out.log("");

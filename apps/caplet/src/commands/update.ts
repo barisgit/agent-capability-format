@@ -1,23 +1,42 @@
 import { readLockfile } from "@acf/installer";
 import { defineCommand } from "citty";
-import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+import {
+  globalArgs,
+  readCwd,
+  readScope,
+  readVerbose,
+  targetArg,
+  validationError,
+} from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { finishWithDiagnostics, reporter } from "../internal/output";
+import {
+  exitCodeForDiagnostics,
+  finishWithDiagnostics,
+  printDiagnostics,
+  reporter,
+} from "../internal/output";
+import { buildPlanView } from "../internal/plan-view";
 import { resolveScopeRoots } from "../internal/scopes";
-import { fetchScopes } from "../internal/workflow";
+import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
 
 export const updateCommand = defineCommand({
-  meta: { name: "update", description: "re-resolve one or all capability entries" },
+  meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },
   args: {
     ...globalArgs,
-    name: { type: "positional", description: "optional capability name" },
+    ...targetArg,
+    name: { type: "positional", required: false, description: "optional capability name" },
+    apply: {
+      type: "boolean",
+      default: true,
+      description: "apply after updating the manifest",
+      negativeDescription: "refresh the lockfile only",
+    },
   },
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const name = typeof context.args.name === "string" ? context.args.name : undefined;
       if (name !== undefined) await ensureKnownName(context.args, name);
       const result = await fetchScopes(context.args, "force", name);
-      const code = finishWithDiagnostics(result.diagnostics, context.args);
       const count = result.results.reduce(
         (sum, item) =>
           sum +
@@ -25,13 +44,39 @@ export const updateCommand = defineCommand({
             .length,
         0,
       );
-      if (code === 0) {
-        const out = reporter(context.args);
-        out.heading("update");
-        out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
-        out.details([["Resolved", `${count} ${count === 1 ? "capability" : "capabilities"}`]]);
+      const out = reporter(context.args);
+      if (context.args.apply === false) {
+        const code = finishWithDiagnostics(result.diagnostics, context.args);
+        if (code === 0) {
+          out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
+          out.details([["Resolved", `${count} ${count === 1 ? "capability" : "capabilities"}`]]);
+        }
+        process.exitCode = code;
+        return;
       }
-      process.exitCode = code;
+      const plan = await buildEmitPlan(context.args);
+      const diagnostics = [...result.diagnostics, ...plan.diagnostics];
+      printDiagnostics(diagnostics, context.args);
+      const code = exitCodeForDiagnostics(diagnostics, context.args);
+      if (code !== 0) {
+        process.exitCode = code;
+        return;
+      }
+      out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
+      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      if (view.fileCount === 0) {
+        out.done("Everything up to date");
+        return;
+      }
+      out.log("");
+      out.plan(view);
+      const applied = await applyEmitPlan(plan);
+      const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
+      const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+      out.log("");
+      out.done(
+        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
+      );
     });
   },
 });

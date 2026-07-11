@@ -4,36 +4,56 @@ import type { ArgsDef } from "citty";
 
 export type ScopeSelection = "user" | "project" | "all";
 export type FetchMode = "auto" | "never" | "force";
-export type ExitCode = 0 | 1 | 2 | 4;
+export type ExitCode = 0 | 1 | 2 | 3 | 4;
 
 export const globalArgs = {
   scope: {
     type: "string",
-    default: "all",
-    description: "scope to use: user, project, or all",
+    alias: "s",
+    description: "limit to one scope: user or project (default: both)",
   },
   cwd: {
     type: "string",
+    alias: "C",
     default: ".",
-    description: "project working directory (default: current directory)",
+    description: "run as if caplet were started in this directory",
   },
-  quiet: { type: "boolean", default: false, description: "suppress non-error output" },
+  quiet: { type: "boolean", alias: "q", default: false, description: "errors only" },
   verbose: {
     type: "boolean",
+    alias: "v",
     default: false,
-    description: "show info diagnostics and expand collapsed file lists",
+    description: "expand file lists and show info diagnostics",
+  },
+  yes: { type: "boolean", alias: "y", default: false, description: "skip confirmation prompts" },
+  strict: {
+    type: "boolean",
+    default: false,
+    description: "treat lossy adapter warnings as failures",
   },
   "fail-on-lossy": {
     type: "boolean",
     default: false,
-    description: "exit 4 when lossy diagnostics are emitted",
+    description: "deprecated alias for --strict",
   },
+} as const satisfies ArgsDef;
+
+export const targetArg = {
+  target: { type: "string", alias: "t", description: "limit targets (claude, codex, ...)" },
 } as const satisfies ArgsDef;
 
 export function readScope(args: Record<string, unknown>): ScopeSelection {
   const value = args.scope;
+  if (value === undefined) return "all";
   if (value === "user" || value === "project" || value === "all") return value;
   throw validationError(`invalid --scope: ${String(value)}`);
+}
+
+export function readExplicitScope(args: Record<string, unknown>): "user" | "project" | undefined {
+  const value = args.scope;
+  if (value === undefined) return undefined;
+  if (value === "user" || value === "project") return value;
+  throw validationError(`invalid --scope for this command: ${String(value)} (use user or project)`);
 }
 
 export function readCwd(args: Record<string, unknown>): string {
@@ -50,8 +70,8 @@ export function readCwd(args: Record<string, unknown>): string {
   }
 }
 
-export function readFailOnLossy(args: Record<string, unknown>): boolean {
-  return args["fail-on-lossy"] === true;
+export function readStrict(args: Record<string, unknown>): boolean {
+  return args.strict === true || args["fail-on-lossy"] === true;
 }
 
 export function readQuiet(args: Record<string, unknown>): boolean {
@@ -62,7 +82,12 @@ export function readVerbose(args: Record<string, unknown>): boolean {
   return args.verbose === true;
 }
 
+export function readYes(args: Record<string, unknown>): boolean {
+  return args.yes === true;
+}
+
 export function readFetchMode(args: Record<string, unknown>): FetchMode {
+  if (args.offline === true) return "never";
   const value = args.mode;
   if (value === undefined || value === "auto" || value === "never" || value === "force") {
     return value ?? "auto";

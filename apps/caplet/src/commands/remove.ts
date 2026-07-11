@@ -3,30 +3,35 @@ import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@acf/core";
 import { defineCommand } from "citty";
 import { applyDiffs } from "../apply/apply-diffs";
 import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";
-import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+import {
+  globalArgs,
+  readCwd,
+  readExplicitScope,
+  targetArg,
+  validationError,
+} from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { diskReadOnlyFs } from "../internal/fs";
 import { rootNoticeDiffFromSidecar } from "../internal/managed-notices";
 import { removeManifestEntry } from "../internal/manifest";
 import { reporter } from "../internal/output";
-import { resolveScopeRoots } from "../internal/scopes";
+import { inferScope, resolveScopeRoots } from "../internal/scopes";
 import { installRootFor } from "../internal/workflow";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },
   args: {
     ...globalArgs,
+    ...targetArg,
     name: { type: "positional", required: true, description: "capability name" },
-    target: { type: "string", description: "target id to clean" },
   },
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const name = context.args.name;
       if (typeof name !== "string" || name.length === 0) throw validationError("name is required");
-      const scope = readScope(context.args);
-      if (scope === "all") throw validationError("remove requires --scope=user or --scope=project");
       const cwd = readCwd(context.args);
       process.chdir(cwd);
+      const scope = await inferScope(readExplicitScope(context.args), cwd);
       const root = (await resolveScopeRoots(scope, cwd))[0];
       if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
       await removeManifestEntry(root, name);
@@ -61,8 +66,7 @@ export const removeCommand = defineCommand({
           noticeResult.deleted.length;
       }
       const out = reporter(context.args);
-      out.heading("remove");
-      out.done(`Removed ${name}`);
+      out.done(`Removed ${name} (${scope} scope)`);
       out.details([
         ["Managed", `${cleaned} managed ${cleaned === 1 ? "region" : "regions"} cleaned`],
       ]);
