@@ -2,7 +2,7 @@ import type { Diagnostic } from "@acf/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readFailOnLossy, readQuiet, readVerbose } from "./args";
 import type { PlanView } from "./plan-view";
-import { columns } from "./render";
+import { columns, glyphs } from "./render";
 
 export type Reporter = {
   log(message: string): void;
@@ -17,6 +17,7 @@ export type Reporter = {
   item(primary: string, secondary?: string): void;
   empty(message: string, hint?: string): void;
   diagnostic(diagnostic: Diagnostic): void;
+  diagnosticSummary(counts: { errors: number; warnings: number; lossy: number }): void;
   status(status: "pass" | "warn" | "fail", message: string): void;
   plan(view: PlanView): void;
 };
@@ -91,24 +92,39 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     diagnostic(diagnostic) {
       if (quiet && diagnostic.severity !== "error") return;
-      const status =
-        diagnostic.severity === "error" ? "FAIL" : diagnostic.severity === "info" ? "INFO" : "WARN";
-      const color =
+      const glyphSet = glyphs();
+      const [glyph, color] =
         diagnostic.severity === "error"
-          ? colors.red
+          ? [glyphSet.fail, colors.red]
           : diagnostic.severity === "info"
-            ? colors.blue
-            : colors.yellow;
+            ? ["i", colors.blue]
+            : [glyphSet.warn, colors.yellow];
       const lines = [
-        `${label(status, color)}  ${colors.bold(diagnostic.code)}`,
-        `      ${sentenceCase(diagnostic.message)}`,
+        `${colors.bold(color(glyph))} ${colors.bold(sentenceCase(diagnostic.message))}`,
+        `    ${colors.dim("code")}  ${diagnostic.code}`,
       ];
       if (diagnostic.path !== undefined)
-        lines.push(`      ${colors.dim("Path")}    ${diagnostic.path}`);
+        lines.push(`    ${colors.dim("path")}  ${diagnostic.path}`);
       if (diagnostic.targetId !== undefined)
-        lines.push(`      ${colors.dim("Target")}  ${diagnostic.targetId}`);
+        lines.push(`    ${colors.dim("target")}  ${diagnostic.targetId}`);
       const write = diagnostic.severity === "info" ? writeStdout : writeStderr;
       for (const line of lines) write(line);
+    },
+    diagnosticSummary(counts) {
+      const problems = counts.errors + counts.warnings + counts.lossy;
+      if (problems === 0) return;
+      const parts = [
+        ...(counts.errors === 0
+          ? []
+          : [`${counts.errors} ${counts.errors === 1 ? "error" : "errors"}`]),
+        ...(counts.warnings === 0
+          ? []
+          : [`${counts.warnings} ${counts.warnings === 1 ? "warning" : "warnings"}`]),
+        ...(counts.lossy === 0 ? [] : [`${counts.lossy} lossy`]),
+      ];
+      writeStderr(
+        colors.bold(`${problems} ${problems === 1 ? "problem" : "problems"} (${parts.join(", ")})`),
+      );
     },
     status(status, message) {
       if (quiet) return;
@@ -140,9 +156,28 @@ export function printDiagnostics(
 ): void {
   const out = reporter(args);
   const verbose = readVerbose(args);
+  const seen = new Map<string, number>();
+  const unique: Diagnostic[] = [];
   for (const diagnostic of diagnostics) {
     if (diagnostic.severity === "info" && !verbose) continue;
-    out.diagnostic(diagnostic);
+    const key = `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}\u0000${diagnostic.path ?? ""}\u0000${diagnostic.targetId ?? ""}`;
+    const count = seen.get(key) ?? 0;
+    if (count === 0) unique.push(diagnostic);
+    seen.set(key, count + 1);
+  }
+  for (const diagnostic of unique) {
+    const key = `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}\u0000${diagnostic.path ?? ""}\u0000${diagnostic.targetId ?? ""}`;
+    const repeats = seen.get(key) ?? 1;
+    const message = repeats > 1 ? `${diagnostic.message} (x${repeats})` : diagnostic.message;
+    out.diagnostic({ ...diagnostic, message });
+  }
+  const counted = diagnostics.filter((d) => d.severity !== "info");
+  if (counted.length > 0) {
+    out.diagnosticSummary({
+      errors: counted.filter((d) => d.severity === "error").length,
+      warnings: counted.filter((d) => d.severity === "warn").length,
+      lossy: counted.filter((d) => d.severity === "lossy").length,
+    });
   }
 }
 

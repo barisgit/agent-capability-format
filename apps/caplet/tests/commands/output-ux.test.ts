@@ -99,9 +99,9 @@ test("diagnostics separate the code, message, and recovery context", async () =>
     ]);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain(
-      "FAIL  acf.caplet.not-found\n      Capability not found: missing-cap",
-    );
+    expect(result.stderr).toContain("fail Capability not found: missing-cap");
+    expect(result.stderr).toContain("code  acf.caplet.not-found");
+    expect(result.stderr).toContain("1 problem (1 error)");
   } finally {
     await cleanup(scope);
   }
