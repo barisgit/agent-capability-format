@@ -1,5 +1,5 @@
+import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { defineCommand } from "citty";
-import { resolveScopeCapabilities, type AcfCapability, type Diagnostic } from "@acf/core";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
@@ -17,7 +17,11 @@ export const lsCommand = defineCommand({
       for (const scopeRoot of await resolveScopeRoots(readScope(context.args), cwd)) {
         const resolved = await resolveScopeCapabilities(scopeRoot);
         diagnostics.push(...resolved.diagnostics);
-        inventories.push({ scope: scopeRoot.scope, path: scopeRoot.agentsDir, capabilities: resolved.capabilities });
+        inventories.push({
+          scope: scopeRoot.scope,
+          path: scopeRoot.agentsDir,
+          capabilities: resolved.capabilities,
+        });
       }
       const code = finishWithDiagnostics(diagnostics, context.args);
       if (code === 0) {
@@ -27,7 +31,10 @@ export const lsCommand = defineCommand({
         for (const inventory of inventories) {
           out.group(capitalize(inventory.scope), inventory.path);
           if (inventory.capabilities.length === 0) {
-            out.empty("No capabilities found.", `Add one with caplet add <source> --scope ${inventory.scope}`);
+            out.empty(
+              "No capabilities found.",
+              `Add one with caplet add <source> --scope ${inventory.scope}`,
+            );
           }
           for (const capability of inventory.capabilities) {
             const summary = describeCapability(capability);
@@ -42,7 +49,11 @@ export const lsCommand = defineCommand({
   },
 });
 
-function describeCapability(capability: AcfCapability): { name: string; version: string; facets: string } {
+function describeCapability(capability: AcfCapability): {
+  name: string;
+  version: string;
+  facets: string;
+} {
   const facets = [
     ["skills", capability.skills.length],
     ["agents", capability.agents.length],

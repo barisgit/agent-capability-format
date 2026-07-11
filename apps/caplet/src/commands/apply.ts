@@ -1,19 +1,9 @@
 import { defineCommand } from "citty";
-import { globalArgs, readFetchMode, readVerbose } from "../internal/args";
+import { globalArgs, readFetchMode, readQuiet, readVerbose } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import {
-  exitCodeForDiagnostics,
-  printChanges,
-  printDiagnostics,
-  reporter,
-} from "../internal/output";
-import {
-  applyEmitPlan,
-  buildEmitPlan,
-  countPresentedFiles,
-  describeDiffs,
-  fetchScopes,
-} from "../internal/workflow";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
+import { buildPlanView } from "../internal/plan-view";
+import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "fetch, emit, write sidecar, and apply diffs" },
@@ -34,21 +24,22 @@ export const applyCommand = defineCommand({
         return;
       }
       const out = reporter(context.args);
-      const changes = describeDiffs(plan.diffs, { expand: readVerbose(context.args) });
-      const fileCount = countPresentedFiles(changes);
-      out.heading("apply");
-      printChanges(out, changes);
+      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      if (view.fileCount === 0) {
+        out.done("Output is up to date");
+        return;
+      }
+      out.plan(view);
       const applied = await applyEmitPlan(plan);
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
       out.log("");
       out.done(
-        fileCount === 0
-          ? "Output is up to date"
-          : `Applied ${fileCount} ${fileCount === 1 ? "file" : "files"}`,
+        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
       );
-      if (changes.length > 0)
-        out.details([["Operations", `${written} writes, ${deleted} deletes`]]);
+      if (!readVerbose(context.args) && !readQuiet(context.args)) {
+        out.log("  " + "Full list: --verbose");
+      }
     });
   },
 });

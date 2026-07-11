@@ -1,7 +1,7 @@
+import { expect } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect } from "bun:test";
 
 export type TestScope = {
   dir: string;
@@ -22,7 +22,12 @@ export async function makeScope(): Promise<TestScope> {
   const sourceRoot = path.join(dir, "sources");
   await mkdir(agentsDir, { recursive: true });
   await mkdir(path.join(home, ".agents"), { recursive: true });
-  await writeCapability(path.join(sourceRoot, "alpha"), "alpha-cap", "Alpha guidance", "alpha-server");
+  await writeCapability(
+    path.join(sourceRoot, "alpha"),
+    "alpha-cap",
+    "Alpha guidance",
+    "alpha-server",
+  );
   await writeCapability(path.join(sourceRoot, "beta"), "beta-cap", "Beta guidance", "beta-server");
   await writeFile(
     path.join(agentsDir, "capabilities.yml"),
@@ -57,7 +62,15 @@ export async function fetchProject(scope: TestScope): Promise<void> {
 }
 
 export async function applyProject(scope: TestScope): Promise<RunResult> {
-  return await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+  return await runCaplet(scope, [
+    "apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+    "--target",
+    "claude",
+  ]);
 }
 
 export async function readText(filePath: string): Promise<string> {

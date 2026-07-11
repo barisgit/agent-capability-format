@@ -43,12 +43,9 @@ test("default emission plans canonical skills once and only uses required native
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.match(/\.agents\/skills\/research\/SKILL\.md/g)).toHaveLength(1);
-    expect(result.stdout).toContain("project / canonical / alpha-cap");
-    expect(result.stdout).toContain(".claude/skills/research/SKILL.md");
-    expect(result.stdout).not.toContain(".codex/skills/research/SKILL.md");
-    expect(result.stdout).not.toContain(".opencode/skills/research/SKILL.md");
-    expect(result.stdout).not.toContain(".pi/skills/research/SKILL.md");
+    expect(result.stdout.match(/skills\/research\/SKILL\.md/g)).toHaveLength(2);
+    expect(result.stdout).toContain("canonical  .agents");
+    expect(result.stdout).toContain("claude  .claude");
   } finally {
     await cleanup(scope);
   }
@@ -77,8 +74,8 @@ test("caplet target config can disable canonical skill emission", async () => {
       "--dry-run",
     ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(".claude/skills/research/SKILL.md");
-    expect(result.stdout).not.toContain(".agents/skills/research/SKILL.md");
+    expect(result.stdout).toContain("skills/research/SKILL.md");
+    expect(result.stdout).not.toContain("canonical  .agents");
   } finally {
     await cleanup(scope);
   }

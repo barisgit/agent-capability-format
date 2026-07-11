@@ -1,7 +1,6 @@
 import "@acf/adapters";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import {
   ACF_SYSTEM_OWNER,
@@ -50,13 +49,6 @@ export type EmitPlan = {
 };
 
 export type ApplySummary = { results: ApplyResult[]; diagnostics: Diagnostic[] };
-
-export type DiffSummary = {
-  action: "create" | "update" | "delete";
-  path: string;
-  context: string;
-  count: number;
-};
 
 export async function fetchScopes(
   args: Record<string, unknown>,
@@ -175,121 +167,6 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
     results.push(result);
   }
   return { results, diagnostics: plan.diagnostics };
-}
-
-const COLLAPSE_THRESHOLD = 5;
-
-export function describeDiffs(
-  diffs: readonly EmittedDiff[],
-  options?: { expand?: boolean },
-): DiffSummary[] {
-  type Entry = DiffSummary & {
-    scope: string;
-    target: string;
-    capabilities: string[];
-    noticeCount: number;
-  };
-  const groups = new Map<string, Entry>();
-  for (const item of diffs) {
-    const action =
-      item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
-    const notice = item.diff.managementNotice !== undefined;
-    const display = notice ? "Management notices" : displayPath(item.diff.path);
-    const destination = item.destination === "canonical" ? "canonical" : item.targetId;
-    const key = `${action}\u0000${display}\u0000${item.scopeRoot.scope}\u0000${destination}`;
-    const group: Entry = groups.get(key) ?? {
-      action,
-      path: display,
-      context: "",
-      count: 0,
-      scope: item.scopeRoot.scope,
-      target: destination,
-      capabilities: [],
-      noticeCount: 0,
-    };
-    if (notice) group.noticeCount += 1;
-    if (
-      item.capabilityName !== ACF_SYSTEM_OWNER &&
-      !group.capabilities.includes(item.capabilityName)
-    ) {
-      group.capabilities.push(item.capabilityName);
-    }
-    groups.set(key, group);
-  }
-  const buckets = new Map<string, Entry[]>();
-  for (const entry of groups.values()) {
-    const key = [
-      entry.action,
-      entry.scope,
-      entry.target,
-      entry.noticeCount === 0 ? "file" : "notice",
-      [...entry.capabilities].sort().join(","),
-    ].join("\u0000");
-    const bucket = buckets.get(key) ?? [];
-    bucket.push(entry);
-    buckets.set(key, bucket);
-  }
-  const result: DiffSummary[] = [];
-  for (const bucket of buckets.values()) {
-    const collapse =
-      options?.expand !== true &&
-      bucket.length > COLLAPSE_THRESHOLD &&
-      bucket[0]?.noticeCount === 0;
-    if (collapse) {
-      const first = bucket[0] as Entry;
-      result.push({
-        action: first.action,
-        path: `${commonDirectory(bucket.map((entry) => entry.path))} (${bucket.length} files)`,
-        count: bucket.length,
-        context: [
-          first.scope,
-          first.target,
-          ...(first.capabilities.length === 0 ? [] : [[...first.capabilities].sort().join(", ")]),
-        ].join(" / "),
-      });
-      continue;
-    }
-    for (const group of bucket) {
-      result.push({
-        action: group.action,
-        path: group.path,
-        count: group.noticeCount === 0 ? 1 : group.noticeCount,
-        context: [
-          group.scope,
-          group.target,
-          ...(group.noticeCount === 0 ? [] : [`${group.noticeCount} files`]),
-          ...(group.capabilities.length === 0 ? [] : [group.capabilities.sort().join(", ")]),
-        ].join(" / "),
-      });
-    }
-  }
-  return result;
-}
-
-function commonDirectory(paths: readonly string[]): string {
-  const segmentLists = paths.map((entry) => entry.split(path.sep).slice(0, -1));
-  const first = segmentLists[0] ?? [];
-  const shared: string[] = [];
-  for (let index = 0; index < first.length; index += 1) {
-    const segment = first[index] as string;
-    if (!segmentLists.every((segments) => segments[index] === segment)) break;
-    shared.push(segment);
-  }
-  return shared.length === 0 ? "." : `${shared.join(path.sep)}${path.sep}`;
-}
-
-export function countPresentedFiles(changes: readonly DiffSummary[]): number {
-  return changes.reduce((sum, change) => sum + change.count, 0);
-}
-
-function displayPath(filePath: string): string {
-  const relative = path.relative(process.cwd(), filePath);
-  if (relative.length > 0 && !relative.startsWith("..")) return relative;
-  const home = os.homedir();
-  if (filePath === home || filePath.startsWith(`${home}${path.sep}`)) {
-    return `~${filePath.slice(home.length)}`;
-  }
-  return filePath;
 }
 
 function isCanonicalSkillPath(filePath: string, scopeRoot: ScopeRoot): boolean {

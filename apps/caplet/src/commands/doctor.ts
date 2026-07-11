@@ -2,9 +2,9 @@ import "@acf/adapters";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { defineCommand } from "citty";
-import { targetIds, targetMap, type Diagnostic } from "@acf/core";
+import { type Diagnostic, targetIds, targetMap } from "@acf/core";
 import { readLockfile } from "@acf/installer";
+import { defineCommand } from "citty";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
@@ -52,15 +52,26 @@ async function checkGit(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promi
     checks.push({ section: "Environment", status: "pass", message: "Git available" });
     return;
   }
-  diagnostics.push({ severity: "error", code: "acf.doctor.git-missing", message: "git is not available" });
+  diagnostics.push({
+    severity: "error",
+    code: "acf.doctor.git-missing",
+    message: "git is not available",
+  });
   checks.push({ section: "Environment", status: "fail", message: "Git unavailable" });
 }
 
-async function checkAgentsReadable(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promise<void> {
+async function checkAgentsReadable(
+  checks: DoctorCheck[],
+  diagnostics: Diagnostic[],
+): Promise<void> {
   const agentsDir = path.join(homedir(), ".agents");
   try {
     await readdir(agentsDir);
-    checks.push({ section: "Environment", status: "pass", message: `Agents directory readable (${agentsDir})` });
+    checks.push({
+      section: "Environment",
+      status: "pass",
+      message: `Agents directory readable (${agentsDir})`,
+    });
   } catch (error) {
     const severity = isErrno(error, "ENOENT") ? "warn" : "error";
     diagnostics.push({
@@ -81,7 +92,11 @@ function checkTargets(checks: DoctorCheck[], diagnostics: Diagnostic[]): void {
   for (const targetId of targetIds) {
     const target = targetMap[targetId];
     if (target?.adapter !== undefined) {
-      checks.push({ section: "Targets", status: "pass", message: `${target.displayName} adapter registered` });
+      checks.push({
+        section: "Targets",
+        status: "pass",
+        message: `${target.displayName} adapter registered`,
+      });
       continue;
     }
     diagnostics.push({
@@ -107,7 +122,11 @@ async function checkLockfiles(
   for (const root of await resolveScopeRoots(readScope(args), cwd)) {
     try {
       await readLockfile(root.lockPath);
-      checks.push({ section: "Lockfiles", status: "pass", message: `${capitalize(root.scope)} lockfile` });
+      checks.push({
+        section: "Lockfiles",
+        status: "pass",
+        message: `${capitalize(root.scope)} lockfile`,
+      });
     } catch (error) {
       diagnostics.push({
         severity: "error",
@@ -115,7 +134,11 @@ async function checkLockfiles(
         message: error instanceof Error ? error.message : "invalid lockfile",
         path: root.lockPath,
       });
-      checks.push({ section: "Lockfiles", status: "fail", message: `${capitalize(root.scope)} lockfile invalid` });
+      checks.push({
+        section: "Lockfiles",
+        status: "fail",
+        message: `${capitalize(root.scope)} lockfile invalid`,
+      });
     }
   }
 }

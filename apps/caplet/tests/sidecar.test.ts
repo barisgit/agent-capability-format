@@ -1,7 +1,7 @@
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { expect, test } from "bun:test";
 import { applyDiffs, detectDrift, readSidecar, removeOwnedRegions, writeSidecar } from "../src";
 import { cleanup, makeScope, readText, writeText } from "./helpers";
 

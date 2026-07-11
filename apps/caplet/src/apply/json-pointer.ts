@@ -173,7 +173,12 @@ function containerAt(text: string, start: number, end: number): ContainerLocatio
   return null;
 }
 
-function findContainerClose(text: string, start: number, end: number, closeChar: "}" | "]"): number {
+function findContainerClose(
+  text: string,
+  start: number,
+  end: number,
+  closeChar: "}" | "]",
+): number {
   let cursor = trimEnd(text, end) - 1;
   while (cursor > start && text[cursor] !== closeChar) cursor -= 1;
   if (text[cursor] !== closeChar) throw new Error("invalid JSON container");
@@ -182,7 +187,7 @@ function findContainerClose(text: string, start: number, end: number, closeChar:
 
 function skipValue(text: string, start: number): number {
   const char = text[start];
-  if (char === "\"") return readString(text, start).end;
+  if (char === '"') return readString(text, start).end;
   if (char === "{" || char === "[") return skipContainer(text, start);
   let cursor = start;
   while (cursor < text.length && !",]}\n\r\t ".includes(text[cursor] ?? "")) cursor += 1;
@@ -196,7 +201,7 @@ function skipContainer(text: string, start: number): number {
   let cursor = start;
   while (cursor < text.length) {
     const char = text[cursor];
-    if (char === "\"") {
+    if (char === '"') {
       cursor = readString(text, cursor).end;
       continue;
     }
@@ -218,7 +223,7 @@ function readString(text: string, start: number): { value: string; end: number }
       cursor += 2;
       continue;
     }
-    if (char === "\"") {
+    if (char === '"') {
       const value: unknown = JSON.parse(text.slice(start, cursor + 1));
       if (typeof value !== "string") throw new Error("invalid JSON string");
       return { value, end: cursor + 1 };

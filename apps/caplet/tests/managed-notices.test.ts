@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  renderArtifactNotice,
-  renderRootInventory,
-  type RootInventoryArtifact,
-} from "@acf/core";
+import { type RootInventoryArtifact, renderArtifactNotice, renderRootInventory } from "@acf/core";
 
 const artifacts: RootInventoryArtifact[] = [
   {
@@ -46,7 +42,9 @@ test("root inventory is deterministic, concise, and explicit about shared owners
   const forward = renderRootInventory(artifacts);
   const reversed = renderRootInventory([...artifacts].reverse());
   expect(reversed).toBe(forward);
-  expect(forward).toContain("This install root is shared. Only the artifacts listed below are managed by ACF.");
+  expect(forward).toContain(
+    "This install root is shared. Only the artifacts listed below are managed by ACF.",
+  );
   expect(forward).toContain("## `alpha-tools`");
   expect(forward).toContain("- `agents/reviewer.md` (whole file)");
   expect(forward).toContain("## `engineering-workflows`");

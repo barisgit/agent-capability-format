@@ -86,7 +86,7 @@ test("caplet detects and repairs management notice drift", async () => {
       "claude",
     ]);
     expect(diff.exitCode).toBe(0);
-    expect(diff.stdout).toContain("Management notices");
+    expect(diff.stdout).toContain("managed notices");
     expect((await applyProject(scope)).exitCode).toBe(0);
     expect(await readText(rootNotice)).toBe(expectedRoot);
     expect(await readText(localNotice)).toBe(expectedLocal);

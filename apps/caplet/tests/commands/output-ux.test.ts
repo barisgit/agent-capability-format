@@ -30,10 +30,10 @@ test("diff groups file changes and ends with a pending summary", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet diff\n\nChanges\n");
-    expect(result.stdout).toMatch(/ {2}CREATE {2}.*CLAUDE\.md/);
-    expect(result.stdout).toContain("project / claude / alpha-cap, beta-cap");
-    expect(result.stdout.match(/\.claude\/CLAUDE\.md/g)).toHaveLength(1);
+    expect(result.stdout).toContain("Plan: 5 changes");
+    expect(result.stdout).toMatch(/\+ CLAUDE\.md/);
+    expect(result.stdout).toContain("alpha-cap, beta-cap");
+    expect(result.stdout.match(/CLAUDE\.md/g)).toHaveLength(1);
     expect(result.stdout).toContain("PENDING  5 files");
   } finally {
     await cleanup(scope);
@@ -123,7 +123,7 @@ test("emit dry-run uses the same change language without writing", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet emit\n\nChanges\n");
+    expect(result.stdout).toContain("Plan: 5 changes");
     expect(result.stdout).toContain("PENDING  5 files");
     expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(false);
   } finally {
@@ -145,9 +145,8 @@ test("apply connects the change plan to an applied summary", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet apply\n\nChanges\n");
-    expect(result.stdout).toContain("DONE  Applied 5 files");
-    expect(result.stdout).toContain("Operations  7 writes, 0 deletes");
+    expect(result.stdout).toContain("Plan: 5 changes");
+    expect(result.stdout).toContain("DONE  Applied 5 files (7 writes, 0 deletes)");
     expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(true);
   } finally {
     await cleanup(scope);
@@ -267,7 +266,6 @@ test("diff has a calm empty state when output is current", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Caplet diff\n\nNo changes\n");
     expect(result.stdout).toContain("DONE  Output is up to date");
     expect(result.stdout).not.toContain("PENDING  0 changes");
   } finally {
@@ -328,7 +326,7 @@ test("diff collapses many same-capability files and --verbose expands them", asy
 
     const collapsed = await runCaplet(scope, args);
     expect(collapsed.exitCode).toBe(0);
-    expect(collapsed.stdout).toMatch(/CREATE {2}.*skills\/ \(8 files\)/);
+    expect(collapsed.stdout).toMatch(/\+ skills\/ +8 files/);
     expect(collapsed.stdout).not.toContain("bulk-3/SKILL.md");
 
     const expanded = await runCaplet(scope, [...args, "--verbose"]);

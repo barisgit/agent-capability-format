@@ -1,16 +1,12 @@
 import { defineCommand } from "citty";
 import { globalArgs, readVerbose } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import {
-  exitCodeForDiagnostics,
-  printChanges,
-  printDiagnostics,
-  reporter,
-} from "../internal/output";
-import { buildEmitPlan, countPresentedFiles, describeDiffs } from "../internal/workflow";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
+import { buildPlanView } from "../internal/plan-view";
+import { buildEmitPlan } from "../internal/workflow";
 
 export const diffCommand = defineCommand({
-  meta: { name: "diff", description: "show pending FileDiffs without applying" },
+  meta: { name: "diff", description: "show pending changes without applying" },
   args: {
     ...globalArgs,
     target: { type: "string", description: "target id" },
@@ -25,15 +21,12 @@ export const diffCommand = defineCommand({
         return;
       }
       const out = reporter(context.args);
-      const changes = describeDiffs(plan.diffs, { expand: readVerbose(context.args) });
-      const fileCount = countPresentedFiles(changes);
-      out.heading("diff");
-      printChanges(out, changes);
-      if (changes.length === 0) {
-        out.log("");
+      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      if (view.fileCount === 0) {
         out.done("Output is up to date");
       } else {
-        out.pending(`${fileCount} ${fileCount === 1 ? "file" : "files"}`);
+        out.plan(view);
+        out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
       }
       process.exitCode = code;
     });

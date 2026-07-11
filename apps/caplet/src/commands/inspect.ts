@@ -1,5 +1,5 @@
+import { type Diagnostic, resolveScopeCapabilities, targetIds } from "@acf/core";
 import { defineCommand } from "citty";
-import { resolveScopeCapabilities, targetIds, type Diagnostic } from "@acf/core";
 import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
@@ -24,14 +24,22 @@ export const inspectCommand = defineCommand({
         const resolved = await resolveScopeCapabilities(scopeRoot);
         diagnostics.push(...resolved.diagnostics);
         for (const capability of resolved.capabilities) {
-          if (capability.manifest.name === name) matches.push(capabilitySummary(capability, targetIds));
+          if (capability.manifest.name === name)
+            matches.push(capabilitySummary(capability, targetIds));
         }
       }
       if (matches.length === 0) {
-        diagnostics.push({ severity: "error", code: "acf.caplet.not-found", message: `capability not found: ${name}` });
+        diagnostics.push({
+          severity: "error",
+          code: "acf.caplet.not-found",
+          message: `capability not found: ${name}`,
+        });
       }
       const code = finishWithDiagnostics(diagnostics, context.args);
-      if (code === 0) reporter(context.args).log(JSON.stringify(matches.length === 1 ? matches[0] : matches, null, 2));
+      if (code === 0)
+        reporter(context.args).log(
+          JSON.stringify(matches.length === 1 ? matches[0] : matches, null, 2),
+        );
     });
   },
 });

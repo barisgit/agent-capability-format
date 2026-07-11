@@ -1,5 +1,5 @@
-import path from "node:path";
 import { expect, test } from "bun:test";
+import path from "node:path";
 import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
 // Regression: a capability with a hook emits into the target settings.json via

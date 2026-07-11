@@ -1,14 +1,14 @@
-export { applyDiffs, type ApplyResult } from "./apply/apply-diffs";
+export { type ApplyResult, applyDiffs } from "./apply/apply-diffs";
 export {
+  type DriftFs,
   detectDrift,
   hashOwnedRegions,
+  type ManagedEntry,
   mergeSidecarEntry,
+  type RemoveOwnedRegionsResult,
   readSidecar,
   relativeSidecarPath,
   removeOwnedRegions,
   writeSidecar,
-  type DriftFs,
-  type ManagedEntry,
-  type RemoveOwnedRegionsResult,
 } from "./apply/sidecar";
 export { rootCommand } from "./cli";

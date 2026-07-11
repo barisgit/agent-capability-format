@@ -1,25 +1,16 @@
 import { defineCommand } from "citty";
 import { globalArgs, readVerbose } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import {
-  exitCodeForDiagnostics,
-  printChanges,
-  printDiagnostics,
-  reporter,
-} from "../internal/output";
-import {
-  applyEmitPlan,
-  buildEmitPlan,
-  countPresentedFiles,
-  describeDiffs,
-} from "../internal/workflow";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
+import { buildPlanView } from "../internal/plan-view";
+import { applyEmitPlan, buildEmitPlan } from "../internal/workflow";
 
 export const emitCommand = defineCommand({
-  meta: { name: "emit", description: "emit FileDiffs to native target artifacts" },
+  meta: { name: "emit", description: "write target artifacts without fetching" },
   args: {
     ...globalArgs,
     target: { type: "string", description: "target id to emit" },
-    "dry-run": { type: "boolean", default: false, description: "show diffs without writing" },
+    "dry-run": { type: "boolean", default: false, description: "show changes without writing" },
   },
   async run(context) {
     await runCommandSafely(context.args, async () => {
@@ -31,17 +22,14 @@ export const emitCommand = defineCommand({
         return;
       }
       const out = reporter(context.args);
-      const changes = describeDiffs(plan.diffs, { expand: readVerbose(context.args) });
-      const fileCount = countPresentedFiles(changes);
-      out.heading("emit");
-      printChanges(out, changes);
+      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      if (view.fileCount === 0) {
+        out.done("Output is up to date");
+        return;
+      }
+      out.plan(view);
       if (context.args["dry-run"] === true) {
-        if (changes.length === 0) {
-          out.log("");
-          out.done("Output is up to date");
-        } else {
-          out.pending(`${fileCount} ${fileCount === 1 ? "file" : "files"}`);
-        }
+        out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
         return;
       }
       const applied = await applyEmitPlan(plan);
@@ -49,12 +37,8 @@ export const emitCommand = defineCommand({
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
       out.log("");
       out.done(
-        fileCount === 0
-          ? "Output is up to date"
-          : `Applied ${fileCount} ${fileCount === 1 ? "file" : "files"}`,
+        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
       );
-      if (changes.length > 0)
-        out.details([["Operations", `${written} writes, ${deleted} deletes`]]);
     });
   },
 });

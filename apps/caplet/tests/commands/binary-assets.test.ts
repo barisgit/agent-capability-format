@@ -86,7 +86,7 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
       "pi",
     ]);
     expect(cleanDiff.exitCode).toBe(0);
-    expect(cleanDiff.stdout).toContain("No changes");
+    expect(cleanDiff.stdout).toContain("Output is up to date");
 
     const canonicalScript = path.join(
       scope.home,
@@ -106,7 +106,7 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
       "--target",
       "pi",
     ]);
-    expect(modeDiff.stdout).toContain("UPDATE");
+    expect(modeDiff.stdout).toMatch(/~ .*run\.sh/);
 
     const repaired = await runCaplet(scope, [
       "apply",

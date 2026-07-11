@@ -1,7 +1,6 @@
-import { readLockfile } from "@acf/installer";
+import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
+import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@acf/installer";
 import { defineCommand } from "citty";
-import { detectLockDrift, readCapabilitiesYml } from "@acf/installer";
-import { resolveScopeCapabilities, type Diagnostic } from "@acf/core";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
