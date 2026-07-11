@@ -1,3 +1,4 @@
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escape sequences requires the ESC control character
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
 
 export function stripAnsi(value: string): string {

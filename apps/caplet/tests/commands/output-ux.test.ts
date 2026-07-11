@@ -60,7 +60,7 @@ test("ls presents capabilities as a scoped, readable inventory", async () => {
 test("ls gives an actionable empty state", async () => {
   const scope = await makeScope();
   try {
-    await writeText(scope.agentsDir + "/capabilities.yml", "acf: 1\ncapabilities: []\n");
+    await writeText(`${scope.agentsDir}/capabilities.yml`, "acf: 1\ncapabilities: []\n");
     const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
@@ -124,7 +124,7 @@ test("emit dry-run uses the same change language without writing", async () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
     expect(result.stdout).toContain("PENDING  5 files");
-    expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(false);
+    expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(false);
   } finally {
     await cleanup(scope);
   }
@@ -146,7 +146,7 @@ test("apply connects the change plan to an applied summary", async () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
     expect(result.stdout).toContain("DONE  Applied 5 files (7 writes, 0 deletes)");
-    expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(true);
+    expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(true);
   } finally {
     await cleanup(scope);
   }
@@ -155,13 +155,13 @@ test("apply connects the change plan to an applied summary", async () => {
 test("add confirms the source and manifest it changed", async () => {
   const scope = await makeScope();
   try {
-    const source = "path:" + scope.sourceRoot + "/gamma";
+    const source = `path:${scope.sourceRoot}/gamma`;
     await writeText(
-      scope.sourceRoot + "/gamma/acf.yml",
+      `${scope.sourceRoot}/gamma/acf.yml`,
       "acf: 1\nname: gamma-cap\nversion: 1.0.0\ndescription: gamma\n",
     );
     await writeText(
-      scope.sourceRoot + "/gamma/instructions/always.md",
+      `${scope.sourceRoot}/gamma/instructions/always.md`,
       "---\nname: always\ndescription: G\nactivation: always\n---\nGamma.\n",
     );
     const result = await runCaplet(scope, [
@@ -178,7 +178,7 @@ test("add confirms the source and manifest it changed", async () => {
     expect(result.stdout).toContain("Manifest  ");
     expect(result.stdout).toContain("DONE  Applied");
     expect(result.stdout).toContain("/.agents/capabilities.yml");
-    expect(result.stdout).toContain("Source    " + source);
+    expect(result.stdout).toContain(`Source    ${source}`);
   } finally {
     await cleanup(scope);
   }

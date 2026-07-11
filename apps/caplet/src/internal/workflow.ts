@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
-  ACF_SYSTEM_OWNER,
   type AcfCapability,
   applyApplicability,
   type CapletConfig,
