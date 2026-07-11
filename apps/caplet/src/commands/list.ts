@@ -1,8 +1,10 @@
 import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { defineCommand } from "citty";
+import { colors } from "consola/utils";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { finishWithDiagnostics, reporter } from "../internal/output";
+import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 
 export const listCommand = defineCommand({
@@ -27,22 +29,30 @@ export const listCommand = defineCommand({
       if (code === 0) {
         const out = reporter(context.args);
         let count = 0;
+        let first = true;
+        const counts: string[] = [];
         for (const inventory of inventories) {
-          out.group(capitalize(inventory.scope), inventory.path);
+          if (!first) out.log("");
+          first = false;
+          out.log(`${colors.bold(inventory.scope)}  ${colors.dim(inventory.path)}`);
           if (inventory.capabilities.length === 0) {
-            out.empty(
-              "No capabilities found.",
-              `Add one with caplet add <source> --scope ${inventory.scope}`,
-            );
+            out.log("  No capabilities installed.");
+            out.hint(`Get started: caplet add <source> --scope ${inventory.scope}`);
+            continue;
           }
-          for (const capability of inventory.capabilities) {
+          const head = ["NAME", "VERSION", "FACETS"].map((cell) => colors.dim(cell));
+          const rows = inventory.capabilities.map((capability) => {
             const summary = describeCapability(capability);
-            out.item(summary.name, `${summary.version}  ${summary.facets}`.trim());
-            count += 1;
-          }
+            return [colors.bold(summary.name), summary.version, colors.dim(summary.facets)];
+          });
+          for (const line of columns([head, ...rows], { indent: "  " })) out.log(line);
+          count += inventory.capabilities.length;
+          counts.push(`${inventory.capabilities.length} ${inventory.scope}`);
         }
         out.log("");
-        out.done(`${count} ${count === 1 ? "capability" : "capabilities"}`);
+        out.done(
+          `${count} ${count === 1 ? "capability" : "capabilities"}${counts.length > 1 ? ` (${counts.join(", ")})` : ""}`,
+        );
       }
     });
   },
@@ -65,8 +75,4 @@ function describeCapability(capability: AcfCapability): {
     .map((item) => `${item[0]} ${item[1]}`)
     .join(", ");
   return { name: capability.manifest.name, version: capability.manifest.version, facets };
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }

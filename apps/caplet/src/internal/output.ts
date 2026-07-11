@@ -12,9 +12,6 @@ export type Reporter = {
   section(title: string): void;
   change(action: "create" | "update" | "delete", path: string, context: string): void;
   pending(message: string): void;
-  group(title: string, detail?: string): void;
-  item(primary: string, secondary?: string): void;
-  empty(message: string, hint?: string): void;
   diagnostic(diagnostic: Diagnostic): void;
   diagnosticSummary(counts: { errors: number; warnings: number; lossy: number }): void;
   status(status: "pass" | "warn" | "fail", message: string): void;
@@ -70,23 +67,6 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     pending(message) {
       if (!quiet) writeStdout(`\n${label(glyphs().warn, colors.yellow)} ${message}`);
-    },
-    group(title, detail) {
-      if (!quiet)
-        writeStdout(
-          `${colors.bold(title)}${detail === undefined ? "" : `  ${colors.dim(detail)}`}`,
-        );
-    },
-    item(primary, secondary) {
-      if (!quiet)
-        writeStdout(
-          `  ${colors.bold(primary)}${secondary === undefined ? "" : `  ${colors.dim(secondary)}`}`,
-        );
-    },
-    empty(message, hint) {
-      if (quiet) return;
-      writeStdout(`  ${message}`);
-      if (hint !== undefined) writeStdout(`  ${colors.dim(hint)}`);
     },
     diagnostic(diagnostic) {
       if (quiet && diagnostic.severity !== "error") return;

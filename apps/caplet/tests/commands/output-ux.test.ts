@@ -48,7 +48,7 @@ test("ls presents capabilities as a scoped, readable inventory", async () => {
     const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Project");
+    expect(result.stdout).toContain("project  ");
     expect(result.stdout).toContain("alpha-cap  1.0.0");
     expect(result.stdout).toContain("agents 1, instructions 1, mcp 1");
     expect(result.stdout).toContain("ok 2 capabilities");
@@ -64,7 +64,7 @@ test("ls gives an actionable empty state", async () => {
     const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("No capabilities found.");
+    expect(result.stdout).toContain("No capabilities installed.");
     expect(result.stdout).toContain("caplet add <source> --scope project");
   } finally {
     await cleanup(scope);
