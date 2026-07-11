@@ -10,7 +10,6 @@ export type Reporter = {
   done(message: string): void;
   details(entries: ReadonlyArray<readonly [label: string, value: string | number]>): void;
   section(title: string): void;
-  change(action: "create" | "update" | "delete", path: string, context: string): void;
   pending(message: string): void;
   diagnostic(diagnostic: Diagnostic): void;
   diagnosticSummary(counts: { errors: number; warnings: number; lossy: number }): void;
@@ -19,22 +18,6 @@ export type Reporter = {
   failure(message: string): void;
   hint(message: string): void;
 };
-
-export type ChangePresentation = {
-  action: "create" | "update" | "delete";
-  path: string;
-  context: string;
-};
-
-export function printChanges(out: Reporter, changes: readonly ChangePresentation[]): void {
-  if (changes.length === 0) {
-    out.section("No changes");
-    out.empty("Managed output already matches the resolved capabilities.");
-    return;
-  }
-  out.section("Changes");
-  for (const change of changes) out.change(change.action, change.path, change.context);
-}
 
 export function reporter(args: Record<string, unknown>): Reporter {
   const quiet = readQuiet(args);
@@ -57,13 +40,6 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     section(title) {
       if (!quiet) writeStdout(colors.bold(title));
-    },
-    change(action, path, context) {
-      if (quiet) return;
-      const color =
-        action === "create" ? colors.green : action === "update" ? colors.yellow : colors.red;
-      writeStdout(`  ${label(action.toUpperCase(), color)}  ${colors.bold(path)}`);
-      writeStdout(`          ${colors.dim(context)}`);
     },
     pending(message) {
       if (!quiet) writeStdout(`\n${label(glyphs().warn, colors.yellow)} ${message}`);
