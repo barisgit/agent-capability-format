@@ -5,6 +5,7 @@ import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
+import { displayPath } from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 
@@ -50,16 +51,16 @@ export const listCommand = defineCommand({
         for (const inventory of inventories) {
           if (!first) out.log("");
           first = false;
-          out.log(`${colors.bold(inventory.scope)}  ${colors.dim(inventory.path)}`);
+          out.log(`${colors.bold(inventory.scope)}  ${colors.dim(displayPath(inventory.path))}`);
           if (inventory.capabilities.length === 0) {
             out.log("  No capabilities installed.");
             out.hint(`Get started: caplet add <source> --scope ${inventory.scope}`);
             continue;
           }
-          const head = ["NAME", "VERSION", "FACETS"].map((cell) => colors.dim(cell));
+          const head = ["NAME", "VERSION", "CONTENTS"].map((cell) => colors.dim(cell));
           const rows = inventory.capabilities.map((capability) => {
             const summary = describeCapability(capability);
-            return [colors.bold(summary.name), summary.version, colors.dim(summary.facets)];
+            return [colors.bold(summary.name), summary.version, colors.dim(summary.contents)];
           });
           for (const line of columns([head, ...rows], { indent: "  " })) out.log(line);
           count += inventory.capabilities.length;
@@ -77,9 +78,9 @@ export const listCommand = defineCommand({
 function describeCapability(capability: AcfCapability): {
   name: string;
   version: string;
-  facets: string;
+  contents: string;
 } {
-  const facets = [
+  const contents = [
     ["skills", capability.skills.length],
     ["agents", capability.agents.length],
     ["commands", capability.commands.length],
@@ -90,5 +91,5 @@ function describeCapability(capability: AcfCapability): {
     .filter((item) => item[1] !== 0)
     .map((item) => `${item[0]} ${item[1]}`)
     .join(", ");
-  return { name: capability.manifest.name, version: capability.manifest.version, facets };
+  return { name: capability.manifest.name, version: capability.manifest.version, contents };
 }

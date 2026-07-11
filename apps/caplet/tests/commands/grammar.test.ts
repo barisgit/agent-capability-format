@@ -162,10 +162,11 @@ test("add writes manifest and emitted files in one invocation", async () => {
 test("bare caplet prints a status summary", async () => {
   const scope = await makeScope();
   try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, ["--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("project");
-    expect(result.stdout).toContain("capabilities");
+    expect(result.stdout).toContain("alpha-cap, beta-cap");
   } finally {
     await cleanup(scope);
   }

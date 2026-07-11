@@ -2,6 +2,7 @@ import { defineCommand } from "citty";
 import { addCommand } from "./commands/add";
 import { applyCommand } from "./commands/apply";
 import { checkCommand } from "./commands/check";
+import { completionCommand } from "./commands/completion";
 import { doctorCommand } from "./commands/doctor";
 import { initCommand } from "./commands/init";
 import { listCommand } from "./commands/list";
@@ -28,6 +29,7 @@ export const rootCommand = defineCommand({
     check: checkCommand,
     doctor: doctorCommand,
     status: statusCommand,
+    completion: completionCommand,
   },
 });
 

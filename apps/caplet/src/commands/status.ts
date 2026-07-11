@@ -1,9 +1,11 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { defineCommand } from "citty";
+import { colors } from "consola/utils";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView } from "../internal/plan-view";
+import { buildPlanView, displayPath } from "../internal/plan-view";
+import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 import { buildEmitPlan } from "../internal/workflow";
 
@@ -17,14 +19,19 @@ export const statusCommand = defineCommand({
       const out = reporter(context.args);
       const diagnostics: Diagnostic[] = [];
       const scopes = await resolveScopeRoots(readScope(context.args), cwd);
-      const rows: Array<[string, string]> = [];
+      const rows: string[][] = [];
       for (const scopeRoot of scopes) {
         const resolved = await resolveScopeCapabilities(scopeRoot);
         diagnostics.push(...resolved.diagnostics);
-        const count = resolved.capabilities.length;
-        rows.push([scopeRoot.scope, `${count} ${count === 1 ? "capability" : "capabilities"}`]);
+        const names = resolved.capabilities.map((capability) => capability.manifest.name).sort();
+        rows.push([
+          colors.bold(scopeRoot.scope),
+          colors.dim(displayPath(scopeRoot.agentsDir)),
+          names.length === 0 ? colors.dim("none — caplet add <source>") : summarizeNames(names),
+        ]);
       }
-      out.details(rows);
+      for (const line of columns(rows, { indent: "  " })) out.log(line);
+      out.log("");
       const plan = await buildEmitPlan(context.args);
       printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
       const view = buildPlanView(plan.diffs);
@@ -37,3 +44,9 @@ export const statusCommand = defineCommand({
     });
   },
 });
+
+function summarizeNames(names: readonly string[]): string {
+  const shown = names.slice(0, 4);
+  const more = names.length - shown.length;
+  return shown.join(", ") + (more > 0 ? ` +${more} more` : "");
+}
