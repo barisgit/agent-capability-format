@@ -1652,6 +1652,41 @@ reader conformance matrix. Implementations MUST emit codes from that
 matrix; they MAY emit additional, more specific codes under these
 namespaces; they MUST NOT collapse listed codes into broader ones.
 
+### 14.7 Visible management notices
+
+An emitter that persists native artifacts MUST make ACF ownership visible to
+people inspecting the destination without requiring them to discover the
+machine sidecar.
+
+- Every install root containing ACF-managed output MUST contain a generated
+  `ACF-MANAGED.md` inventory. The inventory MUST identify each owning
+  capability and its managed whole-file, shared-region, and fully-owned
+  directory artifacts.
+- Every top-level fully-owned artifact directory, such as an emitted skill
+  directory, MUST contain one local `ACF-MANAGED.md`. Emitters MUST NOT place
+  notices recursively in that directory's descendants.
+- Shared directories and shared files MUST be represented only in the install
+  root inventory. Emitters MUST NOT place an extra Markdown file in a host
+  directory whose direct children have host-defined discovery semantics.
+- Notice content MUST be deterministic and MUST NOT contain timestamps,
+  absolute paths, source URLs, credentials, or other source-sensitive data.
+- Notices are final emitted artifacts. They MUST NOT be written into canonical
+  capability sources or resolved capability snapshots and MUST NOT contribute
+  to capability hashes.
+- `ACF-MANAGED.md` is reserved at notice locations. A source asset that maps to
+  a reserved notice path MUST produce an `error` diagnostic. An existing
+  destination notice that is not owned in `.acf-managed.json` MUST NOT be
+  overwritten and MUST produce an `error` diagnostic.
+- Notices MUST be tracked, drift-checked, reconciled, and removed through the
+  same ownership sidecar as other emitted files. The install-root inventory is
+  system-owned rather than owned by any one capability so it can be
+  deterministically rebuilt after capability removal. A target-filtered emit
+  MUST preserve inventory entries for artifacts still owned through unselected
+  targets at the same install root.
+
+The visible notices are explanatory only. `.acf-managed.json` remains the
+machine authority for ownership and safe mutation.
+
 ## 15. Reserved fields and forward compatibility
 
 The following are explicitly reserved for future spec versions and MUST

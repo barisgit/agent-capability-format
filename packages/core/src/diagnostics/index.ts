@@ -55,6 +55,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.lock.missing-entry",
   "acf.lock.unsupported-version",
   "acf.emit.drift",
+  "acf.emit.managed-notice-reserved-path",
+  "acf.emit.managed-notice-destination-collision",
   "acf.cli.partial-implementation",
 ] as const;
 

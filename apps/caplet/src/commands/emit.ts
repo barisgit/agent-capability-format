@@ -1,8 +1,18 @@
 import { defineCommand } from "citty";
 import { globalArgs } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { exitCodeForDiagnostics, printChanges, printDiagnostics, reporter } from "../internal/output";
-import { applyEmitPlan, buildEmitPlan, describeDiffs } from "../internal/workflow";
+import {
+  exitCodeForDiagnostics,
+  printChanges,
+  printDiagnostics,
+  reporter,
+} from "../internal/output";
+import {
+  applyEmitPlan,
+  buildEmitPlan,
+  countPresentedFiles,
+  describeDiffs,
+} from "../internal/workflow";
 
 export const emitCommand = defineCommand({
   meta: { name: "emit", description: "emit FileDiffs to native target artifacts" },
@@ -22,6 +32,7 @@ export const emitCommand = defineCommand({
       }
       const out = reporter(context.args);
       const changes = describeDiffs(plan.diffs);
+      const fileCount = countPresentedFiles(changes);
       out.heading("emit");
       printChanges(out, changes);
       if (context.args["dry-run"] === true) {
@@ -29,7 +40,7 @@ export const emitCommand = defineCommand({
           out.log("");
           out.done("Output is up to date");
         } else {
-          out.pending(`${changes.length} ${changes.length === 1 ? "file" : "files"}`);
+          out.pending(`${fileCount} ${fileCount === 1 ? "file" : "files"}`);
         }
         return;
       }
@@ -37,8 +48,13 @@ export const emitCommand = defineCommand({
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
       out.log("");
-      out.done(changes.length === 0 ? "Output is up to date" : `Applied ${changes.length} ${changes.length === 1 ? "file" : "files"}`);
-      if (changes.length > 0) out.details([["Operations", `${written} writes, ${deleted} deletes`]]);
+      out.done(
+        fileCount === 0
+          ? "Output is up to date"
+          : `Applied ${fileCount} ${fileCount === 1 ? "file" : "files"}`,
+      );
+      if (changes.length > 0)
+        out.details([["Operations", `${written} writes, ${deleted} deletes`]]);
     });
   },
 });

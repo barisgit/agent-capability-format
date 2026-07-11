@@ -23,6 +23,7 @@ export const opencodeAdapter: TargetAdapter<"opencode"> = {
         fs,
         opencodeTarget,
         input.options.skills,
+        diagnostics,
       )),
       ...(await emitStandardAdapter(
         input,

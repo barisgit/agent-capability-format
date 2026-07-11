@@ -30,6 +30,9 @@ export async function applyDiffs(
   for (const diff of diffs) {
     const absolutePath = resolveDiffPath(opts.installRoot, diff.path);
     const relativePath = relativeSidecarPath(opts.installRoot, absolutePath);
+    if (diff.managementNotice !== undefined) {
+      await assertNoticePathOwnedOrAbsent(sidecar, relativePath, absolutePath);
+    }
     const applied = await applyOneDiff(diff, absolutePath);
 
     if (applied.content === null) {
@@ -44,12 +47,14 @@ export async function applyDiffs(
     if (applied.changed) written.push(absolutePath);
     else unchanged.push(absolutePath);
 
-    mergeSidecarEntry(sidecar, {
+    const entry: AcfManagedSidecar["managed"][number] = {
       path: relativePath,
       owns: diff.owns,
       capability: opts.capabilityName,
       hash: hashOwnedRegions(applied.content, diff.owns),
-    });
+    };
+    if (diff.facet !== undefined) entry.facet = diff.facet;
+    mergeSidecarEntry(sidecar, entry);
   }
 
   await writeSidecar(opts.sidecarPath, sidecar);
@@ -59,6 +64,25 @@ export async function applyDiffs(
     unchanged: uniqueSorted(unchanged),
     sidecar,
   };
+}
+
+async function assertNoticePathOwnedOrAbsent(
+  sidecar: AcfManagedSidecar,
+  relativePath: string,
+  absolutePath: string,
+): Promise<void> {
+  const owned = sidecar.managed.some(
+    (entry) =>
+      entry.path === relativePath && entry.owns.some((ownership) => ownership.kind === "file"),
+  );
+  if (owned) return;
+  try {
+    await stat(absolutePath);
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return;
+    throw error;
+  }
+  throw new Error(`refusing to overwrite unowned reserved notice path: ${absolutePath}`);
 }
 
 async function applyOneDiff(

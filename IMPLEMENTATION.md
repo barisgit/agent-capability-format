@@ -784,6 +784,9 @@ export type FileDiff = {
   // "file". For intertwined files (Claude settings.json), `owns` lists the
   // JSON pointers or markers that ACF claims authorship of.
   owns: AcfOwnership[]
+  facet?: { family: FacetFamily; name: string }
+  artifactRoot?: string                  // top-level fully-owned directory
+  managementNotice?: "root" | "artifact"
 }
 
 export type AcfOwnership =
@@ -853,6 +856,34 @@ export type AcfManagedSidecar = {
 ```
 
 Adapters do not write the sidecar. Caplet writes it after applying diffs.
+
+### 4.2.3 Visible ownership notices (`ACF-MANAGED.md`)
+
+The emission planner adds a deterministic `ACF-MANAGED.md` at each install
+root after all adapter outputs have been combined. It inventories whole-file,
+shared-region, and fully-owned-directory artifacts by capability. The root
+notice is recorded in the sidecar under the reserved `acf-system` owner so
+removing one capability can rebuild the aggregate inventory from remaining
+sidecar entries.
+
+Target-filtered applies merge their selected desired plan with retained
+sidecar entries before rendering a shared-root inventory. This prevents, for
+example, `--target claude` from dropping canonical artifacts that remain
+managed through another target without requiring Caplet to execute every
+unselected adapter.
+
+The shared skills emitter also adds one local notice inside every emitted skill
+directory. `FileDiff.artifactRoot`, `facet`, and `managementNotice` carry the
+metadata needed for inventory construction, human diff grouping, and sidecar
+reconstruction. Notices are emitted only at the final destination: source and
+resolved snapshot trees remain byte-identical and capability hashes are
+unaffected.
+
+Both the adapter and applier reject collisions at reserved notice paths. The
+planner checks the sidecar before proposing an overwrite, and the applier
+repeats the ownership check immediately before writing to close the race. ACF
+does not place notices directly in host discovery directories such as a native
+`skills/` root; local notices live one level lower inside each skill directory.
 
 ### 4.3 Registry sketch
 

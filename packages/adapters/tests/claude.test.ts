@@ -20,6 +20,13 @@ test("claude emits all native artifacts with marker and JSON pointer ownership",
   expect(byPath(result.diffs, ".claude/skills/research/SKILL.md").after).toContain(
     "Research skill",
   );
+  const canonicalNotice = byPath(result.diffs, ".agents/skills/research/ACF-MANAGED.md");
+  expect(canonicalNotice.after).toContain("Owning capability: `test-cap`");
+  expect(canonicalNotice.managementNotice).toBe("artifact");
+  expect(canonicalNotice.artifactRoot).toEndWith(".agents/skills/research");
+  expect(byPath(result.diffs, ".claude/skills/research/ACF-MANAGED.md").after).toBe(
+    canonicalNotice.after,
+  );
   expect(byPath(result.diffs, ".claude/agents/reviewer.md").after).toContain("Review code");
   expect(byPath(result.diffs, ".claude/commands/fix.md").after).toContain("Fix an issue");
   const instructions = byPath(result.diffs, ".claude/CLAUDE.md");
@@ -149,6 +156,33 @@ test("claude emits referenced prose assets beside emitted prose files", async ()
   expect(textAfter(byPath(result.diffs, ".claude/.acf/instructions/test-cap/context.md"))).toBe(
     "instruction context\n",
   );
+});
+
+test("claude rejects skill assets at the reserved management notice path", async () => {
+  const cap = await readFixtureCapability();
+  const sourcePath = path.join(cap.root, "skills", "research", "ACF-MANAGED.md");
+  const result = await claudeAdapter.emit(
+    emitInput(
+      {
+        ...cap,
+        assets: [
+          {
+            path: "skills/research/ACF-MANAGED.md",
+            origin: "frontmatter",
+            facet: { family: "skill", name: "research" },
+          },
+        ],
+      },
+      ".claude",
+    ),
+    makeInMemoryFs({ [sourcePath]: "source-owned collision\n" }),
+  );
+
+  expect(codes(result)).toContain("acf.emit.managed-notice-reserved-path");
+  expect(textAfter(byPath(result.diffs, ".claude/skills/research/ACF-MANAGED.md"))).toContain(
+    "Owning capability: `test-cap`",
+  );
+  expect(result.diffs.some((diff) => diff.after === "source-owned collision\n")).toBe(false);
 });
 
 test("claude transports skill assets outside the skill directory with root-relative structure", async () => {

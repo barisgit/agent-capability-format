@@ -1,12 +1,15 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import type {
-  AcfCapability,
-  FileDiff,
-  ReadOnlyFs,
-  Scope,
-  SkillFacet,
-  TargetDefinition,
+import {
+  type AcfCapability,
+  type Diagnostic,
+  type FileDiff,
+  MANAGEMENT_NOTICE_FILENAME,
+  type ReadOnlyFs,
+  renderArtifactNotice,
+  type Scope,
+  type SkillFacet,
+  type TargetDefinition,
 } from "@acf/core";
 import { type AssetPayload, readAssets } from "./assets";
 import { makeFileDiff } from "./diff";
@@ -20,6 +23,7 @@ export async function emitSkills(
   fs: ReadOnlyFs,
   target: TargetDefinition,
   opts: SkillEmitOptions = {},
+  diagnostics: Diagnostic[] = [],
 ): Promise<FileDiff[]> {
   const destinations = skillDestinations(scope, target, opts);
   if (destinations.length === 0) return [];
@@ -31,21 +35,44 @@ export async function emitSkills(
     for (const root of destinations) {
       const skillRoot = path.join(root, skill.name);
       const skillPath = path.join(skillRoot, "SKILL.md");
+      const facet = { family: "skill" as const, name: skill.name };
       await pushTextDiff(
         diffs,
         emittedPaths,
         fs,
         skillPath,
         renderMarkdownFile(skill.frontmatter, skill.body),
+        { artifactRoot: skillRoot, facet },
+      );
+      await pushTextDiff(
+        diffs,
+        emittedPaths,
+        fs,
+        path.join(skillRoot, MANAGEMENT_NOTICE_FILENAME),
+        renderArtifactNotice(cap.manifest.name),
+        { artifactRoot: skillRoot, facet, managementNotice: "artifact" },
       );
 
       for (const asset of assets) {
+        if (asset.relativePath === MANAGEMENT_NOTICE_FILENAME) {
+          diagnostics.push({
+            severity: "error",
+            code: "acf.emit.managed-notice-reserved-path",
+            message: `${MANAGEMENT_NOTICE_FILENAME} is reserved for ACF management notices`,
+            path: path.join(skillRoot, asset.relativePath),
+            family: "skill",
+            capability: { name: cap.manifest.name },
+            data: { facet: skill.name, sourcePath: asset.sourcePath },
+          });
+          continue;
+        }
         await pushAssetDiff(
           diffs,
           emittedPaths,
           fs,
           path.join(skillRoot, asset.relativePath),
           asset,
+          { artifactRoot: skillRoot, facet },
         );
       }
 
@@ -55,6 +82,7 @@ export async function emitSkills(
         fs: ReadOnlyFs,
         outPath: string,
         asset: AssetPayload,
+        metadata: Pick<FileDiff, "artifactRoot" | "facet">,
       ): Promise<void> {
         if (emittedPaths.has(outPath)) return;
         emittedPaths.add(outPath);
@@ -62,12 +90,12 @@ export async function emitSkills(
           fs.readBytes(outPath),
           fs.readMode(outPath),
         ]);
-        diffs.push(
-          makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
-            before: beforeMode,
-            after: asset.mode,
-          }),
-        );
+        const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
+          before: beforeMode,
+          after: asset.mode,
+        });
+        Object.assign(diff, metadata);
+        diffs.push(diff);
       }
     }
   }
@@ -124,9 +152,12 @@ async function pushTextDiff(
   fs: ReadOnlyFs,
   outPath: string,
   after: string,
+  metadata?: Pick<FileDiff, "artifactRoot" | "facet" | "managementNotice">,
 ): Promise<void> {
   if (emittedPaths.has(outPath)) return;
   emittedPaths.add(outPath);
   const before = await fs.readText(outPath);
-  diffs.push(makeFileDiff(outPath, before, after, [{ kind: "file" }]));
+  const diff = makeFileDiff(outPath, before, after, [{ kind: "file" }]);
+  if (metadata !== undefined) Object.assign(diff, metadata);
+  diffs.push(diff);
 }

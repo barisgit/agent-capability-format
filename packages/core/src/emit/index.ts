@@ -1,3 +1,5 @@
+export * from "./managed-notices";
+
 import { applicableTargets } from "../applicability";
 import { resolveScopeCapabilities } from "../resolver";
 import { targetIds, targetMap } from "../targets";

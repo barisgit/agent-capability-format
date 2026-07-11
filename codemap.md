@@ -7,8 +7,9 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 1. Core readers parse manifests and facet files into the canonical model, validate them, and collect diagnostics.
 2. The installer resolves path/Git declarations from `capabilities.yml`, selects exact or globbed paths from multi-capability collections, safely reconciles scope snapshots, and records selector intent plus content hashes in deterministic lockfiles.
 3. Core scope resolution and applicability select effective capabilities and facets for a target.
-4. Registered adapters translate the selected model into `FileDiff` plans.
-5. Caplet reports those plans or applies them while maintaining `.acf-managed.json` ownership and drift metadata; SDK callers can query typed facet views directly.
+4. Registered adapters translate the selected model into `FileDiff` plans, including per-skill `ACF-MANAGED.md` artifact notices and root-level inventory notices.
+5. Caplet applies those plans while maintaining `.acf-managed.json` ownership and drift metadata, generating root inventory notices that catalog all managed artifacts by capability.
+6. SDK callers can query typed facet views directly.
 
 ## Root Entry Points and Configuration
 - `package.json`: Bun workspace manifest and root build, type-check, test, lint, CI, and Caplet scripts.
@@ -21,6 +22,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 ## Integration Points
 - ACF source directories and `.agents/capabilities.yml` are external inputs.
 - Native host install roots and `.acf-managed.json` sidecars are filesystem outputs.
+- `ACF-MANAGED.md` files serve as both per-skill artifact notices and root-level inventory manifests.
 - `@acf/runtime-taxonomy` supplies shared runtime names; `@acf/core` is the model hub; installer, adapters, SDK, and Caplet build on it.
 
 ## Repository Directory Map

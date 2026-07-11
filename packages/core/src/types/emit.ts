@@ -69,6 +69,9 @@ export type FileDiff = {
   beforeMode?: number | null | undefined;
   afterMode?: number | null | undefined;
   owns: AcfOwnership[];
+  facet?: { family: FacetFamily; name: string } | undefined;
+  artifactRoot?: string | undefined;
+  managementNotice?: "root" | "artifact" | undefined;
 };
 export type AcfOwnership =
   | { kind: "file" }

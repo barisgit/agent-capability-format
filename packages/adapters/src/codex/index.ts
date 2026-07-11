@@ -17,7 +17,14 @@ export const codexAdapter: TargetAdapter<"codex"> = {
   async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
     const diagnostics: Diagnostic[] = [];
     const diffs = [
-      ...(await emitSkills(input.capability, input.scope, fs, codexTarget, input.options.skills)),
+      ...(await emitSkills(
+        input.capability,
+        input.scope,
+        fs,
+        codexTarget,
+        input.options.skills,
+        diagnostics,
+      )),
       ...(await emitStandardAdapter(
         input,
         fs,

@@ -1,9 +1,12 @@
 import path from "node:path";
+import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@acf/core";
 import { defineCommand } from "citty";
-import { readCapletConfig, targetIds } from "@acf/core";
+import { applyDiffs } from "../apply/apply-diffs";
 import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";
 import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
+import { diskReadOnlyFs } from "../internal/fs";
+import { rootNoticeDiffFromSidecar } from "../internal/managed-notices";
 import { removeManifestEntry } from "../internal/manifest";
 import { reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
@@ -28,7 +31,8 @@ export const removeCommand = defineCommand({
       if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
       await removeManifestEntry(root, name);
       const config = (await readCapletConfig(cwd)).config;
-      const selectedTargets = typeof context.args.target === "string" ? [context.args.target] : [...targetIds];
+      const selectedTargets =
+        typeof context.args.target === "string" ? [context.args.target] : [...targetIds];
       let cleaned = 0;
       const installRoots = new Set<string>([root.agentsDir]);
       for (const targetId of selectedTargets) {
@@ -40,12 +44,28 @@ export const removeCommand = defineCommand({
         const sidecar = await readSidecar(sidecarPath);
         const result = await removeOwnedRegions(sidecar, installRoot, name);
         await writeSidecar(sidecarPath, result.sidecar);
-        cleaned += result.written.length + result.deleted.length;
+        const rootNotice = await rootNoticeDiffFromSidecar(
+          installRoot,
+          result.sidecar,
+          diskReadOnlyFs(),
+        );
+        const noticeResult = await applyDiffs([rootNotice], {
+          installRoot,
+          capabilityName: ACF_SYSTEM_OWNER,
+          sidecarPath,
+        });
+        cleaned +=
+          result.written.length +
+          result.deleted.length +
+          noticeResult.written.length +
+          noticeResult.deleted.length;
       }
       const out = reporter(context.args);
       out.heading("remove");
       out.done(`Removed ${name}`);
-      out.details([["Managed", `${cleaned} managed ${cleaned === 1 ? "region" : "regions"} cleaned`]]);
+      out.details([
+        ["Managed", `${cleaned} managed ${cleaned === 1 ? "region" : "regions"} cleaned`],
+      ]);
     });
   },
 });

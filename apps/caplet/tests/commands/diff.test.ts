@@ -5,9 +5,17 @@ test("caplet diff shows pending FileDiffs", async () => {
   const scope = await makeScope();
   try {
     await fetchProject(scope);
-    const result = await runCaplet(scope, ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"]);
+    const result = await runCaplet(scope, [
+      "diff",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("PENDING  4 files");
+    expect(result.stdout).toContain("PENDING  5 files");
     expect(result.stdout).toContain("CLAUDE.md");
   } finally {
     await cleanup(scope);

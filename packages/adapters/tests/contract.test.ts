@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import path from "node:path";
 import { adapters } from "../src";
 import { emitInput, readFixtureCapability } from "./util/capability";
 import { makeInMemoryFs } from "./util/in-memory-fs";
@@ -10,6 +11,13 @@ for (const [id, adapter] of Object.entries(adapters)) {
     expect(Array.isArray(result.diffs)).toBe(true);
     expect(Array.isArray(result.diagnostics)).toBe(true);
     expect("files" in result).toBe(false);
+    const localNotices = result.diffs.filter((diff) => diff.managementNotice === "artifact");
+    expect(localNotices.length).toBeGreaterThan(0);
+    for (const notice of localNotices) {
+      expect(path.basename(notice.path)).toBe("ACF-MANAGED.md");
+      expect(path.basename(path.dirname(path.dirname(notice.path)))).toBe("skills");
+      expect(notice.artifactRoot).toBe(path.dirname(notice.path));
+    }
     for (const diff of result.diffs) {
       expect(typeof diff.path).toBe("string");
       expect(diff.path.length).toBeGreaterThan(0);

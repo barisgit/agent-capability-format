@@ -1,7 +1,12 @@
 import path from "node:path";
 import type { AcfCapability, AssetRef, FacetFamily, ReadOnlyFs } from "@acf/core";
 
-export type AssetPayload = { relativePath: string; bytes: Uint8Array; mode: number };
+export type AssetPayload = {
+  relativePath: string;
+  sourcePath: string;
+  bytes: Uint8Array;
+  mode: number;
+};
 
 export function assetsForFacet(cap: AcfCapability, family: FacetFamily, name: string): AssetRef[] {
   return cap.assets.filter(
@@ -46,7 +51,9 @@ export async function readAssets(
       fs.readBytes(assetSourcePath),
       fs.readMode(assetSourcePath),
     ]);
-    if (bytes !== null) out.push({ relativePath, bytes, mode: mode ?? 0o644 });
+    if (bytes !== null) {
+      out.push({ relativePath, sourcePath: asset.path, bytes, mode: mode ?? 0o644 });
+    }
   }
   return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }

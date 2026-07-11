@@ -33,7 +33,7 @@ test("diff groups file changes and ends with a pending summary", async () => {
     expect(result.stdout).toMatch(/ {2}CREATE {2}.*CLAUDE\.md/);
     expect(result.stdout).toContain("project / claude / alpha-cap, beta-cap");
     expect(result.stdout.match(/\.claude\/CLAUDE\.md/g)).toHaveLength(1);
-    expect(result.stdout).toContain("PENDING  4 files");
+    expect(result.stdout).toContain("PENDING  5 files");
   } finally {
     await cleanup(scope);
   }
@@ -123,7 +123,7 @@ test("emit dry-run uses the same change language without writing", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet emit\n\nChanges\n");
-    expect(result.stdout).toContain("PENDING  4 files");
+    expect(result.stdout).toContain("PENDING  5 files");
     expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(false);
   } finally {
     await cleanup(scope);
@@ -145,8 +145,8 @@ test("apply connects the change plan to an applied summary", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Caplet apply\n\nChanges\n");
-    expect(result.stdout).toContain("DONE  Applied 4 files");
-    expect(result.stdout).toContain("Operations  6 writes, 0 deletes");
+    expect(result.stdout).toContain("DONE  Applied 5 files");
+    expect(result.stdout).toContain("Operations  7 writes, 0 deletes");
     expect(await Bun.file(scope.cwd + "/.claude/CLAUDE.md").exists()).toBe(true);
   } finally {
     await cleanup(scope);

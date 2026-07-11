@@ -1,8 +1,13 @@
 import { defineCommand } from "citty";
 import { globalArgs } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { exitCodeForDiagnostics, printChanges, printDiagnostics, reporter } from "../internal/output";
-import { buildEmitPlan, describeDiffs } from "../internal/workflow";
+import {
+  exitCodeForDiagnostics,
+  printChanges,
+  printDiagnostics,
+  reporter,
+} from "../internal/output";
+import { buildEmitPlan, countPresentedFiles, describeDiffs } from "../internal/workflow";
 
 export const diffCommand = defineCommand({
   meta: { name: "diff", description: "show pending FileDiffs without applying" },
@@ -21,13 +26,14 @@ export const diffCommand = defineCommand({
       }
       const out = reporter(context.args);
       const changes = describeDiffs(plan.diffs);
+      const fileCount = countPresentedFiles(changes);
       out.heading("diff");
       printChanges(out, changes);
       if (changes.length === 0) {
         out.log("");
         out.done("Output is up to date");
       } else {
-        out.pending(`${changes.length} ${changes.length === 1 ? "file" : "files"}`);
+        out.pending(`${fileCount} ${fileCount === 1 ? "file" : "files"}`);
       }
       process.exitCode = code;
     });

@@ -17,10 +17,14 @@ export const cursorAdapter: TargetAdapter<"cursor"> = {
   async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
     const diagnostics: Diagnostic[] = [];
     const diffs = [
-      ...(await emitSkills(input.capability, input.scope, fs, cursorTarget, {
-        ...input.options.skills,
-        native: false,
-      })),
+      ...(await emitSkills(
+        input.capability,
+        input.scope,
+        fs,
+        cursorTarget,
+        { ...input.options.skills, native: false },
+        diagnostics,
+      )),
       ...(await emitStandardAdapter(
         input,
         fs,

@@ -62,6 +62,11 @@ Implementation of the Agent Capability Format reference monorepo on branch
 - **`.acf-managed.json` sidecar**: written at each install root, records
   every owned region with its content hash, enables drift detection
   (`acf.emit.drift`) and clean removal.
+- **Visible ownership notices**: every emitted install root has a deterministic
+  aggregate `ACF-MANAGED.md`, and every fully-owned skill directory has one
+  local marker. Notices are sidecar-owned, drift-repaired, reconciled on
+  removal, excluded from source snapshots and hashes, and protected against
+  source or destination collisions.
 - **SPEC §19.5 byte-exact content hash**: regular files only, NFC-normalized
   forward-slash relpaths, byte-lex sorted, NUL-separated, `sha256-` prefix.
   Lives in `packages/core/src/hash/` with focused fixture tests.

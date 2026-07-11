@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
+  ACF_SYSTEM_OWNER,
   type AcfCapability,
   applyApplicability,
   type CapletConfig,
@@ -21,6 +22,7 @@ import { type ApplyResult, applyDiffs } from "../apply/apply-diffs";
 import { detectDrift, readSidecar } from "../apply/sidecar";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
 import { diskReadOnlyFs } from "./fs";
+import { addManagementNotices } from "./managed-notices";
 import { resolveScopeRoots } from "./scopes";
 
 export type EmittedDiff = {
@@ -46,6 +48,7 @@ export type DiffSummary = {
   action: "create" | "update" | "delete";
   path: string;
   context: string;
+  count: number;
 };
 
 export async function fetchScopes(
@@ -85,7 +88,7 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
   const scopes = await resolveScopeRoots(readScope(args), cwd);
   const targets = targetSelection(args, configResult.config);
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
-  const diffs: EmittedDiff[] = [];
+  const desiredDiffs: EmittedDiff[] = [];
   const canonicalDiffs = new Set<string>();
   const fs = diskReadOnlyFs();
 
@@ -128,14 +131,13 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
         const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
         for (const diff of result.diffs) {
-          if (!fileDiffChanged(diff)) continue;
           const canonical = isCanonicalSkillPath(diff.path, scopeRoot);
           if (canonical) {
             const key = `${scopeRoot.scope}\0${filtered.manifest.name}\0${path.resolve(diff.path)}`;
             if (canonicalDiffs.has(key)) continue;
             canonicalDiffs.add(key);
           }
-          diffs.push({
+          desiredDiffs.push({
             scopeRoot,
             targetId,
             destination: canonical ? "canonical" : "native",
@@ -147,6 +149,8 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
       }
     }
   }
+  const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics);
+  const diffs = desiredWithNotices.filter((item) => fileDiffChanged(item.diff));
   return { config: configResult.config, scopes, targets, diagnostics, diffs };
 }
 
@@ -166,31 +170,54 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
 export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
   const groups = new Map<
     string,
-    DiffSummary & { scope: string; target: string; capabilities: string[] }
+    DiffSummary & { scope: string; target: string; capabilities: string[]; noticeCount: number }
   >();
   for (const item of diffs) {
     const action =
       item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
-    const display = displayPath(item.diff.path);
+    const notice = item.diff.managementNotice !== undefined;
+    const display = notice ? "Management notices" : displayPath(item.diff.path);
     const destination = item.destination === "canonical" ? "canonical" : item.targetId;
     const key = `${action}\0${display}\0${item.scopeRoot.scope}\0${destination}`;
-    const group = groups.get(key) ?? {
+    const group: DiffSummary & {
+      scope: string;
+      target: string;
+      capabilities: string[];
+      noticeCount: number;
+    } = groups.get(key) ?? {
       action,
       path: display,
       context: "",
+      count: 0,
       scope: item.scopeRoot.scope,
       target: destination,
       capabilities: [],
+      noticeCount: 0,
     };
-    if (!group.capabilities.includes(item.capabilityName))
+    if (notice) group.noticeCount += 1;
+    if (
+      item.capabilityName !== ACF_SYSTEM_OWNER &&
+      !group.capabilities.includes(item.capabilityName)
+    ) {
       group.capabilities.push(item.capabilityName);
+    }
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => ({
     action: group.action,
     path: group.path,
-    context: `${group.scope} / ${group.target} / ${group.capabilities.join(", ")}`,
+    count: group.noticeCount === 0 ? 1 : group.noticeCount,
+    context: [
+      group.scope,
+      group.target,
+      ...(group.noticeCount === 0 ? [] : [`${group.noticeCount} files`]),
+      ...(group.capabilities.length === 0 ? [] : [group.capabilities.sort().join(", ")]),
+    ].join(" / "),
   }));
+}
+
+export function countPresentedFiles(changes: readonly DiffSummary[]): number {
+  return changes.reduce((sum, change) => sum + change.count, 0);
 }
 
 function displayPath(filePath: string): string {

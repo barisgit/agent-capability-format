@@ -145,6 +145,12 @@ The reference CLI `caplet` exposes both:
 Plus inspection: `caplet check`, `caplet inspect`, `caplet ls`, `caplet
 diff`, `caplet doctor`.
 
+Emitted destinations contain visible `ACF-MANAGED.md` notices: one aggregate
+inventory at each install root and one local marker inside each fully-owned
+skill directory. Edit the declared capability source, not these generated
+files, then run `caplet apply`. The machine-readable `.acf-managed.json`
+sidecar remains the authority used for drift detection and safe cleanup.
+
 ## Packages
 
 The reference implementation ships as one app plus five libraries:
