@@ -21,8 +21,9 @@ function diff(options: {
     path: path.join(options.installRoot, options.file),
     before: action === "create" ? null : "old",
     after: action === "delete" ? null : "new",
-    ...(options.notice === true ? { managementNotice: { kind: "install-root" } } : {}),
-  } as FileDiff;
+    owns: [],
+    ...(options.notice === true ? { managementNotice: "artifact" as const } : {}),
+  };
   return {
     scopeRoot: scopeRoot(options.scope, options.agentsDir),
     targetId: (options.destination === "canonical" ? "claude" : options.target) as never,
