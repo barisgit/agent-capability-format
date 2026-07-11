@@ -18,6 +18,9 @@ test("caplet add writes a source that fetch can resolve", async () => {
     ]);
     expect(result.exitCode).toBe(0);
     const manifest = await readText(path.join(scope.home, ".agents", "capabilities.yml"));
+    expect(manifest).toContain(`source: ${source}`);
+    expect(manifest).not.toContain("kind: path");
+    expect(manifest).not.toContain("location:");
     expect(manifest).toContain("alpha-copy");
     expect(manifest).toContain(scope.sourceRoot);
 
@@ -72,6 +75,8 @@ test("caplet add --path resolves a capability below a source root", async () => 
     expect(duplicate.exitCode).not.toBe(0);
 
     const manifest = await readText(path.join(scope.home, ".agents", "capabilities.yml"));
+    expect(manifest.match(new RegExp(`source: ${source}`, "g"))).toHaveLength(2);
+    expect(manifest).not.toContain("kind: path");
     expect(manifest).toContain("path: alpha");
     expect(manifest).toContain("path: beta");
 

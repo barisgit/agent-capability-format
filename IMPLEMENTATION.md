@@ -2038,7 +2038,7 @@ export type CapletConfig = {
     out?: { user?: string; project?: string }   // override adapter defaults; absolute paths
     disabled?: boolean
     skills?: {
-      native?: boolean                   // target default; false for Pi, otherwise native-path dependent
+      native?: boolean                   // false when target discovers canonical skills; otherwise native-path dependent
       canonical?: boolean                // default: true
     }
   }>>

@@ -73,7 +73,15 @@ export async function writeCapabilitiesYml(
   capabilities: CapabilityEntry[],
 ): Promise<void> {
   await mkdir(path.dirname(root.manifestPath), { recursive: true });
-  await writeFile(root.manifestPath, stringifyYml({ acf: 1, capabilities }), "utf8");
+  const humanReadable = capabilities.map(({ source, ...entry }) => ({
+    source: sourceString(source),
+    ...entry,
+  }));
+  await writeFile(
+    root.manifestPath,
+    stringifyYml({ acf: 1, capabilities: humanReadable }),
+    "utf8",
+  );
 }
 
 function buildEntry(
