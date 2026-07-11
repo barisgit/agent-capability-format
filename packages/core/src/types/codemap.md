@@ -4,7 +4,7 @@
 Defines the canonical TypeScript contracts for ACF source models, diagnostics, scope resolution, targets, emission, file diffs, and ownership sidecars.
 
 ## Design and Data Flow
-`model.ts` models manifests and all facet families plus constants such as hook defaults/effect matrices. `emit.ts` defines target adapters, read-only filesystem boundaries, emit requests/results, install mappings, and managed ownership records. `index.ts` re-exports both sets.
+`model.ts` models manifests, source entries with normalized capability selectors, and all facet families plus constants such as hook defaults/effect matrices. `emit.ts` defines target adapters, read-only filesystem boundaries, emit requests/results, install mappings, and managed ownership records. `index.ts` re-exports both sets.
 
 ## Integration
 - Imports canonical operation/hook/trigger names from `@acf/runtime-taxonomy`.

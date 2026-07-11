@@ -36,6 +36,51 @@ test("caplet add writes a source that fetch can resolve", async () => {
   }
 });
 
+test("caplet preserves concise scalar and list capability selectors when rewriting", async () => {
+  const scope = await makeScope();
+  try {
+    const manifestPath = path.join(scope.home, ".agents", "capabilities.yml");
+    await Bun.write(
+      manifestPath,
+      `acf: 1\ncapabilities:\n  - source: path:${scope.sourceRoot}\n    capabilities: alpha\n`,
+    );
+    const result = await runCaplet(scope, [
+      "add",
+      `path:${scope.sourceRoot}`,
+      "--path",
+      "beta",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "user",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(await readText(manifestPath)).toContain("capabilities: alpha");
+
+    await Bun.write(
+      manifestPath,
+      `acf: 1\ncapabilities:\n  - source: path:${scope.sourceRoot}\n    capabilities: [alpha, beta]\n`,
+    );
+    const listResult = await runCaplet(scope, [
+      "add",
+      `path:${scope.sourceRoot}`,
+      "--path",
+      "alpha",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "user",
+    ]);
+    expect(listResult.exitCode).toBe(0);
+    const rewritten = await readText(manifestPath);
+    expect(rewritten).toContain("capabilities:");
+    expect(rewritten).toContain("  - alpha");
+    expect(rewritten).toContain("  - beta");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("caplet add --path resolves a capability below a source root", async () => {
   const scope = await makeScope();
   try {

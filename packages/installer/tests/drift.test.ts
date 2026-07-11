@@ -28,6 +28,36 @@ test("yml entries missing from lock are diagnosed", () => {
   ]);
 });
 
+test("capability selector drift is diagnosed", () => {
+  const yml: CapabilitiesYml = {
+    acf: 1,
+    capabilities: [
+      {
+        source: { kind: "path", location: "/repo" },
+        capabilities: ["engineering"],
+      },
+    ],
+  };
+  const lock: CapabilitiesLock = {
+    acf: 1,
+    entries: [
+      {
+        capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        capabilityNames: ["hardware"],
+        capabilities: ["hardware"],
+        source: "path:/repo",
+        sourceId: "path:/repo",
+      },
+    ],
+  };
+  const diagnostics = detectLockDrift(yml, lock);
+  expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["acf.lock.drift"]);
+  expect(diagnostics[0]?.data).toMatchObject({
+    ymlCapabilities: ["engineering"],
+    lockCapabilities: ["hardware"],
+  });
+});
+
 test("legacy source-only lock ids remain valid for path entries", () => {
   const yml: CapabilitiesYml = {
     acf: 1,

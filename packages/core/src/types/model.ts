@@ -276,6 +276,7 @@ export type CapabilityEntry = {
   source: SourceSpec;
   ref?: string | undefined;
   path?: string | undefined;
+  capabilities?: string[] | undefined;
   include?: FacetSelector | undefined;
   exclude?: FacetSelector | undefined;
   rename?: string | Record<string, string> | undefined;

@@ -4,7 +4,7 @@
 Defines runtime Zod schemas for ACF manifests, facets, hooks, MCP servers, source manifests, lockfiles, and Caplet config.
 
 ## Design and Data Flow
-Schemas validate syntax and structural constraints while preserving typed inputs for semantic validation in the reader. Shared slug, target, and `only`/`except` schemas compose the higher-level documents.
+Schemas validate syntax and structural constraints while preserving typed inputs for semantic validation in the reader. Source entries normalize shorthand sources and scalar/list capability selectors, rejecting unsafe or unsupported collection-relative paths before installer resolution. Shared slug, target, and `only`/`except` schemas compose the higher-level documents.
 
 ## Integration
 - Uses canonical runtime taxonomy enums.

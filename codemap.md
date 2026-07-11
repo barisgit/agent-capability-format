@@ -5,7 +5,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 
 ## System Design and Data Flow
 1. Core readers parse manifests and facet files into the canonical model, validate them, and collect diagnostics.
-2. The installer resolves path/Git declarations from `capabilities.yml`, materializes scope trees, and records content hashes in deterministic lockfiles.
+2. The installer resolves path/Git declarations from `capabilities.yml`, selects exact or globbed paths from multi-capability collections, safely reconciles scope snapshots, and records selector intent plus content hashes in deterministic lockfiles.
 3. Core scope resolution and applicability select effective capabilities and facets for a target.
 4. Registered adapters translate the selected model into `FileDiff` plans.
 5. Caplet reports those plans or applies them while maintaining `.acf-managed.json` ownership and drift metadata; SDK callers can query typed facet views directly.

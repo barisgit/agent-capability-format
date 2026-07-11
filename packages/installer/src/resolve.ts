@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
@@ -13,6 +13,7 @@ import { detectLockDrift } from "./drift";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch";
 import {
   type CapabilitiesLock,
+  cacheKeyFor,
   canonicalizeLock,
   canonicalizePathLocation,
   entrySourceId,
@@ -46,6 +47,19 @@ export type CapabilityRecord = {
 };
 
 export async function resolveCapabilities(opts: ResolveOptions): Promise<ResolveResult> {
+  await mkdir(opts.scopeRoot.agentsDir, { recursive: true });
+  const stagingDir = await mkdtemp(path.join(opts.scopeRoot.agentsDir, ".acf-staging-"));
+  try {
+    return await resolveCapabilitiesStaged(opts, stagingDir);
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true });
+  }
+}
+
+async function resolveCapabilitiesStaged(
+  opts: ResolveOptions,
+  stagingDir: string,
+): Promise<ResolveResult> {
   const diagnostics: Diagnostic[] = [];
   const manifest = await readCapabilitiesYml(opts.scopeRoot.manifestPath);
   diagnostics.push(...manifest.diagnostics);
@@ -56,8 +70,12 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
 
   await mkdir(opts.scopeRoot.capabilitiesDir, { recursive: true });
   const records: CapabilityRecord[] = [];
+  const priorRecords: CapabilityRecord[] = [];
   const nextEntries: LockEntry[] = [];
   let fetched = false;
+  let failed =
+    manifest.diagnostics.some((diagnostic) => diagnostic.severity === "error") ||
+    diagnostics.some((diagnostic) => diagnostic.code === "acf.lock.unsupported-version");
   const lockedBySource = new Map(
     (usableLock?.entries ?? []).map((entry) => [entry.sourceId, entry]),
   );
@@ -67,9 +85,14 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
     const id = entrySourceId(entry);
     const legacyId = sourceId(entry.source);
     const locked = lockedBySource.get(id) ?? lockedBySource.get(legacyId);
+    if (locked !== undefined) {
+      priorRecords.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
+    }
     const legacyLock = locked !== undefined && locked.sourceId !== id;
     if (requiresRef(entry) && entry.ref === undefined) {
       diagnostics.push(refRequiredDiagnostic(entry, id));
+      failed = true;
+      if (locked !== undefined) nextEntries.push(locked);
       continue;
     }
     const selected =
@@ -90,18 +113,173 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
     }
 
     const fetchedCapability = await fetchCapability(entry, fetchOptions(yml, opts.scopeRoot));
-    const materialized = await materializeFetched(entry, fetchedCapability, opts);
+    const sourceStagingDir = path.join(
+      stagingDir,
+      cacheKeyFor(fetchedCapability.sourceId, entry.ref),
+    );
+    const materialized = await materializeFetched(entry, fetchedCapability, opts, sourceStagingDir);
     diagnostics.push(...materialized.diagnostics);
+    if (!materialized.ok) {
+      failed = true;
+      if (locked !== undefined) {
+        nextEntries.push(locked);
+        records.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
+      }
+      continue;
+    }
     records.push(...materialized.records);
     if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
     fetched = true;
   }
 
   const lockfile = canonicalizeLock({ acf: 1, entries: nextEntries });
+  if (failed) {
+    return {
+      capabilities: priorRecords.sort(byRecordName),
+      lockfile: canonicalizeLock(usableLock ?? { acf: 1, entries: [] }),
+      diagnostics,
+    };
+  }
+
+  const committedRecords = await commitStagedRecords(
+    records,
+    stagingDir,
+    opts.scopeRoot.capabilitiesDir,
+  );
   if (opts.mode !== "never" && opts.updateLock !== false && (fetched || existingLock === null)) {
+    await removeStaleSnapshots(usableLock, lockfile, opts.scopeRoot.capabilitiesDir);
     await writeLockfile(opts.scopeRoot.lockPath, lockfile);
   }
-  return { capabilities: records.sort(byRecordName), lockfile, diagnostics };
+  return { capabilities: committedRecords.sort(byRecordName), lockfile, diagnostics };
+}
+
+async function commitStagedRecords(
+  records: CapabilityRecord[],
+  stagingDir: string,
+  capabilitiesDir: string,
+): Promise<CapabilityRecord[]> {
+  const committed: CapabilityRecord[] = [];
+  for (const record of records) {
+    const relative = path.relative(stagingDir, record.root);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+      committed.push(record);
+      continue;
+    }
+    const destination = capabilityPath(capabilitiesDir, record.name);
+    await rm(destination, { recursive: true, force: true });
+    await rename(record.root, destination);
+    committed.push({ ...record, root: destination });
+  }
+  return committed;
+}
+
+function selectCapabilities(
+  entry: CapabilityEntry,
+  sourceRoot: string,
+  capabilities: Awaited<ReturnType<typeof readRepositoryCapabilities>>["capabilities"],
+): { capabilities: typeof capabilities; diagnostics: Diagnostic[] } {
+  if (entry.capabilities === undefined) return { capabilities, diagnostics: [] };
+  const collectionRoot = path.join(sourceRoot, "acf");
+  const candidates = capabilities
+    .map((capability) => ({
+      capability,
+      relative: path.relative(collectionRoot, capability.root).replaceAll(path.sep, "/"),
+    }))
+    .filter(
+      (item) =>
+        item.relative.length > 0 && item.relative !== ".." && !item.relative.startsWith("../"),
+    );
+  if (candidates.length === 0) {
+    return {
+      capabilities: [],
+      diagnostics: [
+        {
+          severity: "error",
+          code: "acf.resolve.capability-selector-direct-source",
+          message: "capabilities selectors require a source collection with an acf/ directory",
+          path: sourceRoot,
+        },
+      ],
+    };
+  }
+  const selected = new Set<(typeof capabilities)[number]>();
+  const diagnostics: Diagnostic[] = [];
+  for (const selector of entry.capabilities) {
+    const matches = candidates.filter((item) => globMatches(selector, item.relative));
+    if (matches.length === 0) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.resolve.capability-selector-unmatched",
+        message: `capability selector matched nothing: ${selector}`,
+        path: sourceRoot,
+        data: { selector, candidates: candidates.map((item) => item.relative).sort() },
+      });
+    }
+    for (const match of matches) selected.add(match.capability);
+  }
+  return { capabilities: [...selected], diagnostics };
+}
+
+function globMatches(pattern: string, candidate: string): boolean {
+  return matchSegments(pattern.split("/"), candidate.split("/"), 0, 0);
+}
+
+function matchSegments(
+  pattern: string[],
+  candidate: string[],
+  patternIndex: number,
+  candidateIndex: number,
+): boolean {
+  if (patternIndex === pattern.length) return candidateIndex === candidate.length;
+  const segment = pattern[patternIndex];
+  if (segment === "**") {
+    if (matchSegments(pattern, candidate, patternIndex + 1, candidateIndex)) return true;
+    return (
+      candidateIndex < candidate.length &&
+      matchSegments(pattern, candidate, patternIndex, candidateIndex + 1)
+    );
+  }
+  if (candidateIndex >= candidate.length || segment === undefined) return false;
+  return (
+    matchSegment(segment, candidate[candidateIndex] ?? "") &&
+    matchSegments(pattern, candidate, patternIndex + 1, candidateIndex + 1)
+  );
+}
+
+function matchSegment(pattern: string, candidate: string): boolean {
+  let expression = "^";
+  for (const char of pattern) {
+    if (char === "*") expression += ".*";
+    else if (char === "?") expression += ".";
+    else expression += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`${expression}$`).test(candidate);
+}
+
+function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return [...left].sort().join("\0") === [...right].sort().join("\0");
+}
+
+async function removeStaleSnapshots(
+  previous: CapabilitiesLock | null,
+  next: CapabilitiesLock,
+  capabilitiesDir: string,
+): Promise<void> {
+  if (previous === null) return;
+  const keep = new Set(next.entries.flatMap((entry) => entry.capabilityNames));
+  for (const name of previous.entries.flatMap((entry) => entry.capabilityNames)) {
+    if (!keep.has(name)) {
+      await rm(capabilityPath(capabilitiesDir, name), { recursive: true, force: true });
+    }
+  }
+}
+
+function capabilityPath(capabilitiesDir: string, name: string): string {
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+    throw new Error(`invalid capability destination name: ${name}`);
+  }
+  return path.join(capabilitiesDir, name);
 }
 
 function normalizeCapabilitiesYml(value: CapabilitiesYml, manifestDir: string): CapabilitiesYml {
@@ -131,7 +309,18 @@ function driftDiagnosticsForMode(
 ): Diagnostic[] {
   const diagnostics = detectLockDrift(yml, lock);
   if (mode === "never") return diagnostics;
-  return diagnostics.filter((diagnostic) => diagnostic.code !== "acf.lock.missing-entry");
+  return diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.code !== "acf.lock.missing-entry" && !isCapabilitySelectorDrift(diagnostic),
+  );
+}
+
+function isCapabilitySelectorDrift(diagnostic: Diagnostic): boolean {
+  return (
+    diagnostic.code === "acf.lock.drift" &&
+    diagnostic.data !== undefined &&
+    "ymlCapabilities" in diagnostic.data
+  );
 }
 
 function shouldFetch(
@@ -142,7 +331,10 @@ function shouldFetch(
   if (mode === "never") return false;
   if (mode === "force") return true;
   if (locked === undefined) return true;
-  return (entry.ref ?? null) !== (locked.ref ?? null);
+  return (
+    (entry.ref ?? null) !== (locked.ref ?? null) ||
+    !sameStrings(entry.capabilities, locked.capabilities)
+  );
 }
 
 function requiresRef(entry: CapabilityEntry): boolean {
@@ -179,7 +371,7 @@ function recordsFromLock(
   return lockEntry.capabilityNames.map((name) => ({
     entry,
     name,
-    root: path.join(capabilitiesDir, name),
+    root: capabilityPath(capabilitiesDir, name),
     commit: lockEntry.resolvedSha ?? null,
     contentHash: lockEntry.capabilityHash,
   }));
@@ -189,7 +381,9 @@ async function materializeFetched(
   entry: CapabilityEntry,
   fetched: FetchedCapability,
   opts: ResolveOptions,
+  stagingDir: string,
 ): Promise<{
+  ok: boolean;
   records: CapabilityRecord[];
   lockEntry: LockEntry | null;
   diagnostics: Diagnostic[];
@@ -197,18 +391,23 @@ async function materializeFetched(
   const repository = await readRepositoryCapabilities(fetched.root, opts.scope);
   const diagnostics = [...repository.diagnostics];
   const records: CapabilityRecord[] = [];
+  const selected = selectCapabilities(entry, fetched.root, repository.capabilities);
+  diagnostics.push(...selected.diagnostics);
+  if (selected.diagnostics.some((item) => item.severity === "error")) {
+    return { ok: false, records, lockEntry: null, diagnostics };
+  }
 
-  for (const capability of repository.capabilities) {
+  for (const capability of selected.capabilities) {
     const name = finalCapabilityName(entry, capability.manifest.name);
-    const destination = path.join(opts.scopeRoot.capabilitiesDir, name);
+    const destination = capabilityPath(stagingDir, name);
     await copyRegularTree(capability.root, destination);
     const contentHash = await computeContentHash(destination);
     records.push({ entry, name, root: destination, commit: fetched.commit, contentHash });
   }
 
-  if (records.length === 0) return { records, lockEntry: null, diagnostics };
+  if (records.length === 0) return { ok: true, records, lockEntry: null, diagnostics };
   const lockEntry = lockEntryFor(entry, fetched, records);
-  return { records, lockEntry, diagnostics };
+  return { ok: true, records, lockEntry, diagnostics };
 }
 
 function lockEntryFor(
@@ -223,6 +422,7 @@ function lockEntryFor(
     source: sourceString(entry.source),
     sourceId: fetched.sourceId,
   };
+  if (entry.capabilities !== undefined) lockEntry.capabilities = entry.capabilities;
   if (entry.exclude !== undefined) lockEntry.exclude = entry.exclude;
   if (entry.include !== undefined) lockEntry.include = entry.include;
   if (entry.ref !== undefined) lockEntry.ref = entry.ref;

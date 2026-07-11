@@ -97,7 +97,17 @@ capabilities:
     include:
       skill: [react-best-practices, next-app-router]
   - source: path:../my-private
+    capabilities: engineering-workflows
+  - source: github:myorg/capability-pack
+    ref: main
+    capabilities: [software/*, hardware/**]
 ```
+
+A multi-capability repository uses `acf/<capability-path>/acf.yml`.
+`capabilities` selects exact or globbed paths relative to that `acf/` directory;
+a scalar selects one, a list selects several, and omission selects all. `*`
+stays within one segment, `?` matches one character, and a `**` segment is
+recursive. Use `path` first when the collection lives in a monorepo subtree.
 
 Sources are `github:owner/repo`, `git:<url>`, or `path:<location>`. The
 resolver writes one copy into `capabilities/<name>/`. Per-host fan-out
@@ -105,10 +115,12 @@ happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
 resolved by `rename:` or `exclude:`.
 
-For a monorepo source, set `path:` on the entry or use the equivalent CLI:
+For a monorepo source, set `path:` to the subtree containing either an
+`acf/` collection or one direct capability. The equivalent CLI for a direct
+capability subtree is:
 
 ```bash
-caplet add github:owner/capabilities --ref main --path capabilities/my-capability
+caplet add github:owner/monorepo --ref main --path packages/my-capability
 ```
 
 Referenced assets are emitted byte-for-byte; executable permission bits are

@@ -1764,10 +1764,12 @@ For each `ScopeRoot`, the resolver:
 1. parses `capabilities.yml` if present (§7.2),
 2. parses `capabilities.lock` if present (§7.5),
 3. enumerates directories under `capabilitiesDir/` (autoloaded capabilities),
-4. for each entry in `capabilities.yml`, fetches into `capabilitiesDir/` if
-   missing or out of date,
-5. reads each capability via `readCapability` (§5.1),
-6. applies cross-capability uniqueness checks (§7.6).
+4. for each entry in `capabilities.yml`, fetches the selected source root if
+   missing, out of date, or its capability selectors changed,
+5. discovers capability roots, applies collection selectors, and materializes
+   selected capabilities into `capabilitiesDir/`,
+6. reconciles snapshots no longer selected only after the complete resolution
+   succeeds, then applies cross-capability uniqueness checks (§7.6).
 
 ### 7.2 `capabilities.yml` schema
 
@@ -1783,7 +1785,8 @@ export type CapabilitiesYml = {
 export type CapabilityEntry = {
   source: SourceSpec
   ref?: string                          // tag, branch, or commit; default = default branch HEAD
-  path?: string                         // subpath for multi-capability repos
+  path?: string                         // subpath establishing the selected source root
+  capabilities?: string[]               // normalized exact/glob paths under <source>/acf/
   include?: FacetSelector
   exclude?: FacetSelector
   rename?: string                       // override capability slug for collision resolution
@@ -1807,7 +1810,7 @@ capabilities:
       skill: ["react-best-practices", "next-app-router"]
   - source: github:myorg/private-pack
     ref: main
-    path: acf/team-defaults
+    capabilities: [team-defaults, hardware/*]
   - source: path:../my-private
 ```
 
@@ -1893,8 +1896,15 @@ export async function fetchCapability(
 }
 ```
 
-After fetch, the resolver copies (not symlinks) the resolved subtree into
-`scope/capabilities/<final-name>/`.
+After fetch, the resolver discovers valid capability roots. When
+`entry.capabilities` is present it matches each exact/glob selector against POSIX
+paths relative to `<fetched-root>/acf/`, requires every selector to match, and
+deduplicates overlaps. It stages (without symlinks) each selected capability outside the live
+snapshot tree. Only after every source entry validates does it replace
+`scope/capabilities/<final-name>/`; a selector or source-entry failure discards
+all staging and preserves the prior lock and snapshots. After complete
+successful resolution, snapshots formerly owned by the source but absent from
+the next lock are removed.
 
 ### 7.5 Lockfile
 
@@ -1984,7 +1994,8 @@ export function deduplicateCapabilities(
 
 - **Single-capability repo**: `acf.yml` at root.
 - **Multi-capability repo**: `acf/<sub-path>/acf.yml`, arbitrary nesting under
-  `acf/`.
+  `acf/`. Source-entry `capabilities` exact/glob selectors match `<sub-path>`;
+  omission selects all. `path` first establishes a different source root.
 - **Legacy bare `skills/` at root**: synthesizes a minimal manifest at fetch
   time when `acf.yml` is absent and `skills/` is present.
 

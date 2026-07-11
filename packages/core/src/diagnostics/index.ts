@@ -49,6 +49,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.taxonomy.operation.unmapped",
   "acf.capabilities-yml.source.unknown-scheme",
   "acf.capabilities-yml.duplicate-entry",
+  "acf.resolve.capability-selector-direct-source",
+  "acf.resolve.capability-selector-unmatched",
   "acf.lock.drift",
   "acf.lock.missing-entry",
   "acf.lock.unsupported-version",

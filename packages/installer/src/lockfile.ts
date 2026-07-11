@@ -7,6 +7,7 @@ import type { CapabilityEntry, SourceSpec } from "@acf/core";
 export type LockEntry = {
   capabilityHash: string;
   capabilityNames: string[];
+  capabilities?: string[] | undefined;
   exclude?: CapabilityEntry["exclude"] | undefined;
   include?: CapabilityEntry["include"] | undefined;
   ref?: string | undefined;
@@ -16,7 +17,6 @@ export type LockEntry = {
   source: string;
   sourceId: string;
 };
-
 export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
 
 type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
@@ -88,6 +88,7 @@ function canonicalizeEntry(entry: LockEntry): LockEntry {
   const ordered: MutableLockEntry = {};
   ordered.capabilityHash = entry.capabilityHash;
   ordered.capabilityNames = [...entry.capabilityNames].sort();
+  if (entry.capabilities !== undefined) ordered.capabilities = [...entry.capabilities].sort();
   if (entry.exclude !== undefined) ordered.exclude = sortSelector(entry.exclude);
   if (entry.include !== undefined) ordered.include = sortSelector(entry.include);
   if (entry.ref !== undefined) ordered.ref = entry.ref;
@@ -144,7 +145,9 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
     sourceId: value.sourceId,
   };
   if (typeof required.capabilityHash !== "string") throw new Error("invalid lock capabilityHash");
-  if (!isStringArray(required.capabilityNames)) throw new Error("invalid lock capabilityNames");
+  if (!isCapabilityNameArray(required.capabilityNames)) {
+    throw new Error("invalid lock capabilityNames");
+  }
   if (typeof required.source !== "string") throw new Error("invalid lock source");
   if (typeof required.sourceId !== "string") throw new Error("invalid lock sourceId");
   const entry: MutableLockEntry = {
@@ -153,6 +156,9 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
     source: required.source,
     sourceId: required.sourceId,
   };
+  if (isStringArray(value.capabilities) && value.capabilities.length > 0) {
+    entry.capabilities = value.capabilities;
+  }
   if (isSelector(value.exclude)) entry.exclude = value.exclude;
   if (isSelector(value.include)) entry.include = value.include;
   if (typeof value.ref === "string") entry.ref = value.ref;
@@ -178,6 +184,10 @@ function isRename(value: unknown): value is NonNullable<CapabilityEntry["rename"
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isCapabilityNameArray(value: unknown): value is string[] {
+  return isStringArray(value) && value.every((item) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(item));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -38,8 +38,25 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
         data: { sourceId: id, ymlRef: entry.ref ?? null, lockRef: lockEntry.ref ?? null },
       });
     }
+    if (!sameStrings(entry.capabilities, lockEntry.capabilities)) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.lock.drift",
+        message: `capabilities.yml capability selectors differ from lock for ${id}`,
+        data: {
+          sourceId: id,
+          ymlCapabilities: entry.capabilities ?? null,
+          lockCapabilities: lockEntry.capabilities ?? null,
+        },
+      });
+    }
   }
   return diagnostics;
+}
+
+function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return [...left].sort().join("\0") === [...right].sort().join("\0");
 }
 
 function missingEntryDiagnostic(sourceIdValue: string): Diagnostic {

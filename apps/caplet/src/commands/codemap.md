@@ -4,7 +4,7 @@
 Defines the user-facing Caplet command handlers: `add`, `apply`, `check`, `diff`, `doctor`, `emit`, `fetch`, `inspect`, `ls`, `remove`, and `update`.
 
 ## Design and Data Flow
-Each Citty command parses shared arguments, runs through `runCommandSafely`, delegates resolution/emission or manifest work to internal helpers, reports diagnostics, and sets an exit code. Read-only commands inspect resolved capabilities; mutating commands fetch sources, apply diffs, or update manifests/lockfiles.
+Each Citty command parses shared arguments, runs through `runCommandSafely`, delegates resolution/emission or manifest work to internal helpers, reports diagnostics, and sets an exit code. Read-only commands inspect resolved capabilities; mutating commands fetch sources, apply diffs, update manifests/lockfiles, or remove both target-native and canonical sidecar ownership.
 
 ## Integration
 - Registered by `../cli.ts`.

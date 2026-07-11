@@ -251,6 +251,27 @@ const sourceSpecSchema = z
   })
   .pipe(sourceSpecObjectSchema);
 
+const capabilitySelectorSchema = z
+  .union([z.string(), z.array(z.string()).min(1)])
+  .transform((value) => (typeof value === "string" ? [value] : value))
+  .refine((selectors) => selectors.every(isValidCapabilitySelector), {
+    message:
+      "capability selectors must be non-empty relative POSIX paths or globs without . or .. segments",
+  });
+
+function isValidCapabilitySelector(selector: string): boolean {
+  if (selector.length === 0 || selector.startsWith("/") || selector.includes("\\")) return false;
+  return selector
+    .split("/")
+    .every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        (!segment.includes("**") || segment === "**"),
+    );
+}
+
 export const capabilitiesYmlSchema = z.object({
   acf: z.literal(1),
   capabilities: z.array(
@@ -259,9 +280,10 @@ export const capabilitiesYmlSchema = z.object({
         source: sourceSpecSchema,
         ref: z.string().optional(),
         path: z.string().optional(),
+        capabilities: capabilitySelectorSchema.optional(),
         include: selectorSchema.optional(),
         exclude: selectorSchema.optional(),
-        rename: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+        rename: z.union([slugSchema, z.record(z.string(), slugSchema)]).optional(),
         only: z.array(targetIdSchema).optional(),
         except: z.array(targetIdSchema).optional(),
       })

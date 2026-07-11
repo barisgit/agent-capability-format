@@ -1779,6 +1779,7 @@ capabilities:
 
   - source: github:my-org/private-tools
     ref: main
+    capabilities: [engineering, hardware/*] # optional collection selectors
     auth: gh           # optional: auth method override (§17.5)
 
   - source: git:git@github.com:vendor/pack.git
@@ -1802,7 +1803,8 @@ Each entry under `capabilities[]`:
 | ---------- | ------- | -------- | ------------------------------------------------------------------------------ |
 | `source`   | string  | yes      | Source identifier (§18).                                                       |
 | `ref`      | string  | conditional | Required for `github:` and `git:` sources. Branch, tag, or SHA.             |
-| `path`     | string  | no       | Subdirectory inside the source where the capability (or `acf/`) lives.         |
+| `path`     | string  | no       | Subdirectory inside the source to use as the selected source root.             |
+| `capabilities` | string or non-empty list | no | Exact/glob paths relative to the selected source root's `acf/`; omitted selects all. |
 | `auth`     | enum    | no       | `gh` \| `ssh` \| `token` \| `anonymous`. Override resolver default.            |
 | `include`  | mapping | no       | Family-keyed allowlist of facet names. Globs allowed. Implicit `*`.            |
 | `exclude`  | mapping | no       | Family-keyed denylist of facet names. Globs allowed.                           |
@@ -1933,15 +1935,16 @@ entries:
 | `entries[].resolvedSha` | string | conditional | Required for `github:` / `git:`. Forbidden for `path:`.   |
 | `entries[].resolvedAt`  | RFC3339 string | no | Time the resolver recorded the SHA.                         |
 | `entries[].capabilityHash` | string | yes  | `sha256-<hex>` of the materialized capability content (§19.5). |
-| `entries[].capabilityNames` | list | yes   | Names of capabilities produced (one entry MAY produce multiple).   |
+| `entries[].capabilityNames` | list | yes   | Final names of capabilities produced (one entry MAY produce multiple). |
+| `entries[].capabilities` | list | no | Normalized collection selectors from `capabilities.yml`. |
 | `entries[].include` / `exclude` / `rename` | mapping | no | Mirrors `capabilities.yml`.                          |
 
 ### 19.5 Hash computation
 
 `capabilityHash` is computed over the materialized capability tree on
-disk after `path:`, `include`/`exclude`/`rename`, and applicability
-filtering, but BEFORE any adapter emission. The hashing algorithm is
-normative and MUST be stable for `acf: 1`:
+disk after `path:`, capability selection, `include`/`exclude`/`rename`, and
+applicability filtering, but BEFORE any adapter emission. The hashing
+algorithm is normative and MUST be stable for `acf: 1`:
 
 1. Enumerate every regular file under the materialized capability root
    (recursive). Symlinks MUST be rejected by the resolver before hashing;
@@ -2007,9 +2010,10 @@ some-repo/
         agents/
 ```
 
-An `acf/` directory at the repository root may contain capabilities at
+An `acf/` directory at the selected source root may contain capabilities at
 arbitrary depth. Each capability is the directory containing its own
-`acf.yml`. Resolution with `path:` selects one capability or a subtree.
+`acf.yml`. The optional source-entry `path` first changes the selected source
+root; `capabilities` selectors then select paths beneath that root's `acf/`.
 
 ### 20.3 Legacy compatibility
 
@@ -2040,6 +2044,31 @@ Resolver behavior:
   files, every contained capability is materialized.
 - If the path resolves to nothing, the entry fails with an `error`
   diagnostic.
+
+### 20.5 Selecting capabilities from a collection
+
+A source entry MAY declare `capabilities` as one selector string or a non-empty
+list. Scalar syntax normalizes to a one-item list. Omission selects every
+discovered capability. Selectors match normalized POSIX paths relative to the
+selected source root's `acf/` directory:
+
+- an exact path matches one complete capability path;
+- `*` matches zero or more characters within one segment;
+- `?` matches exactly one character within one segment;
+- a `**` segment matches zero or more path segments.
+
+Only directories containing `acf.yml` or `acf.yaml` are candidates. Every
+selector MUST match at least one candidate; overlapping matches are deduplicated.
+Absolute paths, backslashes, empty segments, `.`/`..` segments, and `**` embedded
+inside another segment are invalid. Invalid or unmatched selection MUST NOT
+change existing snapshots or the lockfile.
+
+`path` is applied first, then `capabilities`, then facet-level `include` and
+`exclude`. A direct single-capability source MUST reject `capabilities` because
+there is no collection path to select. Lock entries preserve both normalized
+selector intent and sorted final capability names. Selector drift MUST trigger
+reconciliation in modes that permit fetching, including removal of snapshots no
+longer selected after a fully successful resolution.
 
 ## 21. Caplet command surface (informative)
 

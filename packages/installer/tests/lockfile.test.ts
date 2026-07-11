@@ -25,6 +25,7 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
           resolvedAt: "2026-05-28T00:00:00.000Z",
           capabilityHash: "sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           capabilityNames: ["zeta"],
+          capabilities: ["z/**", "a"],
         },
         {
           sourceId: "github:a/repo",
@@ -63,6 +64,32 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
       "github:z/repo",
     ]);
     expect(reread?.entries[0]?.include).toEqual({ skill: ["a", "b"] });
+    expect(reread?.entries[1]?.capabilities).toEqual(["a", "z/**"]);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("lockfiles reject capability names that could escape the snapshot root", async () => {
+  const dir = await tempDir("acf-installer-lock-unsafe-");
+  try {
+    const lockPath = path.join(dir, "capabilities.lock");
+    await Bun.write(
+      lockPath,
+      JSON.stringify({
+        acf: 1,
+        entries: [
+          {
+            capabilityHash:
+              "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            capabilityNames: ["../../outside"],
+            source: "path:/repo",
+            sourceId: "path:/repo",
+          },
+        ],
+      }),
+    );
+    await expect(readLockfile(lockPath)).rejects.toThrow("invalid lock capabilityNames");
   } finally {
     await cleanup(dir);
   }
