@@ -1,17 +1,21 @@
 import { expect, test } from "bun:test";
+import path from "node:path";
 import { piAdapter } from "../src";
 import {
   byPath,
   codes,
   emitFixture,
   emitInput,
+  fixtureRoot,
   parseJsonDiff,
   readFixtureCapability,
 } from "./util/capability";
 import { makeInMemoryFs } from "./util/in-memory-fs";
 
 test("pi emits all six families without facet-unsupported and diagnoses partial triggers", async () => {
-  const result = await emitFixture(piAdapter, ".pi");
+  const result = await emitFixture(piAdapter, ".pi", {
+    [path.join(fixtureRoot, "skills/review/checklist.md")]: "# Review checklist\n",
+  });
   const got = codes(result);
   expect(got).not.toContain("acf.adapter.facet-unsupported");
   expect(got).toContain("acf.adapter.trigger-unsupported");
@@ -29,6 +33,12 @@ test("pi emits all six families without facet-unsupported and diagnoses partial 
     ),
   ).toBe(true);
   expect(byPath(result.diffs, ".agents/skills/research/SKILL.md")).toBeDefined();
+  expect(byPath(result.diffs, ".agents/skills/review/checklist.md")).toBeDefined();
+  expect(
+    result.diffs.some((diff) =>
+      diff.path.endsWith(".agents/skills/research/skills/review/checklist.md"),
+    ),
+  ).toBe(false);
   expect(result.diffs.some((diff) => diff.path.endsWith(".pi/skills/research/SKILL.md"))).toBe(
     false,
   );

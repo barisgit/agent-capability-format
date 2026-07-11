@@ -8,7 +8,7 @@ import type {
   SkillFacet,
   TargetDefinition,
 } from "@acf/core";
-import { type AssetPayload, assetsForFacet, readAssets } from "./assets";
+import { type AssetPayload, readAssets } from "./assets";
 import { makeFileDiff } from "./diff";
 import { renderMarkdownFile } from "./text";
 
@@ -99,9 +99,15 @@ async function readSkillAssets(
   skill: SkillFacet,
   fs: ReadOnlyFs,
 ): Promise<AssetPayload[]> {
-  return await readAssets(cap, assetsForFacet(cap, "skill", skill.name), fs, (assetPath) =>
-    relativeSkillAssetPath(skill, assetPath),
-  );
+  const skillPrefix = `skills/${skill.name}/`;
+  const assets = cap.assets.filter((asset) => {
+    if (asset.path.startsWith(skillPrefix)) return true;
+    if (asset.path.startsWith("skills/")) return false;
+    return (
+      "name" in asset.facet && asset.facet.family === "skill" && asset.facet.name === skill.name
+    );
+  });
+  return await readAssets(cap, assets, fs, (assetPath) => relativeSkillAssetPath(skill, assetPath));
 }
 
 function relativeSkillAssetPath(skill: SkillFacet, assetPath: string): string | null {
