@@ -8,7 +8,8 @@ import { defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { finishWithDiagnostics, reporter } from "../internal/output";
+import { printJson, readJson } from "../internal/json";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 import { capabilitySummary } from "../internal/workflow";
@@ -18,7 +19,6 @@ export const showCommand = defineCommand({
   args: {
     ...globalArgs,
     name: { type: "positional", required: true, description: "capability name" },
-    json: { type: "boolean", default: false, description: "print machine-readable JSON" },
   },
   async run(context) {
     await runCommandSafely(context.args, async () => {
@@ -43,14 +43,19 @@ export const showCommand = defineCommand({
           message: `capability not found: ${name}`,
         });
       }
+      if (readJson(context.args)) {
+        const code = exitCodeForDiagnostics(diagnostics, context.args);
+        const payload = matches.map((match) => ({
+          scope: match.scope,
+          ...(capabilitySummary(match.capability, targetIds) as Record<string, unknown>),
+        }));
+        printJson("show", code === 0, diagnostics, { capabilities: payload });
+        process.exitCode = code;
+        return;
+      }
       const code = finishWithDiagnostics(diagnostics, context.args);
       if (code !== 0) return;
       const out = reporter(context.args);
-      if (context.args.json === true) {
-        const payload = matches.map((match) => capabilitySummary(match.capability, targetIds));
-        out.log(JSON.stringify(payload.length === 1 ? payload[0] : payload, null, 2));
-        return;
-      }
       for (const match of matches) {
         const capability = match.capability;
         out.log(`${colors.bold(capability.manifest.name)} ${capability.manifest.version}`);

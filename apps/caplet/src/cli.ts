@@ -9,11 +9,12 @@ import { removeCommand } from "./commands/remove";
 import { showCommand } from "./commands/show";
 import { statusCommand } from "./commands/status";
 import { updateCommand } from "./commands/update";
+import { CAPLET_VERSION } from "./internal/json";
 
 export const rootCommand = defineCommand({
   meta: {
     name: "caplet",
-    version: "0.2.0",
+    version: CAPLET_VERSION,
     description: "install agent capabilities and sync them into your AI tools",
   },
   subCommands: {

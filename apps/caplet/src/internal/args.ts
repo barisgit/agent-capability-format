@@ -26,6 +26,11 @@ export const globalArgs = {
     description: "expand file lists and show info diagnostics",
   },
   yes: { type: "boolean", alias: "y", default: false, description: "skip confirmation prompts" },
+  json: {
+    type: "boolean",
+    default: false,
+    description: "print a single machine-readable JSON object to stdout",
+  },
   strict: {
     type: "boolean",
     default: false,

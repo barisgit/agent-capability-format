@@ -7,7 +7,8 @@ import { readLockfile } from "@acf/installer";
 import { defineCommand } from "citty";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { finishWithDiagnostics, reporter } from "../internal/output";
+import { printJson, readJson } from "../internal/json";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
 
 export const doctorCommand = defineCommand({
@@ -21,6 +22,18 @@ export const doctorCommand = defineCommand({
       await checkAgentsReadable(checks, diagnostics);
       checkTargets(checks, diagnostics);
       await checkLockfiles(context.args, checks, diagnostics);
+      if (readJson(context.args)) {
+        const code = exitCodeForDiagnostics(diagnostics, context.args);
+        printJson("doctor", code === 0, diagnostics, {
+          checks: checks.map((check) => ({
+            section: check.section,
+            status: check.status,
+            message: check.message,
+          })),
+        });
+        process.exitCode = code;
+        return;
+      }
       const out = reporter(context.args);
       const code = finishWithDiagnostics(diagnostics, context.args);
       for (const section of ["Environment", "Targets", "Lockfiles"] as const) {

@@ -3,7 +3,8 @@ import { defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { globalArgs, readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { finishWithDiagnostics, reporter } from "../internal/output";
+import { printJson, readJson } from "../internal/json";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 
@@ -24,6 +25,21 @@ export const listCommand = defineCommand({
           path: scopeRoot.agentsDir,
           capabilities: resolved.capabilities,
         });
+      }
+      if (readJson(context.args)) {
+        const code = exitCodeForDiagnostics(diagnostics, context.args);
+        printJson("list", code === 0, diagnostics, {
+          scopes: inventories.map((inventory) => ({
+            scope: inventory.scope,
+            path: inventory.path,
+            capabilities: inventory.capabilities.map((capability) => ({
+              name: capability.manifest.name,
+              version: capability.manifest.version,
+            })),
+          })),
+        });
+        process.exitCode = code;
+        return;
       }
       const code = finishWithDiagnostics(diagnostics, context.args);
       if (code === 0) {
