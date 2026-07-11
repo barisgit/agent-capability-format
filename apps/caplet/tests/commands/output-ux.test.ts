@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import path from "node:path";
 import { cleanup, makeScope, runCaplet, writeText } from "../helpers";
 
 test("fetch presents a clear command header and result summary", async () => {
@@ -308,6 +309,31 @@ test("usage errors are concise, sentence-cased, and visible in quiet mode", asyn
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("FAIL  Add requires --scope=user or --scope=project");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("diff collapses many same-capability files and --verbose expands them", async () => {
+  const scope = await makeScope();
+  try {
+    for (let index = 0; index < 8; index += 1) {
+      await writeText(
+        path.join(scope.sourceRoot, "alpha", "skills", `bulk-${index}`, "SKILL.md"),
+        `---\nname: bulk-${index}\ndescription: Bulk skill ${index}\n---\nBulk ${index}.\n`,
+      );
+    }
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const args = ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+
+    const collapsed = await runCaplet(scope, args);
+    expect(collapsed.exitCode).toBe(0);
+    expect(collapsed.stdout).toMatch(/CREATE {2}.*skills\/ \(8 files\)/);
+    expect(collapsed.stdout).not.toContain("bulk-3/SKILL.md");
+
+    const expanded = await runCaplet(scope, [...args, "--verbose"]);
+    expect(expanded.exitCode).toBe(0);
+    expect(expanded.stdout).toContain("bulk-3/SKILL.md");
   } finally {
     await cleanup(scope);
   }

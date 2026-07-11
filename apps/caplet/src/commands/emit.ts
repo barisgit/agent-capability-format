@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { globalArgs } from "../internal/args";
+import { globalArgs, readVerbose } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import {
   exitCodeForDiagnostics,
@@ -31,7 +31,7 @@ export const emitCommand = defineCommand({
         return;
       }
       const out = reporter(context.args);
-      const changes = describeDiffs(plan.diffs);
+      const changes = describeDiffs(plan.diffs, { expand: readVerbose(context.args) });
       const fileCount = countPresentedFiles(changes);
       out.heading("emit");
       printChanges(out, changes);

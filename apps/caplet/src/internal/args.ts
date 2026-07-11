@@ -12,9 +12,17 @@ export const globalArgs = {
     default: "all",
     description: "scope to use: user, project, or all",
   },
-  cwd: { type: "string", default: ".", description: "project working directory (default: current directory)" },
+  cwd: {
+    type: "string",
+    default: ".",
+    description: "project working directory (default: current directory)",
+  },
   quiet: { type: "boolean", default: false, description: "suppress non-error output" },
-  verbose: { type: "boolean", default: false, description: "show info diagnostics" },
+  verbose: {
+    type: "boolean",
+    default: false,
+    description: "show info diagnostics and expand collapsed file lists",
+  },
   "fail-on-lossy": {
     type: "boolean",
     default: false,
