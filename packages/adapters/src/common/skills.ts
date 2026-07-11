@@ -90,7 +90,8 @@ function skillDestinations(
   const roots: string[] = [];
   if (opts.canonical !== false) roots.push(skillsRootForScope(scope));
   const nativeRoot = target.skillInstallPaths?.[scope] ?? null;
-  if (opts.native !== false && nativeRoot !== null) roots.push(nativeRoot);
+  const emitNative = opts.native ?? !target.discoversCanonicalSkills;
+  if (emitNative && nativeRoot !== null) roots.push(nativeRoot);
   return [...new Set(roots)].sort((a, b) => a.localeCompare(b));
 }
 

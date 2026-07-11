@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { scopeRoot, type Scope, type ScopeRoot } from "@acf/core";
@@ -14,7 +14,10 @@ export async function resolveScopeRoots(
     roots.push(scopeRoot("user", path.join(homedir(), ".agents")));
   }
   if (selection === "project" || selection === "all") {
-    roots.push(scopeRoot("project", await projectAgentsDir(absoluteCwd)));
+    const found = await findProjectAgentsDir(absoluteCwd);
+    if (found !== undefined) roots.push(scopeRoot("project", found));
+    else if (selection === "project")
+      roots.push(scopeRoot("project", path.join(absoluteCwd, ".agents")));
   }
   return dedupeScopeRoots(roots);
 }
@@ -41,10 +44,16 @@ function dedupeScopeRoots(roots: ScopeRoot[]): ScopeRoot[] {
 }
 
 async function findProjectAgentsDir(cwd: string): Promise<string | undefined> {
+  const userAgentsDir = path.join(homedir(), ".agents");
+  const canonicalUserAgentsDir = await realpath(userAgentsDir).catch(() => userAgentsDir);
   let current = cwd;
   while (true) {
     const candidate = path.join(current, ".agents");
-    if (await directoryExists(candidate)) return candidate;
+    if (await directoryExists(candidate)) {
+      const canonicalCandidate = await realpath(candidate);
+      if (canonicalCandidate === canonicalUserAgentsDir) return undefined;
+      return candidate;
+    }
     const parent = path.dirname(current);
     if (parent === current) return undefined;
     current = parent;

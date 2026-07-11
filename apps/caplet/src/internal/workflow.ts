@@ -26,6 +26,7 @@ import { resolveScopeRoots } from "./scopes";
 export type EmittedDiff = {
   scopeRoot: ScopeRoot;
   targetId: TargetId;
+  destination: "canonical" | "native";
   installRoot: string;
   capabilityName: string;
   diff: FileDiff;
@@ -85,11 +86,13 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
   const targets = targetSelection(args, configResult.config);
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const diffs: EmittedDiff[] = [];
+  const canonicalDiffs = new Set<string>();
   const fs = diskReadOnlyFs();
 
   for (const scopeRoot of scopes) {
     const resolved = await resolveScopeCapabilities(scopeRoot);
     diagnostics.push(...resolved.diagnostics);
+    diagnostics.push(...(await driftDiagnostics(scopeRoot.agentsDir)));
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, configResult.config, cwd);
       if (installRoot === null) {
@@ -126,10 +129,17 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
         diagnostics.push(...result.diagnostics);
         for (const diff of result.diffs) {
           if (!fileDiffChanged(diff)) continue;
+          const canonical = isCanonicalSkillPath(diff.path, scopeRoot);
+          if (canonical) {
+            const key = `${scopeRoot.scope}\0${filtered.manifest.name}\0${path.resolve(diff.path)}`;
+            if (canonicalDiffs.has(key)) continue;
+            canonicalDiffs.add(key);
+          }
           diffs.push({
             scopeRoot,
             targetId,
-            installRoot,
+            destination: canonical ? "canonical" : "native",
+            installRoot: canonical ? scopeRoot.agentsDir : installRoot,
             capabilityName: filtered.manifest.name,
             diff,
           });
@@ -162,13 +172,14 @@ export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
     const action =
       item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update";
     const display = displayPath(item.diff.path);
-    const key = `${action}\0${display}\0${item.scopeRoot.scope}\0${item.targetId}`;
+    const destination = item.destination === "canonical" ? "canonical" : item.targetId;
+    const key = `${action}\0${display}\0${item.scopeRoot.scope}\0${destination}`;
     const group = groups.get(key) ?? {
       action,
       path: display,
       context: "",
       scope: item.scopeRoot.scope,
-      target: item.targetId,
+      target: destination,
       capabilities: [],
     };
     if (!group.capabilities.includes(item.capabilityName))
@@ -185,6 +196,12 @@ export function describeDiffs(diffs: readonly EmittedDiff[]): DiffSummary[] {
 function displayPath(filePath: string): string {
   const relative = path.relative(process.cwd(), filePath);
   return relative.length > 0 && !relative.startsWith("..") ? relative : filePath;
+}
+
+function isCanonicalSkillPath(filePath: string, scopeRoot: ScopeRoot): boolean {
+  const root = path.resolve(scopeRoot.agentsDir, "skills");
+  const candidate = path.resolve(filePath);
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
 export function capabilitySummary(

@@ -51,6 +51,10 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
       "user",
     ]);
     expect(added.exitCode).toBe(0);
+    await writeText(
+      path.join(scope.home, ".agents", "caplet.yml"),
+      "targets:\n  pi:\n    skills:\n      native: true\n",
+    );
 
     const applied = await runCaplet(scope, [
       "apply",

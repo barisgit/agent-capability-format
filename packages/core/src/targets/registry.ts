@@ -101,6 +101,7 @@ export const targets = defineTargets([
   defineTarget({
     id: "codex",
     displayName: "Codex",
+    discoversCanonicalSkills: true,
     support: {
       skill: "full",
       agent: "full",
@@ -175,6 +176,7 @@ export const targets = defineTargets([
   defineTarget({
     id: "opencode",
     displayName: "OpenCode",
+    discoversCanonicalSkills: true,
     support: {
       skill: "full",
       agent: "full",
@@ -217,6 +219,7 @@ export const targets = defineTargets([
   defineTarget({
     id: "pi",
     displayName: "Pi",
+    discoversCanonicalSkills: true,
     support: {
       skill: "full",
       agent: "full",

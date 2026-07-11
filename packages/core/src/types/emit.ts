@@ -27,6 +27,9 @@ export type TargetDefinition<Id extends string = string> = {
   // also reads skills from its own native location, declare it here so caplet
   // can dual-emit. `null` for both scopes means canonical-only (e.g. cursor).
   skillInstallPaths?: InstallPaths | undefined;
+  // The target discovers the ecosystem-shared .agents/skills root itself, so
+  // native skill copies are opt-in rather than the default.
+  discoversCanonicalSkills?: boolean | undefined;
   mappings: TargetMappings;
   extensions: TargetExtensionSchemas;
   adapter?: TargetAdapter<Id> | undefined;

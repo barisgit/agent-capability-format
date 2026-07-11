@@ -30,9 +30,12 @@ export const removeCommand = defineCommand({
       const config = (await readCapletConfig(cwd)).config;
       const selectedTargets = typeof context.args.target === "string" ? [context.args.target] : [...targetIds];
       let cleaned = 0;
+      const installRoots = new Set<string>([root.agentsDir]);
       for (const targetId of selectedTargets) {
         const installRoot = installRootFor(targetId, root, config, path.resolve(cwd));
-        if (installRoot === null) continue;
+        if (installRoot !== null) installRoots.add(installRoot);
+      }
+      for (const installRoot of installRoots) {
         const sidecarPath = path.join(installRoot, ".acf-managed.json");
         const sidecar = await readSidecar(sidecarPath);
         const result = await removeOwnedRegions(sidecar, installRoot, name);

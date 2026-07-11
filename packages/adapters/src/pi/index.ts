@@ -16,12 +16,8 @@ export const piAdapter: TargetAdapter<"pi"> = {
   id: "pi",
   async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
     const diagnostics: Diagnostic[] = [];
-    const skillOptions = {
-      ...input.options.skills,
-      native: input.options.skills?.native ?? false,
-    };
     const diffs = [
-      ...(await emitSkills(input.capability, input.scope, fs, piTarget, skillOptions)),
+      ...(await emitSkills(input.capability, input.scope, fs, piTarget, input.options.skills)),
       ...(await emitStandardAdapter(
         input,
         fs,

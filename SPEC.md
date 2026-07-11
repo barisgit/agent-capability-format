@@ -2108,7 +2108,7 @@ canonical root. If the target declares a native skill install path for
 that scope, adapters MUST also emit the same skill to that native
 directory. The default behavior is dual-emit for targets with native skill
 install paths, except when the target already discovers the canonical root.
-Such targets (currently Pi) MUST default to canonical-only emission to avoid
+Such targets (currently Codex, OpenCode, and Pi) MUST default to canonical-only emission to avoid
 duplicate skill-name warnings, while allowing users to explicitly enable the
 native destination. Targets without native skill install paths MUST NOT skip
 skills merely because no native location exists.

@@ -2101,10 +2101,11 @@ export const capletConfigSchema = z.object({
 The config never restates what an adapter already knows (`installPaths` live
 in the target registry). `targets.<id>.out` is purely an override.
 `targets.<id>.skills.canonical` and `targets.<id>.skills.native` toggle the
-two skill emission destinations. `canonical` defaults to `true`. `native`
-defaults to `false` for Pi because Pi already discovers `.agents/skills`, and
-defaults to `true` for other targets with `skillInstallPaths`; it has no effect
-for targets without `skillInstallPaths`.
+two skill emission destinations. `canonical` defaults to `true` and is planned
+once per scope, independently of target-native output. `native` defaults to
+`false` for Codex, OpenCode, and Pi because they already discover
+`.agents/skills`; Claude Code defaults to its native skills directory. An
+explicit `native: true` overrides discovery-aware defaults.
 
 ### 8.3 Scope handling
 
