@@ -9,7 +9,7 @@ test("fetch presents a clear command header and result summary", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toContain("caplet fetch is deprecated");
-    expect(result.stdout).toContain("DONE  Updated 2 capabilities");
+    expect(result.stdout).toContain("ok Updated 2 capabilities");
     expect(result.stdout).toContain("Resolved  2 capabilities");
   } finally {
     await cleanup(scope);
@@ -35,7 +35,7 @@ test("diff groups file changes and ends with a pending summary", async () => {
     expect(result.stdout).toMatch(/\+ CLAUDE\.md/);
     expect(result.stdout).toContain("alpha-cap, beta-cap");
     expect(result.stdout.match(/CLAUDE\.md/g)).toHaveLength(1);
-    expect(result.stdout).toContain("PENDING  5 files");
+    expect(result.stdout).toContain("warn 5 files");
   } finally {
     await cleanup(scope);
   }
@@ -51,7 +51,7 @@ test("ls presents capabilities as a scoped, readable inventory", async () => {
     expect(result.stdout).toContain("Project");
     expect(result.stdout).toContain("alpha-cap  1.0.0");
     expect(result.stdout).toContain("agents 1, instructions 1, mcp 1");
-    expect(result.stdout).toContain("DONE  2 capabilities");
+    expect(result.stdout).toContain("ok 2 capabilities");
   } finally {
     await cleanup(scope);
   }
@@ -123,7 +123,7 @@ test("emit dry-run uses the same change language without writing", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
-    expect(result.stdout).toContain("PENDING  5 files");
+    expect(result.stdout).toContain("warn 5 files");
     expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(false);
   } finally {
     await cleanup(scope);
@@ -145,7 +145,7 @@ test("apply connects the change plan to an applied summary", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
-    expect(result.stdout).toContain("DONE  Applied 5 files (7 writes, 0 deletes)");
+    expect(result.stdout).toContain("ok Applied 5 files (7 writes, 0 deletes)");
     expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(true);
   } finally {
     await cleanup(scope);
@@ -174,9 +174,9 @@ test("add confirms the source and manifest it changed", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Added path source (project scope)");
+    expect(result.stdout).toContain("ok Added path source (project scope)");
     expect(result.stdout).toContain("Manifest  ");
-    expect(result.stdout).toContain("DONE  Applied");
+    expect(result.stdout).toContain("ok Applied");
     expect(result.stdout).toContain("/.agents/capabilities.yml");
     expect(result.stdout).toContain(`Source    ${source}`);
   } finally {
@@ -198,7 +198,7 @@ test("update makes the refreshed capability explicit", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Updated alpha-cap");
+    expect(result.stdout).toContain("ok Updated alpha-cap");
   } finally {
     await cleanup(scope);
   }
@@ -228,7 +228,7 @@ test("remove reports both manifest removal and managed cleanup", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Removed alpha-cap (project scope)");
+    expect(result.stdout).toContain("ok Removed alpha-cap (project scope)");
     expect(result.stdout).toMatch(/Managed {2}\d+ managed regions cleaned/);
   } finally {
     await cleanup(scope);
@@ -241,10 +241,10 @@ test("doctor organizes checks by concern and summarizes health", async () => {
     const result = await runCaplet(scope, ["doctor", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Environment\n  PASS  Git available");
+    expect(result.stdout).toContain("Environment\n  ok Git available");
     expect(result.stdout).toContain("\nTargets\n");
-    expect(result.stdout).toContain("\nLockfiles\n  PASS  Project lockfile");
-    expect(result.stdout).toMatch(/DONE {2}\d+ checks passed/);
+    expect(result.stdout).toContain("\nLockfiles\n  ok Project lockfile");
+    expect(result.stdout).toMatch(/ok \d+ checks passed/);
   } finally {
     await cleanup(scope);
   }
@@ -273,8 +273,8 @@ test("diff has a calm empty state when output is current", async () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Everything up to date");
-    expect(result.stdout).not.toContain("PENDING  0 changes");
+    expect(result.stdout).toContain("ok Everything up to date");
+    expect(result.stdout).not.toContain("warn 0 changes");
   } finally {
     await cleanup(scope);
   }

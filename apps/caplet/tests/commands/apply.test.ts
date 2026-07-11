@@ -104,7 +104,7 @@ test("caplet apply fetches and writes native artifacts", async () => {
     );
     const result = await applyProject(scope);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Applied 10 files");
+    expect(result.stdout).toContain("ok Applied 10 files");
     expect(await readText(path.join(scope.cwd, ".claude", "CLAUDE.md"))).toContain(
       "Alpha guidance",
     );

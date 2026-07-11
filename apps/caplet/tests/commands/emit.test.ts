@@ -17,7 +17,7 @@ test("caplet emit dry-run shows pending diffs without writing", async () => {
       "--dry-run",
     ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("PENDING  5 files");
+    expect(result.stdout).toContain("warn 5 files");
     expect(await Bun.file(path.join(scope.cwd, ".claude", "CLAUDE.md")).exists()).toBe(false);
   } finally {
     await cleanup(scope);

@@ -11,7 +11,7 @@ test("caplet check validates resolved capabilities", async () => {
     await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain("DONE  Validation passed");
+    expect(result.stdout + result.stderr).toContain("ok Validation passed");
   } finally {
     await cleanup(scope);
   }

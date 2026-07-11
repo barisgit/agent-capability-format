@@ -16,7 +16,7 @@ test("caplet update refreshes lockfile", async () => {
       "project",
     ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("DONE  Updated alpha-cap");
+    expect(result.stdout).toContain("ok Updated alpha-cap");
   } finally {
     await cleanup(scope);
   }

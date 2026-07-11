@@ -46,16 +46,16 @@ export function reporter(args: Record<string, unknown>): Reporter {
       if (!quiet) writeStdout(message);
     },
     error(message) {
-      writeStderr(`${label("FAIL", colors.red)}  ${sentenceCase(message)}`);
+      writeStderr(`${label(glyphs().fail, colors.red)} ${sentenceCase(message)}`);
     },
     done(message) {
-      if (!quiet) writeStdout(`${label("DONE", colors.green)}  ${message}`);
+      if (!quiet) writeStdout(`${label(glyphs().ok, colors.green)} ${message}`);
     },
     details(entries) {
       if (quiet || entries.length === 0) return;
       const width = Math.max(...entries.map(([entryLabel]) => entryLabel.length));
       for (const [entryLabel, value] of entries) {
-        writeStdout(`      ${colors.dim(entryLabel.padEnd(width))}  ${String(value)}`);
+        writeStdout(`    ${colors.dim(entryLabel.padEnd(width))}  ${String(value)}`);
       }
     },
     section(title) {
@@ -69,7 +69,7 @@ export function reporter(args: Record<string, unknown>): Reporter {
       writeStdout(`          ${colors.dim(context)}`);
     },
     pending(message) {
-      if (!quiet) writeStdout(`\n${label("PENDING", colors.yellow)}  ${message}`);
+      if (!quiet) writeStdout(`\n${label(glyphs().warn, colors.yellow)} ${message}`);
     },
     group(title, detail) {
       if (!quiet)
@@ -126,9 +126,14 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     status(status, message) {
       if (quiet) return;
-      const color =
-        status === "pass" ? colors.green : status === "warn" ? colors.yellow : colors.red;
-      writeStdout(`  ${label(status.toUpperCase(), color)}  ${message}`);
+      const glyphSet = glyphs();
+      const [glyph, color] =
+        status === "pass"
+          ? [glyphSet.ok, colors.green]
+          : status === "warn"
+            ? [glyphSet.warn, colors.yellow]
+            : [glyphSet.fail, colors.red];
+      writeStdout(`  ${label(glyph, color)} ${message}`);
     },
     plan(view) {
       for (const line of renderPlan(view, { quiet })) writeStdout(line);
