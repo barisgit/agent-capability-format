@@ -17,7 +17,13 @@ import {
   targetIds,
   targetMap,
 } from "@acf/core";
-import { type ResolveResult, readLockfile, resolveCapabilities } from "@acf/installer";
+import {
+  detectLockDrift,
+  type ResolveResult,
+  readCapabilitiesYml,
+  readLockfile,
+  resolveCapabilities,
+} from "@acf/installer";
 import { type ApplyResult, applyDiffs } from "../apply/apply-diffs";
 import { detectDrift, readSidecar } from "../apply/sidecar";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
@@ -93,6 +99,9 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
   const fs = diskReadOnlyFs();
 
   for (const scopeRoot of scopes) {
+    const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
+    diagnostics.push(...manifest.diagnostics);
+    diagnostics.push(...detectLockDrift(manifest.value, await readLockfile(scopeRoot.lockPath)));
     const resolved = await resolveScopeCapabilities(scopeRoot);
     diagnostics.push(...resolved.diagnostics);
     diagnostics.push(...(await driftDiagnostics(scopeRoot.agentsDir)));
