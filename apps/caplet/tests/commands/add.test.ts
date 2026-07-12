@@ -153,3 +153,22 @@ test("caplet add --path resolves a capability below a source root", async () => 
     await cleanup(scope);
   }
 });
+
+test("caplet add github source without --ref suggests --ref main", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, [
+      "add",
+      "github:owner/repo",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "user",
+    ]);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("Git and github sources require --ref");
+    expect(result.stderr).toContain("try: caplet add github:owner/repo --ref main");
+  } finally {
+    await cleanup(scope);
+  }
+});

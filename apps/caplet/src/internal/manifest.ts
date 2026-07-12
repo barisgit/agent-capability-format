@@ -92,7 +92,9 @@ function buildEntry(
   if (opts.path !== undefined) entry.path = opts.path;
   if (opts.rename !== undefined) entry.rename = opts.rename;
   if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
-    throw validationError("git and github sources require --ref");
+    throw validationError(
+      `git and github sources require --ref (try: caplet add ${source} --ref main)`,
+    );
   }
   return entry;
 }
