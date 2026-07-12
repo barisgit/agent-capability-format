@@ -1,3 +1,4 @@
+import path from "node:path";
 import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { defineCommand } from "citty";
 import { colors } from "consola/utils";
@@ -23,7 +24,7 @@ export const listCommand = defineCommand({
         diagnostics.push(...resolved.diagnostics);
         inventories.push({
           scope: scopeRoot.scope,
-          path: scopeRoot.agentsDir,
+          path: path.join(scopeRoot.agentsDir, "capabilities"),
           capabilities: resolved.capabilities,
         });
       }

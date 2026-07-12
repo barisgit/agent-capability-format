@@ -242,10 +242,10 @@ function relativeToRoot(filePath: string, installRoot: string, directory: boolea
 }
 
 export function displayPath(filePath: string): string {
+  const home = os.homedir();
   const relative = path.relative(process.cwd(), filePath);
   if (relative.length === 0) return ".";
-  if (!relative.startsWith("..")) return relative;
-  const home = os.homedir();
+  if (!relative.startsWith("..") && process.cwd() !== home) return relative;
   if (filePath === home) return "~";
   if (filePath.startsWith(`${home}${path.sep}`)) return `~${filePath.slice(home.length)}`;
   return filePath;
