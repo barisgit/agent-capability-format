@@ -38,6 +38,7 @@ export async function readCapabilitiesYml(
 
   const parsed = capabilitiesYmlSchema.safeParse(padSelectorsForCoreSchema(parsedYaml));
   if (!parsed.success) {
+    describeUnknownKeys(parsed.error.issues);
     pushZodIssues(diagnostics, parsed.error, manifestPath, {
       baseCode: "acf.capabilities-yml.invalid",
     });
@@ -89,6 +90,69 @@ function restorePartialSelectors(value: CapabilitiesYml, raw: unknown): Capabili
   const restored: CapabilitiesYml = { acf: 1, capabilities };
   if (value.defaults !== undefined) restored.defaults = value.defaults;
   return restored;
+}
+
+const knownKeysByPath: Record<string, string[]> = {
+  "": ["acf", "capabilities", "defaults"],
+  capabilities: [
+    "source",
+    "ref",
+    "path",
+    "capabilities",
+    "include",
+    "exclude",
+    "rename",
+    "only",
+    "except",
+  ],
+  defaults: ["fetch"],
+  "defaults.fetch": ["shallow", "blobless"],
+};
+
+function describeUnknownKeys(
+  issues: { code: string; keys?: string[]; path: PropertyKey[]; message: string }[],
+): void {
+  for (const issue of issues) {
+    if (issue.code !== "unrecognized_keys" || issue.keys === undefined) continue;
+    const pathKey = issue.path
+      .filter((segment): segment is string => typeof segment === "string")
+      .join(".");
+    const knownKeys = knownKeysByPath[pathKey] ?? [];
+    issue.message = issue.keys
+      .map((key) => {
+        const suggestion = closestKey(key, knownKeys);
+        const hint = suggestion === undefined ? "" : ` — did you mean "${suggestion}"?`;
+        return `unknown key "${key}"${hint}`;
+      })
+      .join("; ");
+  }
+}
+
+function closestKey(key: string, candidates: string[]): string | undefined {
+  let best: { candidate: string; distance: number } | undefined;
+  for (const candidate of candidates) {
+    const distance = levenshtein(key.toLowerCase(), candidate.toLowerCase());
+    if (distance <= 2 && (best === undefined || distance < best.distance))
+      best = { candidate, distance };
+  }
+  return best?.candidate;
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        (previous[j] as number) + 1,
+        (current[j - 1] as number) + 1,
+        (previous[j - 1] as number) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] as number;
 }
 
 function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string): Diagnostic[] {

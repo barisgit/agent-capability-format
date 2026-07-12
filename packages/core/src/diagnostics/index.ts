@@ -117,6 +117,7 @@ function deriveZodCode(issue: ZodIssue, baseCode?: string): string {
   if (message.includes("requires url")) return "acf.mcp.transport.missing-url";
   if (message.includes("unknown source scheme"))
     return "acf.capabilities-yml.source.unknown-scheme";
+  if (issue.code === "unrecognized_keys") return "acf.capabilities-yml.unknown-key";
   if (path === "name" || path.endsWith(".name")) return "acf.manifest.invalid-name";
   if (path === "acf") return "acf.manifest.acf-version-unknown";
   return baseCode ?? `acf.schema.${path.length > 0 ? path.replaceAll(".", "-") : "invalid"}`;

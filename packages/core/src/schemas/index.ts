@@ -272,11 +272,11 @@ function isValidCapabilitySelector(selector: string): boolean {
     );
 }
 
-export const capabilitiesYmlSchema = z.object({
+export const capabilitiesYmlSchema = z.strictObject({
   acf: z.literal(1),
   capabilities: z.array(
     z
-      .object({
+      .strictObject({
         source: sourceSpecSchema,
         ref: z.string().optional(),
         path: z.string().optional(),
@@ -287,12 +287,20 @@ export const capabilitiesYmlSchema = z.object({
         only: z.array(targetIdSchema).optional(),
         except: z.array(targetIdSchema).optional(),
       })
-      .and(onlyExceptSchema),
+      .superRefine((value, ctx) => {
+        if (value.only !== undefined && value.except !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "only and except are mutually exclusive",
+            path: [],
+          });
+        }
+      }),
   ),
   defaults: z
-    .object({
+    .strictObject({
       fetch: z
-        .object({ shallow: z.boolean().optional(), blobless: z.boolean().optional() })
+        .strictObject({ shallow: z.boolean().optional(), blobless: z.boolean().optional() })
         .optional(),
     })
     .optional(),

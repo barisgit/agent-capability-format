@@ -91,3 +91,56 @@ test("malformed capabilities.yml returns diagnostics", async () => {
     await cleanup(dir);
   }
 });
+
+test("unknown entry key is rejected with did-you-mean hint", async () => {
+  const dir = await tempDir("acf-installer-unknown-key-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    await writeText(
+      file,
+      "acf: 1\ncapabilities:\n  - source: github:owner/repo\n    ref: main\n    capatibilities: engineering-workflows\n",
+    );
+    const result = await readCapabilitiesYml(file);
+    expect(result.value.capabilities).toEqual([]);
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.code === "acf.capabilities-yml.unknown-key",
+    );
+    expect(issue?.severity).toBe("error");
+    expect(issue?.message).toBe('unknown key "capatibilities" — did you mean "capabilities"?');
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("unknown top-level key is rejected", async () => {
+  const dir = await tempDir("acf-installer-unknown-top-key-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    await writeText(file, "acf: 1\ncapabilitys: []\ncapabilities: []\n");
+    const result = await readCapabilitiesYml(file);
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.code === "acf.capabilities-yml.unknown-key",
+    );
+    expect(issue?.message).toBe('unknown key "capabilitys" — did you mean "capabilities"?');
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("unknown key without a close match omits the hint", async () => {
+  const dir = await tempDir("acf-installer-unknown-far-key-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    await writeText(
+      file,
+      "acf: 1\ncapabilities:\n  - source: path:./repo\n    somethingelse: true\n",
+    );
+    const result = await readCapabilitiesYml(file);
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.code === "acf.capabilities-yml.unknown-key",
+    );
+    expect(issue?.message).toBe('unknown key "somethingelse"');
+  } finally {
+    await cleanup(dir);
+  }
+});
