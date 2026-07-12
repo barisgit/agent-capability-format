@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { cleanup, fetchProject, makeScope, runCaplet } from "../helpers";
 
-test("caplet diff rejects declared sources that have not been resolved", async () => {
+test("caplet diff --offline rejects declared sources that have not been resolved", async () => {
   const scope = await makeScope();
   try {
     const result = await runCaplet(scope, [
       "diff",
+      "--offline",
       "--cwd",
       scope.cwd,
       "--scope",

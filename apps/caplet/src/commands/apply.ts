@@ -14,14 +14,29 @@ export const applyCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const json = readJson(context.args);
       const dryRun = context.args["dry-run"] === true;
-      const fetched = dryRun
-        ? { diagnostics: [] }
-        : await fetchScopes(context.args, readFetchMode(context.args));
-      const plan = await buildEmitPlan(context.args);
+      const frozen = context.args.frozen === true;
+      const simulate = dryRun && !frozen;
+      const fetched =
+        dryRun && frozen
+          ? { scopes: [], results: [], diagnostics: [] }
+          : await fetchScopes(
+              context.args,
+              readFetchMode(context.args),
+              undefined,
+              simulate ? { updateLock: false } : undefined,
+            );
+      const locks = simulate
+        ? new Map(
+            fetched.scopes.flatMap((scopeRoot, index) => {
+              const result = fetched.results[index];
+              return result === undefined ? [] : ([[scopeRoot.scope, result.lockfile]] as const);
+            }),
+          )
+        : undefined;
+      const plan = await buildEmitPlan(context.args, locks === undefined ? undefined : { locks });
       const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
       if (!json) printDiagnostics(diagnostics, context.args);
-      const frozenStale =
-        context.args.frozen === true && diagnostics.some((d) => d.code.startsWith("acf.lock."));
+      const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
       const code = frozenStale ? 3 : exitCodeForDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
       const reach = await collectReach(plan);
