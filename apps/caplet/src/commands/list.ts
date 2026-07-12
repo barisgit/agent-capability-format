@@ -1,18 +1,19 @@
 import path from "node:path";
 import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@acf/core";
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { globalArgs, readCwd, readScope } from "../internal/args";
+import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { displayPath } from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 
 export const listCommand = defineCommand({
   meta: { name: "list", description: "list installed capabilities (alias: ls)" },
-  args: globalArgs,
+  args: specToCittyArgs("list") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const cwd = readCwd(context.args);

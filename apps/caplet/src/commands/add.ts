@@ -1,11 +1,9 @@
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
 import {
-  globalArgs,
   readCwd,
   readExplicitScope,
   readOptionalString,
   readVerbose,
-  targetArg,
   validationError,
 } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
@@ -13,26 +11,12 @@ import { addManifestEntry } from "../internal/manifest";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
 import { buildPlanView } from "../internal/plan-view";
 import { inferScope, resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
 
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },
-  args: {
-    ...globalArgs,
-    ...targetArg,
-    source: { type: "positional", required: true, description: "source to add" },
-    pin: { type: "string", description: "pin a git ref (branch, tag, or commit)" },
-    ref: { type: "string", description: "deprecated alias for --pin" },
-    path: { type: "string", description: "capability directory inside the source" },
-    as: { type: "string", description: "install under a different capability name" },
-    rename: { type: "string", description: "deprecated alias for --as" },
-    apply: {
-      type: "boolean",
-      default: true,
-      description: "apply after updating the manifest",
-      negativeDescription: "edit the manifest only; skip resolve and apply",
-    },
-  },
+  args: specToCittyArgs("add") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const source = context.args.source;

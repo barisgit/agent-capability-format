@@ -4,22 +4,20 @@ import {
   resolveScopeCapabilities,
   targetIds,
 } from "@acf/core";
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { globalArgs, readCwd, readScope, validationError } from "../internal/args";
+import { readCwd, readScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { capabilitySummary } from "../internal/workflow";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
-  args: {
-    ...globalArgs,
-    name: { type: "positional", required: true, description: "capability name" },
-  },
+  args: specToCittyArgs("show") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const name = context.args.name;

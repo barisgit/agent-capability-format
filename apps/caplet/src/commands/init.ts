@@ -1,15 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { defineCommand } from "citty";
-import { globalArgs, readCwd } from "../internal/args";
+import { type ArgsDef, defineCommand } from "citty";
+import { readCwd } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { reporter } from "../internal/output";
+import { specToCittyArgs } from "../internal/spec";
 
 const TEMPLATE = `acf: 1\ncapabilities: []\n`;
 
 export const initCommand = defineCommand({
   meta: { name: "init", description: "create .agents/capabilities.yml for this project" },
-  args: globalArgs,
+  args: specToCittyArgs("init") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const cwd = readCwd(context.args);

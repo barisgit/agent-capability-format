@@ -4,16 +4,17 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { type Diagnostic, targetIds, targetMap } from "@acf/core";
 import { readLockfile } from "@acf/installer";
-import { defineCommand } from "citty";
-import { globalArgs, readCwd, readScope } from "../internal/args";
+import { type ArgsDef, defineCommand } from "citty";
+import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 
 export const doctorCommand = defineCommand({
   meta: { name: "doctor", description: "check caplet environment and setup" },
-  args: globalArgs,
+  args: specToCittyArgs("doctor") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const diagnostics: Diagnostic[] = [];

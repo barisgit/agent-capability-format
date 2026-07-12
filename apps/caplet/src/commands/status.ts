@@ -1,17 +1,18 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { globalArgs, readCwd, readScope } from "../internal/args";
+import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printDiagnostics, reporter } from "../internal/output";
 import { buildPlanView, displayPath } from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { buildEmitPlan } from "../internal/workflow";
 
 export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },
-  args: globalArgs,
+  args: specToCittyArgs("status") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const cwd = readCwd(context.args);

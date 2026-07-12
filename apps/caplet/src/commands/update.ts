@@ -1,13 +1,6 @@
 import { readLockfile } from "@acf/installer";
-import { defineCommand } from "citty";
-import {
-  globalArgs,
-  readCwd,
-  readScope,
-  readVerbose,
-  targetArg,
-  validationError,
-} from "../internal/args";
+import { type ArgsDef, defineCommand } from "citty";
+import { readCwd, readScope, readVerbose, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import {
   exitCodeForDiagnostics,
@@ -17,21 +10,12 @@ import {
 } from "../internal/output";
 import { buildPlanView } from "../internal/plan-view";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
 
 export const updateCommand = defineCommand({
   meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },
-  args: {
-    ...globalArgs,
-    ...targetArg,
-    name: { type: "positional", required: false, description: "optional capability name" },
-    apply: {
-      type: "boolean",
-      default: true,
-      description: "apply after updating the manifest",
-      negativeDescription: "refresh the lockfile only",
-    },
-  },
+  args: specToCittyArgs("update") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const name = typeof context.args.name === "string" ? context.args.name : undefined;

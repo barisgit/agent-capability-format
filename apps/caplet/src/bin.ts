@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { runMain } from "citty";
 import { rewriteAlias, rootCommand } from "./cli";
-import { rootHelp } from "./help";
+import { renderCommandHelp, renderRootHelp } from "./help";
 import { CAPLET_VERSION } from "./internal/json";
+import { commandSpec } from "./internal/spec";
 
 const rawArgs = process.argv.slice(2);
 const first = rawArgs[0];
@@ -11,12 +12,22 @@ if (rawArgs.includes("--version") || rawArgs.includes("-V")) {
   process.stdout.write(`${CAPLET_VERSION}\n`);
   process.exit(0);
 }
-if (!hasCommand && (rawArgs.includes("--help") || rawArgs.includes("-h"))) {
-  process.stdout.write(rootHelp());
-  process.exit(0);
-}
 const wantsHelp = rawArgs.includes("--help") || rawArgs.includes("-h");
 const base = hasCommand || wantsHelp ? rawArgs : ["status", ...rawArgs];
-const { argv, notice } = rewriteAlias(base);
+const { argv, notice } = rewriteAlias(first === "help" ? rawArgs.slice(1).concat("--help") : base);
 if (notice !== undefined) process.stderr.write(`${notice}\n`);
+const command = argv[0]?.startsWith("-") ? undefined : argv[0];
+if (argv.includes("--help") || argv.includes("-h")) {
+  const help = command === undefined ? renderRootHelp() : renderCommandHelp(command);
+  if (help !== undefined) {
+    process.stdout.write(help);
+    process.exit(0);
+  }
+}
+if (command !== undefined && commandSpec(command) === undefined) {
+  process.stderr.write(
+    `unknown command: ${command}\n  See caplet --help for available commands.\n`,
+  );
+  process.exit(2);
+}
 await runMain(rootCommand, { rawArgs: argv });

@@ -1,11 +1,12 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@acf/installer";
-import { defineCommand } from "citty";
-import { globalArgs, readCwd, readScope, targetArg } from "../internal/args";
+import { type ArgsDef, defineCommand } from "citty";
+import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
 import { resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { buildEmitPlan } from "../internal/workflow";
 
 export const checkCommand = defineCommand({
@@ -13,15 +14,7 @@ export const checkCommand = defineCommand({
     name: "check",
     description: "validate manifests and detect stale outputs (CI-friendly)",
   },
-  args: {
-    ...globalArgs,
-    ...targetArg,
-    frozen: {
-      type: "boolean",
-      default: false,
-      description: "also fail (exit 3) if the lockfile is stale",
-    },
-  },
+  args: specToCittyArgs("check") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const cwd = readCwd(context.args);

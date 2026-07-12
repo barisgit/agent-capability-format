@@ -1,8 +1,9 @@
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
+import { commandNames, SCOPE_VALUES, specToCittyArgs, TARGET_IDS } from "../internal/spec";
 
-const COMMANDS = "init add remove update apply list ls show check doctor status completion";
-const SCOPES = "user project";
-const TARGETS = "claude codex opencode pi";
+const COMMANDS = [...commandNames(), "ls"].join(" ");
+const SCOPES = SCOPE_VALUES.join(" ");
+const TARGETS = TARGET_IDS.join(" ");
 
 const BASH = [
   "_caplet_completions() {",
@@ -55,9 +56,7 @@ const SCRIPTS: Record<string, string> = { bash: BASH, zsh: ZSH, fish: FISH };
 
 export const completionCommand = defineCommand({
   meta: { name: "completion", description: "print shell completions (bash, zsh, fish)" },
-  args: {
-    shell: { type: "positional", description: "bash, zsh, or fish", required: true },
-  },
+  args: specToCittyArgs("completion") as ArgsDef,
   run(context) {
     const script = SCRIPTS[String(context.args.shell)];
     if (script === undefined) {

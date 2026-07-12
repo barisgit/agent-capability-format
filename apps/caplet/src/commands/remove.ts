@@ -1,30 +1,21 @@
 import path from "node:path";
 import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@acf/core";
-import { defineCommand } from "citty";
+import { type ArgsDef, defineCommand } from "citty";
 import { applyDiffs } from "../apply/apply-diffs";
 import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";
-import {
-  globalArgs,
-  readCwd,
-  readExplicitScope,
-  targetArg,
-  validationError,
-} from "../internal/args";
+import { readCwd, readExplicitScope, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { diskReadOnlyFs } from "../internal/fs";
 import { rootNoticeDiffFromSidecar } from "../internal/managed-notices";
 import { removeManifestEntry } from "../internal/manifest";
 import { reporter } from "../internal/output";
 import { inferScope, resolveScopeRoots } from "../internal/scopes";
+import { specToCittyArgs } from "../internal/spec";
 import { installRootFor } from "../internal/workflow";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },
-  args: {
-    ...globalArgs,
-    ...targetArg,
-    name: { type: "positional", required: true, description: "capability name" },
-  },
+  args: specToCittyArgs("remove") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const name = context.args.name;

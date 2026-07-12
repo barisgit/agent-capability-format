@@ -1,44 +1,15 @@
-import { defineCommand } from "citty";
-import {
-  globalArgs,
-  readFetchMode,
-  readQuiet,
-  readVerbose,
-  readYes,
-  targetArg,
-} from "../internal/args";
+import { type ArgsDef, defineCommand } from "citty";
+import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args";
 import { confirm, runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
 import { buildPlanView, planToJson } from "../internal/plan-view";
+import { specToCittyArgs } from "../internal/spec";
 import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
-  args: {
-    ...globalArgs,
-    ...targetArg,
-    "dry-run": {
-      type: "boolean",
-      alias: "n",
-      default: false,
-      description: "show the change plan without writing anything",
-    },
-    offline: {
-      type: "boolean",
-      default: false,
-      description: "never fetch; use the lockfile as-is",
-    },
-    frozen: {
-      type: "boolean",
-      default: false,
-      description: "fail (exit 3) if the lockfile is stale",
-    },
-    mode: {
-      type: "string",
-      description: "deprecated: use --offline (never) or caplet update (force)",
-    },
-  },
+  args: specToCittyArgs("apply") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
       const json = readJson(context.args);
