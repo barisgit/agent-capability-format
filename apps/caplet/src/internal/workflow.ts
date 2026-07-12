@@ -30,6 +30,7 @@ import {
 import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs";
 import {
   detectDrift,
+  hashOwnedRegions,
   type ManagedEntry,
   readSidecar,
   relativeSidecarPath,
@@ -298,8 +299,16 @@ async function sweepStaleSidecarEntries(
       for (const entry of sidecar.managed) {
         if (entry.capability === ACF_SYSTEM_OWNER) continue;
         const pathKey = `${candidate.installRoot}\u0000${entry.path}`;
-        if (desiredKeys.has(`${pathKey}\u0000${entry.capability}`)) continue;
         const wholeFile = entry.owns.some((own) => own.kind === "file");
+        if (desiredKeys.has(`${pathKey}\u0000${entry.capability}`)) {
+          // Entry is still desired. If the recorded hash no longer matches the
+          // owned regions on disk (stale sidecar metadata), force-apply so the
+          // sidecar heals even when the file bytes are already up to date.
+          const absolutePath = path.resolve(candidate.installRoot, entry.path);
+          const current = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
+          if (hashOwnedRegions(current, entry.owns) !== entry.hash) forcedPaths.add(pathKey);
+          continue;
+        }
         if (desiredPaths.has(pathKey) && wholeFile) {
           forcedPaths.add(pathKey);
           addStale(candidate.installRoot, entry);

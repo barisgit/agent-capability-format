@@ -171,3 +171,50 @@ test("byte-identical ownership transfer updates the sidecar owner", async () => 
     await cleanup(scope);
   }
 });
+
+test("apply heals a stale sidecar hash when disk already matches desired content", async () => {
+  const scope = await makeScope();
+  try {
+    const first = await applyProject(scope);
+    expect(first.exitCode).toBe(0);
+
+    const sidecarPath = path.join(scope.cwd, ".claude", ".acf-managed.json");
+    const sidecar = JSON.parse(await readFile(sidecarPath, "utf8")) as {
+      managed: Array<{ path: string; hash: string; capability: string }>;
+    };
+    const victim = sidecar.managed.find(
+      (entry) => entry.capability === "alpha-cap" && entry.path.endsWith(".md"),
+    );
+    expect(victim).toBeDefined();
+    if (victim === undefined) throw new Error("unreachable");
+    victim.hash = "sha256-deadbeef";
+    await writeFile(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+
+    // Dry-run must not claim everything is up to date while drift persists.
+    const dry = await runCaplet(scope, [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    expect(dry.exitCode).toBe(0);
+    expect(dry.stdout).not.toContain("Everything up to date");
+
+    const heal = await applyProject(scope);
+    expect(heal.exitCode).toBe(0);
+
+    const healed = await readFile(sidecarPath, "utf8");
+    expect(healed).not.toContain("sha256-deadbeef");
+
+    const third = await applyProject(scope);
+    expect(third.exitCode).toBe(0);
+    expect(third.stdout).toContain("Everything up to date");
+    expect(third.stdout + third.stderr).not.toContain("drifted");
+  } finally {
+    await cleanup(scope);
+  }
+});
