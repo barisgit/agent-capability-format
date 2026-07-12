@@ -346,3 +346,41 @@ test("diff collapses many same-capability files and --verbose expands them", asy
     await cleanup(scope);
   }
 });
+
+test("apply and status surface reach: sources and targets", async () => {
+  const scope = await makeScope();
+  try {
+    const applied = await runCaplet(scope, [
+      "apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude",
+    ]);
+    expect(applied.exitCode).toBe(0);
+    expect(applied.stdout).toContain("sources");
+    expect(applied.stdout).toContain("(1 capability)");
+    expect(applied.stdout).toContain("targets");
+    expect(applied.stdout).toContain("canonical");
+    expect(applied.stdout).toContain("claude");
+
+    const status = await runCaplet(scope, ["status", "--cwd", scope.cwd, "--scope", "project"]);
+    expect(status.exitCode).toBe(0);
+    expect(status.stdout).toContain("sources");
+    expect(status.stdout).toContain("targets");
+
+    const json = await runCaplet(scope, [
+      "status", "--json", "--cwd", scope.cwd, "--scope", "project",
+    ]);
+    const parsed = JSON.parse(json.stdout);
+    expect(Array.isArray(parsed.sources)).toBe(true);
+    expect(Array.isArray(parsed.targets)).toBe(true);
+    expect(parsed.sources).toHaveLength(2);
+    expect(parsed.sources[0].capabilities).toBe(1);
+
+    const applyJson = await runCaplet(scope, [
+      "apply", "--json", "--cwd", scope.cwd, "--scope", "project", "--target", "claude",
+    ]);
+    const applyParsed = JSON.parse(applyJson.stdout);
+    expect(Array.isArray(applyParsed.sources)).toBe(true);
+    expect(Array.isArray(applyParsed.targets)).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});

@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER } from "@acf/core";
-import type { EmittedDiff } from "./workflow";
+import type { EmittedDiff, Reach } from "./workflow";
 
 export type PlanAction = "create" | "update" | "delete";
 
@@ -264,5 +264,56 @@ export function planToJson(view: PlanView): unknown {
     })),
     totals: view.totals,
     fileCount: view.fileCount,
+  };
+}
+
+export function reachLines(reach: Reach): Array<[string, string]> {
+  const bySource = new Map<string, { scopes: Set<string>; capabilities: number }>();
+  for (const item of reach.sources) {
+    const entry = bySource.get(item.source) ?? { scopes: new Set<string>(), capabilities: 0 };
+    entry.scopes.add(item.scope);
+    entry.capabilities += item.capabilities;
+    bySource.set(item.source, entry);
+  }
+  const sourceText = [...bySource.entries()]
+    .map(([source, info]) => {
+      const caps = `${info.capabilities} ${info.capabilities === 1 ? "capability" : "capabilities"}`;
+      return `${shortenSource(source)} (${caps})`;
+    })
+    .join(" \u00b7 ");
+  const byScope = new Map<string, string[]>();
+  for (const item of reach.targets) {
+    const list = byScope.get(item.scope) ?? [];
+    list.push(`${item.destination} ${displayPath(item.installRoot)}`);
+    byScope.set(item.scope, list);
+  }
+  const targetText = [...byScope.entries()]
+    .map(([scope, roots]) =>
+      byScope.size > 1 ? `${scope}: ${roots.join(" \u00b7 ")}` : roots.join(" \u00b7 "),
+    )
+    .join("  ");
+  const lines: Array<[string, string]> = [];
+  if (sourceText.length > 0) lines.push(["sources", sourceText]);
+  if (targetText.length > 0) lines.push(["targets", targetText]);
+  return lines;
+}
+
+function shortenSource(source: string): string {
+  if (source.startsWith("path:")) return `path:${displayPath(source.slice(5))}`;
+  return source;
+}
+
+export function reachToJson(reach: Reach): { sources: unknown[]; targets: unknown[] } {
+  return {
+    sources: reach.sources.map((item) => ({
+      scope: item.scope,
+      source: item.source,
+      capabilities: item.capabilities,
+    })),
+    targets: reach.targets.map((item) => ({
+      scope: item.scope,
+      destination: item.destination,
+      installRoot: item.installRoot,
+    })),
   };
 }

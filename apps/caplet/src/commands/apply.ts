@@ -3,9 +3,9 @@ import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args
 import { confirm, runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView, planToJson } from "../internal/plan-view";
+import { buildPlanView, planToJson, reachLines, reachToJson } from "../internal/plan-view";
 import { specToCittyArgs } from "../internal/spec";
-import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
+import { applyEmitPlan, buildEmitPlan, collectReach, fetchScopes } from "../internal/workflow";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
@@ -24,6 +24,7 @@ export const applyCommand = defineCommand({
         context.args.frozen === true && diagnostics.some((d) => d.code.startsWith("acf.lock."));
       const code = frozenStale ? 3 : exitCodeForDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      const reach = await collectReach(plan);
       if (code !== 0) {
         if (json) printJson("apply", false, diagnostics, { plan: planToJson(view) });
         process.exitCode = code;
@@ -31,14 +32,30 @@ export const applyCommand = defineCommand({
       }
       const out = reporter(context.args);
       if (view.fileCount === 0) {
-        if (json) printJson("apply", true, diagnostics, { plan: planToJson(view), applied: null });
-        else out.done("Everything up to date");
+        if (json) {
+          printJson("apply", true, diagnostics, {
+            plan: planToJson(view),
+            applied: null,
+            ...reachToJson(reach),
+          });
+        } else {
+          out.done("Everything up to date");
+          out.details(reachLines(reach));
+        }
         return;
       }
       if (!json) out.plan(view);
       if (dryRun) {
-        if (json) printJson("apply", true, diagnostics, { plan: planToJson(view), applied: null });
-        else out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
+        if (json) {
+          printJson("apply", true, diagnostics, {
+            plan: planToJson(view),
+            applied: null,
+            ...reachToJson(reach),
+          });
+        } else {
+          out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
+          out.details(reachLines(reach));
+        }
         return;
       }
       const deletions = view.totals.reduce((sum, item) => sum + item.delete, 0);
@@ -59,6 +76,7 @@ export const applyCommand = defineCommand({
         printJson("apply", true, diagnostics, {
           plan: planToJson(view),
           applied: { files: view.fileCount, writes: written, deletes: deleted },
+          ...reachToJson(reach),
         });
         return;
       }
@@ -66,6 +84,7 @@ export const applyCommand = defineCommand({
       out.done(
         `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
       );
+      out.details(reachLines(reach));
       if (!readVerbose(context.args) && !readQuiet(context.args)) {
         out.log(`  ${"Full list: --verbose"}`);
       }

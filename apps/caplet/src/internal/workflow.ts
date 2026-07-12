@@ -296,3 +296,44 @@ function groupByApplyTarget(items: readonly EmittedDiff[]): ApplyGroup[] {
     `${a.installRoot}:${a.capabilityName}`.localeCompare(`${b.installRoot}:${b.capabilityName}`),
   );
 }
+
+export type Reach = {
+  sources: Array<{ scope: string; source: string; capabilities: number }>;
+  targets: Array<{ scope: string; destination: string; installRoot: string }>;
+};
+
+export async function collectReach(plan: EmitPlan): Promise<Reach> {
+  const sources: Reach["sources"] = [];
+  for (const scopeRoot of plan.scopes) {
+    const lock = await readLockfile(scopeRoot.lockPath);
+    for (const entry of lock?.entries ?? []) {
+      sources.push({
+        scope: scopeRoot.scope,
+        source: entry.sourceId,
+        capabilities: entry.capabilityNames.length,
+      });
+    }
+  }
+  const targets: Reach["targets"] = [];
+  const seen = new Set<string>();
+  for (const scopeRoot of plan.scopes) {
+    const canonicalKey = `${scopeRoot.scope}\u0000canonical`;
+    if (!seen.has(canonicalKey)) {
+      seen.add(canonicalKey);
+      targets.push({
+        scope: scopeRoot.scope,
+        destination: "canonical",
+        installRoot: scopeRoot.agentsDir,
+      });
+    }
+    for (const targetId of plan.targets) {
+      const installRoot = installRootFor(targetId, scopeRoot, plan.config, process.cwd());
+      if (installRoot === null) continue;
+      const key = `${scopeRoot.scope}\u0000${targetId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ scope: scopeRoot.scope, destination: targetId, installRoot });
+    }
+  }
+  return { sources, targets };
+}

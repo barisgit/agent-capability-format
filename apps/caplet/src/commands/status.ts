@@ -3,12 +3,13 @@ import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
+import { printJson, readJson } from "../internal/json";
 import { printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView, displayPath } from "../internal/plan-view";
+import { buildPlanView, displayPath, reachLines, reachToJson } from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 import { specToCittyArgs } from "../internal/spec";
-import { buildEmitPlan } from "../internal/workflow";
+import { buildEmitPlan, collectReach } from "../internal/workflow";
 
 export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },
@@ -17,6 +18,7 @@ export const statusCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const cwd = readCwd(context.args);
       process.chdir(cwd);
+      const json = readJson(context.args);
       const out = reporter(context.args);
       const diagnostics: Diagnostic[] = [];
       const scopes = await resolveScopeRoots(readScope(context.args), cwd);
@@ -31,11 +33,23 @@ export const statusCommand = defineCommand({
           names.length === 0 ? colors.dim("none — caplet add <source>") : summarizeNames(names),
         ]);
       }
-      for (const line of columns(rows, { indent: "  " })) out.log(line);
-      out.log("");
+      if (!json) {
+        for (const line of columns(rows, { indent: "  " })) out.log(line);
+        out.log("");
+      }
       const plan = await buildEmitPlan(context.args);
-      printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
+      const reach = await collectReach(plan);
+      if (!json) printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
       const view = buildPlanView(plan.diffs);
+      if (json) {
+        printJson("status", true, [...diagnostics, ...plan.diagnostics], {
+          pending: view.fileCount,
+          ...reachToJson(reach),
+        });
+        return;
+      }
+      out.details(reachLines(reach));
+      out.log("");
       if (view.fileCount === 0) {
         out.done("Everything up to date");
         return;
