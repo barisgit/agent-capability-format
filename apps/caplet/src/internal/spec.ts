@@ -328,7 +328,7 @@ export function specToCittyArgs(name: string): Record<string, unknown> {
   }
   return args;
 }
-undefined
+undefined;
 
 function editDistance(a: string, b: string): number {
   let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
@@ -396,4 +396,3 @@ export function unknownFlagError(command: string | undefined, argv: string[]): s
   }
   return undefined;
 }
-

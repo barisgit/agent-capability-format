@@ -3,7 +3,9 @@ import { unknownFlagError } from "../src/internal/spec";
 
 describe("unknownFlagError", () => {
   test("suggests --help for --hel", () => {
-    expect(unknownFlagError(undefined, ["--hel"])).toBe("unknown flag: --hel — did you mean --help?");
+    expect(unknownFlagError(undefined, ["--hel"])).toBe(
+      "unknown flag: --hel — did you mean --help?",
+    );
   });
 
   test("suggests --dry-run for --dryrun on apply", () => {
@@ -13,7 +15,9 @@ describe("unknownFlagError", () => {
   });
 
   test("accepts valid flags, values, bundles, and separators", () => {
-    expect(unknownFlagError("apply", ["-n", "--offline", "-s", "user", "--cwd=/tmp"])).toBeUndefined();
+    expect(
+      unknownFlagError("apply", ["-n", "--offline", "-s", "user", "--cwd=/tmp"]),
+    ).toBeUndefined();
     expect(unknownFlagError("apply", ["-nv"])).toBeUndefined();
     expect(unknownFlagError("apply", ["--", "--not-a-flag"])).toBeUndefined();
   });

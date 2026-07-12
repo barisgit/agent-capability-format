@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
@@ -214,6 +214,52 @@ test("apply heals a stale sidecar hash when disk already matches desired content
     expect(third.exitCode).toBe(0);
     expect(third.stdout).toContain("Everything up to date");
     expect(third.stdout + third.stderr).not.toContain("drifted");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("dry-run does not mutate the sidecar when a facet's source is deleted", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(
+      path.join(scope.sourceRoot, "alpha", "skills", "doomed", "SKILL.md"),
+      "---\nname: doomed\ndescription: Doomed skill\n---\nBody.\n",
+    );
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const sidecarPath = path.join(scope.cwd, ".claude", ".acf-managed.json");
+    const before = await readFile(sidecarPath, "utf8");
+    expect(before).toContain("doomed");
+
+    await rm(path.join(scope.sourceRoot, "alpha", "skills", "doomed"), { recursive: true });
+
+    const dry = await runCaplet(scope, [
+      "apply",
+      "--dry-run",
+      "--mode",
+      "force",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    expect(dry.exitCode).toBe(0);
+    expect(dry.stdout).not.toContain("Everything up to date");
+    expect(await readFile(sidecarPath, "utf8")).toBe(before);
+
+    const heal = await applyProject(scope);
+    expect(heal.exitCode).toBe(0);
+    const after = await readFile(sidecarPath, "utf8");
+    expect(after).not.toContain("doomed");
+    expect(
+      await Bun.file(path.join(scope.cwd, ".claude", "skills", "doomed", "SKILL.md")).exists(),
+    ).toBe(false);
+
+    const third = await applyProject(scope);
+    expect(third.exitCode).toBe(0);
+    expect(third.stdout).toContain("Everything up to date");
   } finally {
     await cleanup(scope);
   }

@@ -47,12 +47,25 @@ export const applyCommand = defineCommand({
       }
       const out = reporter(context.args);
       if (view.fileCount === 0) {
+        const stale = plan.staleEntries.length;
+        if (stale > 0 && !dryRun) await applyEmitPlan(plan);
         if (json) {
           printJson("apply", true, diagnostics, {
             plan: planToJson(view),
-            applied: null,
+            applied: stale > 0 && !dryRun ? { files: 0, writes: 0, deletes: 0 } : null,
             ...reachToJson(reach),
           });
+        } else if (stale > 0) {
+          if (dryRun) {
+            out.pending(`${stale} stale sidecar ${stale === 1 ? "entry" : "entries"} to clean up`);
+          } else {
+            out.done(`Cleaned up ${stale} stale sidecar ${stale === 1 ? "entry" : "entries"}`);
+          }
+          for (const line of reachBlock(
+            reach,
+            plan.scopes.map((scopeRoot) => scopeRoot.scope),
+          ))
+            out.log(line);
         } else {
           out.done("Everything up to date");
           for (const line of reachBlock(

@@ -108,6 +108,7 @@ export async function buildEmitPlan(
   const desiredDiffs: EmittedDiff[] = [];
   const canonicalDiffs = new Set<string>();
   const resolvedNames = new Map<string, ReadonlySet<string>>();
+  const resolvedFacets = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
   const fs = diskReadOnlyFs();
 
   for (const scopeRoot of scopes) {
@@ -145,6 +146,15 @@ export async function buildEmitPlan(
     resolvedNames.set(
       scopeRoot.scope,
       new Set(resolved.capabilities.map((capability) => capability.manifest.name)),
+    );
+    resolvedFacets.set(
+      scopeRoot.scope,
+      new Map(
+        resolved.capabilities.map((capability) => [
+          capability.manifest.name,
+          capabilityFacetKeys(capability),
+        ]),
+      ),
     );
     diagnostics.push(...(await driftDiagnostics(scopeRoot.agentsDir)));
     for (const targetId of targets) {
@@ -207,6 +217,7 @@ export async function buildEmitPlan(
     cwd,
     desiredDiffs,
     resolvedNames,
+    resolvedFacets,
   );
   const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics, {
     staleByRoot: sweep.staleByRoot,
@@ -257,6 +268,7 @@ async function sweepStaleSidecarEntries(
   cwd: string,
   desired: readonly EmittedDiff[],
   resolvedNames: ReadonlyMap<string, ReadonlySet<string>>,
+  resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
 ): Promise<SweepResult> {
   const desiredKeys = new Set<string>();
   const desiredPaths = new Set<string>();
@@ -319,7 +331,9 @@ async function sweepStaleSidecarEntries(
           });
           continue;
         }
-        if (names.has(entry.capability)) continue;
+        if (names.has(entry.capability) && facetStillExists(entry, resolvedFacets, scopeRoot)) {
+          continue;
+        }
         const absolutePath = path.resolve(candidate.installRoot, entry.path);
         const before = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
         const diff: FileDiff = {
@@ -347,6 +361,29 @@ async function sweepStaleSidecarEntries(
     }
   }
   return { deletes, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+function capabilityFacetKeys(capability: AcfCapability): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const facet of capability.skills) keys.add(`skill\u0000${facet.name}`);
+  for (const facet of capability.agents) keys.add(`agent\u0000${facet.name}`);
+  for (const facet of capability.commands) keys.add(`command\u0000${facet.name}`);
+  for (const facet of capability.instructions) keys.add(`instruction\u0000${facet.name}`);
+  for (const bucket of Object.keys(capability.hooks?.buckets ?? {}))
+    keys.add(`hook\u0000${bucket}`);
+  for (const server of capability.mcp?.servers ?? []) keys.add(`mcp\u0000${server.name}`);
+  return keys;
+}
+
+function facetStillExists(
+  entry: ManagedEntry,
+  resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  scopeRoot: ScopeRoot,
+): boolean {
+  if (entry.facet === undefined) return true;
+  const facets = resolvedFacets.get(scopeRoot.scope)?.get(entry.capability);
+  if (facets === undefined) return true;
+  return facets.has(`${entry.facet.family}\u0000${entry.facet.name}`);
 }
 
 function readTextOrNull(filePath: string): string | null {
