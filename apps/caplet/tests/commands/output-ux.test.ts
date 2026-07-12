@@ -368,8 +368,9 @@ test("apply and status surface reach: sources and managed targets", async () => 
 
     const status = await runCaplet(scope, ["status", "--cwd", scope.cwd, "--scope", "project"]);
     expect(status.exitCode).toBe(0);
-    expect(status.stdout).toContain("sources");
-    expect(status.stdout).toContain("targets");
+    expect(status.stdout).toContain("capabilities");
+    expect(status.stdout).toContain("from");
+    expect(status.stdout).toContain("writes to");
     expect(status.stdout).toContain("claude .claude");
     expect(status.stdout).not.toContain("codex");
 

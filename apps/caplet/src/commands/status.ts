@@ -10,8 +10,8 @@ import {
   displayPath,
   footprintLines,
   footprintToJson,
-  reachBlock,
   reachToJson,
+  shortenSource,
 } from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
@@ -29,20 +29,14 @@ export const statusCommand = defineCommand({
       const out = reporter(context.args);
       const diagnostics: Diagnostic[] = [];
       const scopes = await resolveScopeRoots(readScope(context.args), cwd);
-      const rows: string[][] = [];
+      const capabilityNames = new Map<string, string[]>();
       for (const scopeRoot of scopes) {
         const resolved = await resolveScopeCapabilities(scopeRoot);
         diagnostics.push(...resolved.diagnostics);
-        const names = resolved.capabilities.map((capability) => capability.manifest.name).sort();
-        rows.push([
-          colors.bold(scopeRoot.scope),
-          colors.dim(displayPath(scopeRoot.agentsDir)),
-          names.length === 0 ? colors.dim("none — caplet add <source>") : summarizeNames(names),
-        ]);
-      }
-      if (!json) {
-        for (const line of columns(rows, { indent: "  " })) out.log(line);
-        out.log("");
+        capabilityNames.set(
+          scopeRoot.scope,
+          resolved.capabilities.map((capability) => capability.manifest.name).sort(),
+        );
       }
       const plan = await buildEmitPlan(context.args);
       const reach = await collectReach(plan);
@@ -58,15 +52,33 @@ export const statusCommand = defineCommand({
         });
         return;
       }
-      if (footprint !== null && footprint.length > 0) {
-        for (const line of footprintLines(footprint)) out.log(line);
-        out.log("");
-      }
-      for (const line of reachBlock(
-        reach,
-        scopes.map((scopeRoot) => scopeRoot.scope),
-      )) {
-        out.log(line);
+      let first = true;
+      for (const scopeRoot of scopes) {
+        if (!first) out.log("");
+        first = false;
+        const names = capabilityNames.get(scopeRoot.scope) ?? [];
+        out.log(`${colors.bold(scopeRoot.scope)}  ${colors.dim(displayPath(scopeRoot.agentsDir))}`);
+        if (names.length === 0) {
+          out.log(`  ${colors.dim("none — caplet add <source>")}`);
+          continue;
+        }
+        const sources = reach.sources.filter((item) => item.scope === scopeRoot.scope);
+        const targets = reach.targets.filter((item) => item.scope === scopeRoot.scope);
+        const rows: string[][] = [[colors.dim("capabilities"), summarizeNames(names)]];
+        for (const item of sources) rows.push([colors.dim("from"), shortenSource(item.source)]);
+        if (targets.length > 0 && footprint === null) {
+          rows.push([
+            colors.dim("writes to"),
+            targets
+              .map((item) => `${item.destination} ${colors.dim(displayPath(item.installRoot))}`)
+              .join(" · "),
+          ]);
+        }
+        for (const line of columns(rows, { indent: "  " })) out.log(line);
+        if (footprint !== null) {
+          const scoped = footprint.filter((entry) => entry.scope === scopeRoot.scope);
+          for (const line of footprintLines(scoped, { skipScopeHeader: true })) out.log(line);
+        }
       }
       out.log("");
       if (view.fileCount === 0) {
@@ -74,7 +86,7 @@ export const statusCommand = defineCommand({
         return;
       }
       out.pending(`${view.fileCount} ${view.fileCount === 1 ? "change" : "changes"} pending`);
-      out.hint("Preview: caplet apply -n \u00b7 apply: caplet apply");
+      out.hint("Preview: caplet apply -n · apply: caplet apply");
     });
   },
 });

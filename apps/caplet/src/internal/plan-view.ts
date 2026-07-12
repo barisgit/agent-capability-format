@@ -308,27 +308,33 @@ export function reachBlock(reach: Reach, scopes: readonly string[]): string[] {
   return lines;
 }
 
-export function footprintLines(footprint: readonly FootprintEntry[]): string[] {
+export function footprintLines(
+  footprint: readonly FootprintEntry[],
+  options?: { indent?: string; skipScopeHeader?: boolean },
+): string[] {
+  const baseIndent = options?.indent ?? "";
   const lines: string[] = [];
   let scope: string | null = null;
   let target: string | null = null;
   let rows: string[][] = [];
   const flush = () => {
-    if (rows.length > 0) lines.push(...columns(rows, { indent: "    " }));
+    if (rows.length > 0) lines.push(...columns(rows, { indent: `${baseIndent}    ` }));
     rows = [];
   };
   for (const entry of footprint) {
     if (entry.scope !== scope) {
       flush();
-      if (scope !== null) lines.push("");
+      if (scope !== null && options?.skipScopeHeader !== true) lines.push("");
       scope = entry.scope;
       target = null;
-      lines.push(colors.bold(entry.scope));
+      if (options?.skipScopeHeader !== true) lines.push(colors.bold(entry.scope));
     }
     if (entry.target !== target) {
       flush();
       target = entry.target;
-      lines.push(`  ${colors.bold(entry.target)} ${colors.dim(displayPath(entry.installRoot))}`);
+      lines.push(
+        `${baseIndent}  ${colors.bold(entry.target)} ${colors.dim(displayPath(entry.installRoot))}`,
+      );
     }
     const label =
       entry.kind === "region" ? `${entry.path} ${colors.dim("(managed region)")}` : entry.path;
@@ -349,7 +355,7 @@ export function footprintToJson(footprint: readonly FootprintEntry[]): unknown[]
   }));
 }
 
-function shortenSource(source: string): string {
+export function shortenSource(source: string): string {
   if (source.startsWith("path:")) return `path:${displayPath(source.slice(5))}`;
   return source;
 }
