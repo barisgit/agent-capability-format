@@ -20,9 +20,9 @@ Plan-view tree (scope → destination → directory rollups) with action-count s
 
 Personal skills adopted into managed capabilities: `engineering-workflows` 2.0.0, `knowledge-ops` 1.0.0, `macos-personal` 1.0.0 in the Capatibilities repo. Learned: aux files require `assets:` frontmatter declaration (see Spec C2).
 
-### In flight: Unified Help + Reach Visibility
+### Unified Help + Reach Visibility
 
-Single `COMMAND_SPECS` table rendering root help, per-command help, and completions from one source; citty demoted to parser. `apply`/`status` reach footer (sources + targets). Async run 59e8dd15.
+Single `COMMAND_SPECS` table renders root help, per-command help, and completions from one source; citty demoted to pure parser (its help renderer unreachable, args generated from spec). `apply`/`status` always show reach: sources (with capability counts) and targets (with install roots).
 
 ---
 
