@@ -1,7 +1,9 @@
 import os from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER } from "@acf/core";
-import type { EmittedDiff, Reach } from "./workflow";
+import { colors } from "consola/utils";
+import { columns } from "./render";
+import type { EmittedDiff, FootprintEntry, Reach } from "./workflow";
 
 export type PlanAction = "create" | "update" | "delete";
 
@@ -267,35 +269,84 @@ export function planToJson(view: PlanView): unknown {
   };
 }
 
-export function reachLines(reach: Reach): Array<[string, string]> {
-  const bySource = new Map<string, { scopes: Set<string>; capabilities: number }>();
+export function reachBlock(reach: Reach, scopes: readonly string[]): string[] {
+  const lines: string[] = [];
+  const bySource = new Map<string, number>();
   for (const item of reach.sources) {
-    const entry = bySource.get(item.source) ?? { scopes: new Set<string>(), capabilities: 0 };
-    entry.scopes.add(item.scope);
-    entry.capabilities += item.capabilities;
-    bySource.set(item.source, entry);
+    bySource.set(item.source, (bySource.get(item.source) ?? 0) + item.capabilities);
   }
-  const sourceText = [...bySource.entries()]
-    .map(([source, info]) => {
-      const caps = `${info.capabilities} ${info.capabilities === 1 ? "capability" : "capabilities"}`;
-      return `${shortenSource(source)} (${caps})`;
-    })
-    .join(" \u00b7 ");
+  if (bySource.size > 0) {
+    lines.push(colors.dim("sources"));
+    const rows = [...bySource.entries()].map(([source, capabilities]) => [
+      shortenSource(source),
+      colors.dim(`${capabilities} ${capabilities === 1 ? "capability" : "capabilities"}`),
+    ]);
+    lines.push(...columns(rows, { indent: "    " }));
+  }
   const byScope = new Map<string, string[]>();
   for (const item of reach.targets) {
     const list = byScope.get(item.scope) ?? [];
-    list.push(`${item.destination} ${displayPath(item.installRoot)}`);
+    list.push(`${item.destination} ${colors.dim(displayPath(item.installRoot))}`);
     byScope.set(item.scope, list);
   }
-  const targetText = [...byScope.entries()]
-    .map(([scope, roots]) =>
-      byScope.size > 1 ? `${scope}: ${roots.join(" \u00b7 ")}` : roots.join(" \u00b7 "),
-    )
-    .join("  ");
-  const lines: Array<[string, string]> = [];
-  if (sourceText.length > 0) lines.push(["sources", sourceText]);
-  if (targetText.length > 0) lines.push(["targets", targetText]);
+  lines.push(colors.dim("targets"));
+  const rows: string[][] = [];
+  for (const scope of scopes) {
+    const roots = byScope.get(scope) ?? [];
+    if (roots.length === 0) {
+      rows.push([colors.bold(scope), colors.dim("(nothing managed yet)")]);
+      continue;
+    }
+    const shown = roots.slice(0, 4);
+    const more = roots.length - shown.length;
+    rows.push([
+      colors.bold(scope),
+      shown.join(" \u00b7 ") + (more > 0 ? colors.dim(` \u00b7 +${more} more`) : ""),
+    ]);
+  }
+  lines.push(...columns(rows, { indent: "    " }));
   return lines;
+}
+
+export function footprintLines(footprint: readonly FootprintEntry[]): string[] {
+  const lines: string[] = [];
+  let scope: string | null = null;
+  let target: string | null = null;
+  let rows: string[][] = [];
+  const flush = () => {
+    if (rows.length > 0) lines.push(...columns(rows, { indent: "    " }));
+    rows = [];
+  };
+  for (const entry of footprint) {
+    if (entry.scope !== scope) {
+      flush();
+      if (scope !== null) lines.push("");
+      scope = entry.scope;
+      target = null;
+      lines.push(colors.bold(entry.scope));
+    }
+    if (entry.target !== target) {
+      flush();
+      target = entry.target;
+      lines.push(`  ${colors.bold(entry.target)} ${colors.dim(displayPath(entry.installRoot))}`);
+    }
+    const label =
+      entry.kind === "region" ? `${entry.path} ${colors.dim("(managed region)")}` : entry.path;
+    rows.push([label, colors.dim(entry.capability)]);
+  }
+  flush();
+  return lines;
+}
+
+export function footprintToJson(footprint: readonly FootprintEntry[]): unknown[] {
+  return footprint.map((entry) => ({
+    scope: entry.scope,
+    target: entry.target,
+    installRoot: entry.installRoot,
+    path: entry.path,
+    kind: entry.kind,
+    capability: entry.capability,
+  }));
 }
 
 function shortenSource(source: string): string {
@@ -314,6 +365,7 @@ export function reachToJson(reach: Reach): { sources: unknown[]; targets: unknow
       scope: item.scope,
       destination: item.destination,
       installRoot: item.installRoot,
+      files: item.files,
     })),
   };
 }

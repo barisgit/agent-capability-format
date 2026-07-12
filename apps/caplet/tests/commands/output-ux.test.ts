@@ -347,39 +347,112 @@ test("diff collapses many same-capability files and --verbose expands them", asy
   }
 });
 
-test("apply and status surface reach: sources and targets", async () => {
+test("apply and status surface reach: sources and managed targets", async () => {
   const scope = await makeScope();
   try {
     const applied = await runCaplet(scope, [
-      "apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude",
+      "apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
     ]);
     expect(applied.exitCode).toBe(0);
     expect(applied.stdout).toContain("sources");
-    expect(applied.stdout).toContain("(1 capability)");
+    expect(applied.stdout).toContain("1 capability");
     expect(applied.stdout).toContain("targets");
-    expect(applied.stdout).toContain("canonical");
-    expect(applied.stdout).toContain("claude");
+    expect(applied.stdout).toContain("claude .claude");
+    expect(applied.stdout).not.toContain("codex");
 
     const status = await runCaplet(scope, ["status", "--cwd", scope.cwd, "--scope", "project"]);
     expect(status.exitCode).toBe(0);
     expect(status.stdout).toContain("sources");
     expect(status.stdout).toContain("targets");
+    expect(status.stdout).toContain("claude .claude");
+    expect(status.stdout).not.toContain("codex");
 
     const json = await runCaplet(scope, [
-      "status", "--json", "--cwd", scope.cwd, "--scope", "project",
+      "status",
+      "--json",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
     ]);
     const parsed = JSON.parse(json.stdout);
     expect(Array.isArray(parsed.sources)).toBe(true);
     expect(Array.isArray(parsed.targets)).toBe(true);
     expect(parsed.sources).toHaveLength(2);
     expect(parsed.sources[0].capabilities).toBe(1);
+    expect(parsed.targets.every((t: { files: number }) => t.files > 0)).toBe(true);
 
     const applyJson = await runCaplet(scope, [
-      "apply", "--json", "--cwd", scope.cwd, "--scope", "project", "--target", "claude",
+      "apply",
+      "--json",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
     ]);
     const applyParsed = JSON.parse(applyJson.stdout);
     expect(Array.isArray(applyParsed.sources)).toBe(true);
     expect(Array.isArray(applyParsed.targets)).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("status -v shows the managed footprint compactly", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(
+      `${scope.sourceRoot}/alpha/skills/research/SKILL.md`,
+      "---\nname: research\ndescription: Research skill\n---\nUse research.\n",
+    );
+    const applied = await runCaplet(scope, [
+      "apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    expect(applied.exitCode).toBe(0);
+
+    const result = await runCaplet(scope, [
+      "status",
+      "-v",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("claude .claude");
+    expect(result.stdout).toContain("skills/research/");
+    expect(result.stdout).not.toContain("skills/research/SKILL.md");
+    expect(result.stdout).toContain("agents/alpha-helper.md");
+    expect(result.stdout).toContain("alpha-cap");
+
+    const json = await runCaplet(scope, [
+      "status",
+      "-v",
+      "--json",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+    const parsed = JSON.parse(json.stdout);
+    expect(Array.isArray(parsed.footprint)).toBe(true);
+    const research = parsed.footprint.find((f: { path: string }) => f.path === "skills/research/");
+    expect(research.kind).toBe("dir");
+    expect(research.capability).toBe("alpha-cap");
   } finally {
     await cleanup(scope);
   }

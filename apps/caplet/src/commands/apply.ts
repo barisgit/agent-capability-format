@@ -3,7 +3,7 @@ import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args
 import { confirm, runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView, planToJson, reachLines, reachToJson } from "../internal/plan-view";
+import { buildPlanView, planToJson, reachBlock, reachToJson } from "../internal/plan-view";
 import { specToCittyArgs } from "../internal/spec";
 import { applyEmitPlan, buildEmitPlan, collectReach, fetchScopes } from "../internal/workflow";
 
@@ -40,7 +40,11 @@ export const applyCommand = defineCommand({
           });
         } else {
           out.done("Everything up to date");
-          out.details(reachLines(reach));
+          for (const line of reachBlock(
+            reach,
+            plan.scopes.map((scopeRoot) => scopeRoot.scope),
+          ))
+            out.log(line);
         }
         return;
       }
@@ -54,7 +58,11 @@ export const applyCommand = defineCommand({
           });
         } else {
           out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
-          out.details(reachLines(reach));
+          for (const line of reachBlock(
+            reach,
+            plan.scopes.map((scopeRoot) => scopeRoot.scope),
+          ))
+            out.log(line);
         }
         return;
       }
@@ -72,11 +80,12 @@ export const applyCommand = defineCommand({
       const applied = await applyEmitPlan(plan);
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+      const appliedReach = await collectReach(plan);
       if (json) {
         printJson("apply", true, diagnostics, {
           plan: planToJson(view),
           applied: { files: view.fileCount, writes: written, deletes: deleted },
-          ...reachToJson(reach),
+          ...reachToJson(appliedReach),
         });
         return;
       }
@@ -84,7 +93,12 @@ export const applyCommand = defineCommand({
       out.done(
         `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
       );
-      out.details(reachLines(reach));
+      out.log("");
+      for (const line of reachBlock(
+        appliedReach,
+        plan.scopes.map((scopeRoot) => scopeRoot.scope),
+      ))
+        out.log(line);
       if (!readVerbose(context.args) && !readQuiet(context.args)) {
         out.log(`  ${"Full list: --verbose"}`);
       }

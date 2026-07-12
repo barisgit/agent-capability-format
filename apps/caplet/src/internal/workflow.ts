@@ -24,7 +24,7 @@ import {
   resolveCapabilities,
 } from "@acf/installer";
 import { type ApplyResult, applyDiffs } from "../apply/apply-diffs";
-import { detectDrift, readSidecar } from "../apply/sidecar";
+import { detectDrift, type ManagedEntry, readSidecar } from "../apply/sidecar";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
 import { diskReadOnlyFs } from "./fs";
 import { addManagementNotices } from "./managed-notices";
@@ -299,8 +299,52 @@ function groupByApplyTarget(items: readonly EmittedDiff[]): ApplyGroup[] {
 
 export type Reach = {
   sources: Array<{ scope: string; source: string; capabilities: number }>;
-  targets: Array<{ scope: string; destination: string; installRoot: string }>;
+  targets: Array<{ scope: string; destination: string; installRoot: string; files: number }>;
 };
+
+export type FootprintEntry = {
+  scope: string;
+  target: string;
+  installRoot: string;
+  path: string;
+  kind: "dir" | "file" | "region";
+  capability: string;
+};
+
+type ManagedRoot = {
+  scope: string;
+  destination: string;
+  installRoot: string;
+  entries: ManagedEntry[];
+};
+
+async function managedRoots(plan: EmitPlan): Promise<ManagedRoot[]> {
+  const roots: ManagedRoot[] = [];
+  const seen = new Set<string>();
+  for (const scopeRoot of plan.scopes) {
+    const candidates: Array<{ destination: string; installRoot: string }> = [
+      { destination: "canonical", installRoot: scopeRoot.agentsDir },
+    ];
+    for (const targetId of targetIds) {
+      const installRoot = installRootFor(targetId, scopeRoot, plan.config, process.cwd());
+      if (installRoot !== null) candidates.push({ destination: targetId, installRoot });
+    }
+    for (const candidate of candidates) {
+      const key = `${scopeRoot.scope}\u0000${candidate.destination}`;
+      if (seen.has(key)) continue;
+      const sidecar = await readSidecar(path.join(candidate.installRoot, ".acf-managed.json"));
+      if (sidecar.managed.length === 0) continue;
+      seen.add(key);
+      roots.push({
+        scope: scopeRoot.scope,
+        destination: candidate.destination,
+        installRoot: candidate.installRoot,
+        entries: sidecar.managed,
+      });
+    }
+  }
+  return roots;
+}
 
 export async function collectReach(plan: EmitPlan): Promise<Reach> {
   const sources: Reach["sources"] = [];
@@ -315,25 +359,56 @@ export async function collectReach(plan: EmitPlan): Promise<Reach> {
     }
   }
   const targets: Reach["targets"] = [];
-  const seen = new Set<string>();
-  for (const scopeRoot of plan.scopes) {
-    const canonicalKey = `${scopeRoot.scope}\u0000canonical`;
-    if (!seen.has(canonicalKey)) {
-      seen.add(canonicalKey);
-      targets.push({
-        scope: scopeRoot.scope,
-        destination: "canonical",
-        installRoot: scopeRoot.agentsDir,
-      });
-    }
-    for (const targetId of plan.targets) {
-      const installRoot = installRootFor(targetId, scopeRoot, plan.config, process.cwd());
-      if (installRoot === null) continue;
-      const key = `${scopeRoot.scope}\u0000${targetId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      targets.push({ scope: scopeRoot.scope, destination: targetId, installRoot });
-    }
+  for (const root of await managedRoots(plan)) {
+    targets.push({
+      scope: root.scope,
+      destination: root.destination,
+      installRoot: root.installRoot,
+      files: root.entries.length,
+    });
   }
   return { sources, targets };
+}
+
+export async function collectFootprint(plan: EmitPlan): Promise<FootprintEntry[]> {
+  const footprint: FootprintEntry[] = [];
+  for (const root of await managedRoots(plan)) {
+    const dirs = new Map<string, { capability: string; kind: "dir" }>();
+    const files: Array<{ path: string; kind: "file" | "region"; capability: string }> = [];
+    for (const entry of root.entries) {
+      const facet = entry.facet;
+      if (facet !== undefined && facet.family === "skill") {
+        const dir = `skills/${facet.name}/`;
+        if (!dirs.has(dir)) dirs.set(dir, { capability: entry.capability, kind: "dir" });
+        continue;
+      }
+      const region = entry.owns.some((own) => own.kind !== "file");
+      files.push({
+        path: entry.path,
+        kind: region ? "region" : "file",
+        capability: entry.capability,
+      });
+    }
+    for (const [dir, info] of [...dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      footprint.push({
+        scope: root.scope,
+        target: root.destination,
+        installRoot: root.installRoot,
+        path: dir,
+        kind: info.kind,
+        capability: info.capability,
+      });
+    }
+    for (const file of files.sort((a, b) => a.path.localeCompare(b.path))) {
+      footprint.push({
+        scope: root.scope,
+        target: root.destination,
+        installRoot: root.installRoot,
+        path: file.path,
+        kind: file.kind,
+        capability: file.capability,
+      });
+    }
+  }
+  return footprint;
 }

@@ -1,15 +1,22 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { readCwd, readScope } from "../internal/args";
+import { readCwd, readScope, readVerbose } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
 import { printJson, readJson } from "../internal/json";
 import { printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView, displayPath, reachLines, reachToJson } from "../internal/plan-view";
+import {
+  buildPlanView,
+  displayPath,
+  footprintLines,
+  footprintToJson,
+  reachBlock,
+  reachToJson,
+} from "../internal/plan-view";
 import { columns } from "../internal/render";
 import { resolveScopeRoots } from "../internal/scopes";
 import { specToCittyArgs } from "../internal/spec";
-import { buildEmitPlan, collectReach } from "../internal/workflow";
+import { buildEmitPlan, collectFootprint, collectReach } from "../internal/workflow";
 
 export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },
@@ -39,16 +46,28 @@ export const statusCommand = defineCommand({
       }
       const plan = await buildEmitPlan(context.args);
       const reach = await collectReach(plan);
+      const verbose = readVerbose(context.args);
+      const footprint = verbose ? await collectFootprint(plan) : null;
       if (!json) printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
       const view = buildPlanView(plan.diffs);
       if (json) {
         printJson("status", true, [...diagnostics, ...plan.diagnostics], {
           pending: view.fileCount,
           ...reachToJson(reach),
+          ...(footprint === null ? {} : { footprint: footprintToJson(footprint) }),
         });
         return;
       }
-      out.details(reachLines(reach));
+      if (footprint !== null && footprint.length > 0) {
+        for (const line of footprintLines(footprint)) out.log(line);
+        out.log("");
+      }
+      for (const line of reachBlock(
+        reach,
+        scopes.map((scopeRoot) => scopeRoot.scope),
+      )) {
+        out.log(line);
+      }
       out.log("");
       if (view.fileCount === 0) {
         out.done("Everything up to date");
