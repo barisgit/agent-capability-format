@@ -146,7 +146,10 @@ async function resolveCapabilitiesStaged(
     stagingDir,
     opts.scopeRoot.capabilitiesDir,
   );
-  if (opts.mode !== "never" && opts.updateLock !== false && (fetched || existingLock === null)) {
+  const lockChanged =
+    usableLock === null ||
+    JSON.stringify(canonicalizeLock(usableLock)) !== JSON.stringify(lockfile);
+  if (opts.mode !== "never" && opts.updateLock !== false && (fetched || lockChanged)) {
     await removeStaleSnapshots(usableLock, lockfile, opts.scopeRoot.capabilitiesDir);
     await writeLockfile(opts.scopeRoot.lockPath, lockfile);
   }

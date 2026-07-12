@@ -10,33 +10,45 @@ import {
   renderRootInventory,
 } from "@acf/core";
 import { readSidecar } from "../apply/sidecar";
-import type { EmittedDiff } from "./workflow";
+import type { EmittedDiff, RootContext } from "./workflow";
 
 export async function addManagementNotices(
   desired: readonly EmittedDiff[],
   fs: ReadOnlyFs,
   diagnostics: Diagnostic[],
+  opts?: {
+    staleByRoot?: ReadonlyMap<string, ReadonlySet<string>>;
+    rootContexts?: ReadonlyMap<string, RootContext>;
+  },
 ): Promise<EmittedDiff[]> {
   const output = [...desired];
   const byRoot = groupByInstallRoot(desired);
-  for (const [installRoot, items] of byRoot) {
+  const staleByRoot = opts?.staleByRoot ?? new Map<string, ReadonlySet<string>>();
+  const roots = new Set([...byRoot.keys(), ...staleByRoot.keys()]);
+  for (const installRoot of roots) {
+    const items = byRoot.get(installRoot) ?? [];
     const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
-    const artifacts = mergedInventoryArtifacts(items, installRoot, sidecar);
-    if (artifacts.length === 0) continue;
-    const first = items[0];
-    if (first === undefined) continue;
+    const stale = staleByRoot.get(installRoot) ?? new Set<string>();
+    const artifacts = mergedInventoryArtifacts(items, installRoot, sidecar, stale);
     const noticePath = path.join(installRoot, MANAGEMENT_NOTICE_FILENAME);
     const before = await fs.readText(noticePath);
+    if (artifacts.length === 0 && (before === null || stale.size === 0)) continue;
+    const first = items[0];
+    const context =
+      first !== undefined
+        ? { scopeRoot: first.scopeRoot, targetId: first.targetId, destination: first.destination }
+        : opts?.rootContexts?.get(installRoot);
+    if (context === undefined) continue;
     output.push({
-      scopeRoot: first.scopeRoot,
-      targetId: first.targetId,
-      destination: first.destination,
+      scopeRoot: context.scopeRoot,
+      targetId: context.targetId,
+      destination: context.destination,
       installRoot,
       capabilityName: ACF_SYSTEM_OWNER,
       diff: {
         path: noticePath,
         before,
-        after: renderRootInventory(artifacts),
+        after: artifacts.length === 0 ? null : renderRootInventory(artifacts),
         owns: [{ kind: "file" }],
         managementNotice: "root",
       },
@@ -116,14 +128,16 @@ function mergedInventoryArtifacts(
   items: readonly EmittedDiff[],
   installRoot: string,
   sidecar: AcfManagedSidecar,
+  stale: ReadonlySet<string> = new Set(),
 ): RootInventoryArtifact[] {
-  const replaced = new Set(
-    items
+  const replaced = new Set([
+    ...items
       .filter((item) => item.diff.managementNotice === undefined)
       .map(
         (item) => `${item.capabilityName}\0${inventoryRelativePath(installRoot, item.diff.path)}`,
       ),
-  );
+    ...stale,
+  ]);
   const retained = inventoryArtifactsFromSidecar(sidecar, replaced);
   return [...retained, ...inventoryArtifacts(items, installRoot)];
 }

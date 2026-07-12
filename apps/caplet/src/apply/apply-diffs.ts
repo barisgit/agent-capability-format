@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@acf/adapters/common";
 import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@acf/core";
@@ -8,6 +8,7 @@ import {
   mergeSidecarEntry,
   readSidecar,
   relativeSidecarPath,
+  removeOwnedRegionsFromText,
   writeSidecar,
 } from "./sidecar";
 
@@ -33,14 +34,15 @@ export async function applyDiffs(
     if (diff.managementNotice !== undefined) {
       await assertNoticePathOwnedOrAbsent(sidecar, relativePath, absolutePath);
     }
-    const applied = await applyOneDiff(diff, absolutePath);
+    const applied = await applyOneDiff(diff, absolutePath, opts.installRoot);
 
-    if (applied.content === null) {
+    if (diff.after === null) {
       sidecar.managed = sidecar.managed.filter(
         (entry) => !(entry.path === relativePath && entry.capability === opts.capabilityName),
       );
-      if (applied.changed) deleted.push(absolutePath);
-      else unchanged.push(absolutePath);
+      if (!applied.changed) unchanged.push(absolutePath);
+      else if (applied.content === null) deleted.push(absolutePath);
+      else written.push(absolutePath);
       continue;
     }
 
@@ -88,6 +90,7 @@ async function assertNoticePathOwnedOrAbsent(
 async function applyOneDiff(
   diff: FileDiff,
   absolutePath: string,
+  installRoot: string,
 ): Promise<{ content: FileContent | null; changed: boolean }> {
   if (diff.owns.some((own) => own.kind === "file")) {
     const byteOriented = diff.before instanceof Uint8Array || diff.after instanceof Uint8Array;
@@ -97,6 +100,7 @@ async function applyOneDiff(
     const beforeMode = await readModeIfExists(absolutePath);
     if (diff.after === null) {
       await rm(absolutePath, { force: true });
+      await pruneEmptyDirs(path.dirname(absolutePath), installRoot);
       return { content: null, changed: before !== null };
     }
     const contentChanged = !contentEquals(before, diff.after);
@@ -108,6 +112,12 @@ async function applyOneDiff(
   }
 
   const before = await readTextIfExists(absolutePath);
+  if (diff.after === null) {
+    if (before === null) return { content: null, changed: false };
+    const stripped = removeOwnedRegionsFromText(before, diff.owns);
+    if (stripped !== before) await writeText(absolutePath, stripped);
+    return { content: stripped, changed: stripped !== before };
+  }
   const diffAfter = textContent(diff.after);
   let after = before ?? defaultTextFor(diff.owns);
   for (const own of diff.owns) {
@@ -131,6 +141,27 @@ function applyMarker(currentText: string, name: string, afterText: string | null
   if (afterText === null) return currentText;
   const body = extractMarkedBlock(afterText, name) ?? afterText;
   return replaceMarkedBlock(currentText, name, body);
+}
+
+async function pruneEmptyDirs(dir: string, boundary: string): Promise<void> {
+  const root = path.resolve(boundary);
+  let current = path.resolve(dir);
+  for (;;) {
+    if (current === root || !current.startsWith(root + path.sep)) return;
+    let entries: string[];
+    try {
+      entries = await readdir(current);
+    } catch {
+      return;
+    }
+    if (entries.length > 0) return;
+    try {
+      await rmdir(current);
+    } catch {
+      return;
+    }
+    current = path.dirname(current);
+  }
 }
 
 function defaultTextFor(owns: readonly AcfOwnership[]): string {
@@ -186,7 +217,7 @@ function contentEquals(left: FileContent | null, right: FileContent | null): boo
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
-function resolveDiffPath(installRoot: string, diffPath: string): string {
+export function resolveDiffPath(installRoot: string, diffPath: string): string {
   if (path.isAbsolute(diffPath)) return path.normalize(diffPath);
   if (diffPath.startsWith(".")) return path.resolve(process.cwd(), diffPath);
   return path.resolve(installRoot, diffPath);

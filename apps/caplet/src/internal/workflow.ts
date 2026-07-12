@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
+  ACF_SYSTEM_OWNER,
   type AcfCapability,
   applyApplicability,
   type CapletConfig,
@@ -17,14 +18,23 @@ import {
   targetMap,
 } from "@acf/core";
 import {
+  type CapabilitiesLock,
   detectLockDrift,
+  entrySourceId,
   type ResolveResult,
   readCapabilitiesYml,
   readLockfile,
   resolveCapabilities,
+  sourceId,
 } from "@acf/installer";
-import { type ApplyResult, applyDiffs } from "../apply/apply-diffs";
-import { detectDrift, type ManagedEntry, readSidecar } from "../apply/sidecar";
+import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs";
+import {
+  detectDrift,
+  type ManagedEntry,
+  readSidecar,
+  relativeSidecarPath,
+  writeSidecar,
+} from "../apply/sidecar";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
 import { diskReadOnlyFs } from "./fs";
 import { addManagementNotices } from "./managed-notices";
@@ -39,12 +49,15 @@ export type EmittedDiff = {
   diff: FileDiff;
 };
 
+export type StaleSidecarEntry = { installRoot: string; path: string; capability: string };
+
 export type EmitPlan = {
   config: CapletConfig;
   scopes: ScopeRoot[];
   targets: TargetId[];
   diagnostics: Diagnostic[];
   diffs: EmittedDiff[];
+  staleEntries: StaleSidecarEntry[];
 };
 
 export type ApplySummary = { results: ApplyResult[]; diagnostics: Diagnostic[] };
@@ -53,6 +66,7 @@ export async function fetchScopes(
   args: Record<string, unknown>,
   mode: FetchMode,
   capabilityName?: string,
+  opts?: { updateLock?: boolean },
 ): Promise<{ scopes: ScopeRoot[]; results: ResolveResult[]; diagnostics: Diagnostic[] }> {
   const cwd = path.resolve(readCwd(args));
   process.chdir(cwd);
@@ -72,6 +86,7 @@ export async function fetchScopes(
       scopeRoot,
       mode,
       sourceIds,
+      updateLock: opts?.updateLock,
     });
     results.push(result);
     diagnostics.push(...result.diagnostics);
@@ -79,7 +94,10 @@ export async function fetchScopes(
   return { scopes, results, diagnostics };
 }
 
-export async function buildEmitPlan(args: Record<string, unknown>): Promise<EmitPlan> {
+export async function buildEmitPlan(
+  args: Record<string, unknown>,
+  opts?: { locks?: ReadonlyMap<string, CapabilitiesLock> },
+): Promise<EmitPlan> {
   const cwd = path.resolve(readCwd(args));
   process.chdir(cwd);
   const configResult = await readCapletConfig(cwd);
@@ -88,14 +106,45 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const desiredDiffs: EmittedDiff[] = [];
   const canonicalDiffs = new Set<string>();
+  const resolvedNames = new Map<string, ReadonlySet<string>>();
   const fs = diskReadOnlyFs();
 
   for (const scopeRoot of scopes) {
     const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
     diagnostics.push(...manifest.diagnostics);
-    diagnostics.push(...detectLockDrift(manifest.value, await readLockfile(scopeRoot.lockPath)));
+    const lockOverride = opts?.locks?.get(scopeRoot.scope);
+    const diskLock = await readLockfile(scopeRoot.lockPath);
+    const lock = lockOverride ?? diskLock;
+    diagnostics.push(...detectLockDrift(manifest.value, lock));
     const resolved = await resolveScopeCapabilities(scopeRoot);
     diagnostics.push(...resolved.diagnostics);
+    if (lock !== null) {
+      const manifestDir = path.dirname(scopeRoot.manifestPath);
+      const manifestSources = new Set(
+        manifest.value.capabilities.flatMap((entry) => [
+          entrySourceId(entry),
+          entrySourceId(entry, manifestDir),
+          sourceId(entry.source),
+          sourceId(entry.source, manifestDir),
+        ]),
+      );
+      const selected = new Set(
+        lock.entries
+          .filter((entry) => manifestSources.has(entry.sourceId))
+          .flatMap((entry) => entry.capabilityNames),
+      );
+      const lockedNames = new Set(
+        (diskLock ?? lock).entries.flatMap((entry) => entry.capabilityNames),
+      );
+      resolved.capabilities = resolved.capabilities.filter(
+        (capability) =>
+          selected.has(capability.manifest.name) || !lockedNames.has(capability.manifest.name),
+      );
+    }
+    resolvedNames.set(
+      scopeRoot.scope,
+      new Set(resolved.capabilities.map((capability) => capability.manifest.name)),
+    );
     diagnostics.push(...(await driftDiagnostics(scopeRoot.agentsDir)));
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, configResult.config, cwd);
@@ -150,9 +199,167 @@ export async function buildEmitPlan(args: Record<string, unknown>): Promise<Emit
       }
     }
   }
-  const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics);
-  const diffs = desiredWithNotices.filter((item) => fileDiffChanged(item.diff));
-  return { config: configResult.config, scopes, targets, diagnostics, diffs };
+  const sweep = await sweepStaleSidecarEntries(
+    scopes,
+    targets,
+    configResult.config,
+    cwd,
+    desiredDiffs,
+    resolvedNames,
+  );
+  const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics, {
+    staleByRoot: sweep.staleByRoot,
+    rootContexts: sweep.rootContexts,
+  });
+  const diffs = [
+    ...desiredWithNotices.filter(
+      (item) => fileDiffChanged(item.diff) || sweep.forcedPaths.has(diffPathKey(item)),
+    ),
+    ...sweep.deletes.filter((item) => fileDiffChanged(item.diff)),
+  ];
+  return {
+    config: configResult.config,
+    scopes,
+    targets,
+    diagnostics,
+    diffs,
+    staleEntries: sweep.staleEntries,
+  };
+}
+
+function diffPathKey(item: EmittedDiff): string {
+  const relative = relativeSidecarPath(
+    item.installRoot,
+    resolveDiffPath(item.installRoot, item.diff.path),
+  );
+  return `${item.installRoot}\u0000${relative}`;
+}
+
+export type RootContext = {
+  scopeRoot: ScopeRoot;
+  targetId: TargetId;
+  destination: "canonical" | "native";
+};
+
+type SweepResult = {
+  deletes: EmittedDiff[];
+  forcedPaths: ReadonlySet<string>;
+  staleByRoot: Map<string, Set<string>>;
+  staleEntries: StaleSidecarEntry[];
+  rootContexts: Map<string, RootContext>;
+};
+
+async function sweepStaleSidecarEntries(
+  scopes: readonly ScopeRoot[],
+  targets: readonly TargetId[],
+  config: CapletConfig,
+  cwd: string,
+  desired: readonly EmittedDiff[],
+  resolvedNames: ReadonlyMap<string, ReadonlySet<string>>,
+): Promise<SweepResult> {
+  const desiredKeys = new Set<string>();
+  const desiredPaths = new Set<string>();
+  for (const item of desired) {
+    const key = diffPathKey(item);
+    desiredPaths.add(key);
+    desiredKeys.add(`${key}\u0000${item.capabilityName}`);
+  }
+  const deletes: EmittedDiff[] = [];
+  const forcedPaths = new Set<string>();
+  const staleByRoot = new Map<string, Set<string>>();
+  const staleEntries: StaleSidecarEntry[] = [];
+  const rootContexts = new Map<string, RootContext>();
+  const addStale = (installRoot: string, entry: ManagedEntry): void => {
+    const bucket = staleByRoot.get(installRoot) ?? new Set<string>();
+    bucket.add(`${entry.capability}\u0000${entry.path}`);
+    staleByRoot.set(installRoot, bucket);
+  };
+  for (const scopeRoot of scopes) {
+    const names = resolvedNames.get(scopeRoot.scope) ?? new Set<string>();
+    const candidates: Array<{ installRoot: string } & Omit<RootContext, "scopeRoot">> = [
+      {
+        destination: "canonical",
+        targetId: targets[0] ?? "claude",
+        installRoot: scopeRoot.agentsDir,
+      },
+    ];
+    for (const targetId of targets) {
+      const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
+      if (installRoot !== null) candidates.push({ destination: "native", targetId, installRoot });
+    }
+    for (const candidate of candidates) {
+      if (rootContexts.has(candidate.installRoot)) continue;
+      rootContexts.set(candidate.installRoot, {
+        scopeRoot,
+        targetId: candidate.targetId,
+        destination: candidate.destination,
+      });
+      const sidecar = await readSidecar(path.join(candidate.installRoot, ".acf-managed.json"));
+      for (const entry of sidecar.managed) {
+        if (entry.capability === ACF_SYSTEM_OWNER) continue;
+        const pathKey = `${candidate.installRoot}\u0000${entry.path}`;
+        if (desiredKeys.has(`${pathKey}\u0000${entry.capability}`)) continue;
+        const wholeFile = entry.owns.some((own) => own.kind === "file");
+        if (desiredPaths.has(pathKey) && wholeFile) {
+          forcedPaths.add(pathKey);
+          addStale(candidate.installRoot, entry);
+          staleEntries.push({
+            installRoot: candidate.installRoot,
+            path: entry.path,
+            capability: entry.capability,
+          });
+          continue;
+        }
+        if (names.has(entry.capability)) continue;
+        const absolutePath = path.resolve(candidate.installRoot, entry.path);
+        const before = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
+        const diff: FileDiff = {
+          path: absolutePath,
+          before,
+          after: null,
+          owns: entry.owns,
+        };
+        if (entry.facet !== undefined) diff.facet = entry.facet;
+        deletes.push({
+          scopeRoot,
+          targetId: candidate.targetId,
+          destination: candidate.destination,
+          installRoot: candidate.installRoot,
+          capabilityName: entry.capability,
+          diff,
+        });
+        addStale(candidate.installRoot, entry);
+        staleEntries.push({
+          installRoot: candidate.installRoot,
+          path: entry.path,
+          capability: entry.capability,
+        });
+      }
+    }
+  }
+  return { deletes, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+function readTextOrNull(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch (error) {
+    if (isErrnoCode(error, "ENOENT")) return null;
+    throw error;
+  }
+}
+
+function readBytesOrNull(filePath: string): Uint8Array | null {
+  try {
+    return readFileSync(filePath);
+  } catch (error) {
+    if (isErrnoCode(error, "ENOENT")) return null;
+    throw error;
+  }
+}
+
+function isErrnoCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
@@ -165,7 +372,29 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
     });
     results.push(result);
   }
+  await removeStaleSidecarEntries(plan.staleEntries);
   return { results, diagnostics: plan.diagnostics };
+}
+
+async function removeStaleSidecarEntries(stale: readonly StaleSidecarEntry[]): Promise<void> {
+  const byRoot = new Map<string, StaleSidecarEntry[]>();
+  for (const entry of stale) {
+    const bucket = byRoot.get(entry.installRoot) ?? [];
+    bucket.push(entry);
+    byRoot.set(entry.installRoot, bucket);
+  }
+  for (const [installRoot, removals] of byRoot) {
+    const sidecarPath = path.join(installRoot, ".acf-managed.json");
+    const sidecar = await readSidecar(sidecarPath);
+    const before = sidecar.managed.length;
+    sidecar.managed = sidecar.managed.filter(
+      (entry) =>
+        !removals.some(
+          (removal) => removal.path === entry.path && removal.capability === entry.capability,
+        ),
+    );
+    if (sidecar.managed.length !== before) await writeSidecar(sidecarPath, sidecar);
+  }
 }
 
 function isCanonicalSkillPath(filePath: string, scopeRoot: ScopeRoot): boolean {

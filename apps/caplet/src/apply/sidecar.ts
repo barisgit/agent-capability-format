@@ -96,11 +96,7 @@ export async function removeOwnedRegions(
       unchanged.push(absolutePath);
       continue;
     }
-    let after = before;
-    for (const own of owns) {
-      if (own.kind === "json-pointer") after = deleteJsonPointerText(after, own.pointer);
-      if (own.kind === "marker") after = removeMarkedBlock(after, own.name);
-    }
+    const after = removeOwnedRegionsFromText(before, owns);
     if (after === before) {
       unchanged.push(absolutePath);
       continue;
@@ -114,6 +110,15 @@ export async function removeOwnedRegions(
     sidecar.managed.filter((entry) => entry.capability !== capabilityName),
   );
   return { written: written.sort(), deleted: deleted.sort(), unchanged: unchanged.sort(), sidecar };
+}
+
+export function removeOwnedRegionsFromText(text: string, owns: readonly AcfOwnership[]): string {
+  let after = text;
+  for (const own of owns) {
+    if (own.kind === "json-pointer") after = deleteJsonPointerText(after, own.pointer);
+    if (own.kind === "marker") after = removeMarkedBlock(after, own.name);
+  }
+  return after;
 }
 
 export function hashOwnedRegions(
