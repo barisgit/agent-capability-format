@@ -3,7 +3,7 @@ import { runMain } from "citty";
 import { rewriteAlias, rootCommand } from "./cli";
 import { renderCommandHelp, renderRootHelp } from "./help";
 import { CAPLET_VERSION } from "./internal/json";
-import { commandSpec } from "./internal/spec";
+import { commandSpec, unknownFlagError } from "./internal/spec";
 
 const rawArgs = process.argv.slice(2);
 const first = rawArgs[0];
@@ -28,6 +28,12 @@ if (command !== undefined && commandSpec(command) === undefined) {
   process.stderr.write(
     `unknown command: ${command}\n  See caplet --help for available commands.\n`,
   );
+  process.exit(2);
+}
+const flagError = unknownFlagError(command, command === undefined ? argv : argv.slice(1));
+if (flagError !== undefined) {
+  const helpTarget = command === undefined ? "caplet --help" : `caplet ${command} --help`;
+  process.stderr.write(`${flagError}\n  See ${helpTarget} for available flags.\n`);
   process.exit(2);
 }
 await runMain(rootCommand, { rawArgs: argv });

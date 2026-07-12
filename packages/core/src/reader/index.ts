@@ -62,7 +62,22 @@ const manifestKeys = new Set([
 ]);
 const markdownKeys = new Set(["sections", "targets"]);
 const frontmatterKeys = {
-  skill: new Set(["name", "description", "invocation", "assets", "only", "except", "targets"]),
+  skill: new Set([
+    "name",
+    "description",
+    "invocation",
+    "assets",
+    "only",
+    "except",
+    "targets",
+    // Common agent-skills ecosystem fields (accepted, passed through)
+    "version",
+    "license",
+    "metadata",
+    "argument-hint",
+    "allowed-tools",
+    "disable-model-invocation",
+  ]),
   agent: new Set(["name", "description", "mode", "model", "assets", "only", "except", "targets"]),
   command: new Set([
     "name",

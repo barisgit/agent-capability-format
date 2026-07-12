@@ -328,3 +328,72 @@ export function specToCittyArgs(name: string): Record<string, unknown> {
   }
   return args;
 }
+undefined
+
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (current[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + cost,
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] ?? 0;
+}
+
+function closest(input: string, candidates: string[]): string | undefined {
+  let best: string | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const distance = editDistance(input, candidate);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  return bestDistance <= 2 ? best : undefined;
+}
+
+/** Validate flag tokens against a command's spec. Returns an error message for the first unknown flag. */
+export function unknownFlagError(command: string | undefined, argv: string[]): string | undefined {
+  const spec = command === undefined ? undefined : commandSpec(command);
+  const flags = [
+    ...GLOBAL_FLAGS,
+    ...(spec?.target === true ? [TARGET_FLAG] : []),
+    ...(spec?.flags ?? []),
+  ];
+  const known = new Set<string>(["--help", "--version"]);
+  const booleanShorts = new Set<string>(["h", "V"]);
+  for (const flag of flags) {
+    known.add(`--${flag.name}`);
+    if (flag.type === "boolean") known.add(`--no-${flag.name}`);
+    if (flag.short !== undefined) {
+      known.add(`-${flag.short}`);
+      if (flag.type === "boolean") booleanShorts.add(flag.short);
+    }
+  }
+  known.add("-h");
+  known.add("-V");
+  for (const token of argv) {
+    if (token === "--") break;
+    if (!token.startsWith("-") || token === "-") continue;
+    const name = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+    if (known.has(name)) continue;
+    if (!name.startsWith("--") && name.length > 2) {
+      // bundled shorts like -nv: accept only when every letter is a known boolean short
+      const letters = name.slice(1).split("");
+      if (letters.every((letter) => booleanShorts.has(letter))) continue;
+    }
+    const suggestion = closest(name, [...known]);
+    const hint = suggestion === undefined ? "" : ` — did you mean ${suggestion}?`;
+    return `unknown flag: ${name}${hint}`;
+  }
+  return undefined;
+}
+
