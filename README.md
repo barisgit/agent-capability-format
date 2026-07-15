@@ -115,6 +115,24 @@ happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
 resolved by `rename:` or `exclude:`.
 
+Repositories do not need to adopt ACF before caplet can consume their skills.
+When no root `acf.yml` or `acf/` collection exists, caplet recognizes a root
+`SKILL.md`, `skills/<name>/SKILL.md`, or one-level-deep
+`<name>/SKILL.md`. Each discovered skill becomes one synthesized capability,
+and its portable references and scripts are included automatically.
+
+Select one capability directly from GitHub with the add-only `@name`
+shorthand:
+
+```bash
+caplet add github:vercel-labs/skills@find-skills --pin main
+```
+
+The persisted source remains `github:vercel-labs/skills` with
+`capabilities: [find-skills]`. On an interactive terminal, adding an
+unqualified source with multiple capabilities opens a numbered multi-select;
+non-interactive use and `--yes` keep the deterministic install-all behavior.
+
 For a monorepo source, set `path:` to the subtree containing either an
 `acf/` collection or one direct capability. The equivalent CLI for a direct
 capability subtree is:

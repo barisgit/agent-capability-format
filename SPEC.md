@@ -1839,7 +1839,7 @@ Each entry under `capabilities[]`:
 | `source`   | string  | yes      | Source identifier (§18).                                                       |
 | `ref`      | string  | conditional | Required for `github:` and `git:` sources. Branch, tag, or SHA.             |
 | `path`     | string  | no       | Subdirectory inside the source to use as the selected source root.             |
-| `capabilities` | string or non-empty list | no | Exact/glob paths relative to the selected source root's `acf/`; omitted selects all. |
+| `capabilities` | string or non-empty list | no | Exact/glob discovered capability selectors; manifested collections use paths relative to `acf/`, synthesized skills use capability names; omitted selects all. |
 | `auth`     | enum    | no       | `gh` \| `ssh` \| `token` \| `anonymous`. Override resolver default.            |
 | `include`  | mapping | no       | Family-keyed allowlist of facet names. Globs allowed. Implicit `*`.            |
 | `exclude`  | mapping | no       | Family-keyed denylist of facet names. Globs allowed.                           |
@@ -2050,23 +2050,30 @@ arbitrary depth. Each capability is the directory containing its own
 `acf.yml`. The optional source-entry `path` first changes the selected source
 root; `capabilities` selectors then select paths beneath that root's `acf/`.
 
-### 20.3 Legacy compatibility
+### 20.3 Unmanifested skill import
 
-A repository that has `skills/` at its root and no `acf.yml` is treated
-as an **implicit single-capability** repository with an auto-generated
-minimal manifest:
+When neither a root `acf.yml` nor an `acf/` collection exists,
+implementations MAY import bare Agent Skills repositories. Discovery MUST use
+the first matching layout in this order and MUST NOT combine layouts:
 
-```yaml
-acf: 1
-name: <repo-basename>
-version: 0.0.0
-```
+1. a root `SKILL.md`,
+2. immediate `skills/<directory>/SKILL.md` children,
+3. immediate `<directory>/SKILL.md` children at the selected source root.
 
-Implementations MUST emit an `info` diagnostic when applying legacy mode.
-This compatibility path covers existing Agent Skills repositories.
+Each discovered skill is synthesized as one independent capability named from
+its validated skill frontmatter. Generated capability state MUST be staged
+outside the source checkout; a resolver MUST NOT write an `acf.yml` or other
+metadata into a local `path:` source. The generated version identifies the
+capability as unmanifested and SHOULD include the resolved source revision.
 
-Legacy mode and explicit `acf.yml` modes MUST NOT mix in the same
-capability root.
+Imported skill contents include every recursively contained regular file
+except hidden paths, dependency trees such as `node_modules`, generated
+`ACF-MANAGED.md` notices, symbolic links, and special files. This implicit
+asset rule applies only to synthesized imports; authored ACF capabilities keep
+their declared/reference-driven asset behavior.
+
+If a repository has either manifested layout, manifested discovery takes
+precedence and bare-skill import MUST NOT run.
 
 ### 20.4 Selecting a capability with `path:`
 

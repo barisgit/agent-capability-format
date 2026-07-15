@@ -1937,6 +1937,14 @@ all staging and preserves the prior lock and snapshots. After complete
 successful resolution, snapshots formerly owned by the source but absent from
 the next lock are removed.
 
+If neither a root `acf.yml` nor an `acf/` collection exists, source inventory
+falls back to bare-skill discovery using SPEC §20.3 precedence. Each discovered
+skill is staged as an independent generated capability; generation never writes
+into the fetched root. A private import marker enables missing-description
+warnings and recursive portable-asset collection while leaving the upstream
+`SKILL.md` byte-identical. Inventory is shared with `caplet add` preflight so
+interactive choices and resolver selectors cannot disagree.
+
 ### 7.5 Lockfile
 
 ```ts
@@ -1951,6 +1959,7 @@ export type LockEntry = {
   contentHash: string                 // sha256 over the final installed tree
   installedAt: string                 // ISO 8601
   capabilityName: string              // final installed slug (post-rename)
+  synthesized?: boolean               // source was imported from bare skills
 }
 ```
 
@@ -2725,23 +2734,25 @@ Never silent exit 0.
 
 ### 14.1 Mutating commands
 
-- `caplet add <source>[@<ref>][:<path>] [--scope user|project] [--include …] [--exclude …] [--fetch]`
-  Mutates `capabilities.yml`. Fetches when `--fetch` is passed.
-- `caplet remove <name> [--scope …]` — removes an entry by capability name
-  or source id. With `--purge`, also deletes the materialized
-  `capabilities/<name>/` directory.
-- `caplet update [<name>…] [--scope …]` — moves lockfile entry to the latest
-  ref matching the declared `ref` spec; refetches. Interactive picker when
-  `<name>` is omitted.
+- `caplet add <source> [--pin <ref>] [--path <subdir>] [--scope user|project] [--no-apply]`
+  inspects when selection is needed, mutates `capabilities.yml`, resolves, and
+  applies by default. `github:owner/repo@name` is an add-only exact capability
+  selector; the persisted source omits the suffix. An unqualified interactive
+  multi-capability source uses a numbered picker, while non-TTY and `--yes`
+  select all.
+- `caplet remove <name> [--scope …]` removes the named capability and its
+  sidecar-owned output. For an entry selecting several capabilities, it retains
+  sibling selectors and removes the source entry only when none remain.
+- `caplet update [name] [--scope …] [--no-apply]` re-resolves matching sources
+  and applies by default.
 
 ### 14.2 Reconcile commands
 
-- `caplet fetch [--scope …] [--prune] [--force]` — reads `capabilities.yml`,
-  fetches missing/changed entries, updates the lockfile. `--prune` removes
-  lock entries no longer listed and deletes their `capabilities/` trees.
-- `caplet emit [--target <id>…] [--scope …] [--out <dir>] [--dry-run]` —
-  emits native artifacts.
-- `caplet apply [--scope …] [--target …]` — `fetch` followed by `emit`.
+- `caplet apply [--scope …] [--target …] [--dry-run] [--offline] [--frozen]`
+  resolves declared sources and reconciles native artifacts. Dry-run refreshes
+  lock state in memory without writing it.
+- Deprecated `fetch` and `emit` invocations rewrite to `update --no-apply` and
+  `apply --offline`; they are not separate implementation paths.
 
 ### 14.3 Inspection commands
 
