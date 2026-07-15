@@ -37,3 +37,57 @@ describe("parseAddSource", () => {
     );
   });
 });
+
+import { chooseSourceCapabilities } from "../src/internal/source-selection";
+
+describe("chooseSourceCapabilities", () => {
+  test("validates exact requested names", async () => {
+    expect(
+      await chooseSourceCapabilities(["alpha", "beta"], { requested: "beta", interactive: false }),
+    ).toEqual(["beta"]);
+    await expect(
+      chooseSourceCapabilities(["alpha", "beta"], { requested: "missing", interactive: false }),
+    ).rejects.toThrow("Available: alpha, beta");
+  });
+
+  test("rejects duplicate candidate names as ambiguous", async () => {
+    await expect(
+      chooseSourceCapabilities(["alpha", "alpha"], { requested: "alpha", interactive: false }),
+    ).rejects.toThrow("duplicate capability name");
+  });
+
+  test("keeps install-all behavior outside interactive selection", async () => {
+    expect(await chooseSourceCapabilities(["alpha", "beta"], { interactive: false })).toEqual([
+      "alpha",
+      "beta",
+    ]);
+    expect(
+      await chooseSourceCapabilities(["alpha", "beta"], { interactive: true, yes: true }),
+    ).toEqual(["alpha", "beta"]);
+  });
+
+  test("invokes the picker only for interactive unqualified multi-capability sources", async () => {
+    const calls: string[][] = [];
+    const picker = async (items: readonly string[]) => {
+      calls.push([...items]);
+      return ["beta"];
+    };
+    expect(
+      await chooseSourceCapabilities(["alpha", "beta"], { interactive: true, picker }),
+    ).toEqual(["beta"]);
+    expect(calls).toEqual([["alpha", "beta"]]);
+    expect(await chooseSourceCapabilities(["alpha"], { interactive: true, picker })).toEqual([
+      "alpha",
+    ]);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("propagates picker cancellation without selection", async () => {
+    expect(
+      await chooseSourceCapabilities(["alpha", "beta"], {
+        interactive: true,
+        picker: async () => null,
+      }),
+    ).toBeNull();
+  });
+});
