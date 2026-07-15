@@ -36,18 +36,19 @@ test("resolver discovers multi acf directory at arbitrary depth", async () => {
   }
 });
 
-test("legacy bare skills synthesizes minimal manifest", async () => {
-  const dir = await tempDir("acf-resolver-legacy-");
+test("core repository reading does not mutate bare skill sources", async () => {
+  const dir = await tempDir("acf-resolver-bare-");
   try {
     await writeText(
       path.join(dir, "skills", "legacy", "SKILL.md"),
       "---\nname: legacy\ndescription: Legacy\n---\nbody\n",
     );
     const result = await readRepositoryCapabilities(dir);
-    expect(result.capabilities[0]?.manifest.version).toBe("0.0.0");
-    expect(result.capabilities[0]?.diagnostics.map((d) => d.code)).toContain(
-      "acf.resolve.legacy-skills",
+    expect(result.capabilities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      "acf.resolve.no-capabilities",
     );
+    expect(await Bun.file(path.join(dir, "acf.yml")).exists()).toBe(false);
   } finally {
     await cleanup(dir);
   }

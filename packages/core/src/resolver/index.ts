@@ -1,4 +1,4 @@
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { readCapability } from "../reader";
@@ -39,20 +39,6 @@ export async function discoverRepository(repoRoot: string): Promise<RepositoryDi
     const roots = await findManifestDirs(acfDir);
     return { roots: roots.sort(), diagnostics: [], legacy: false };
   }
-  if (await exists(path.join(root, "skills"))) {
-    return {
-      roots: [root],
-      diagnostics: [
-        {
-          severity: "info",
-          code: "acf.resolve.legacy-skills",
-          message: "legacy bare skills repository uses synthesized manifest",
-          path: root,
-        },
-      ],
-      legacy: true,
-    };
-  }
   return {
     roots: [],
     diagnostics: [
@@ -76,7 +62,6 @@ export async function readRepositoryCapabilities(
   const capabilities: AcfCapability[] = [];
   const diagnostics = [...discovery.diagnostics];
   for (const root of discovery.roots) {
-    if (discovery.legacy) await ensureLegacyManifest(root);
     const cap = await readCapability(root, scope, origin);
     cap.diagnostics.push(...discovery.diagnostics);
     capabilities.push(cap);
@@ -96,7 +81,6 @@ export async function resolveScopeCapabilities(
     const discovery = await discoverRepository(dir);
     diagnostics.push(...discovery.diagnostics);
     for (const capRoot of discovery.roots) {
-      if (discovery.legacy) await ensureLegacyManifest(capRoot);
       const cap = await readCapability(capRoot, root.scope, { kind: "local", directory: capRoot });
       cap.diagnostics.push(...discovery.diagnostics);
       capabilities.push(cap);
@@ -176,22 +160,6 @@ async function walkForManifests(dir: string, out: string[]): Promise<void> {
     if (entry.name.startsWith(".")) continue;
     if (entry.isDirectory()) await walkForManifests(path.join(dir, entry.name), out);
   }
-}
-
-async function ensureLegacyManifest(root: string): Promise<void> {
-  const manifest = path.join(root, "acf.yml");
-  if (await exists(manifest)) return;
-  const name = slugFromBasename(path.basename(root));
-  await writeFile(manifest, `acf: 1\nname: ${name}\nversion: 0.0.0\n`, "utf8");
-}
-
-function slugFromBasename(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .replaceAll(/[^a-z0-9]+/g, "-")
-      .replaceAll(/^-|-$/g, "") || "legacy-capability"
-  );
 }
 
 function byCapabilityName(a: AcfCapability, b: AcfCapability): number {

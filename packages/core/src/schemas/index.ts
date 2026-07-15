@@ -22,7 +22,7 @@ const withOnlyExcept = <S extends z.ZodRawShape>(shape: S) => z.object(shape).an
 export const manifestSchema = withOnlyExcept({
   acf: z.literal(1),
   name: slugSchema,
-  version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/),
+  version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
   description: z.string().optional(),
   authors: z.array(z.string()).optional(),
   license: z.string().optional(),

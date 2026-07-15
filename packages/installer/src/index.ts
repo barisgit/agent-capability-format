@@ -3,6 +3,8 @@ export { detectLockDrift } from "./drift";
 export type { FetchedCapability, FetchOptions } from "./fetch";
 export { fetchCapability } from "./fetch";
 export { cloneFull, cloneShallow, fetchRef, revParseHead } from "./git";
+export type { SourceCapabilityCandidate, SourceInventory } from "./inventory";
+export { inspectSource } from "./inventory";
 export type { CapabilitiesLock, LockEntry } from "./lockfile";
 export {
   canonicalizeLock,

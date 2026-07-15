@@ -112,3 +112,21 @@ test("unsupported lockfile version is diagnosed", () => {
     detectLockDrift({ acf: 1, capabilities: [] }, lock).map((diagnostic) => diagnostic.code),
   ).toEqual(["acf.lock.unsupported-version"]);
 });
+
+test("lockfiles round-trip optional synthesized provenance and accept older entries", async () => {
+  const dir = await tempDir("acf-installer-lock-synthesized-");
+  try {
+    const lockPath = path.join(dir, "capabilities.lock");
+    const base = {
+      capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      capabilityNames: ["skill"],
+      source: "path:/repo",
+      sourceId: "path:/repo",
+    };
+    await writeLockfile(lockPath, { acf: 1, entries: [{ ...base, synthesized: true }, base] });
+    const reread = await readLockfile(lockPath);
+    expect(reread?.entries.map((entry) => entry.synthesized)).toEqual([true, undefined]);
+  } finally {
+    await cleanup(dir);
+  }
+});

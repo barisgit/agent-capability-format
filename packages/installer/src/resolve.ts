@@ -1,16 +1,16 @@
-import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
   computeContentHash,
   type Diagnostic,
-  readRepositoryCapabilities,
   type ScopeRoot,
 } from "@acf/core";
 import { readCapabilitiesYml } from "./capabilities-yml";
 import { detectLockDrift } from "./drift";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch";
+import { inspectSource, type SourceCapabilityCandidate, type SourceInventory } from "./inventory";
 import {
   type CapabilitiesLock,
   cacheKeyFor,
@@ -117,7 +117,7 @@ async function resolveCapabilitiesStaged(
       stagingDir,
       cacheKeyFor(fetchedCapability.sourceId, entry.ref),
     );
-    const materialized = await materializeFetched(entry, fetchedCapability, opts, sourceStagingDir);
+    const materialized = await materializeFetched(entry, fetchedCapability, sourceStagingDir);
     diagnostics.push(...materialized.diagnostics);
     if (!materialized.ok) {
       failed = true;
@@ -179,14 +179,35 @@ async function commitStagedRecords(
 function selectCapabilities(
   entry: CapabilityEntry,
   sourceRoot: string,
-  capabilities: Awaited<ReturnType<typeof readRepositoryCapabilities>>["capabilities"],
-): { capabilities: typeof capabilities; diagnostics: Diagnostic[] } {
-  if (entry.capabilities === undefined) return { capabilities, diagnostics: [] };
+  inventory: SourceInventory,
+): { candidates: SourceCapabilityCandidate[]; diagnostics: Diagnostic[] } {
+  if (entry.capabilities === undefined)
+    return { candidates: inventory.candidates, diagnostics: [] };
+  if (inventory.synthesized) {
+    const selected = new Set<SourceCapabilityCandidate>();
+    const diagnostics: Diagnostic[] = [];
+    for (const selector of entry.capabilities) {
+      const matches = inventory.candidates.filter((candidate) =>
+        globMatches(selector, candidate.name),
+      );
+      if (matches.length === 0) {
+        diagnostics.push({
+          severity: "error",
+          code: "acf.resolve.capability-selector-unmatched",
+          message: `capability selector matched nothing: ${selector}`,
+          path: sourceRoot,
+          data: { selector, candidates: inventory.candidates.map((candidate) => candidate.name) },
+        });
+      }
+      for (const match of matches) selected.add(match);
+    }
+    return { candidates: [...selected], diagnostics };
+  }
   const collectionRoot = path.join(sourceRoot, "acf");
-  const candidates = capabilities
-    .map((capability) => ({
-      capability,
-      relative: path.relative(collectionRoot, capability.root).replaceAll(path.sep, "/"),
+  const candidates = inventory.candidates
+    .map((candidate) => ({
+      candidate,
+      relative: path.relative(collectionRoot, candidate.root).replaceAll(path.sep, "/"),
     }))
     .filter(
       (item) =>
@@ -194,7 +215,7 @@ function selectCapabilities(
     );
   if (candidates.length === 0) {
     return {
-      capabilities: [],
+      candidates: [],
       diagnostics: [
         {
           severity: "error",
@@ -205,7 +226,7 @@ function selectCapabilities(
       ],
     };
   }
-  const selected = new Set<(typeof capabilities)[number]>();
+  const selected = new Set<SourceCapabilityCandidate>();
   const diagnostics: Diagnostic[] = [];
   for (const selector of entry.capabilities) {
     const matches = candidates.filter((item) => globMatches(selector, item.relative));
@@ -218,9 +239,9 @@ function selectCapabilities(
         data: { selector, candidates: candidates.map((item) => item.relative).sort() },
       });
     }
-    for (const match of matches) selected.add(match.capability);
+    for (const match of matches) selected.add(match.candidate);
   }
-  return { capabilities: [...selected], diagnostics };
+  return { candidates: [...selected], diagnostics };
 }
 
 function globMatches(pattern: string, candidate: string): boolean {
@@ -383,7 +404,6 @@ function recordsFromLock(
 async function materializeFetched(
   entry: CapabilityEntry,
   fetched: FetchedCapability,
-  opts: ResolveOptions,
   stagingDir: string,
 ): Promise<{
   ok: boolean;
@@ -391,25 +411,29 @@ async function materializeFetched(
   lockEntry: LockEntry | null;
   diagnostics: Diagnostic[];
 }> {
-  const repository = await readRepositoryCapabilities(fetched.root, opts.scope);
-  const diagnostics = [...repository.diagnostics];
+  const inventory = await inspectSource(fetched.root);
+  const diagnostics = [...inventory.diagnostics];
   const records: CapabilityRecord[] = [];
-  const selected = selectCapabilities(entry, fetched.root, repository.capabilities);
+  const selected = selectCapabilities(entry, fetched.root, inventory);
   diagnostics.push(...selected.diagnostics);
-  if (selected.diagnostics.some((item) => item.severity === "error")) {
+  if (diagnostics.some((item) => item.severity === "error")) {
     return { ok: false, records, lockEntry: null, diagnostics };
   }
 
-  for (const capability of selected.capabilities) {
-    const name = finalCapabilityName(entry, capability.manifest.name);
+  for (const candidate of selected.candidates) {
+    const name = finalCapabilityName(entry, candidate.name);
     const destination = capabilityPath(stagingDir, name);
-    await copyRegularTree(capability.root, destination);
+    if (candidate.synthesized) {
+      await materializeImportedSkill(candidate, destination, fetched.commit);
+    } else {
+      await copyRegularTree(candidate.root, destination);
+    }
     const contentHash = await computeContentHash(destination);
     records.push({ entry, name, root: destination, commit: fetched.commit, contentHash });
   }
 
   if (records.length === 0) return { ok: true, records, lockEntry: null, diagnostics };
-  const lockEntry = lockEntryFor(entry, fetched, records);
+  const lockEntry = lockEntryFor(entry, fetched, records, inventory.synthesized);
   return { ok: true, records, lockEntry, diagnostics };
 }
 
@@ -417,6 +441,7 @@ function lockEntryFor(
   entry: CapabilityEntry,
   fetched: FetchedCapability,
   records: CapabilityRecord[],
+  synthesized: boolean,
 ): LockEntry {
   const first = records[0];
   const lockEntry: LockEntry = {
@@ -430,9 +455,48 @@ function lockEntryFor(
   if (entry.include !== undefined) lockEntry.include = entry.include;
   if (entry.ref !== undefined) lockEntry.ref = entry.ref;
   if (entry.rename !== undefined) lockEntry.rename = entry.rename;
+  if (synthesized) lockEntry.synthesized = true;
   lockEntry.resolvedAt = new Date().toISOString();
   if (fetched.commit !== null) lockEntry.resolvedSha = fetched.commit;
   return lockEntry;
+}
+
+async function materializeImportedSkill(
+  candidate: SourceCapabilityCandidate,
+  destination: string,
+  revision: string | null,
+): Promise<void> {
+  await rm(destination, { recursive: true, force: true });
+  await mkdir(path.join(destination, "skills", candidate.name), { recursive: true });
+  await copyPortableSkillTree(candidate.root, path.join(destination, "skills", candidate.name));
+  const version = `0.0.0-unmanifested+${revision ?? "local"}`;
+  await writeFile(
+    path.join(destination, "acf.yml"),
+    `acf: 1\nname: ${candidate.name}\nversion: ${version}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(destination, ".acf-import.json"),
+    `${JSON.stringify({ acf: 1, synthesized: true, sourcePath: candidate.sourcePath })}\n`,
+    "utf8",
+  );
+}
+
+async function copyPortableSkillTree(source: string, destination: string): Promise<void> {
+  await cp(source, destination, {
+    recursive: true,
+    dereference: false,
+    filter: async (candidate) => {
+      const relative = path.relative(source, candidate);
+      const segments = relative.split(path.sep).filter(Boolean);
+      if (segments.some((segment) => segment.startsWith(".") || segment === "node_modules")) {
+        return false;
+      }
+      if (path.basename(candidate) === "ACF-MANAGED.md") return false;
+      const stat = await lstat(candidate);
+      return stat.isDirectory() || stat.isFile();
+    },
+  });
 }
 
 async function copyRegularTree(source: string, destination: string): Promise<void> {

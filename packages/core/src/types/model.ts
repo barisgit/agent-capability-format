@@ -225,7 +225,7 @@ export type McpTransport =
 
 export type AssetRef = {
   path: string;
-  origin: "frontmatter" | "markdown";
+  origin: "frontmatter" | "markdown" | "implicit";
   facet: { family: FacetFamily; name: string } | { family: "capability" };
 };
 
@@ -253,6 +253,7 @@ export type Diagnostic = {
 
 export type AcfCapability = {
   root: string;
+  synthesized?: true | undefined;
   scope: Scope;
   origin: CapabilityOrigin;
   manifest: Manifest;
@@ -292,6 +293,7 @@ export type CapabilitiesYml = {
 };
 export type LockEntry = {
   sourceId: string;
+  synthesized?: true | undefined;
   commit: string;
   contentHash: string;
   installedAt: string;

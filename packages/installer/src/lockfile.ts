@@ -16,6 +16,7 @@ export type LockEntry = {
   resolvedSha?: string | undefined;
   source: string;
   sourceId: string;
+  synthesized?: true | undefined;
 };
 export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
 
@@ -97,6 +98,7 @@ function canonicalizeEntry(entry: LockEntry): LockEntry {
   if (entry.resolvedSha !== undefined && !entry.source.startsWith("path:")) {
     ordered.resolvedSha = entry.resolvedSha;
   }
+  if (entry.synthesized === true) ordered.synthesized = true;
   ordered.source = entry.source;
   ordered.sourceId = entry.sourceId;
   return ordered as LockEntry;
@@ -165,6 +167,7 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   if (isRename(value.rename)) entry.rename = value.rename;
   if (typeof value.resolvedAt === "string") entry.resolvedAt = value.resolvedAt;
   if (typeof value.resolvedSha === "string") entry.resolvedSha = value.resolvedSha;
+  if (value.synthesized === true) entry.synthesized = true;
   return entry as LockEntry;
 }
 

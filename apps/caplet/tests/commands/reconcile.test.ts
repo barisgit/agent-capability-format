@@ -264,3 +264,51 @@ test("dry-run does not mutate the sidecar when a facet's source is deleted", asy
     await cleanup(scope);
   }
 });
+
+test("synthesized skill deletion removes owned files but preserves unmanaged files", async () => {
+  const scope = await makeScope();
+  try {
+    const bare = path.join(scope.sourceRoot, "bare-skills");
+    const docsBytes = "---\nname: docs\n---\ndocs\n";
+    await writeText(path.join(bare, "skills", "docs", "SKILL.md"), docsBytes);
+    await writeText(
+      path.join(bare, "skills", "pdf", "SKILL.md"),
+      "---\nname: pdf\ndescription: pdf\n---\npdf\n",
+    );
+    for (const name of ["docs", "pdf"]) {
+      await writeText(path.join(bare, "skills", name, "references", "guide.md"), `${name} guide\n`);
+    }
+    await writeFile(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${bare}\n`,
+      "utf8",
+    );
+    const first = await applyProject(scope);
+    if (first.exitCode !== 0) throw new Error(first.stdout + first.stderr);
+    const docsOutput = path.join(scope.agentsDir, "skills", "docs");
+    expect(await Bun.file(path.join(docsOutput, "SKILL.md")).text()).toBe(docsBytes);
+    expect(await Bun.file(path.join(docsOutput, "references", "guide.md")).exists()).toBe(true);
+    await writeText(path.join(docsOutput, "unmanaged.txt"), "keep\n");
+
+    await rm(path.join(bare, "skills", "docs"), { recursive: true });
+    const update = await runCaplet(scope, [
+      "apply",
+      "--mode",
+      "force",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+
+    expect(update.exitCode).toBe(0);
+    expect(await Bun.file(path.join(docsOutput, "SKILL.md")).exists()).toBe(false);
+    expect(await Bun.file(path.join(docsOutput, "references", "guide.md")).exists()).toBe(false);
+    expect(await Bun.file(path.join(docsOutput, "unmanaged.txt")).text()).toBe("keep\n");
+    expect((await applyProject(scope)).stdout).toContain("Everything up to date");
+  } finally {
+    await cleanup(scope);
+  }
+});

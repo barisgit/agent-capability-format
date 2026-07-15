@@ -36,14 +36,22 @@ export async function emitSkills(
       const skillRoot = path.join(root, skill.name);
       const skillPath = path.join(skillRoot, "SKILL.md");
       const facet = { family: "skill" as const, name: skill.name };
-      await pushTextDiff(
-        diffs,
-        emittedPaths,
-        fs,
-        skillPath,
-        renderMarkdownFile(skill.frontmatter, skill.body),
-        { artifactRoot: skillRoot, facet },
-      );
+      if (cap.synthesized) {
+        await pushSkillPrimaryBytes(diffs, emittedPaths, fs, skillPath, skill, {
+          artifactRoot: skillRoot,
+          facet,
+        });
+      } else {
+        await pushTextDiff(
+          diffs,
+          emittedPaths,
+          fs,
+          skillPath,
+          renderMarkdownFile(skill.frontmatter, skill.body),
+          { artifactRoot: skillRoot, facet },
+        );
+      }
+
       await pushTextDiff(
         diffs,
         emittedPaths,
@@ -101,6 +109,31 @@ export async function emitSkills(
   }
 
   return diffs.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function pushSkillPrimaryBytes(
+  diffs: FileDiff[],
+  emittedPaths: Set<string>,
+  fs: ReadOnlyFs,
+  outPath: string,
+  skill: SkillFacet,
+  metadata: Pick<FileDiff, "artifactRoot" | "facet">,
+): Promise<void> {
+  if (emittedPaths.has(outPath)) return;
+  emittedPaths.add(outPath);
+  const [before, after, beforeMode, afterMode] = await Promise.all([
+    fs.readBytes(outPath),
+    fs.readBytes(skill.primaryFile),
+    fs.readMode(outPath),
+    fs.readMode(skill.primaryFile),
+  ]);
+  if (after === null) return;
+  const diff = makeFileDiff(outPath, before, after, [{ kind: "file" }], {
+    before: beforeMode,
+    after: afterMode ?? 0o644,
+  });
+  Object.assign(diff, metadata);
+  diffs.push(diff);
 }
 
 export function skillsRootForScope(scope: Scope): string {

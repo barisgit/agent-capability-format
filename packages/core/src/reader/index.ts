@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { collectReferencedAssets } from "../assets";
+import { collectImportedSkillAssets, collectReferencedAssets } from "../assets";
 import { pushZodIssues } from "../diagnostics";
 import {
   agentFrontmatterSchema,
@@ -44,6 +44,7 @@ import {
 } from "./helpers";
 import { validateCapability } from "./validation";
 
+export { parseMarkdown } from "./helpers";
 export { validateCapability } from "./validation";
 
 const manifestKeys = new Set([
@@ -107,11 +108,12 @@ export async function readCapability(
 ): Promise<AcfCapability> {
   const absRoot = path.resolve(root);
   const diagnostics: Diagnostic[] = [];
+  const imported = await exists(path.join(absRoot, ".acf-import.json"));
   await validateSingularFolders(absRoot, diagnostics);
   const manifest = (await readManifest(absRoot, diagnostics)) ?? fallbackManifest(absRoot);
   const capabilityMarkdown = await readAcfMd(absRoot, diagnostics);
   const [skills, agents, commands, instructions, hooks, mcp] = await Promise.all([
-    readSkills(absRoot, diagnostics),
+    readSkills(absRoot, diagnostics, imported),
     readAgents(absRoot, diagnostics),
     readCommands(absRoot, diagnostics),
     readInstructions(absRoot, diagnostics),
@@ -132,8 +134,15 @@ export async function readCapability(
     assets: [],
     diagnostics,
   };
+  if (imported) capability.synthesized = true;
   if (capabilityMarkdown !== undefined) capability.capabilityMarkdown = capabilityMarkdown;
   capability.assets = await collectReferencedAssets(capability);
+  if (imported) {
+    const implicit = await collectImportedSkillAssets(capability.skills);
+    const byPath = new Map(capability.assets.map((asset) => [asset.path, asset]));
+    for (const asset of implicit) byPath.set(asset.path, asset);
+    capability.assets = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+  }
   validateCapability(capability);
   sortDiagnostics(capability.diagnostics);
   return capability;
@@ -184,7 +193,11 @@ export async function readAcfMd(
   return { path: file, frontmatter: result.success ? result.data : {}, body: parsed.body };
 }
 
-export async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<SkillFacet[]> {
+export async function readSkills(
+  root: string,
+  diagnostics: Diagnostic[],
+  imported = false,
+): Promise<SkillFacet[]> {
   const dir = path.join(root, "skills");
   if (!(await exists(dir))) return [];
   const facets: SkillFacet[] = [];
@@ -213,7 +226,23 @@ export async function readSkills(root: string, diagnostics: Diagnostic[]): Promi
     }
     const parsed = await parseMarkdown(primary);
     pushUnknownFields(parsed.frontmatter, frontmatterKeys.skill, diagnostics, primary);
-    const result = skillFrontmatterSchema.safeParse(parsed.frontmatter);
+    const missingDescription =
+      imported &&
+      (typeof parsed.frontmatter.description !== "string" ||
+        parsed.frontmatter.description.length === 0);
+    const frontmatter = missingDescription
+      ? { ...parsed.frontmatter, description: "Imported skill" }
+      : parsed.frontmatter;
+    if (missingDescription) {
+      diagnostics.push({
+        severity: "warn",
+        code: "acf.import.skill-description-missing",
+        message: "imported skill has no description; using an in-memory fallback",
+        path: primary,
+        family: "skill",
+      });
+    }
+    const result = skillFrontmatterSchema.safeParse(frontmatter);
     if (!result.success) {
       pushZodIssues(diagnostics, result.error, primary, { family: "skill" });
       continue;

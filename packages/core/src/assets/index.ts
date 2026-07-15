@@ -1,3 +1,4 @@
+import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import type {
   AcfCapability,
@@ -29,6 +30,41 @@ export async function collectReferencedAssets(input: AssetInput): Promise<AssetR
     pushProseAssets(facet, pending);
   }
   return await validateAndNormalize(input.root, pending, input.diagnostics);
+}
+
+export async function collectImportedSkillAssets(skills: SkillFacet[]): Promise<AssetRef[]> {
+  const assets: AssetRef[] = [];
+  for (const skill of skills) {
+    await walkPortableSkillFiles(skill.dir, skill, assets);
+  }
+  return assets.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function walkPortableSkillFiles(
+  directory: string,
+  skill: SkillFacet,
+  assets: AssetRef[],
+): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (
+      entry.name.startsWith(".") ||
+      entry.name === "node_modules" ||
+      entry.name === "ACF-MANAGED.md"
+    ) {
+      continue;
+    }
+    const full = path.join(directory, entry.name);
+    const stat = await lstat(full);
+    if (stat.isDirectory()) {
+      await walkPortableSkillFiles(full, skill, assets);
+    } else if (stat.isFile() && full !== skill.primaryFile) {
+      assets.push({
+        path: path.relative(path.dirname(path.dirname(skill.dir)), full).replaceAll(path.sep, "/"),
+        origin: "implicit",
+        facet: { family: "skill", name: skill.name },
+      });
+    }
+  }
 }
 
 function pushSkillAssets(facet: SkillFacet, refs: PendingRef[]): void {

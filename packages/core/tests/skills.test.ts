@@ -24,3 +24,41 @@ test("skill frontmatter validates and basename must match name", async () => {
     await cleanup(dir);
   }
 });
+
+test("import marker allows missing descriptions and collects every portable skill file", async () => {
+  const skillBytes = "---\nname: imported\n---\nBody.\n";
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": "acf: 1\nname: imported\nversion: 0.0.0-unmanifested+local\n",
+    ".acf-import.json": '{"acf":1,"synthesized":true}\n',
+    "skills/imported/SKILL.md": skillBytes,
+    "skills/imported/references/guide.md": "Guide\n",
+    "skills/imported/scripts/run.py": "print('ok')\n",
+    "skills/imported/.cache/hidden.md": "hidden\n",
+    "skills/imported/node_modules/pkg/index.js": "dependency\n",
+    "skills/imported/ACF-MANAGED.md": "managed\n",
+  });
+  try {
+    expect(codes(cap)).toContain("acf.import.skill-description-missing");
+    expect(cap.skills[0]?.frontmatter.description).toBe("Imported skill");
+    expect(cap.assets.map((asset) => asset.path)).toEqual([
+      "skills/imported/references/guide.md",
+      "skills/imported/scripts/run.py",
+    ]);
+    expect(await Bun.file(cap.skills[0]?.primaryFile ?? "").text()).toBe(skillBytes);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("authored capabilities do not gain implicit skill assets", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": baseManifest,
+    "skills/authored/SKILL.md": "---\nname: authored\ndescription: Authored\n---\nBody.\n",
+    "skills/authored/unreferenced.txt": "not an asset\n",
+  });
+  try {
+    expect(cap.assets).toEqual([]);
+  } finally {
+    await cleanup(dir);
+  }
+});
