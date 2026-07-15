@@ -63,3 +63,27 @@ test("selectCapabilities returns null on cancel or EOF", async () => {
     await selectCapabilities(["alpha", "beta"], { lines: lines([]), write: () => {} }),
   ).toBeNull();
 });
+
+test("selectCapabilities default readline I/O consumes stdin and closes", async () => {
+  const script = [
+    'import { selectCapabilities } from "./src/internal/picker.ts";',
+    'const selected = await selectCapabilities(["alpha", "beta"]);',
+    "process.stderr.write(`RESULT=${JSON.stringify(selected)}\\n`);",
+  ].join("\n");
+  const child = Bun.spawn([process.execPath, "-e", script], {
+    cwd: import.meta.dir.replace(/\/tests$/, ""),
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  child.stdin.write("2\n");
+  child.stdin.end();
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("Select capabilities:");
+  expect(stderr).toContain('RESULT=["beta"]');
+});

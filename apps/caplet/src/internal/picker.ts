@@ -1,3 +1,5 @@
+import { createInterface } from "node:readline";
+
 export type NumberedSelection =
   | { kind: "selected"; indices: number[] }
   | { kind: "cancelled" }
@@ -6,11 +8,33 @@ export type NumberedSelection =
 export type PickerIo = {
   lines: AsyncIterable<string>;
   write: (value: string) => void;
+  close?: () => void;
 };
 
 export async function selectCapabilities(
   candidates: readonly string[],
-  io: PickerIo = { lines: console, write: (value) => process.stdout.write(value) },
+  io?: PickerIo,
+): Promise<string[] | null> {
+  const activeIo = io ?? defaultPickerIo();
+  try {
+    return await selectCapabilitiesWithIo(candidates, activeIo);
+  } finally {
+    activeIo.close?.();
+  }
+
+  function defaultPickerIo(): PickerIo {
+    const lines = createInterface({ input: process.stdin, terminal: false });
+    return {
+      lines,
+      write: (value) => process.stdout.write(value),
+      close: () => lines.close(),
+    };
+  }
+}
+
+async function selectCapabilitiesWithIo(
+  candidates: readonly string[],
+  io: PickerIo,
 ): Promise<string[] | null> {
   if (candidates.length === 0) return null;
   io.write("Select capabilities:\n");
