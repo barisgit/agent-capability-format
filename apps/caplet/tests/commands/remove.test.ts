@@ -88,3 +88,42 @@ test("caplet remove keeps sibling selectors from a shared source entry", async (
     await cleanup(scope);
   }
 });
+
+test("caplet remove narrows an install-all entry to surviving capabilities", async () => {
+  const scope = await makeScope();
+  try {
+    const root = scopeRoot("project", scope.agentsDir);
+    const manifestPath = path.join(scope.agentsDir, "capabilities.yml");
+    const source = `path:${scope.sourceRoot}`;
+    await Bun.write(manifestPath, `acf: 1\ncapabilities:\n  - source: ${source}\n`);
+    await Bun.write(
+      path.join(scope.agentsDir, "capabilities.lock"),
+      `${JSON.stringify(
+        {
+          acf: 1,
+          entries: [
+            {
+              capabilityHash: "sha256-test",
+              capabilityNames: ["alpha-cap", "beta-cap"],
+              source,
+              sourceId: source,
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    await removeManifestEntry(root, "alpha-cap");
+
+    const manifest = await readText(manifestPath);
+    expect(manifest).toContain("capabilities: beta-cap");
+    expect(manifest).not.toContain("alpha-cap");
+    const lock = JSON.parse(await readText(path.join(scope.agentsDir, "capabilities.lock")));
+    expect(lock.entries[0].capabilityNames).toEqual(["beta-cap"]);
+    expect(lock.entries[0].capabilities).toEqual(["beta-cap"]);
+  } finally {
+    await cleanup(scope);
+  }
+});
