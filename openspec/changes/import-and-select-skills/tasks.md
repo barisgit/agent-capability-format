@@ -18,12 +18,12 @@
 - [ ] 3.2 Implement add-only GitHub suffix parsing and inventory-based exact capability translation
 - [ ] 3.3 Add failing integration tests for exact manifested and synthesized selection, unknown candidates, duplicate names, and no durable mutation on failure
 - [ ] 3.4 Implement pre-mutation selection, existing `capabilities:` lock round-tripping, and unmatched selected-skill protection on update
-- [ ] 3.5 Add failing removal tests and make `caplet remove <name>` retain sibling selectors sharing the same source entry
+- [x] 3.5 Add failing removal tests and make `caplet remove <name>` retain sibling selectors sharing the same source entry
 
 ## 4. Interactive Numbered Multi-select
 
-- [ ] 4.1 Add parser-first tests for comma/range selection, all/default, invalid retry, stable result ordering, cancellation, and EOF
-- [ ] 4.2 Implement a dependency-free line-oriented numbered picker using the existing terminal/console infrastructure
+- [x] 4.1 Add parser-first tests for comma/range selection, all/default, invalid retry, stable result ordering, cancellation, and EOF
+- [x] 4.2 Implement a dependency-free line-oriented numbered picker using the existing terminal/console infrastructure
 - [ ] 4.3 Add command tests for TTY manifested and synthesized choice, non-TTY install-all, `--yes`, cancellation, and `--no-apply`
 - [ ] 4.4 Refactor `caplet add` to inspect before manifest mutation and reuse that command's fetched source during resolution
 

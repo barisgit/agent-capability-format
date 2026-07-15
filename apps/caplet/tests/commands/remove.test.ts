@@ -40,3 +40,51 @@ test("caplet remove updates manifest and cleans sidecar-owned output", async () 
     await cleanup(scope);
   }
 });
+
+import { scopeRoot } from "@acf/core";
+import { removeManifestEntry } from "../../src/internal/manifest";
+
+test("caplet remove keeps sibling selectors from a shared source entry", async () => {
+  const scope = await makeScope();
+  try {
+    const root = scopeRoot("project", scope.agentsDir);
+    const manifestPath = path.join(scope.agentsDir, "capabilities.yml");
+    const source = `path:${scope.sourceRoot}`;
+    await Bun.write(
+      manifestPath,
+      `acf: 1\ncapabilities:\n  - source: ${source}\n    capabilities: [alpha-cap, beta-cap, gamma-cap]\n`,
+    );
+    await Bun.write(
+      path.join(scope.agentsDir, "capabilities.lock"),
+      `${JSON.stringify(
+        {
+          acf: 1,
+          entries: [
+            {
+              capabilityHash: "sha256-test",
+              capabilityNames: ["alpha-cap", "beta-cap", "gamma-cap"],
+              capabilities: ["alpha-cap", "beta-cap", "gamma-cap"],
+              source,
+              sourceId: source,
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    await removeManifestEntry(root, "beta-cap");
+
+    const manifest = await readText(manifestPath);
+    expect(manifest).toContain("alpha-cap");
+    expect(manifest).not.toContain("beta-cap");
+    expect(manifest).toContain("gamma-cap");
+    const lock = JSON.parse(await readText(path.join(scope.agentsDir, "capabilities.lock")));
+    expect(lock.entries).toHaveLength(1);
+    expect(lock.entries[0].capabilityNames).toEqual(["alpha-cap", "gamma-cap"]);
+    expect(lock.entries[0].capabilities).toEqual(["alpha-cap", "gamma-cap"]);
+  } finally {
+    await cleanup(scope);
+  }
+});
