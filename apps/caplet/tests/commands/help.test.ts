@@ -57,6 +57,8 @@ test("per-command help shares root help formatting", async () => {
       expect(result.stdout).toContain("USAGE");
       expect(result.stdout).toContain("EXAMPLES");
     }
+    const add = await runCaplet(scope, ["add", "--help"]);
+    expect(add.stdout).toContain("github:vercel-labs/skills@find-skills");
     const apply = await runCaplet(scope, ["apply", "--help"]);
     expect(apply.stdout).toContain("FLAGS");
     expect(apply.stdout).toContain("-n, --dry-run");

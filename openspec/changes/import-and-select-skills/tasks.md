@@ -30,7 +30,7 @@
 ## 5. Product Surfaces and Documentation
 
 - [ ] 5.1 Label synthesized imports in `show` and JSON payloads and report selected capability names/counts during add
-- [ ] 5.2 Update COMMAND_SPECS help/examples and shell completions without introducing a second command metadata source
+- [x] 5.2 Update COMMAND_SPECS help/examples and shell completions without introducing a second command metadata source
 - [ ] 5.3 Update README, SPEC.md, IMPLEMENTATION.md, backlog status, and affected codemaps
 
 ## 6. Verification
