@@ -4,6 +4,7 @@ import type { ScopeRoot } from "@acf/core";
 import { type CapabilityEntry, type SourceSpec, stringifyYml } from "@acf/core";
 import {
   entrySourceId,
+  type LockEntry,
   readCapabilitiesYml,
   readLockfile,
   sourceId,
@@ -31,6 +32,22 @@ export function parseAddSource(input: string): ParsedAddSource {
   return { source, spec: parseSourceSpec(source), selector };
 }
 
+export type ManifestEntryOptions = {
+  ref?: string | undefined;
+  path?: string | undefined;
+  rename?: string | undefined;
+  capabilities?: string[] | undefined;
+};
+
+export function buildManifestEntry(
+  source: string,
+  opts: ManifestEntryOptions = {},
+): CapabilityEntry {
+  const entry = buildEntry(source, opts);
+  if (opts.capabilities !== undefined) entry.capabilities = opts.capabilities;
+  return entry;
+}
+
 export function parseSourceSpec(source: string): SourceSpec {
   if (source.startsWith("github:")) return { kind: "github", repo: source.slice("github:".length) };
   if (source.startsWith("git:")) return { kind: "git", url: source.slice("git:".length) };
@@ -41,11 +58,11 @@ export function parseSourceSpec(source: string): SourceSpec {
 
 export async function addManifestEntry(
   root: ScopeRoot,
-  source: string,
-  opts: { ref?: string | undefined; path?: string | undefined; rename?: string | undefined },
+  source: string | CapabilityEntry,
+  opts: ManifestEntryOptions = {},
 ): Promise<CapabilityEntry> {
   const manifest = await readCapabilitiesYml(root.manifestPath);
-  const entry = buildEntry(source, opts);
+  const entry = typeof source === "string" ? buildManifestEntry(source, opts) : source;
   const duplicate = manifest.value.capabilities.some(
     (candidate) =>
       entrySourceId(candidate, path.dirname(root.manifestPath)) ===
@@ -63,7 +80,12 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
   const sourceIdsToRemove = new Set<string>();
   const lockUpdates = new Map<
     string,
-    { capabilityNames: string[]; capabilities: string[]; rename?: CapabilityEntry["rename"] }
+    {
+      capabilityNames: string[];
+      capabilities: string[];
+      selectorsByCapability: Record<string, string>;
+      rename?: CapabilityEntry["rename"];
+    }
   >();
   let found = false;
   const kept = manifest.value.capabilities.flatMap((entry) => {
@@ -89,7 +111,25 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
         installedName
       );
     }
-    const capabilities = survivors.map((candidate) => originalCapabilityName(entry, candidate));
+    function selectorForRemoval(
+      entry: CapabilityEntry,
+      lockEntry: LockEntry | undefined,
+      installedName: string,
+    ): string {
+      const mapped = lockEntry?.selectorsByCapability?.[installedName];
+      if (mapped !== undefined) return mapped;
+      const originalName = originalCapabilityName(entry, installedName);
+      if (entry.capabilities?.includes(originalName)) return originalName;
+      throw validationError(
+        "lockfile lacks exact selectors for safe removal; run caplet update --no-apply, then retry",
+      );
+    }
+    const selectorsByCapability = Object.fromEntries(
+      survivors.map((candidate) => [candidate, selectorForRemoval(entry, lockEntry, candidate)]),
+    );
+    const capabilities = survivors.map(
+      (candidate) => selectorsByCapability[candidate] ?? originalCapabilityName(entry, candidate),
+    );
     const next: CapabilityEntry = { ...entry, capabilities };
     if (typeof entry.rename === "object") {
       const rename = Object.fromEntries(
@@ -104,6 +144,7 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
       lockUpdates.set(lockEntry.sourceId, {
         capabilityNames: survivors,
         capabilities,
+        selectorsByCapability,
         ...(next.rename === undefined ? {} : { rename: next.rename }),
       });
     }
@@ -143,10 +184,7 @@ export async function writeCapabilitiesYml(
   await writeFile(root.manifestPath, stringifyYml({ acf: 1, capabilities: humanReadable }), "utf8");
 }
 
-function buildEntry(
-  source: string,
-  opts: { ref?: string | undefined; path?: string | undefined; rename?: string | undefined },
-): CapabilityEntry {
+function buildEntry(source: string, opts: ManifestEntryOptions): CapabilityEntry {
   const entry: CapabilityEntry = { source: parseSourceSpec(source) };
   if (opts.ref !== undefined) entry.ref = opts.ref;
   if (opts.path !== undefined) entry.path = opts.path;

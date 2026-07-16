@@ -18,5 +18,5 @@ export {
 } from "./lockfile";
 export type { PruneResult } from "./prune";
 export { pruneCapabilities } from "./prune";
-export type { CapabilityRecord, ResolveOptions, ResolveResult } from "./resolve";
+export type { CapabilityRecord, PrefetchedSource, ResolveOptions, ResolveResult } from "./resolve";
 export { resolveCapabilities } from "./resolve";

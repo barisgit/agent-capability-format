@@ -113,7 +113,7 @@ test("unsupported lockfile version is diagnosed", () => {
   ).toEqual(["acf.lock.unsupported-version"]);
 });
 
-test("lockfiles round-trip optional synthesized provenance and accept older entries", async () => {
+test("lockfiles round-trip optional synthesized provenance and selector mappings", async () => {
   const dir = await tempDir("acf-installer-lock-synthesized-");
   try {
     const lockPath = path.join(dir, "capabilities.lock");
@@ -123,9 +123,23 @@ test("lockfiles round-trip optional synthesized provenance and accept older entr
       source: "path:/repo",
       sourceId: "path:/repo",
     };
-    await writeLockfile(lockPath, { acf: 1, entries: [{ ...base, synthesized: true }, base] });
+    await writeLockfile(lockPath, {
+      acf: 1,
+      entries: [
+        {
+          ...base,
+          synthesized: true,
+          selectorsByCapability: { skill: "group/skill" },
+        },
+        base,
+      ],
+    });
     const reread = await readLockfile(lockPath);
     expect(reread?.entries.map((entry) => entry.synthesized)).toEqual([true, undefined]);
+    expect(reread?.entries.map((entry) => entry.selectorsByCapability)).toEqual([
+      { skill: "group/skill" },
+      undefined,
+    ]);
   } finally {
     await cleanup(dir);
   }

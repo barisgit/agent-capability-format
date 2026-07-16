@@ -4,13 +4,8 @@
 Defines the stable ACF diagnostic code catalog and constructors.
 
 ## Design and Data Flow
-`makeDiagnostic` creates typed diagnostics; `pushZodIssues` translates schema issue paths and messages into ACF diagnostics. Domain modules append these records instead of coupling to terminal output.
-
-### Management Notice Diagnostics
-The catalog includes two notice-specific diagnostic codes:
-- `acf.emit.managed-notice-reserved-path`: Error when a capability declares an asset at the reserved `ACF-MANAGED.md` path
-- `acf.emit.managed-notice-destination-collision`: Error when an unowned file exists at a notice path that would be overwritten
+`makeDiagnostic` creates typed diagnostics; `pushZodIssues` translates Zod paths, issue kinds, and messages into domain codes with structured metadata. Coverage includes schema/unknown-key failures, capability-selector resolution, lock drift, adapter degradation, and managed-notice collisions; imported-skill reading may also append a missing-description fallback warning.
 
 ## Integration
-- Consumes canonical `Diagnostic` types and Zod issues.
+- Consumes canonical `Diagnostic`, facet, and target types plus Zod issues.
 - Used across readers, config parsing, validation, adapters, installer, SDK, and CLI reporting.

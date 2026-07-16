@@ -1927,10 +1927,12 @@ export async function fetchCapability(
 }
 ```
 
-After fetch, the resolver discovers valid capability roots. When
-`entry.capabilities` is present it matches each exact/glob selector against POSIX
-paths relative to `<fetched-root>/acf/`, requires every selector to match, and
-deduplicates overlaps. It stages (without symlinks) each selected capability outside the live
+After fetch, the shared source inventory discovers valid capability candidates
+and assigns each a selector: a POSIX path relative to `<fetched-root>/acf/` for
+manifested collections, or the validated capability name for direct manifested
+capabilities and synthesized skills. When `entry.capabilities` is present the
+resolver matches every exact/glob selector against those values, requires every
+selector to match, and deduplicates overlaps. It stages (without symlinks) each selected capability outside the live
 snapshot tree. Only after every source entry validates does it replace
 `scope/capabilities/<final-name>/`; a selector or source-entry failure discards
 all staging and preserves the prior lock and snapshots. After complete
@@ -2735,14 +2737,17 @@ Never silent exit 0.
 ### 14.1 Mutating commands
 
 - `caplet add <source> [--pin <ref>] [--path <subdir>] [--scope user|project] [--no-apply]`
-  inspects when selection is needed, mutates `capabilities.yml`, resolves, and
+  inventories the source and reports selected capabilities before mutation,
+  mutates `capabilities.yml`, resolves, and
   applies by default. `github:owner/repo@name` is an add-only exact capability
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`
   select all.
-- `caplet remove <name> [--scope …]` removes the named capability and its
+- `caplet remove <name> [--scope …]` updates `capabilities.yml` and removes
   sidecar-owned output. For an entry selecting several capabilities, it retains
-  sibling selectors and removes the source entry only when none remain.
+  sibling selectors and removes the source entry only when none remain. A legacy
+  lock without exact selector mappings must be refreshed with
+  `caplet update --no-apply` before ambiguous collection narrowing.
 - `caplet update [name] [--scope …] [--no-apply]` re-resolves matching sources
   and applies by default.
 

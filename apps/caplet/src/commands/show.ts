@@ -56,7 +56,11 @@ export const showCommand = defineCommand({
       const out = reporter(context.args);
       for (const match of matches) {
         const capability = match.capability;
-        out.log(`${colors.bold(capability.manifest.name)} ${capability.manifest.version}`);
+        out.log(
+          `${colors.bold(capability.manifest.name)} ${capability.manifest.version}${
+            capability.synthesized === true ? colors.dim(" · unmanifested import") : ""
+          }`,
+        );
         out.log(colors.dim(`  ${match.scope} scope \u00b7 ${capability.root}`));
         out.log("");
         const facets: Array<[string, string[]]> = [

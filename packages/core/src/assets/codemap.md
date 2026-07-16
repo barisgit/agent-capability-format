@@ -1,10 +1,10 @@
 # packages/core/src/assets/
 
 ## Responsibility
-Resolves asset references declared by capabilities and facets into validated source files.
+Resolves declared references and implicit imported-skill files into normalized asset inputs.
 
 ## Design and Data Flow
-`collectReferencedAssets` gathers explicit and body-derived references, resolves them relative to capability roots, verifies regular files, deduplicates paths, and returns sorted asset inputs plus diagnostics.
+`collectReferencedAssets` gathers frontmatter and Markdown references, resolves them within capability roots, verifies regular files, deduplicates, and sorts results while appending path diagnostics. `collectImportedSkillAssets` recursively includes portable files beside imported `SKILL.md` entries, excluding hidden paths, `node_modules`, management notices, and primary files, and marks them with `origin: "implicit"`.
 
 ## Integration
 - Uses canonical facet/asset types and filesystem utilities.

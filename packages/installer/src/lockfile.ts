@@ -8,6 +8,7 @@ export type LockEntry = {
   capabilityHash: string;
   capabilityNames: string[];
   capabilities?: string[] | undefined;
+  selectorsByCapability?: Record<string, string> | undefined;
   exclude?: CapabilityEntry["exclude"] | undefined;
   include?: CapabilityEntry["include"] | undefined;
   ref?: string | undefined;
@@ -90,6 +91,9 @@ function canonicalizeEntry(entry: LockEntry): LockEntry {
   ordered.capabilityHash = entry.capabilityHash;
   ordered.capabilityNames = [...entry.capabilityNames].sort();
   if (entry.capabilities !== undefined) ordered.capabilities = [...entry.capabilities].sort();
+  if (entry.selectorsByCapability !== undefined) {
+    ordered.selectorsByCapability = sortStringRecord(entry.selectorsByCapability);
+  }
   if (entry.exclude !== undefined) ordered.exclude = sortSelector(entry.exclude);
   if (entry.include !== undefined) ordered.include = sortSelector(entry.include);
   if (entry.ref !== undefined) ordered.ref = entry.ref;
@@ -121,6 +125,15 @@ function sortRename(rename: NonNullable<CapabilityEntry["rename"]>): CapabilityE
   const sorted: Record<string, string> = {};
   for (const key of Object.keys(rename).sort()) {
     const value = rename[key];
+    if (value !== undefined) sorted[key] = value;
+  }
+  return sorted;
+}
+
+function sortStringRecord(record: Record<string, string>): Record<string, string> {
+  const sorted: Record<string, string> = {};
+  for (const key of Object.keys(record).sort()) {
+    const value = record[key];
     if (value !== undefined) sorted[key] = value;
   }
   return sorted;
@@ -161,6 +174,9 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   if (isStringArray(value.capabilities) && value.capabilities.length > 0) {
     entry.capabilities = value.capabilities;
   }
+  if (isCapabilitySelectorMap(value.selectorsByCapability)) {
+    entry.selectorsByCapability = value.selectorsByCapability;
+  }
   if (isSelector(value.exclude)) entry.exclude = value.exclude;
   if (isSelector(value.include)) entry.include = value.include;
   if (typeof value.ref === "string") entry.ref = value.ref;
@@ -191,6 +207,18 @@ function isStringArray(value: unknown): value is string[] {
 
 function isCapabilityNameArray(value: unknown): value is string[] {
   return isStringArray(value) && value.every((item) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(item));
+}
+
+function isCapabilitySelectorMap(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(
+      ([name, selector]) =>
+        /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
+        typeof selector === "string" &&
+        selector.length > 0,
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -5,7 +5,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 
 ## System Design and Data Flow
 1. Core readers parse manifests and facet files into the canonical model, validate them, and collect diagnostics.
-2. The installer resolves path/Git declarations from `capabilities.yml`, selects exact or globbed paths from multi-capability collections, safely reconciles scope snapshots, and records selector intent plus content hashes in deterministic lockfiles.
+2. The installer resolves path/Git declarations from `capabilities.yml`, inventories manifested or bare-skill sources, selects exact or globbed capability candidates, safely reconciles scope snapshots, and records selector intent, synthesized provenance, and content hashes in deterministic lockfiles.
 3. Core scope resolution and applicability select effective capabilities and facets for a target.
 4. Registered adapters translate the selected model into `FileDiff` plans, including per-skill `ACF-MANAGED.md` artifact notices and root-level inventory notices.
 5. Caplet applies those plans while maintaining `.acf-managed.json` ownership and drift metadata, generating root inventory notices that catalog all managed artifacts by capability.
@@ -32,7 +32,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 | `apps/caplet/` | Packages the `caplet` command-line application and its public programmatic exports. | [Map](apps/caplet/codemap.md) |
 | `apps/caplet/src/apply/` | Applies adapter-generated file diffs and maintains ownership metadata for safe updates and removal. | [Map](apps/caplet/src/apply/codemap.md) |
 | `apps/caplet/src/` | Composes the Caplet CLI, command handlers, filesystem application logic, and public exports. | [Map](apps/caplet/src/codemap.md) |
-| `apps/caplet/src/commands/` | Defines the user-facing Caplet command handlers: `add`, `apply`, `check`, `diff`, `doctor`, `emit`, `fetch`, `inspect`, `ls`, `remove`, and `update`. | [Map](apps/caplet/src/commands/codemap.md) |
+| `apps/caplet/src/commands/` | Defines the user-facing Caplet handlers for initialization, add/remove/update, apply, list/show/status/check/doctor, and shell completion. | [Map](apps/caplet/src/commands/codemap.md) |
 | `apps/caplet/src/internal/` | Provides shared CLI infrastructure for argument normalization, scope discovery, manifests, reporting, filesystem access, and end-to-end workflows. | [Map](apps/caplet/src/internal/codemap.md) |
 | `apps/` | Holds runnable end-user applications. The current application is the `caplet` reference CLI. | [Map](apps/codemap.md) |
 | `packages/adapters/` | Packages `@acf/adapters`, the host-specific emitters that translate canonical capabilities into native file diffs. | [Map](packages/adapters/codemap.md) |
@@ -46,7 +46,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 | `packages/` | Contains the reusable ACF libraries: canonical model/core processing, target adapters, source installation, consumer SDK, and runtime taxonomy. | [Map](packages/codemap.md) |
 | `packages/core/` | Packages `@acf/core`, the canonical domain model and processing pipeline for ACF capabilities. | [Map](packages/core/codemap.md) |
 | `packages/core/src/applicability/` | Computes and validates which registered targets a capability or facet applies to. | [Map](packages/core/src/applicability/codemap.md) |
-| `packages/core/src/assets/` | Resolves asset references declared by capabilities and facets into validated source files. | [Map](packages/core/src/assets/codemap.md) |
+| `packages/core/src/assets/` | Resolves declared assets and recursively collects portable implicit assets for synthesized skill imports. | [Map](packages/core/src/assets/codemap.md) |
 | `packages/core/src/caplet-config/` | Discovers, parses, validates, and merges user and project Caplet configuration. | [Map](packages/core/src/caplet-config/codemap.md) |
 | `packages/core/src/` | Implements the public `@acf/core` API. | [Map](packages/core/src/codemap.md) |
 | `packages/core/src/diagnostics/` | Defines the stable ACF diagnostic code catalog and constructors. | [Map](packages/core/src/diagnostics/codemap.md) |
@@ -60,7 +60,7 @@ Agent Capability Format (ACF) is a TypeScript/Bun monorepo for declaring portabl
 | `packages/core/src/utils/` | Provides small asynchronous filesystem primitives used by core processing. | [Map](packages/core/src/utils/codemap.md) |
 | `packages/core/src/validator/` | Provides the validator compatibility entry point. | [Map](packages/core/src/validator/codemap.md) |
 | `packages/installer/` | Packages `@acf/installer`, which resolves capability source declarations into local capability trees and lockfiles. | [Map](packages/installer/codemap.md) |
-| `packages/installer/src/` | Implements reproducible acquisition and installation of declared capability sources. | [Map](packages/installer/src/codemap.md) |
+| `packages/installer/src/` | Implements source acquisition, manifested/bare-skill inventory, selection, staged installation, reconciliation, and locking. | [Map](packages/installer/src/codemap.md) |
 | `packages/runtime-taxonomy/` | Packages the provisional canonical runtime operation, hook-type, and trigger-name vocabulary. | [Map](packages/runtime-taxonomy/codemap.md) |
 | `packages/runtime-taxonomy/src/` | Defines canonical string-literal sets and type guards for runtime operations, hook types, and trigger names. | [Map](packages/runtime-taxonomy/src/codemap.md) |
 | `packages/sdk/` | Packages `@acf/sdk`, the high-level consumer API for loading resolved, target-applicable capability facets. | [Map](packages/sdk/codemap.md) |

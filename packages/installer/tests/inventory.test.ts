@@ -17,7 +17,10 @@ test("inventory discovers one capability per shallow skills directory without mu
     );
     const before = await readFile(path.join(dir, "skills", "pdf", "SKILL.md"));
     const inventory = await inspectSource(dir);
-    expect(inventory.candidates.map((item) => item.name)).toEqual(["docs", "pdf"]);
+    expect(inventory.candidates.map((item) => [item.name, item.selector])).toEqual([
+      ["docs", "docs"],
+      ["pdf", "pdf"],
+    ]);
     expect(inventory.candidates.every((item) => item.synthesized)).toBe(true);
     expect(await Bun.file(path.join(dir, "acf.yml")).exists()).toBe(false);
     expect(await readFile(path.join(dir, "skills", "pdf", "SKILL.md"))).toEqual(before);
@@ -39,9 +42,9 @@ test("inventory applies manifested, root skill, skills directory, then one-level
       path.join(manifested, "skills", "ignored", "SKILL.md"),
       "---\nname: ignored\ndescription: Ignored\n---\n",
     );
-    expect((await inspectSource(manifested)).candidates.map((item) => item.name)).toEqual([
-      "authored",
-    ]);
+    expect(
+      (await inspectSource(manifested)).candidates.map((item) => [item.name, item.selector]),
+    ).toEqual([["authored", "authored"]]);
 
     await writeText(
       path.join(rootSkill, "SKILL.md"),

@@ -9,6 +9,7 @@ import {
 
 export type SourceCapabilityCandidate = {
   name: string;
+  selector: string;
   root: string;
   sourcePath: string;
   synthesized: boolean;
@@ -28,13 +29,20 @@ export async function inspectSource(sourceRoot: string): Promise<SourceInventory
     (await isDirectory(path.join(root, "acf")))
   ) {
     const repository = await readRepositoryCapabilities(root);
+    const collectionRoot = path.join(root, "acf");
     return {
-      candidates: repository.capabilities.map((capability) => ({
-        name: capability.manifest.name,
-        root: capability.root,
-        sourcePath: path.relative(root, capability.root).replaceAll(path.sep, "/") || ".",
-        synthesized: false,
-      })),
+      candidates: repository.capabilities.map((capability) => {
+        const relative = path.relative(collectionRoot, capability.root).replaceAll(path.sep, "/");
+        const inCollection =
+          relative.length > 0 && relative !== ".." && !relative.startsWith("../");
+        return {
+          name: capability.manifest.name,
+          selector: inCollection ? relative : capability.manifest.name,
+          root: capability.root,
+          sourcePath: path.relative(root, capability.root).replaceAll(path.sep, "/") || ".",
+          synthesized: false,
+        };
+      }),
       diagnostics: repository.diagnostics,
       synthesized: false,
     };
@@ -74,6 +82,7 @@ export async function inspectSource(sourceRoot: string): Promise<SourceInventory
     }
     candidates.push({
       name: result.data.name,
+      selector: result.data.name,
       root: skillRoot,
       sourcePath: path.relative(root, skillRoot).replaceAll(path.sep, "/") || ".",
       synthesized: true,

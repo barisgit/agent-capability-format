@@ -21,6 +21,7 @@ import {
   type CapabilitiesLock,
   detectLockDrift,
   entrySourceId,
+  type PrefetchedSource,
   type ResolveResult,
   readCapabilitiesYml,
   readLockfile,
@@ -67,7 +68,10 @@ export async function fetchScopes(
   args: Record<string, unknown>,
   mode: FetchMode,
   capabilityName?: string,
-  opts?: { updateLock?: boolean },
+  opts?: {
+    updateLock?: boolean;
+    prefetchedSources?: ReadonlyMap<string, PrefetchedSource>;
+  },
 ): Promise<{ scopes: ScopeRoot[]; results: ResolveResult[]; diagnostics: Diagnostic[] }> {
   const cwd = path.resolve(readCwd(args));
   process.chdir(cwd);
@@ -88,6 +92,7 @@ export async function fetchScopes(
       mode,
       sourceIds,
       updateLock: opts?.updateLock,
+      prefetchedSources: opts?.prefetchedSources,
     });
     results.push(result);
     diagnostics.push(...result.diagnostics);
@@ -456,6 +461,7 @@ export function capabilitySummary(
   return {
     name: capability.manifest.name,
     version: capability.manifest.version,
+    synthesized: capability.synthesized === true,
     scope: capability.scope,
     root: capability.root,
     facets: {

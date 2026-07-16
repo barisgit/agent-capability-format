@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { cleanup, makeScope, readText, runCaplet } from "../helpers";
+import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
 test("caplet add writes a source that fetch can resolve", async () => {
   const scope = await makeScope();
@@ -168,6 +168,53 @@ test("caplet add github source without --ref suggests --ref main", async () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Git and github sources require --ref");
     expect(result.stderr).toContain("try: caplet add github:owner/repo --ref main");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet add imports every bare skill as a synthesized capability non-interactively", async () => {
+  const scope = await makeScope();
+  try {
+    const bare = path.join(scope.sourceRoot, "bare-skills");
+    await writeText(
+      path.join(bare, "skills", "one", "SKILL.md"),
+      "---\nname: one\ndescription: One\n---\nOne.\n",
+    );
+    await writeText(path.join(bare, "skills", "one", "references", "guide.md"), "Guide.\n");
+    await writeText(
+      path.join(bare, "skills", "two", "SKILL.md"),
+      "---\nname: two\ndescription: Two\n---\nTwo.\n",
+    );
+
+    const result = await runCaplet(scope, [
+      "add",
+      `path:${bare}`,
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Capabilities  one, two");
+    const manifest = await readText(path.join(scope.agentsDir, "capabilities.yml"));
+    expect(manifest).not.toContain("capabilities: [");
+    const lock = JSON.parse(await readText(path.join(scope.agentsDir, "capabilities.lock")));
+    const imported = lock.entries.find((entry: { synthesized?: boolean }) => entry.synthesized);
+    expect(imported?.capabilityNames).toEqual(["one", "two"]);
+    expect(imported?.synthesized).toBe(true);
+    expect(await Bun.file(path.join(scope.agentsDir, "skills", "one", "SKILL.md")).exists()).toBe(
+      true,
+    );
+    expect(
+      await Bun.file(
+        path.join(scope.agentsDir, "skills", "one", "references", "guide.md"),
+      ).exists(),
+    ).toBe(true);
+    expect(await Bun.file(path.join(scope.agentsDir, "skills", "two", "SKILL.md")).exists()).toBe(
+      true,
+    );
   } finally {
     await cleanup(scope);
   }

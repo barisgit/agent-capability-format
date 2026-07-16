@@ -1,17 +1,13 @@
 # apps/caplet/src/apply/
 
 ## Responsibility
-Applies adapter-generated file diffs and maintains ownership metadata for safe updates and removal.
+Applies adapter-generated file diffs and maintains ownership metadata for safe reconciliation and removal.
 
 ## Design and Data Flow
-`applyDiffs` materializes whole-file, marker-block, and JSON-pointer changes, then records hashes in `.acf-managed.json`. `sidecar.ts` detects drift and removes only owned regions; `json-pointer.ts` performs text-preserving JSON pointer lookup/deletion.
+`applyDiffs` resolves paths inside an install root, applies whole-file, marker-block, and JSON-pointer changes, preserves file modes, prunes empty directories, and records owned-region hashes in `.acf-managed.json`. Reserved management-notice paths must be absent or already ACF-owned before writes occur.
 
-### Management Notice Safety
-The apply module enforces notice path safety:
-- `assertNoticePathOwnedOrAbsent` checks that notice paths are either already owned by ACF or don't exist
-- Prevents overwriting unowned files at reserved `ACF-MANAGED.md` paths
-- Throws clear errors if collision would occur (defensive check before write)
+`sidecar.ts` reads, canonicalizes, and writes ownership state, detects drift, and removes only owned files or regions. `json-pointer.ts` provides pointer lookup and text-preserving deletion without reformatting the surrounding JSON document.
 
 ## Integration
-- Consumes `FileDiff` and ownership types from `@acf/core` plus merge/marker helpers from `@acf/adapters/common`.
-- Called by internal emit/apply workflows and the `remove` command.
+- Consumes `FileDiff`, content, and ownership types from `@acf/core` plus marker/merge helpers from `@acf/adapters/common`.
+- Called by `internal/workflow.ts` and removal flows; public managed-apply APIs are re-exported from `../index.ts`.

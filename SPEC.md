@@ -1972,6 +1972,7 @@ entries:
 | `entries[].capabilityHash` | string | yes  | `sha256-<hex>` of the materialized capability content (§19.5). |
 | `entries[].capabilityNames` | list | yes   | Final names of capabilities produced (one entry MAY produce multiple). |
 | `entries[].capabilities` | list | no | Normalized collection selectors from `capabilities.yml`. |
+| `entries[].selectorsByCapability` | mapping | no | Final capability name to exact inventory selector, used for selector-safe removal. |
 | `entries[].include` / `exclude` / `rename` | mapping | no | Mirrors `capabilities.yml`.                          |
 
 ### 19.5 Hash computation
@@ -2091,24 +2092,25 @@ Resolver behavior:
 
 A source entry MAY declare `capabilities` as one selector string or a non-empty
 list. Scalar syntax normalizes to a one-item list. Omission selects every
-discovered capability. Selectors match normalized POSIX paths relative to the
-selected source root's `acf/` directory:
+discovered capability. Manifested collections match selectors against normalized
+POSIX paths relative to the selected source root's `acf/` directory. A direct
+manifested capability and a synthesized skill use their validated capability
+name as the selector:
 
 - an exact path matches one complete capability path;
 - `*` matches zero or more characters within one segment;
 - `?` matches exactly one character within one segment;
 - a `**` segment matches zero or more path segments.
 
-Only directories containing `acf.yml` or `acf.yaml` are candidates. Every
-selector MUST match at least one candidate; overlapping matches are deduplicated.
+Only manifested capability roots and synthesized skills discovered by §§20.1–20.3
+are candidates. Every selector MUST match at least one candidate; overlapping matches are deduplicated.
 Absolute paths, backslashes, empty segments, `.`/`..` segments, and `**` embedded
 inside another segment are invalid. Invalid or unmatched selection MUST NOT
 change existing snapshots or the lockfile.
 
 `path` is applied first, then `capabilities`, then facet-level `include` and
-`exclude`. A direct single-capability source MUST reject `capabilities` because
-there is no collection path to select. Lock entries preserve both normalized
-selector intent and sorted final capability names. Selector drift MUST trigger
+`exclude`. Lock entries preserve both normalized selector intent and sorted final
+capability names. Selector drift MUST trigger
 reconciliation in modes that permit fetching, including removal of snapshots no
 longer selected after a fully successful resolution.
 

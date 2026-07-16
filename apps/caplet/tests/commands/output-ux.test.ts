@@ -178,7 +178,7 @@ test("add confirms the source and manifest it changed", async () => {
     expect(result.stdout).toContain("Manifest  ");
     expect(result.stdout).toContain("ok Applied");
     expect(result.stdout).toContain("/.agents/capabilities.yml");
-    expect(result.stdout).toContain(`Source    ${source}`);
+    expect(result.stdout).toContain(`Source        ${source}`);
   } finally {
     await cleanup(scope);
   }

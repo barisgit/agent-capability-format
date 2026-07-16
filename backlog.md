@@ -32,13 +32,13 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 
 **Priority**: Highest — strategic; makes the entire skills.sh catalog installable via caplet
 **Estimate**: 2-3 days
-**Status**: Planned
+**Status**: Completed
 
 **Problem**: caplet only installs sources with `acf.yml` manifests. The ecosystem standard (vercel-labs skills, Anthropic skills repos) is a bare repo of `<skill>/SKILL.md` directories — same SKILL.md format, no manifest. Today none of that supply is installable.
 
 **Implementation**:
 
-- Reader fallback in `@acf/installer`: when a source has no `acf.yml` but contains `SKILL.md` directories (root, `skills/`, or one level deep), synthesize an in-memory capability: name from repo (`owner-repo`), version `0.0.0-unmanifested+<commit>`, all discovered skills as facets
+- Shared installer inventory: when a source has no ACF manifest but contains `SKILL.md` directories (root, `skills/`, or one level deep), synthesize one independent capability per skill using its validated frontmatter name and version `0.0.0-unmanifested+<revision>`
 - Auto-declare every file in each skill dir as an asset (no `assets:` frontmatter needed for imports; also see Spec C2)
 - Provenance recorded in lockfile entry (`synthesized: true`)
 - `caplet show` marks these as `unmanifested import`
@@ -46,7 +46,7 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 
 **Acceptance**:
 
-- `caplet add github:vercel-labs/skills` installs their skills as one capability, apply emits to all targets, remove cleans up
+- `caplet add github:vercel-labs/skills` installs each discovered skill as a managed capability, apply emits to all targets, and remove cleans up
 - `caplet add github:anthropics/skills` works
 - Existing manifested sources unaffected; `check` passes after import
 
@@ -54,16 +54,17 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 
 **Priority**: High
 **Estimate**: 1-2 days
-**Status**: Planned
+**Status**: Completed
 **Depends on**: A1 (filters must work on synthesized capabilities too)
 
 **Problem**: `add` takes a whole source. Users want one skill or capability from a multi-capability repo: `owner/repo@name` selection, and a picker when they don't know what's inside.
 
 **Implementation**:
 
-- Parse `github:owner/repo@<capability-or-skill>` in source specs; store selector in capabilities.yml entry (`include:` already exists in schema — wire it through add)
+- Parse add-only `github:owner/repo@<capability-or-skill>` shorthand and store the translated selector in the existing entry-level `capabilities:` field
 - TTY without selector and source has >1 capability (or >1 skill in an unmanifested repo): multi-select prompt (hand-rolled, consistent with render.ts aesthetic; no inquirer dep)
 - Non-TTY without selector: install all (current behavior), print what was selected
+- `caplet remove <name>` narrows a shared source entry and retains selected siblings
 
 **Acceptance**: `caplet add github:vercel-labs/skills@find-skills` installs exactly one skill; picker appears on TTY only; `-y` skips picker
 

@@ -30,6 +30,12 @@ export type ResolveOptions = {
   mode: "auto" | "never" | "force";
   sourceIds?: readonly string[] | undefined;
   updateLock?: boolean | undefined;
+  prefetchedSources?: ReadonlyMap<string, PrefetchedSource> | undefined;
+};
+
+export type PrefetchedSource = {
+  fetched: FetchedCapability;
+  inventory: SourceInventory;
 };
 
 export type ResolveResult = {
@@ -41,6 +47,7 @@ export type ResolveResult = {
 export type CapabilityRecord = {
   entry: CapabilityEntry;
   name: string;
+  selector: string;
   root: string;
   commit: string | null;
   contentHash: string;
@@ -112,12 +119,19 @@ async function resolveCapabilitiesStaged(
       continue;
     }
 
-    const fetchedCapability = await fetchCapability(entry, fetchOptions(yml, opts.scopeRoot));
+    const prefetched = opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId);
+    const fetchedCapability =
+      prefetched?.fetched ?? (await fetchCapability(entry, fetchOptions(yml, opts.scopeRoot)));
     const sourceStagingDir = path.join(
       stagingDir,
       cacheKeyFor(fetchedCapability.sourceId, entry.ref),
     );
-    const materialized = await materializeFetched(entry, fetchedCapability, sourceStagingDir);
+    const materialized = await materializeFetched(
+      entry,
+      fetchedCapability,
+      sourceStagingDir,
+      prefetched?.inventory,
+    );
     diagnostics.push(...materialized.diagnostics);
     if (!materialized.ok) {
       failed = true;
@@ -183,63 +197,22 @@ function selectCapabilities(
 ): { candidates: SourceCapabilityCandidate[]; diagnostics: Diagnostic[] } {
   if (entry.capabilities === undefined)
     return { candidates: inventory.candidates, diagnostics: [] };
-  if (inventory.synthesized) {
-    const selected = new Set<SourceCapabilityCandidate>();
-    const diagnostics: Diagnostic[] = [];
-    for (const selector of entry.capabilities) {
-      const matches = inventory.candidates.filter((candidate) =>
-        globMatches(selector, candidate.name),
-      );
-      if (matches.length === 0) {
-        diagnostics.push({
-          severity: "error",
-          code: "acf.resolve.capability-selector-unmatched",
-          message: `capability selector matched nothing: ${selector}`,
-          path: sourceRoot,
-          data: { selector, candidates: inventory.candidates.map((candidate) => candidate.name) },
-        });
-      }
-      for (const match of matches) selected.add(match);
-    }
-    return { candidates: [...selected], diagnostics };
-  }
-  const collectionRoot = path.join(sourceRoot, "acf");
-  const candidates = inventory.candidates
-    .map((candidate) => ({
-      candidate,
-      relative: path.relative(collectionRoot, candidate.root).replaceAll(path.sep, "/"),
-    }))
-    .filter(
-      (item) =>
-        item.relative.length > 0 && item.relative !== ".." && !item.relative.startsWith("../"),
-    );
-  if (candidates.length === 0) {
-    return {
-      candidates: [],
-      diagnostics: [
-        {
-          severity: "error",
-          code: "acf.resolve.capability-selector-direct-source",
-          message: "capabilities selectors require a source collection with an acf/ directory",
-          path: sourceRoot,
-        },
-      ],
-    };
-  }
   const selected = new Set<SourceCapabilityCandidate>();
   const diagnostics: Diagnostic[] = [];
   for (const selector of entry.capabilities) {
-    const matches = candidates.filter((item) => globMatches(selector, item.relative));
+    const matches = inventory.candidates.filter((candidate) =>
+      globMatches(selector, candidate.selector),
+    );
     if (matches.length === 0) {
       diagnostics.push({
         severity: "error",
         code: "acf.resolve.capability-selector-unmatched",
         message: `capability selector matched nothing: ${selector}`,
         path: sourceRoot,
-        data: { selector, candidates: candidates.map((item) => item.relative).sort() },
+        data: { selector, candidates: inventory.candidates.map((item) => item.selector).sort() },
       });
     }
-    for (const match of matches) selected.add(match.candidate);
+    for (const match of matches) selected.add(match);
   }
   return { candidates: [...selected], diagnostics };
 }
@@ -395,6 +368,7 @@ function recordsFromLock(
   return lockEntry.capabilityNames.map((name) => ({
     entry,
     name,
+    selector: lockEntry.selectorsByCapability?.[name] ?? name,
     root: capabilityPath(capabilitiesDir, name),
     commit: lockEntry.resolvedSha ?? null,
     contentHash: lockEntry.capabilityHash,
@@ -405,13 +379,14 @@ async function materializeFetched(
   entry: CapabilityEntry,
   fetched: FetchedCapability,
   stagingDir: string,
+  inspectedInventory?: SourceInventory,
 ): Promise<{
   ok: boolean;
   records: CapabilityRecord[];
   lockEntry: LockEntry | null;
   diagnostics: Diagnostic[];
 }> {
-  const inventory = await inspectSource(fetched.root);
+  const inventory = inspectedInventory ?? (await inspectSource(fetched.root));
   const diagnostics = [...inventory.diagnostics];
   const records: CapabilityRecord[] = [];
   const selected = selectCapabilities(entry, fetched.root, inventory);
@@ -429,7 +404,14 @@ async function materializeFetched(
       await copyRegularTree(candidate.root, destination);
     }
     const contentHash = await computeContentHash(destination);
-    records.push({ entry, name, root: destination, commit: fetched.commit, contentHash });
+    records.push({
+      entry,
+      name,
+      selector: candidate.selector,
+      root: destination,
+      commit: fetched.commit,
+      contentHash,
+    });
   }
 
   if (records.length === 0) return { ok: true, records, lockEntry: null, diagnostics };
@@ -447,6 +429,9 @@ function lockEntryFor(
   const lockEntry: LockEntry = {
     capabilityHash: first?.contentHash ?? emptyTreeHash(),
     capabilityNames: records.map((record) => record.name).sort(),
+    selectorsByCapability: Object.fromEntries(
+      records.map((record) => [record.name, record.selector]),
+    ),
     source: sourceString(entry.source),
     sourceId: fetched.sourceId,
   };

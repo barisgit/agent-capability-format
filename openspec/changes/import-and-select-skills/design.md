@@ -56,7 +56,7 @@ Interactive unqualified adds and explicit suffix adds inspect first. Once confir
 
 ### Removal edits selectors before deleting source entries
 
-When a lock entry maps a named capability to a manifest entry with multiple explicit capability selectors, `remove` deletes only that selector and retains siblings. It removes the whole source entry only when it represented solely the removed capability. Existing orphan sweeping deletes only the removed capability's outputs.
+When a lock entry maps a named capability to a manifest entry with multiple explicit capability selectors, `remove` deletes only that selector and retains siblings. The lock records each final capability name's exact inventory selector so collection paths remain stable even when they differ from manifest names or originated from a glob. It removes the whole source entry only when it represented solely the removed capability. Existing orphan sweeping deletes only the removed capability's outputs.
 
 ## Risks / Trade-offs
 
@@ -65,7 +65,7 @@ When a lock entry maps a named capability to a manifest entry with multiple expl
 - [Large repositories produce many capabilities] -> compact add output and existing plan rollups; measure before adding limits.
 - [Inspection and resolution diverge] -> one inventory implementation and one-use fetched lease.
 - [Imported trees contain generated/dependency content] -> explicit portable-tree exclusions and regular-file-only copying.
-- [Old locks lack synthesized metadata] -> optional backward-compatible fields with no lock schema bump.
+- [Old locks lack synthesized metadata or exact selector mappings] -> optional backward-compatible fields with no lock schema bump; ambiguous legacy collection removal fails safely with an update instruction.
 - [Selector-aware removal regresses unfiltered entries] -> tests for selected siblings, sole selection, and install-all entries.
 
 ## Migration Plan

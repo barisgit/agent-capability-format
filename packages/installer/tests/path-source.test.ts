@@ -3,7 +3,13 @@ import { access, cp, readFile, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeContentHash } from "@acf/core/hash";
-import { fetchCapability, readLockfile, resolveCapabilities } from "../src";
+import {
+  entrySourceId,
+  fetchCapability,
+  inspectSource,
+  readLockfile,
+  resolveCapabilities,
+} from "../src";
 import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const fixture = fileURLToPath(new URL("./fixtures/local-cap", import.meta.url));
@@ -111,7 +117,7 @@ test("globstar selectors include top-level and nested capabilities", async () =>
   }
 });
 
-test("selectors reject direct capability sources without mutating the snapshot", async () => {
+test("selectors can name a direct capability source", async () => {
   const dir = await tempDir("acf-installer-direct-selector-");
   try {
     const repo = path.join(dir, "repo");
@@ -123,10 +129,9 @@ test("selectors reject direct capability sources without mutating the snapshot",
     );
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(result.diagnostics.map((item) => item.code)).toContain(
-      "acf.resolve.capability-selector-direct-source",
-    );
-    await expect(access(path.join(scopeRoot.capabilitiesDir, "direct"))).rejects.toThrow();
+    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(result.capabilities.map((item) => item.name)).toEqual(["direct"]);
+    await access(path.join(scopeRoot.capabilitiesDir, "direct"));
   } finally {
     await cleanup(dir);
   }
@@ -412,6 +417,36 @@ test("duplicate synthesized names fail atomically", async () => {
     expect(result.diagnostics.map((item) => item.code)).toContain("acf.capability.name-collision");
     expect(await Bun.file(scopeRoot.lockPath).exists()).toBe(false);
     expect(await Bun.file(path.join(scopeRoot.capabilitiesDir, "duplicate")).exists()).toBe(false);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("resolver reuses a prefetched source inventory", async () => {
+  const dir = await tempDir("acf-installer-prefetched-");
+  try {
+    const repo = path.join(dir, "repo");
+    const missing = path.join(dir, "missing-source");
+    const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
+    await writeText(
+      path.join(repo, "skills", "prefetched", "SKILL.md"),
+      "---\nname: prefetched\ndescription: Prefetched\n---\nBody.\n",
+    );
+    await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${missing}\n`);
+    const entry = { source: { kind: "path" as const, location: missing } };
+    const id = entrySourceId(entry);
+    const fetched = { root: repo, commit: null, sourceId: id };
+    const inventory = await inspectSource(repo);
+
+    const result = await resolveCapabilities({
+      scope: "project",
+      scopeRoot,
+      mode: "force",
+      prefetchedSources: new Map([[id, { fetched, inventory }]]),
+    });
+
+    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(result.capabilities.map((item) => item.name)).toEqual(["prefetched"]);
   } finally {
     await cleanup(dir);
   }
