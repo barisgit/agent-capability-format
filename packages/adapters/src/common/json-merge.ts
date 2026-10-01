@@ -42,24 +42,63 @@ function mergeAt(
   if (container.kind === "object") {
     const property = findObjectProperty(text, container.start, container.end, segment);
     if (property === null) {
-      return insertObjectProperty(text, container.start, container.end, segment, buildFromSegments(segments, index + 1, newValue));
+      return insertObjectProperty(
+        text,
+        container.start,
+        container.end,
+        segment,
+        buildFromSegments(segments, index + 1, newValue),
+      );
     }
-    if (isLast) return replaceRange(text, property.valueStart, property.valueEnd, formatValue(newValue, lineIndentAt(text, property.valueStart)));
+    if (isLast)
+      return replaceRange(
+        text,
+        property.valueStart,
+        property.valueEnd,
+        formatValue(newValue, lineIndentAt(text, property.valueStart)),
+      );
     const child = containerAt(text, property.valueStart, property.valueEnd);
     if (child === null) {
-      return replaceRange(text, property.valueStart, property.valueEnd, formatValue(buildFromSegments(segments, index + 1, newValue), lineIndentAt(text, property.valueStart)));
+      return replaceRange(
+        text,
+        property.valueStart,
+        property.valueEnd,
+        formatValue(
+          buildFromSegments(segments, index + 1, newValue),
+          lineIndentAt(text, property.valueStart),
+        ),
+      );
     }
     return mergeAt(text, child, segments, index + 1, newValue);
   }
 
   const element = findArrayElement(text, container.start, container.end, segment);
   if (element === null) {
-    return appendArrayElement(text, container.start, container.end, buildFromSegments(segments, index + 1, newValue));
+    return appendArrayElement(
+      text,
+      container.start,
+      container.end,
+      buildFromSegments(segments, index + 1, newValue),
+    );
   }
-  if (isLast) return replaceRange(text, element.valueStart, element.valueEnd, formatValue(newValue, lineIndentAt(text, element.valueStart)));
+  if (isLast)
+    return replaceRange(
+      text,
+      element.valueStart,
+      element.valueEnd,
+      formatValue(newValue, lineIndentAt(text, element.valueStart)),
+    );
   const child = containerAt(text, element.valueStart, element.valueEnd);
   if (child === null) {
-    return replaceRange(text, element.valueStart, element.valueEnd, formatValue(buildFromSegments(segments, index + 1, newValue), lineIndentAt(text, element.valueStart)));
+    return replaceRange(
+      text,
+      element.valueStart,
+      element.valueEnd,
+      formatValue(
+        buildFromSegments(segments, index + 1, newValue),
+        lineIndentAt(text, element.valueStart),
+      ),
+    );
   }
   return mergeAt(text, child, segments, index + 1, newValue);
 }
@@ -117,7 +156,12 @@ function buildFromSegments(segments: string[], index: number, value: unknown): u
   return { [segment]: buildFromSegments(segments, index + 1, value) };
 }
 
-function findObjectProperty(text: string, start: number, end: number, key: string): ObjectProperty | null {
+function findObjectProperty(
+  text: string,
+  start: number,
+  end: number,
+  key: string,
+): ObjectProperty | null {
   let cursor = skipWhitespace(text, start + 1);
   while (cursor < end) {
     if (text[cursor] === "}") return null;
@@ -134,11 +178,17 @@ function findObjectProperty(text: string, start: number, end: number, key: strin
   return null;
 }
 
-function findArrayElement(text: string, start: number, end: number, segment: string): ArrayElement | null {
+function findArrayElement(
+  text: string,
+  start: number,
+  end: number,
+  segment: string,
+): ArrayElement | null {
   let cursor = skipWhitespace(text, start + 1);
   let index = 0;
   const wanted = segment === "-" ? -1 : Number(segment);
-  if (segment !== "-" && (!Number.isInteger(wanted) || wanted < 0)) throw new Error(`invalid array index: ${segment}`);
+  if (segment !== "-" && (!Number.isInteger(wanted) || wanted < 0))
+    throw new Error(`invalid array index: ${segment}`);
   while (cursor < end) {
     if (text[cursor] === "]") return null;
     const valueStart = cursor;
@@ -151,7 +201,13 @@ function findArrayElement(text: string, start: number, end: number, segment: str
   return null;
 }
 
-function insertObjectProperty(text: string, start: number, end: number, key: string, value: unknown): string {
+function insertObjectProperty(
+  text: string,
+  start: number,
+  end: number,
+  key: string,
+  value: unknown,
+): string {
   const close = findContainerClose(text, start, end, "}");
   const empty = skipWhitespace(text, start + 1) === close;
   const closeIndent = lineIndentAt(text, close);
@@ -173,7 +229,11 @@ function appendArrayElement(text: string, start: number, end: number, value: unk
   return replaceRange(text, insertPos, insertPos, `,\n${rendered}`);
 }
 
-function containerAt(text: string, start: number, end: number): { start: number; end: number; kind: "object" | "array" } | null {
+function containerAt(
+  text: string,
+  start: number,
+  end: number,
+): { start: number; end: number; kind: "object" | "array" } | null {
   const valueStart = skipWhitespace(text, start);
   const char = text[valueStart];
   if (char === "{") return { start: valueStart, end, kind: "object" };
@@ -181,7 +241,12 @@ function containerAt(text: string, start: number, end: number): { start: number;
   return null;
 }
 
-function findContainerClose(text: string, start: number, end: number, closeChar: "}" | "]"): number {
+function findContainerClose(
+  text: string,
+  start: number,
+  end: number,
+  closeChar: "}" | "]",
+): number {
   let cursor = trimEnd(text, end) - 1;
   while (cursor > start && text[cursor] !== closeChar) cursor -= 1;
   if (text[cursor] !== closeChar) throw new Error("invalid JSON container");
@@ -190,7 +255,7 @@ function findContainerClose(text: string, start: number, end: number, closeChar:
 
 function skipValue(text: string, start: number): number {
   const char = text[start];
-  if (char === "\"") return readString(text, start).end;
+  if (char === '"') return readString(text, start).end;
   if (char === "{" || char === "[") return skipContainer(text, start);
   let cursor = start;
   while (cursor < text.length && !",]}\n\r\t ".includes(text[cursor] ?? "")) cursor += 1;
@@ -204,7 +269,7 @@ function skipContainer(text: string, start: number): number {
   let cursor = start;
   while (cursor < text.length) {
     const char = text[cursor];
-    if (char === "\"") {
+    if (char === '"') {
       cursor = readString(text, cursor).end;
       continue;
     }
@@ -226,7 +291,7 @@ function readString(text: string, start: number): { value: string; end: number }
       cursor += 2;
       continue;
     }
-    if (char === "\"") {
+    if (char === '"') {
       const raw = text.slice(start, cursor + 1);
       const value: unknown = JSON.parse(raw);
       if (typeof value !== "string") throw new Error("invalid JSON string");

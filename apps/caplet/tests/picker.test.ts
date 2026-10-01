@@ -68,7 +68,7 @@ test("selectCapabilities default readline I/O consumes stdin and closes", async 
   const script = [
     'import { selectCapabilities } from "./src/internal/picker.ts";',
     'const selected = await selectCapabilities(["alpha", "beta"]);',
-    "process.stderr.write(`RESULT=${JSON.stringify(selected)}\\n`);",
+    "process.stderr.write('RESULT=' + JSON.stringify(selected) + '\\n');",
   ].join("\n");
   const child = Bun.spawn([process.execPath, "-e", script], {
     cwd: import.meta.dir.replace(/\/tests$/, ""),

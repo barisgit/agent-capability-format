@@ -40,6 +40,7 @@ import {
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
 import { diskReadOnlyFs } from "./fs";
 import { addManagementNotices } from "./managed-notices";
+import { anchorPathSource } from "./manifest";
 import { resolveScopeRoots } from "./scopes";
 
 export type EmittedDiff = {
@@ -122,7 +123,15 @@ export async function buildEmitPlan(
     const lockOverride = opts?.locks?.get(scopeRoot.scope);
     const diskLock = await readLockfile(scopeRoot.lockPath);
     const lock = lockOverride ?? diskLock;
-    diagnostics.push(...detectLockDrift(manifest.value, lock));
+    // Relative path: sources are relative to the manifest directory, not the process cwd.
+    const manifestDirForDrift = path.dirname(scopeRoot.manifestPath);
+    const anchoredManifest = {
+      ...manifest.value,
+      capabilities: manifest.value.capabilities.map((entry) =>
+        anchorPathSource(entry, manifestDirForDrift),
+      ),
+    };
+    diagnostics.push(...detectLockDrift(anchoredManifest, lock));
     const resolved = await resolveScopeCapabilities(scopeRoot);
     diagnostics.push(...resolved.diagnostics);
     if (lock !== null) {

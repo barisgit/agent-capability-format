@@ -14,7 +14,7 @@ Plan-view tree (scope → destination → directory rollups) with action-count s
 
 ### Command Grammar v0.2
 
-9-command surface: `init add remove update apply list show check doctor status` (+`completion`). Deprecated aliases: `diff`→`apply -n`, `emit`→`apply`, `inspect`→`show`, `fetch`→`update --no-apply`, `ls`→`list` (permanent). Self-applying `add`/`update` (`--no-apply` opt-out). Scope inference for mutations. Bare `caplet` = status. `check` exit codes 0/1/2/3 (`--frozen`, `--strict`). Shorts `-s -t -C -n -y -q -v`. Global `--json` envelope. Grouped root help, `-V`, `caplet completion bash|zsh|fish`.
+Command surface: `init add remove update apply list show check doctor status completion`. `ls` is a supported alias of `list` with no deprecation notice. Deprecated aliases print a notice: `inspect`→`show`, `diff`→`apply --dry-run`, `emit`→`apply --offline`, `fetch`→`update --no-apply`. Self-applying `add`/`update` (`--no-apply` opt-out). Scope inference for mutations. Bare `caplet` = status. `check` exit codes 0/1/2/3 (`--frozen`, `--strict`). Shorts `-s -t -C -n -y -q -v`. Global `--json` envelope. Grouped root help, `-V`, `caplet completion bash|zsh|fish`.
 
 ### Skills Migration (dogfood)
 
@@ -173,7 +173,6 @@ Single dim line on TTY when a newer published version exists (npm registry check
 ## Tech Debt
 
 - `CAPLET_VERSION` hardcoded in `internal/json.ts` duplicating package.json (fold into B1)
-- `json-pointer.ts` pre-existing biome format violations (one `--write` pass, separate commit)
 - Loose-skill backups in `/tmp/skills-migration-backup/` — delete after a week of stable use
 - `explain-canvas` skill: `tool/node_modules` excluded from migration; document install step in its SKILL.md or vendor a lockfile
-- Untracked `.agents/capabilities.lock` + `docs/` at repo root — decide: commit or gitignore
+- Untracked `.agents/capabilities.lock` at repo root — decide: commit or gitignore

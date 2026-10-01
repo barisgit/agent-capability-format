@@ -146,6 +146,12 @@ async function resolveCapabilitiesStaged(
     fetched = true;
   }
 
+  // Validate final destinations across fetched and retained records before any
+  // snapshot is replaced. SPEC §17.6: no implicit winner within a scope.
+  const collisions = nameCollisionDiagnostics(records);
+  diagnostics.push(...collisions);
+  if (collisions.length > 0) failed = true;
+
   const lockfile = canonicalizeLock({ acf: 1, entries: nextEntries });
   if (failed) {
     return {
@@ -188,6 +194,29 @@ async function commitStagedRecords(
     committed.push({ ...record, root: destination });
   }
   return committed;
+}
+
+function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
+  const byName = new Map<string, CapabilityRecord[]>();
+  for (const record of records) {
+    byName.set(record.name, [...(byName.get(record.name) ?? []), record]);
+  }
+
+  const diagnostics: Diagnostic[] = [];
+  for (const [name, colliding] of byName) {
+    if (colliding.length < 2) continue;
+    diagnostics.push({
+      severity: "error",
+      code: "acf.capability.name-collision",
+      message: `capability name collision: ${name} (resolve with rename or a narrower capabilities selection)`,
+      data: {
+        name,
+        sources: colliding.map((record) => entrySourceId(record.entry)),
+        selectors: colliding.map((record) => record.selector),
+      },
+    });
+  }
+  return diagnostics;
 }
 
 function selectCapabilities(

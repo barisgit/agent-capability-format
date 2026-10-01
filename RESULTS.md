@@ -1,5 +1,12 @@
 # ACF Reference Implementation — Results
 
+> **Historical report, superseded.** This records the first reference
+> implementation pass and is kept as evidence of that outcome. Its command
+> list (`inspect`, `ls`, `emit`, `fetch`, `diff`), file counts, and CI
+> timings describe that point in time. For the current command surface see
+> `README.md` and `IMPLEMENTATION.md` §14; for planned work see `backlog.md`.
+> Run `bun run ci` for current health.
+
 Implementation of the Agent Capability Format reference monorepo on branch
 `feature/reference-implementation`. Built end-to-end against `SPEC.md`,
 `IMPLEMENTATION.md`, `CONTEXT.md`, and `README.md`.

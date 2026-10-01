@@ -201,7 +201,7 @@ emit an info diagnostic.
 ### Axiom 17 — Resolution and emission are separate phases
 
 The canonical capability tree on disk is host-agnostic. Native artifacts are
-produced exclusively by `caplet emit` (or `caplet apply`). There is no
+produced by the emission phase of `caplet apply` (`--offline` skips fetching). There is no
 install-time fan-out to per-host directories; the resolver writes one copy
 into `capabilities/` and adapters emit from there. Re-targeting is a
 re-emit, not a re-install.

@@ -70,8 +70,8 @@ Reference CLI. Uses `@acf/sdk` (or core + adapters + installer directly) to:
 - resolve and fetch remote capabilities,
 - emit native artifacts,
 - report diagnostics,
-- run the full command surface from `SPEC.md` §21 (`add`/`remove`/`update`/
-  `fetch`/`emit`/`apply`/`check`/`inspect`/`ls`/`diff`/`doctor`).
+- run the full command surface from `SPEC.md` §21 (`init`/`add`/`remove`/
+  `update`/`apply`/`list`/`show`/`check`/`doctor`/`status`/`completion`).
 
 The CLI is an implementation, not part of the spec. Hot-path runtime helpers
 (hook runner, instruction runtime) are deliberately out of scope here and
@@ -237,10 +237,13 @@ Canonical root `package.json` scripts:
     "test": "turbo run test --force",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ci": "turbo run check-types lint test build --force"
+    "ci": "bun run lint && turbo run check-types test build --force"
   }
 }
 ```
+
+Lint runs once at the repository root with Biome; Turbo runs the per-package
+`check-types`, `test`, and `build` tasks.
 
 Every package MUST declare a `test` script. Packages with no tests yet use a
 non-failing placeholder (`echo 'no tests for @acf/<pkg>'`) so
@@ -291,7 +294,7 @@ export type CapabilityOrigin =
 Adapters consult `scope` when picking install destinations; the reader only
 records it.
 
-`CapabilityOrigin` lets `caplet inspect` and diagnostics explain why a
+`CapabilityOrigin` lets `caplet show` and diagnostics explain why a
 capability exists and where it came from. `LockEntry` is defined in §7.
 
 ### 3.2 Manifest
@@ -720,7 +723,7 @@ between current and desired content. Caplet (or any consumer) applies the
 diffs and tracks ownership in a `.acf-managed.json` sidecar (§4.6).
 
 This design is universal across file formats (JSON, YAML, Markdown, MDC,
-TOML, anything text-based), makes dry-run and `caplet diff` trivial, and
+TOML, anything text-based), makes `caplet apply --dry-run` trivial, and
 keeps adapters declarative.
 
 ```ts
@@ -774,7 +777,7 @@ export type ReadOnlyFs = {
 
 /** A file-level diff. Adapters return one of these per file they want to
  *  produce, modify, or delete. Caplet applies them, captures them for
- *  `--dry-run` and `caplet diff`, and updates `.acf-managed.json`. */
+ *  `caplet apply --dry-run`, and updates `.acf-managed.json`. */
 export type FileDiff = {
   path: string                           // absolute path on disk
   before: string | null                  // null = file did not exist
@@ -838,7 +841,8 @@ subsequent emits and on `caplet remove`, the sidecar lets caplet:
 
 - delete ACF-managed pointers/markers without nuking unrelated user content,
 - detect drift where the user has manually edited an ACF-managed region,
-- support `caplet emit --clean` (remove all ACF content, then re-apply).
+- support a future clean re-apply (remove all ACF content, then re-apply);
+  the current CLI has no `--clean` flag.
 
 Shape:
 
@@ -1897,6 +1901,15 @@ Default fetch (`SPEC.md` §18):
 - `--sparse-checkout` set to `entry.path` if declared,
 - fall back to full clone if `ref` looks like a 40-char SHA (shallow + arbitrary SHA needs `--shallow-since` or refspec gymnastics).
 
+For private `github:` sources, `GITHUB_TOKEN` supplies an HTTP Basic authorization
+header scoped to the source URL. Git receives it through process-local
+`GIT_CONFIG_*` environment variables (Git 2.31 or later), not URL userinfo,
+command-line arguments, or persisted repository configuration. The same ephemeral
+authentication is retained during checkout because blobless clones can fetch
+missing objects at that point. Git errors redact credentials, including raw and
+percent-encoded token text. Without a token, normal Git authentication applies; SSH sources
+retain their existing behavior.
+
 ```ts
 export async function fetchCapability(
   spec: SourceSpec,
@@ -1993,9 +2006,10 @@ Drift handling:
 
 - `caplet check` warns if `contentHash` differs from on-disk state (user
   edited an installed capability).
-- `caplet fetch` refuses to overwrite a drifted capability without `--force`.
-- `caplet fetch --prune` removes lock entries (and on-disk capabilities) not
-  present in `capabilities.yml`.
+- Overwrite protection for drifted capabilities (`--force`) and an explicit
+  `--prune` flag are not part of the current CLI. `caplet update` and
+  `caplet apply` remove snapshots and lock entries that are no longer
+  selected after a fully successful resolution (SPEC §20.5).
 
 ### 7.6 Cross-capability uniqueness
 
@@ -2162,7 +2176,9 @@ explicit `native: true` overrides discovery-aware defaults.
 
 ### 8.3 Scope handling
 
-`caplet apply`, `caplet emit`, `caplet fetch` default to `scope: all`.
+`caplet apply`, `caplet update`, and the inspection commands default to
+`scope: all`; `--scope` / `-s` limits them to one scope, and mutations infer
+the scope when it is unambiguous.
 Behavior table:
 
 | Setting     | Action                                                                  |
@@ -2381,14 +2397,16 @@ Behavior is defined in `SPEC.md` §14.2. Implementation convention:
 - Unknown target ids in `only` / `except` produce `error`.
 - Loss of ordering, surface, or effect mapping produces `lossy`.
 - Unknown manifest top-level fields produce `info`.
-- Caplet config `diagnostics.failOnLossy: true` upgrades `lossy` to `error`
-  for exit-code purposes only.
+- The caplet `--strict` flag (hidden deprecated alias `--fail-on-lossy`)
+  makes `lossy` diagnostics fail the command (§14.4). The caplet config
+  field `diagnostics.failOnLossy` is parsed but not currently consulted by
+  caplet's exit-code logic.
 
 ## 12. Emission pipeline
 
 The emission pipeline is **scope × target**, with per-capability
 applicability filtering and per-capability adapter calls. Adapters return
-`FileDiff[]`. Caplet collects, optionally shows (`--dry-run`/`diff`), and
+`FileDiff[]`. Caplet collects, optionally shows (`apply --dry-run`), and
 applies them via a writer that updates `.acf-managed.json`.
 
 ```ts
@@ -2722,17 +2740,33 @@ No subprocess to caplet. No two-step install. One import.
 
 ## 14. CLI surface (`caplet`)
 
-Per `SPEC.md` §21. All 11 commands are **required in v1**. Stubs that exit
-0 without doing anything are forbidden — the first audit caught this and it
-lets agents fake-pass. If an implementer cannot fully implement a command,
-they MUST:
+Per `SPEC.md` §21. The canonical surface is 11 commands: `init`, `add`,
+`remove`, `update`, `apply`, `list`, `show`, `check`, `doctor`, `status`,
+and `completion`. Root help, per-command help, argument parsing, and shell
+completions are generated from `COMMAND_SPECS` in
+`apps/caplet/src/internal/spec.ts`; `caplet --help` is the authoritative
+flag reference. Running `caplet` with no command runs `status`.
 
-- document the gap in `RESULTS.md`,
-- emit a structured `Diagnostic` with `severity: "error"` and code
-  `acf.cli.partial-implementation` explaining what's missing,
-- exit with code `1` (validation/diagnostic errors).
+Global flags: `-s/--scope`, `-C/--cwd`, `-q/--quiet`, `-v/--verbose`,
+`-y/--yes`, `--json`, `--strict`, `-V/--version`, `-h/--help`. Commands that
+accept `-t/--target` may repeat it. Unknown commands and flags exit 2 with a
+did-you-mean hint when one is close.
 
-Never silent exit 0.
+Stubs that exit 0 without doing anything are forbidden — the first audit
+caught this and it lets agents fake-pass. A command that cannot do its job
+MUST emit a structured `error` diagnostic and exit non-zero; never silent
+exit 0.
+
+Aliases are rewritten before parsing (`rewriteAlias` in
+`apps/caplet/src/cli.ts`); they are not separate implementation paths:
+
+| Alias     | Rewrites to                | Notice on stderr |
+| --------- | -------------------------- | ---------------- |
+| `ls`      | `list`                     | none (supported) |
+| `inspect` | `show`                     | deprecated       |
+| `diff`    | `apply --dry-run`          | deprecated       |
+| `emit`    | `apply --offline` (keeps `--dry-run`) | deprecated |
+| `fetch`   | `update --no-apply` (drops `--mode`)  | deprecated |
 
 ### 14.1 Mutating commands
 
@@ -2756,36 +2790,41 @@ Never silent exit 0.
 - `caplet apply [--scope …] [--target …] [--dry-run] [--offline] [--frozen]`
   resolves declared sources and reconciles native artifacts. Dry-run refreshes
   lock state in memory without writing it.
-- Deprecated `fetch` and `emit` invocations rewrite to `update --no-apply` and
-  `apply --offline`; they are not separate implementation paths.
+- `-n/--dry-run` prints the change plan without writing files or the
+  lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
+  exits 3 when the lockfile is stale. A plan that deletes files asks for
+  confirmation on a TTY unless `--yes` or `--json` is set.
 
 ### 14.3 Inspection commands
 
-- `caplet check [path]` — read + validate without emitting; print
-  diagnostics.
-- `caplet inspect [path|--scope …]` — print resolved capability tree
-  (capabilities, facets, hooks, MCP servers, assets, applicable targets) as
-  JSON.
-- `caplet ls [--scope …] [--family …]` — list resolved capabilities and
-  facets. Human-readable.
-- `caplet diff [--scope …] [--target …]` — show what `emit` would change
-  on disk (file-level diff between current installRoot and would-be output).
-- `caplet doctor` — environment checks (yaml parser, git availability,
-  target registry health, scope discovery, lockfile drift, network
-  reachability for known source hosts). Each subcheck reports pass/warn/fail
-  with a remediation hint.
+- `caplet status` — summarize scopes, sources, targets, capabilities, and
+  pending changes.
+- `caplet list` (alias `ls`) — list installed capabilities per scope.
+- `caplet show <name>` — show one capability's facets, scope root, and
+  target support; `--json` gives machine output.
+- `caplet check [--target …] [--frozen]` — validate without writing. Exits
+  1 when emitted outputs are stale, 2 on validation errors, and 3 with
+  `--frozen` when the lockfile is stale.
+- `caplet doctor` — checks git availability, `.agents/` readability, the
+  target registry, and lockfiles; each check reports pass/warn/fail.
+- `caplet completion <bash|zsh|fish>` — print shell completions.
+
+For a preview of what `apply` would change on disk, use
+`caplet apply --dry-run` (the old `diff` alias).
 
 ### 14.4 Exit codes
 
 | Code | Meaning                                                                       |
 | ---- | ----------------------------------------------------------------------------- |
 | 0    | Success, no `error` diagnostics.                                              |
-| 1    | Validation errors present (or `lossy` with `failOnLossy`); partial impl.      |
-| 2    | IO / path / input failure (missing file, bad CLI args, permission denied).    |
-| 4    | Network or git fetch failure.                                                 |
+| 1    | `check` found stale emitted outputs, or the user declined a confirmation.     |
+| 2    | `error` diagnostics (validation, IO, fetch) or bad CLI input.                 |
+| 3    | `--frozen` and the lockfile is stale (`apply`, `check`).                      |
+| 4    | `lossy` diagnostics with `--strict` (`check` reports this as 2).              |
+| 130  | Interactive `add` picker was cancelled.                                       |
 
 `warn`, `lossy`, and `info` diagnostics are printed (subject to caplet
-config toggles) but do not affect exit code unless `failOnLossy` is set.
+config toggles) but do not affect exit code unless `--strict` is set.
 
 `caplet --help` and `<command> --help` MUST exit 0 with non-empty help text.
 Every command MUST emit a structured diagnostic on failure, not a free-form
@@ -2817,8 +2856,6 @@ error string.
 - Whether a future generic hook runner / instruction runtime is published
   alongside ACF or as a sibling specification.
 - Watch-mode behavior for `path:` sources during local development
-  (`caplet dev <capability>` proposal vs. `emit` reading sources directly).
-- Whether `caplet diff` should diff at the source-tree level or the
-  emitted-artifact level by default.
+  (`caplet dev <capability>` proposal vs. `apply` reading sources directly).
 - Whether a future generic auth provider abstraction (beyond `gh|token|ssh`
   for GitHub) is needed once non-GitHub `git:` sources become common.

@@ -28,6 +28,9 @@ export function substituteStringRecord(
 ): Record<string, string> | undefined {
   if (values === undefined) return undefined;
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [key, substitutePlaceholders(value, placeholders)]),
+    Object.entries(values).map(([key, value]) => [
+      key,
+      substitutePlaceholders(value, placeholders),
+    ]),
   );
 }

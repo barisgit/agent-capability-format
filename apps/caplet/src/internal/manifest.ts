@@ -1,8 +1,14 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScopeRoot } from "@acf/core";
-import { type CapabilityEntry, type SourceSpec, stringifyYml } from "@acf/core";
 import {
+  type CapabilitiesYml,
+  type CapabilityEntry,
+  type SourceSpec,
+  stringifyYml,
+} from "@acf/core";
+import {
+  canonicalizePathLocation,
   entrySourceId,
   type LockEntry,
   readCapabilitiesYml,
@@ -61,21 +67,25 @@ export async function addManifestEntry(
   source: string | CapabilityEntry,
   opts: ManifestEntryOptions = {},
 ): Promise<CapabilityEntry> {
-  const manifest = await readCapabilitiesYml(root.manifestPath);
+  const manifest = await readManifestForMutation(root);
   const entry = typeof source === "string" ? buildManifestEntry(source, opts) : source;
-  const duplicate = manifest.value.capabilities.some(
+  const duplicate = manifest.capabilities.some(
     (candidate) =>
       entrySourceId(candidate, path.dirname(root.manifestPath)) ===
       entrySourceId(entry, path.dirname(root.manifestPath)),
   );
-  if (duplicate) throw validationError(`source already exists: ${sourceString(entry.source)}`);
-  manifest.value.capabilities.push(entry);
-  await writeCapabilitiesYml(root, manifest.value.capabilities);
+  if (duplicate) {
+    throw validationError(
+      `source already exists: ${sourceString(entry.source, path.dirname(root.manifestPath))}`,
+    );
+  }
+  manifest.capabilities.push(entry);
+  await writeCapabilitiesYml(root, manifest);
   return entry;
 }
 
 export async function removeManifestEntry(root: ScopeRoot, name: string): Promise<void> {
-  const manifest = await readCapabilitiesYml(root.manifestPath);
+  const manifest = await readManifestForMutation(root);
   const lock = await readLockfile(root.lockPath);
   const sourceIdsToRemove = new Set<string>();
   const lockUpdates = new Map<
@@ -88,7 +98,7 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
     }
   >();
   let found = false;
-  const kept = manifest.value.capabilities.flatMap((entry) => {
+  const kept = manifest.capabilities.flatMap((entry) => {
     const id = entrySourceId(entry, path.dirname(root.manifestPath));
     const legacyId = sourceId(entry.source, path.dirname(root.manifestPath));
     const lockEntry = lock?.entries.find(
@@ -151,7 +161,7 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
     return [next];
   });
   if (!found) throw validationError(`unknown capability: ${name}`);
-  await writeCapabilitiesYml(root, kept);
+  await writeCapabilitiesYml(root, { ...manifest, capabilities: kept });
   if (lock !== null) {
     await writeLockfile(root.lockPath, {
       acf: 1,
@@ -169,19 +179,60 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
   await rm(path.join(root.capabilitiesDir, name), { recursive: true, force: true });
 }
 
+/**
+ * Reads capabilities.yml for an add/remove rewrite. An unreadable or invalid manifest parses as
+ * empty, so rewriting it would silently drop every existing entry (and reconciliation would then
+ * delete their installed snapshots). Refuse instead and leave the file, lock, and installs alone.
+ */
+export async function readManifestForMutation(root: ScopeRoot): Promise<CapabilitiesYml> {
+  const manifest = await readCapabilitiesYml(root.manifestPath);
+  const errors = manifest.diagnostics.filter((item) => item.severity === "error");
+  if (errors.length > 0) {
+    const details = errors.map((item) => `${item.code}: ${item.message}`).join("; ");
+    throw validationError(
+      `refusing to modify invalid ${root.manifestPath} (fix it first): ${details}`,
+    );
+  }
+  return manifest.value;
+}
+
 export async function writeCapabilitiesYml(
   root: ScopeRoot,
-  capabilities: CapabilityEntry[],
+  manifest: CapabilitiesYml,
 ): Promise<void> {
   await mkdir(path.dirname(root.manifestPath), { recursive: true });
-  const humanReadable = capabilities.map(({ source, capabilities: selected, ...entry }) => ({
-    source: sourceString(source),
-    ...(selected === undefined
-      ? {}
-      : { capabilities: selected.length === 1 ? selected[0] : selected }),
+  const humanReadable = manifest.capabilities.map(
+    ({ source, capabilities: selected, ...entry }) => ({
+      source: manifestSourceString(source),
+      ...(selected === undefined
+        ? {}
+        : { capabilities: selected.length === 1 ? selected[0] : selected }),
+      ...entry,
+    }),
+  );
+  const document = {
+    acf: 1,
+    ...(manifest.defaults === undefined ? {} : { defaults: manifest.defaults }),
+    capabilities: humanReadable,
+  };
+  await writeFile(root.manifestPath, stringifyYml(document), "utf8");
+}
+
+// Path locations are written exactly as stored: relative ones stay relative to the manifest
+// directory (SPEC 18.3). New CLI inputs are made absolute against the caller's cwd before they
+// reach the manifest (see anchorPathSource).
+function manifestSourceString(source: SourceSpec): string {
+  if (source.kind === "path") return `path:${source.location}`;
+  return sourceString(source);
+}
+
+/** Returns the entry with a relative or home-relative `path:` location made absolute from baseDir. */
+export function anchorPathSource(entry: CapabilityEntry, baseDir: string): CapabilityEntry {
+  if (entry.source.kind !== "path") return entry;
+  return {
     ...entry,
-  }));
-  await writeFile(root.manifestPath, stringifyYml({ acf: 1, capabilities: humanReadable }), "utf8");
+    source: { kind: "path", location: canonicalizePathLocation(entry.source.location, baseDir) },
+  };
 }
 
 function buildEntry(source: string, opts: ManifestEntryOptions): CapabilityEntry {

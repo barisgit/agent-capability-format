@@ -1795,7 +1795,7 @@ ignored with an `info` diagnostic.
 remote and local capabilities into the scope's `capabilities/` directory.
 
 `capabilities.yml` does NOT change what is loaded at runtime; it
-describes what `caplet fetch` (or an equivalent resolver) should place
+describes what `caplet update` (or an equivalent resolver) should place
 into the scope's `capabilities/` directory.
 
 ### 17.4 `capabilities.yml` shape
@@ -2005,7 +2005,7 @@ optional `capabilityNames` for `path:` entries.
 
 When `capabilities.yml` and `capabilities.lock` disagree:
 
-- `caplet fetch` (or equivalent) MUST re-resolve from `capabilities.yml`
+- `caplet update` (or equivalent) MUST re-resolve from `capabilities.yml`
   and update `capabilities.lock`.
 - `caplet apply` (or equivalent) MUST emit a `warn` diagnostic and
   refuse to proceed without an explicit `--update-lock` (or equivalent)
@@ -2118,19 +2118,23 @@ longer selected after a fully successful resolution.
 
 This section is informative. The reference CLI (`caplet`) provides:
 
-| Command            | Purpose                                                                  |
-| ------------------ | ------------------------------------------------------------------------ |
-| `caplet add`       | Mutate `capabilities.yml`: add a new source entry (interactive).         |
-| `caplet remove`    | Mutate `capabilities.yml`: remove an entry.                              |
-| `caplet update`    | Mutate `capabilities.yml`: update `ref` on an entry.                     |
-| `caplet fetch`     | Reconcile imports declared in `capabilities.yml`; refresh lockfile.      |
-| `caplet emit`      | Produce native artifacts for one or more targets.                        |
-| `caplet apply`     | Composite: `fetch` then `emit`.                                          |
-| `caplet check`     | Validate capabilities and `capabilities.yml` without emitting.           |
-| `caplet inspect`   | Print resolved capability metadata for human or JSON consumption.        |
-| `caplet ls`        | List capabilities and facets across scopes.                              |
-| `caplet diff`      | Diff resolved capability state against the lockfile.                     |
-| `caplet doctor`    | Run environment, auth, and registry diagnostics.                         |
+| Command             | Purpose                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `caplet init`       | Create a project `.agents/capabilities.yml`.                                              |
+| `caplet add`        | Add source entries to `capabilities.yml`, resolve, and apply (`--no-apply` edits only).   |
+| `caplet remove`     | Remove a capability selection or entry and its managed output.                            |
+| `caplet update`     | Re-resolve sources to their latest refs, refresh the lockfile, and apply (`--no-apply`).  |
+| `caplet apply`      | Resolve declared sources as needed and reconcile native artifacts (`--dry-run`, `--offline`, `--frozen`). |
+| `caplet status`     | Summarize scopes, capabilities, and pending changes; the default with no command.         |
+| `caplet list`       | List installed capabilities across scopes (alias `caplet ls`).                            |
+| `caplet show`       | Show one capability's contents and target support.                                        |
+| `caplet check`      | Validate capabilities and `capabilities.yml` and detect stale outputs without writing.    |
+| `caplet doctor`     | Check git, `.agents/` access, target registry, and lockfiles.                             |
+| `caplet completion` | Print shell completions.                                                                  |
+
+Earlier command names remain as deprecated aliases: `inspect` runs `show`,
+`diff` runs `apply --dry-run` (a plan of emitted-file changes, not a lockfile
+diff), `emit` runs `apply --offline`, and `fetch` runs `update --no-apply`.
 
 Other tools MAY implement a different command surface; the above is the
 reference shape used in `IMPLEMENTATION.md`.

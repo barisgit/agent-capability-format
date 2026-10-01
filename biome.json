@@ -9,12 +9,13 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
-      "!**/dist/**",
-      "!**/node_modules/**",
-      "!**/.turbo/**",
-      "!**/.pi/**",
-      "!**/fixtures/**",
-      "!**/tests/fixtures/**"
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.turbo",
+      "!**/.pi",
+      "!**/fixtures",
+      "!**/tests/fixtures",
+      "!**/.charters/**/state.json"
     ]
   },
   "formatter": {

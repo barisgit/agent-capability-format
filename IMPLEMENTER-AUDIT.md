@@ -1,5 +1,11 @@
 # Implementer Audit — ACF Parallel Passes
 
+> **Historical report, superseded.** This audit of the May 2026 parallel
+> implementer branches is kept as evidence. Its verdicts, command list, and
+> script shapes describe those branches, not the current repository. For the
+> current command surface and scripts see `README.md` and
+> `IMPLEMENTATION.md`; for planned work see `backlog.md`.
+
 Date: 2026-05-17
 
 This is a synthesis of four autonomous implementation branches. Treat the

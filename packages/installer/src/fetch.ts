@@ -54,14 +54,15 @@ async function fetchGitCapability(
   if (ref === undefined) throw new Error("acf.resolve.ref-required: git sources require ref");
   const destination = getCachePath(opts.cacheDir, id, ref);
   const url = gitUrl(entry.source);
+  const authHeader = githubAuthHeader(entry.source);
   const shallow = opts.shallow ?? true;
   const blobless = opts.blobless ?? true;
   await retry(opts.retries ?? 0, async () => {
     await ensureCleanCache(destination);
     if (shallow && !looksLikeSha(ref)) {
-      await cloneShallow({ url, destination, ref, blobless });
+      await cloneShallow({ url, destination, ref, blobless, authHeader });
     } else {
-      await cloneFull({ url, destination, ref, blobless });
+      await cloneFull({ url, destination, ref, blobless, authHeader });
     }
   });
   const commit = await revParseHead(destination);
@@ -74,11 +75,19 @@ async function fetchGitCapability(
 
 function gitUrl(source: Extract<SourceSpec, { kind: "github" | "git" }>): string {
   if (source.kind === "git") return source.url;
-  const token = process.env.GITHUB_TOKEN;
-  if (token !== undefined && token.length > 0) {
-    return `https://x-access-token:${encodeURIComponent(token)}@github.com/${source.repo}.git`;
-  }
   return `https://github.com/${source.repo}.git`;
+}
+
+// GITHUB_TOKEN is sent as an HTTP Basic header scoped to the clone URL instead of
+// URL userinfo, so it stays out of git argv, error messages, and cached config.
+function githubAuthHeader(
+  source: Extract<SourceSpec, { kind: "github" | "git" }>,
+): string | undefined {
+  if (source.kind !== "github") return undefined;
+  const token = process.env.GITHUB_TOKEN;
+  if (token === undefined || token.length === 0) return undefined;
+  const credential = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return `Authorization: Basic ${credential}`;
 }
 
 function resolveEntryPath(root: string, entryPath: string | undefined): string {

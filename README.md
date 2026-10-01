@@ -40,7 +40,7 @@ confuse them.
 | ---------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `acf.yml`              | Inside one capability directory, at its root.                                   | The **capability manifest**. Declares one capability's identity, version, and applicability.  |
 | `capabilities/`        | `~/.agents/capabilities/` (user) and `./.agents/capabilities/` (project).       | A **directory**, not a file. Every subdirectory containing `acf.yml` is autoloaded.           |
-| `capabilities.yml`     | `~/.agents/capabilities.yml` and/or `./.agents/capabilities.yml`. Optional.     | A **scope-level import list**. Declares what `caplet fetch` should place under `capabilities/`. |
+| `capabilities.yml`     | `~/.agents/capabilities.yml` and/or `./.agents/capabilities.yml`. Optional.     | A **scope-level import list**. Declares what `caplet update` / `caplet apply` resolve into `capabilities/`. |
 
 Short version: `acf.yml` is *inside* one capability. `capabilities/` is the
 autoloaded directory. `capabilities.yml` is the import list that populates it.
@@ -138,7 +138,7 @@ For a monorepo source, set `path:` to the subtree containing either an
 capability subtree is:
 
 ```bash
-caplet add github:owner/monorepo --ref main --path packages/my-capability
+caplet add github:owner/monorepo --pin main --path packages/my-capability
 ```
 
 Referenced assets are emitted byte-for-byte; executable permission bits are
@@ -154,20 +154,52 @@ ACF has two distinct phases:
    target's install location (`~/.claude/`, `./.cursor/`, …). Re-targeting is
    a re-emit, not a re-install.
 
-The reference CLI `caplet` exposes both:
+The reference CLI `caplet` (`caplet --help` is authoritative):
 
-- `caplet fetch` — reconcile `capabilities.yml` into `capabilities/`.
-- `caplet emit` — render native artifacts for one or more targets.
-- `caplet apply` — `fetch` then `emit`.
+| Group   | Command                     | What it does                                                                 |
+| ------- | --------------------------- | ---------------------------------------------------------------------------- |
+| Manage  | `caplet init`               | Create `.agents/capabilities.yml` for this project.                          |
+| Manage  | `caplet add <source>...`    | Add sources to `capabilities.yml`, resolve, and apply (`--no-apply` to skip). |
+| Manage  | `caplet remove <name>...`   | Remove a capability and its managed output.                                  |
+| Manage  | `caplet update [name]`      | Re-resolve sources to their latest refs and apply (`--no-apply`: lock only). |
+| Sync    | `caplet apply`              | Resolve (fetching as needed) and reconcile native artifacts.                 |
+| Inspect | `caplet status`             | Summarize scopes, capabilities, and pending changes. Bare `caplet` runs it.  |
+| Inspect | `caplet list`               | List installed capabilities. `caplet ls` is a supported alias.               |
+| Inspect | `caplet show <name>`        | Show a capability's contents and target support.                             |
+| Inspect | `caplet check`              | Validate and detect stale outputs without writing (CI-friendly).             |
+| Inspect | `caplet doctor`             | Check git, `.agents/` access, targets, and lockfiles.                        |
+| Setup   | `caplet completion <shell>` | Print bash, zsh, or fish completions.                                        |
 
-Plus inspection: `caplet check`, `caplet inspect`, `caplet ls`, `caplet
-diff`, `caplet doctor`.
+Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
+fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
+lockfile is stale. `caplet check --frozen --strict` is the CI form.
+
+Older command names still work but print a deprecation notice and rewrite to
+the canonical command:
+
+| Deprecated       | Runs                         |
+| ---------------- | ---------------------------- |
+| `caplet inspect` | `caplet show`                |
+| `caplet diff`    | `caplet apply --dry-run`     |
+| `caplet emit`    | `caplet apply --offline`     |
+| `caplet fetch`   | `caplet update --no-apply`   |
 
 Emitted destinations contain visible `ACF-MANAGED.md` notices: one aggregate
 inventory at each install root and one local marker inside each fully-owned
 skill directory. Edit the declared capability source, not these generated
 files, then run `caplet apply`. The machine-readable `.acf-managed.json`
 sidecar remains the authority used for drift detection and safe cleanup.
+
+## Project status
+
+ACF and `caplet` are a draft specification plus a working reference
+implementation (`caplet` 0.2.0, private Bun workspace, not yet published to
+npm). It supports bare skill imports, source capability selection, and
+managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
+completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).
+`RESULTS.md` and `IMPLEMENTER-AUDIT.md` are historical reports, not current
+status. Run `bun run ci` for current health rather than relying on any
+recorded result.
 
 ## Packages
 

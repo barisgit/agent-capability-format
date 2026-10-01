@@ -1,11 +1,6 @@
 import path from "node:path";
 import type { CapabilityEntry, ScopeRoot } from "@acf/core";
-import {
-  fetchCapability,
-  inspectSource,
-  type PrefetchedSource,
-  readCapabilitiesYml,
-} from "@acf/installer";
+import { fetchCapability, inspectSource, type PrefetchedSource } from "@acf/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import {
   readCwd,
@@ -16,7 +11,13 @@ import {
   validationError,
 } from "../internal/args";
 import { runCommandSafely } from "../internal/command";
-import { addManifestEntry, buildManifestEntry, parseAddSource } from "../internal/manifest";
+import {
+  addManifestEntry,
+  anchorPathSource,
+  buildManifestEntry,
+  parseAddSource,
+  readManifestForMutation,
+} from "../internal/manifest";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
 import { buildPlanView } from "../internal/plan-view";
 import { inferScope, resolveScopeRoots } from "../internal/scopes";
@@ -38,12 +39,15 @@ export const addCommand = defineCommand({
       const root = (await resolveScopeRoots(scope, cwd))[0];
       if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
       const parsedSource = parseAddSource(rawSource);
-      const entry = buildManifestEntry(parsedSource.source, {
+      const built = buildManifestEntry(parsedSource.source, {
         ref: readOptionalString(context.args, "pin") ?? readOptionalString(context.args, "ref"),
         path: readOptionalString(context.args, "path"),
         rename:
           readOptionalString(context.args, "as") ?? readOptionalString(context.args, "rename"),
       });
+      // A relative path typed on the command line means "relative to --cwd", not to the
+      // manifest directory, so anchor it before it is fetched or written.
+      const entry = anchorPathSource(built, cwd);
 
       type SelectionInspection = {
         inventory: Awaited<ReturnType<typeof inspectSource>>;
@@ -56,11 +60,13 @@ export const addCommand = defineCommand({
         entry: CapabilityEntry,
         options: { requested?: string; interactive: boolean; yes: boolean },
       ): Promise<SelectionInspection> {
-        const yml = await readCapabilitiesYml(root.manifestPath);
+        // Validate the manifest before fetching so an invalid file aborts with nothing changed.
+        const manifest = await readManifestForMutation(root);
+        // Omitted settings fall through to fetchCapability's defaults, matching the installer.
         const fetched = await fetchCapability(entry, {
           cacheDir: path.join(root.agentsDir, ".cache", "acf-installer"),
-          shallow: yml.value.defaults?.fetch?.shallow ?? true,
-          blobless: yml.value.defaults?.fetch?.blobless ?? false,
+          shallow: manifest.defaults?.fetch?.shallow,
+          blobless: manifest.defaults?.fetch?.blobless,
         });
         const inventory = await inspectSource(fetched.root);
         if (inventory.diagnostics.some((item) => item.severity === "error")) {
