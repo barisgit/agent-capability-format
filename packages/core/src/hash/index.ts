@@ -7,6 +7,8 @@ export {
   computeCapabilityDigests,
   computePayloadDigest,
   PAYLOAD_DIGEST_PATTERN,
+  payloadDigestOfEntries,
+  type TreeEntry,
 } from "./payload-digest.js";
 
 /**

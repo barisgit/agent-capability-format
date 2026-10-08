@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmod } from "node:fs/promises";
 import path from "node:path";
-import { computeContentHash, computePayloadDigest } from "../src";
+import { computeContentHash, computePayloadDigest, payloadDigestOfEntries } from "../src";
 import { cleanup, tempDir, writeText } from "./helpers";
 
 // Expected value computed independently from the SPEC.md §19.6 framing (Python reference).
@@ -64,4 +64,19 @@ test("payload digest rejects paths that collide after NFC normalization", async 
   } finally {
     await cleanup(dir);
   }
+});
+
+test("the digest of in-memory entries equals the digest of the same tree on disk", () => {
+  const entries = [
+    { path: "scripts/run.sh", content: "#!/bin/sh\necho hi\n", executable: true },
+    {
+      path: "acf.yml",
+      content: new TextEncoder().encode("acf: 1\nname: pinned\nversion: 1.0.0\n"),
+    },
+    { path: "docs/e\u0301.md", content: "accent\n" },
+  ];
+  expect(payloadDigestOfEntries(entries)).toBe(PINNED_DIGEST);
+  expect(() =>
+    payloadDigestOfEntries([...entries, { path: "docs/\u00e9.md", content: "" }]),
+  ).toThrow("normalization collision: docs/\u00e9.md");
 });

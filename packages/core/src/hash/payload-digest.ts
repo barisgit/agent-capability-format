@@ -53,6 +53,35 @@ export async function computeCapabilityDigests(root: string): Promise<Capability
   };
 }
 
+/** One file of an in-memory tree: `/`-separated relative path, bytes or UTF-8 text, exec bit. */
+export type TreeEntry = {
+  path: string;
+  content: string | Uint8Array;
+  executable?: boolean | undefined;
+};
+
+/**
+ * Computes the `acf-tree-2` payload digest of an in-memory tree, framed and ordered exactly as
+ * {@link computePayloadDigest} frames the same files on disk (paths NFC-normalized and sorted by
+ * their bytes). Writers use it to fingerprint generated output before writing it. Throws on two
+ * paths that collide after NFC normalization.
+ */
+export function payloadDigestOfEntries(entries: readonly TreeEntry[]): string {
+  const files = entries
+    .map((entry) => ({ ...entry, rel: entry.path.normalize("NFC") }))
+    .sort((a, b) => Buffer.compare(Buffer.from(a.rel, "utf8"), Buffer.from(b.rel, "utf8")));
+  rejectNfcCollisions(files);
+  const hash = createHash("sha256");
+  for (const file of files) {
+    const content =
+      typeof file.content === "string"
+        ? Buffer.from(file.content, "utf8")
+        : Buffer.from(file.content);
+    frameEntry(hash, Buffer.from(file.rel, "utf8"), file.executable === true, content);
+  }
+  return `${PAYLOAD_DIGEST_PREFIX}${hash.digest("hex")}`;
+}
+
 // Framing (SPEC.md §19.6): kind byte, u64be path length, path bytes, executable byte,
 // u64be content length, content bytes.
 function frameEntry(hash: Hash, pathBytes: Buffer, executable: boolean, content: Buffer): void {
@@ -70,7 +99,7 @@ function u64be(value: number): Buffer {
   return buffer;
 }
 
-function rejectNfcCollisions(files: readonly TreeFile[]): void {
+function rejectNfcCollisions(files: readonly Pick<TreeFile, "rel">[]): void {
   // Files are sorted by NFC path, so equal NFC paths are adjacent.
   for (let index = 1; index < files.length; index += 1) {
     const previous = files[index - 1];
