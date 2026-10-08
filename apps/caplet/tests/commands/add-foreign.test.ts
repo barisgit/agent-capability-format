@@ -22,8 +22,18 @@ test("caplet add installs a Claude plugin into the loose targets", async () => {
     const plugin = path.join(scope.sourceRoot, "review-plugin");
     await writeText(
       path.join(plugin, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: "review-kit", version: "1.2.0", description: "Review helpers" }),
+      JSON.stringify({
+        name: "review-kit",
+        version: "1.2.0",
+        description: "Review helpers",
+        skills: "./extra-skills",
+      }),
     );
+    await writeText(
+      path.join(plugin, "extra-skills", "triage", "SKILL.md"),
+      "---\ndescription: Triage issues\n---\nTriage.\n",
+    );
+    await writeText(path.join(plugin, "extra-skills", "triage", "notes.md"), "Notes.\n");
     await writeText(
       path.join(plugin, "skills", "review", "SKILL.md"),
       "---\nname: review\ndescription: Review code\n---\nReview.\n",
@@ -55,10 +65,13 @@ test("caplet add installs a Claude plugin into the loose targets", async () => {
     expect(await Bun.file(path.join(snapshot, ".claude-plugin", "plugin.json")).exists()).toBe(
       true,
     );
-    for (const file of ["SKILL.md", "checklist.md"]) {
-      expect(await Bun.file(path.join(scope.agentsDir, "skills", "review", file)).exists()).toBe(
-        true,
-      );
+    for (const file of [
+      "review/SKILL.md",
+      "review/checklist.md",
+      "triage/SKILL.md",
+      "triage/notes.md",
+    ]) {
+      expect(await Bun.file(path.join(scope.agentsDir, "skills", file)).exists()).toBe(true);
     }
     const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
     expect(claudeMcp.mcpServers.files).toEqual({
