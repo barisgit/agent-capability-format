@@ -1,0 +1,11 @@
+[
+  {
+    "scope": "project",
+    "capability": "tools",
+    "target": "claude",
+    "kind": "mcp-server",
+    "name": "docs",
+    "detail": "node ${ACF_CAPABILITY_DIR}/server.js --stdio",
+    "change": "added"
+  }
+]

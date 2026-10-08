@@ -1,17 +1,14 @@
+import { executableChanges } from "@caplet/core";
 import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
-import { readCwd, readScope, readVerbose, validationError } from "../internal/args.js";
+import { planAndApply } from "../internal/apply-flow.js";
+import { readCwd, readScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
-import {
-  exitCodeForDiagnostics,
-  finishWithDiagnostics,
-  printDiagnostics,
-  reporter,
-} from "../internal/output.js";
-import { buildPlanView } from "../internal/plan-view.js";
+import { printJson, readJson } from "../internal/json.js";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow.js";
+import { fetchScopes, installedExecutables } from "../internal/workflow.js";
 
 export const updateCommand = defineCommand({
   meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },
@@ -20,6 +17,7 @@ export const updateCommand = defineCommand({
     await runCommandSafely(context.args, async () => {
       const name = typeof context.args.name === "string" ? context.args.name : undefined;
       if (name !== undefined) await ensureKnownName(context.args, name);
+      const installed = await installedExecutables(context.args);
       const result = await fetchScopes(context.args, "force", name);
       const count = result.results.reduce(
         (sum, item) =>
@@ -29,40 +27,43 @@ export const updateCommand = defineCommand({
         0,
       );
       const out = reporter(context.args);
+      const announce = () => {
+        out.done(
+          name === undefined
+            ? `Updated ${count} ${count === 1 ? "capability" : "capabilities"}`
+            : `Updated ${name}`,
+        );
+      };
       if (context.args.apply === false) {
-        const code = finishWithDiagnostics(result.diagnostics, context.args);
+        // Nothing is planned, so the report compares the snapshots the update just installed.
+        const executables = executableChanges(installed, await installedExecutables(context.args));
+        const code = exitCodeForDiagnostics(result.diagnostics, context.args);
+        process.exitCode = code;
+        if (readJson(context.args)) {
+          printJson("update", code === 0, result.diagnostics, {
+            updated: count,
+            plan: null,
+            applied: null,
+            executables,
+          });
+          return;
+        }
+        printDiagnostics(result.diagnostics, context.args);
         if (code === 0) {
-          out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
+          announce();
           out.details([["Resolved", `${count} ${count === 1 ? "capability" : "capabilities"}`]]);
         }
-        process.exitCode = code;
+        out.executables(executables);
         return;
       }
-      const plan = await buildEmitPlan(context.args);
-      const diagnostics = [...result.diagnostics, ...plan.diagnostics];
-      printDiagnostics(diagnostics, context.args);
-      const code = exitCodeForDiagnostics(diagnostics, context.args);
-      if (code !== 0) {
-        process.exitCode = code;
-        return;
-      }
-      out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
-      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
-      if (view.fileCount === 0) {
-        out.done("Everything up to date");
-        return;
-      }
-      out.log("");
-      out.plan(view);
-      const applied = await applyEmitPlan(plan);
-      const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
-      const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
-      printDiagnostics(applied.diagnostics, context.args);
-      process.exitCode = exitCodeForDiagnostics(applied.diagnostics, context.args);
-      out.log("");
-      out.done(
-        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
-      );
+      await planAndApply({
+        command: "update",
+        args: context.args,
+        diagnostics: result.diagnostics,
+        installed,
+        payload: { updated: count },
+        announce,
+      });
     });
   },
 });
