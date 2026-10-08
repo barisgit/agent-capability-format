@@ -91,8 +91,13 @@ export function translatedOutcome(
 /**
  * `acf.support.component-omitted` (lossy): the target has no carrier for the component type,
  * so the writer skips it. Use `packageRefused` instead when the component is restricting.
+ * `recovery` replaces the default when another choice also resolves it (a carrier change).
  */
-export function componentOmitted(subject: SupportSubject, reason: string): Diagnostic {
+export function componentOmitted(
+  subject: SupportSubject,
+  reason: string,
+  recovery = recoveryFor(subject),
+): Diagnostic {
   const label = componentLabel(subject);
   return diagnostic(subject, {
     severity: "lossy",
@@ -102,7 +107,7 @@ export function componentOmitted(subject: SupportSubject, reason: string): Diagn
       outcome: "omitted",
       source: subject.family,
       consequence: `${label} is not installed for ${subject.target}`,
-      recovery: recoveryFor(subject),
+      recovery,
     },
   });
 }
@@ -110,10 +115,14 @@ export function componentOmitted(subject: SupportSubject, reason: string): Diagn
 /**
  * `acf.support.refused` (error) for a restricting component the target cannot carry: the
  * whole package is refused for that target (capability-model-layers, Component omission).
+ * `recovery` replaces the default when another choice also resolves it (a carrier change).
  */
-export function packageRefused(subject: SupportSubject, reason: string): Diagnostic {
+export function packageRefused(
+  subject: SupportSubject,
+  reason: string,
+  recovery = recoveryFor(subject),
+): Diagnostic {
   const label = componentLabel(subject);
-  const recovery = recoveryFor(subject);
   return diagnostic(subject, {
     severity: "error",
     code: "acf.support.refused",

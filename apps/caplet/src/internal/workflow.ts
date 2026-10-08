@@ -609,11 +609,9 @@ export function outputBoundary(
     const resolved = path.resolve(cwd, skillsRoot);
     if (!isInsideOrEqual(resolved, root)) roots.push(resolved);
   }
-  const mcpFile = path.resolve(
-    cwd,
-    layoutFor(context.targetId, root, context.scopeRoot.scope).mcpFile,
-  );
-  return { roots, files: isInsideOrEqual(mcpFile, root) ? [] : [mcpFile] };
+  const layoutMcp = layoutFor(context.targetId, root, context.scopeRoot.scope).mcpFile;
+  const mcpFile = layoutMcp === undefined ? undefined : path.resolve(cwd, layoutMcp);
+  return { roots, files: mcpFile === undefined || isInsideOrEqual(mcpFile, root) ? [] : [mcpFile] };
 }
 
 function isInsideOrEqual(candidate: string, root: string): boolean {

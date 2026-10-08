@@ -12,12 +12,14 @@ import {
   type AcfOwnership,
   acfPathPlaceholders,
   type Carrier,
+  componentOmitted,
   type EmitInput,
   type FileDiff,
   type McpServer,
   nativeExtras,
   nativeKeyInfo,
   type ReadOnlyFs,
+  recoveryFor,
   type Scope,
   type SupportSubject,
   type TargetId,
@@ -168,6 +170,11 @@ export async function emitMcp(
     dataDir: capabilityDataDir(input.installRoot, capability.manifest.name),
   };
   const file = mcpPathFor(target, input.installRoot, input.scope);
+  if (file === undefined) {
+    for (const server of mcp.servers)
+      report.diagnostics.push(unwritableServer(input, target, server));
+    return [];
+  }
   const before = await fs.readText(file);
   let after = before ?? "";
   const owns: AcfOwnership[] = [];
@@ -206,15 +213,19 @@ export function capabilityDataDir(installRoot: string, capabilityName: string): 
 /**
  * The config file a target reads MCP servers from at `scope`: Claude's project `.mcp.json`,
  * Codex `config.toml`, OpenCode's `opencode.json` (project root or user config directory), and
- * `mcp.json` in the install root otherwise.
+ * `mcp.json` in the install root otherwise. Undefined when no file caplet may write carries
+ * servers for that scope: Claude reads user servers only from `~/.claude.json`, a state file
+ * Claude itself rewrites, so the loose carrier has no safe place for them.
  */
-export function mcpPathFor(targetId: TargetId, installRoot: string, scope: Scope): string {
+export function mcpPathFor(
+  targetId: TargetId,
+  installRoot: string,
+  scope: Scope,
+): string | undefined {
   const projectRoot = path.dirname(installRoot);
   switch (targetId) {
     case "claude":
-      return scope === "project"
-        ? path.join(projectRoot, ".mcp.json")
-        : path.join(installRoot, "mcp.json");
+      return scope === "project" ? path.join(projectRoot, ".mcp.json") : undefined;
     case "codex":
       return path.join(installRoot, "config.toml");
     case "opencode":
@@ -222,6 +233,25 @@ export function mcpPathFor(targetId: TargetId, installRoot: string, scope: Scope
     default:
       return path.join(installRoot, "mcp.json");
   }
+}
+
+/**
+ * `acf.support.component-omitted` for a server whose target has no writable MCP file at the
+ * scope; the Claude plugin carrier installs user-scope servers through the plugin instead.
+ */
+function unwritableServer(input: EmitInput, target: TargetId, server: McpServer) {
+  const subject = {
+    capability: input.capability.manifest.name,
+    target,
+    carrier: "loose" as const,
+    family: "mcp" as const,
+    component: server.name,
+  };
+  return componentOmitted(
+    subject,
+    `${target} reads ${input.scope}-scope MCP servers only from ~/.claude.json, which caplet does not edit`,
+    `targets.${target}.carrier: plugin or ${recoveryFor(subject)}`,
+  );
 }
 
 type Fields = {

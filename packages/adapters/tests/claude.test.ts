@@ -237,3 +237,22 @@ function textAfter(diff: { after: string | Uint8Array | null }): string {
   if (diff.after === null) throw new Error("expected emitted content");
   return typeof diff.after === "string" ? diff.after : new TextDecoder().decode(diff.after);
 }
+
+test("claude loose user scope omits MCP servers instead of writing a file Claude ignores", async () => {
+  const cap = await readFixtureCapability("user");
+  const result = await claudeAdapter.emit(
+    emitInput(cap, "/home/me/.claude", { carrier: "loose" }),
+    makeInMemoryFs(),
+  );
+  expect(result.diffs.some((diff) => diff.path.endsWith("mcp.json"))).toBe(false);
+  expect(result.diffs.some((diff) => diff.path.includes(".acf/data"))).toBe(false);
+  const omitted = result.diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.code === "acf.support.component-omitted" && diagnostic.family === "mcp",
+  );
+  expect(omitted.map((diagnostic) => diagnostic.data?.component).sort()).toEqual(
+    (cap.mcp?.servers ?? []).map((server) => server.name).sort(),
+  );
+  expect(omitted[0]?.message).toContain("~/.claude.json");
+  expect(omitted[0]?.data?.recovery).toContain("targets.claude.carrier: plugin");
+});

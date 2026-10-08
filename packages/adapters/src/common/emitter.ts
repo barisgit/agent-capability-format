@@ -45,7 +45,8 @@ export type AdapterLayout = {
   alwaysInstructionFile?: string | undefined;
   hookDir?: string | undefined;
   hookSettingsFile?: string | undefined;
-  mcpFile: string;
+  /** Undefined when the target has no MCP file caplet may write at the scope. */
+  mcpFile: string | undefined;
   cursorRulesDir?: string | undefined;
 };
 
