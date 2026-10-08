@@ -267,6 +267,11 @@ verbatim; `description` stays metadata.
 
 ## Hooks in one paragraph
 
+> **Experimental in caplet 0.1.x.** caplet writes hook entries in a
+> caplet-specific shape rather than each tool's native hook format, so tools
+> may ignore them. Do not rely on hooks, especially blocking ones, until the
+> hook writers are rebuilt (tracked in `openspec/changes/plugin-interop-foundation/`).
+
 Hooks live in a single `hooks/hooks.yml` keyed by canonical type:
 `session_start`, `user_prompt_submit`, `pre_tool`, `permission_request`,
 `post_tool`, `stop`, `pre_compact`. Each entry has `name`, optional

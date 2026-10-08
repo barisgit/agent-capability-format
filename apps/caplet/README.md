@@ -25,6 +25,9 @@ caplet                                        # status summary
 caplet check --frozen --strict                # CI: fail on stale or lossy output
 ```
 
+Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
+does not yet write them in each tool's native format, so tools may ignore them.
+
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 
 ## License
