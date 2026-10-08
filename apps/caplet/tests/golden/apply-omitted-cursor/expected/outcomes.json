@@ -1,0 +1,56 @@
+[
+  {
+    "capability": "alpha-cap",
+    "target": "cursor",
+    "family": "agent",
+    "component": "alpha-helper",
+    "outcome": "omitted",
+    "source": "agent",
+    "consequence": "cursor does not natively support agent; facet is not emitted",
+    "recovery": "exclude: { agent: [alpha-helper] } or except: [cursor]"
+  },
+  {
+    "capability": "alpha-cap",
+    "target": "cursor",
+    "family": "instruction",
+    "component": "always",
+    "outcome": "omitted",
+    "source": "activation: always",
+    "consequence": "cursor only emits file_context instructions as Cursor rules",
+    "recovery": "exclude: { instruction: [always] } or except: [cursor]"
+  },
+  {
+    "capability": "alpha-cap",
+    "target": "cursor",
+    "family": "mcp",
+    "component": "alpha-server",
+    "outcome": "native"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "cursor",
+    "family": "agent",
+    "component": "beta-helper",
+    "outcome": "omitted",
+    "source": "agent",
+    "consequence": "cursor does not natively support agent; facet is not emitted",
+    "recovery": "exclude: { agent: [beta-helper] } or except: [cursor]"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "cursor",
+    "family": "instruction",
+    "component": "always",
+    "outcome": "omitted",
+    "source": "activation: always",
+    "consequence": "cursor only emits file_context instructions as Cursor rules",
+    "recovery": "exclude: { instruction: [always] } or except: [cursor]"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "cursor",
+    "family": "mcp",
+    "component": "beta-server",
+    "outcome": "native"
+  }
+]

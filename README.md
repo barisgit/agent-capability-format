@@ -180,7 +180,9 @@ The reference CLI `caplet` (`caplet --help` is authoritative):
 | Inspect | `caplet doctor`             | Check git, `.agents/` access, targets, and lockfiles.                        |
 | Setup   | `caplet completion <shell>` | Print bash, zsh, or fish completions.                                        |
 
-Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
+The plan starts with a compatibility report listing, per target, each
+component that is translated, changed in behavior, omitted or blocked, with a
+recovery action. Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 

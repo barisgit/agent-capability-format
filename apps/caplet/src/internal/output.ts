@@ -1,6 +1,7 @@
-import type { Diagnostic } from "@caplet/core";
+import type { ComponentOutcome, Diagnostic, TargetId } from "@caplet/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
+import { renderCompatibility } from "./compatibility.js";
 import type { PlanView } from "./plan-view.js";
 import { columns, glyphs } from "./render.js";
 
@@ -15,6 +16,8 @@ export type Reporter = {
   diagnosticSummary(counts: { errors: number; warnings: number; lossy: number }): void;
   status(status: "pass" | "warn" | "fail", message: string): void;
   plan(view: PlanView): void;
+  /** Behavior-first compatibility report; precedes the plan's file list. */
+  compatibility(outcomes: readonly ComponentOutcome[], targets: readonly TargetId[]): void;
   failure(message: string): void;
   hint(message: string): void;
 };
@@ -93,6 +96,10 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     plan(view) {
       for (const line of renderPlan(view, { quiet })) writeStdout(line);
+    },
+    compatibility(outcomes, targets) {
+      if (quiet) return;
+      for (const line of renderCompatibility(outcomes, targets)) writeStdout(line);
     },
     failure(message) {
       writeStderr(`${colors.bold(colors.red(glyphs().fail))} ${sentenceCase(message)}`);

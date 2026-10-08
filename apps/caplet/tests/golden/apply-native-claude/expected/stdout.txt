@@ -1,0 +1,18 @@
+Compatibility
+  claude - native: 2 agents, 2 instructions, 2 MCP servers
+
+Plan: 5 changes
+
+project  .
+  claude  .claude
+    + .mcp.json                 alpha-cap, beta-cap
+    + CLAUDE.md                 alpha-cap, beta-cap
+    + agents/alpha-helper.md    alpha-cap
+    + agents/beta-helper.md     beta-cap
+    + managed notices
+
++ 5 create  ~ 0 update  - 0 delete
+
+warn 5 files
+targets
+    project  (nothing managed yet)
