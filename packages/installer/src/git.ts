@@ -34,7 +34,7 @@ export async function cloneFull(opts: CloneOptions): Promise<void> {
 }
 
 async function clone(args: string[], opts: CloneOptions): Promise<RunGitOptions> {
-  // Callers reject credential-bearing URLs (source-credentials.ts); auth arrives only as a header.
+  // Callers reject credential-bearing URLs (@caplet/core credentials); auth arrives only as a header.
   const gitOptions: RunGitOptions =
     opts.authHeader === undefined
       ? {}

@@ -1,8 +1,11 @@
 /**
+ * Credential detection and redaction for URLs that caplet writes or echoes.
+ *
  * Source URLs must not carry credentials (SPEC.md §18): they would be written to
- * capabilities.yml, the lockfile and the cache, and echoed in plans and errors. This module
- * detects userinfo and credential-looking query or fragment parameters, and builds a rejection
- * message that names the URL with every credential part masked.
+ * capabilities.yml, the lockfile and the cache, and echoed in plans and errors. MCP server URLs
+ * must not carry userinfo (canonical-mcp, Canonical MCP server fields). This module detects
+ * userinfo and credential-looking query or fragment parameters, and masks every credential part
+ * so that messages can name the URL without leaking it.
  */
 
 const SCHEME_URL = /^([a-z][a-z0-9+.-]*:[/][/])([^/?#]*)([^?#]*)(?:[?]([^#]*))?(?:#(.*))?$/is;
@@ -24,7 +27,7 @@ export const CREDENTIAL_IN_URL = "acf.source.credential-in-url";
  * password does not. The message never contains the credential itself.
  */
 export function sourceUrlCredentialProblem(url: string): string | null {
-  const found = inspect(url);
+  const found = findUrlCredentials(url);
   if (found === null) return null;
   return (
     `source URL must not embed credentials (${found.reason}): ` +
@@ -33,7 +36,21 @@ export function sourceUrlCredentialProblem(url: string): string | null {
   );
 }
 
-function inspect(url: string): { reason: string; redacted: string } | null {
+/** Credential parts found in a URL, with the URL rewritten so that each part is masked. */
+export type UrlCredentials = {
+  /** Human-readable kinds of credential found, e.g. `userinfo, query parameter "token"`. */
+  reason: string;
+  /** True when the authority carries userinfo that is a credential (not an SSH user name). */
+  userinfo: boolean;
+  /** The URL with every credential part replaced by `***`. */
+  redacted: string;
+};
+
+/**
+ * Finds userinfo and credential-looking query or fragment parameters in `url`; returns null for
+ * a credential-free URL. SSH user names (`git@host`) are not credentials; an SSH password is.
+ */
+export function findUrlCredentials(url: string): UrlCredentials | null {
   const parsed = SCHEME_URL.exec(url);
   if (parsed === null) return inspectScpLike(url);
   const [, scheme = "", authority = "", rest = "", query, fragment] = parsed;
@@ -57,13 +74,17 @@ function inspect(url: string): { reason: string; redacted: string } | null {
     rest +
     (redactedQuery === undefined ? "" : `?${redactedQuery}`) +
     (redactedFragment === undefined ? "" : `#${redactedFragment}`);
-  return { reason: [...new Set(reasons)].join(", "), redacted };
+  return {
+    reason: [...new Set(reasons)].join(", "),
+    userinfo: reasons.includes("userinfo"),
+    redacted,
+  };
 }
 
-function inspectScpLike(url: string): { reason: string; redacted: string } | null {
+function inspectScpLike(url: string): UrlCredentials | null {
   const parsed = SCP_LIKE.exec(url);
   if (parsed === null || !(parsed[1] ?? "").includes(":")) return null;
-  return { reason: "userinfo", redacted: `${MASK}@${parsed[2] ?? ""}` };
+  return { reason: "userinfo", userinfo: true, redacted: `${MASK}@${parsed[2] ?? ""}` };
 }
 
 /** Masks credential-looking `key=value` parameters (or a bare token) and records why. */

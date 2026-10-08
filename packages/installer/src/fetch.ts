@@ -1,9 +1,13 @@
 import path from "node:path";
-import type { CapabilityEntry, SourceSpec } from "@caplet/core";
+import {
+  type CapabilityEntry,
+  CREDENTIAL_IN_URL,
+  type SourceSpec,
+  sourceUrlCredentialProblem,
+} from "@caplet/core";
 import { ensureCleanCache, getCachePath } from "./cache.js";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git.js";
 import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile.js";
-import { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";
 
 export type FetchOptions = {
   cacheDir: string;

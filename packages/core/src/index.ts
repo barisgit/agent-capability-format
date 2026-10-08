@@ -1,6 +1,7 @@
 export * from "./applicability/index.js";
 export * from "./assets/index.js";
 export * from "./caplet-config/index.js";
+export * from "./credentials/index.js";
 export * from "./diagnostics/index.js";
 export * from "./emit/index.js";
 export * from "./extras/index.js";

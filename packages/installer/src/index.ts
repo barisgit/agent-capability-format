@@ -1,3 +1,4 @@
+export { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "@caplet/core";
 export { readCapabilitiesYml } from "./capabilities-yml.js";
 export { detectLockDrift } from "./drift.js";
 export type { FetchedCapability, FetchOptions } from "./fetch.js";
@@ -25,4 +26,3 @@ export type {
   ResolveResult,
 } from "./resolve.js";
 export { resolveCapabilities } from "./resolve.js";
-export { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";
