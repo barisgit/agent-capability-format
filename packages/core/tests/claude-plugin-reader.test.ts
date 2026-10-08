@@ -122,6 +122,30 @@ describe("Claude plugin reader", () => {
     ]);
   });
 
+  test("manifest mcpServers paths and maps merge with .mcp.json, later names winning", async () => {
+    const { capability, diagnostics } = await read({
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "servers",
+        mcpServers: ["./config/servers.json", { shared: { command: "inline-shared" } }],
+      }),
+      ".mcp.json": JSON.stringify({
+        mcpServers: { shared: { command: "default-shared" }, base: { command: "base" } },
+      }),
+      "config/servers.json": JSON.stringify({ extra: { command: "extra" } }),
+    });
+    expect(diagnostics).toEqual([]);
+    expect(
+      capability?.mcp?.servers.map((server) => [
+        server.name,
+        "command" in server ? server.command : undefined,
+      ]),
+    ).toEqual([
+      ["base", "base"],
+      ["extra", "extra"],
+      ["shared", "inline-shared"],
+    ]);
+  });
+
   test("stdio servers keep cwd omitted", async () => {
     const { capability } = await read(fullPlugin);
     for (const server of capability?.mcp?.servers ?? []) expect(server).not.toHaveProperty("cwd");
