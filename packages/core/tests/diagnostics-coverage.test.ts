@@ -86,6 +86,8 @@ const exportedOnly = new Set([
   "acf.support.degraded",
   "acf.support.component-omitted",
   "acf.extras.dropped",
+  // Built by the Codex MCP writer; adapters/tests/native-mcp.test.ts covers it.
+  "acf.mcp.config-conflict",
 ]);
 
 test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {
