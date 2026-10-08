@@ -226,3 +226,23 @@ test("native/ holds only target directories of regular files that stay inside th
     await cleanup(outside);
   }
 });
+
+test("a linked native/ directory or target directory is rejected without reading through it", async () => {
+  const outside = await tempDir();
+  const linkedRoot = await tempDir();
+  const linkedTarget = await tempDir();
+  try {
+    await makeCapability(outside, { "claude/secret.md": "x\n" });
+    await makeCapability(linkedRoot, { "acf.yml": baseManifest });
+    await addSymlink(outside, path.join(linkedRoot, "native"));
+    await makeCapability(linkedTarget, { "acf.yml": baseManifest, "native/codex/a.md": "x\n" });
+    await addSymlink(path.join(outside, "claude"), path.join(linkedTarget, "native/claude"));
+    for (const dir of [linkedRoot, linkedTarget]) {
+      const cap = await readCapability(dir, "project", { kind: "local", directory: dir });
+      expect(errorCodes(cap)).toEqual(["acf.native.unsupported-entry"]);
+      expect(nativeFiles(cap, "claude")).toEqual([]);
+    }
+  } finally {
+    for (const dir of [outside, linkedRoot, linkedTarget]) await cleanup(dir);
+  }
+});

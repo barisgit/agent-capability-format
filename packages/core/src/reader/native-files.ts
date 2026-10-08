@@ -6,12 +6,11 @@
  * Files under `native/` are never read as ACF facets.
  */
 import type { Dirent } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { AGENT_PLUGINS_DIALECT, NATIVE_FILES_DIR } from "../extras/index.js";
 import { isTargetId } from "../targets/index.js";
 import type { Diagnostic, NativeFileExtra } from "../types/index.js";
-import { exists } from "../utils/fs.js";
 
 /** Files under `<root>/native/<target>/`, sorted by target then path; pushes errors for the rest. */
 export async function readNativeFiles(
@@ -19,15 +18,26 @@ export async function readNativeFiles(
   diagnostics: Diagnostic[],
 ): Promise<NativeFileExtra[]> {
   const dir = path.join(root, NATIVE_FILES_DIR);
-  if (!(await exists(dir))) return [];
+  const info = await lstat(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (info === undefined) return [];
+  // Checked without following links: a linked native/ could copy files from outside the root.
+  if (!info.isDirectory()) {
+    diagnostics.push(unsupported(dir, `${NATIVE_FILES_DIR}/ must be a directory`));
+    return [];
+  }
   const files: NativeFileExtra[] = [];
   for (const entry of await sortedEntries(dir)) {
     const full = path.join(dir, entry.name);
-    if (!entry.isDirectory() || !isTargetId(entry.name)) {
+    if (entry.isSymbolicLink()) {
+      diagnostics.push(unsupported(full, "a link cannot be copied into a package"));
+    } else if (!entry.isDirectory() || !isTargetId(entry.name)) {
       diagnostics.push(unknownTarget(entry, full));
-      continue;
+    } else {
+      await collect(entry.name, full, "", files, diagnostics);
     }
-    await collect(entry.name, full, "", files, diagnostics);
   }
   return files;
 }
