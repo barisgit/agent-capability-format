@@ -25,3 +25,4 @@ export type {
   ResolveResult,
 } from "./resolve.js";
 export { resolveCapabilities } from "./resolve.js";
+export { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";

@@ -10,6 +10,7 @@ import {
   pushZodIssues,
 } from "@caplet/core";
 import { entrySourceId } from "./lockfile.js";
+import { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";
 
 export async function readCapabilitiesYml(
   manifestPath: string,
@@ -46,6 +47,11 @@ export async function readCapabilitiesYml(
   }
 
   const value = restorePartialSelectors(parsed.data as CapabilitiesYml, parsedYaml);
+  const credentialDiagnostics = credentialSourceDiagnostics(value, manifestPath);
+  if (credentialDiagnostics.length > 0) {
+    // Nothing from this manifest is used: any later message naming the entry could echo it.
+    return { value: emptyCapabilitiesYml(), diagnostics: credentialDiagnostics };
+  }
   diagnostics.push(...duplicateEntryDiagnostics(value, path.dirname(manifestPath)));
   return { value, diagnostics };
 }
@@ -153,6 +159,23 @@ function levenshtein(a: string, b: string): number {
     previous = current;
   }
   return previous[b.length] as number;
+}
+
+function credentialSourceDiagnostics(value: CapabilitiesYml, manifestPath: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  value.capabilities.forEach((entry, index) => {
+    if (entry.source.kind !== "git") return;
+    const problem = sourceUrlCredentialProblem(entry.source.url);
+    if (problem === null) return;
+    diagnostics.push({
+      severity: "error",
+      code: CREDENTIAL_IN_URL,
+      message: problem,
+      path: manifestPath,
+      data: { index },
+    });
+  });
+  return diagnostics;
 }
 
 function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string): Diagnostic[] {

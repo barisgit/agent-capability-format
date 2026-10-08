@@ -144,3 +144,23 @@ test("unknown key without a close match omits the hint", async () => {
     await cleanup(dir);
   }
 });
+
+test("credential-bearing source URLs are rejected without echoing the secret", async () => {
+  const dir = await tempDir("acf-installer-credentials-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    await writeText(
+      file,
+      "acf: 1\ncapabilities:\n  - source: git:https://x-access-token:s3cret@github.com/o/r\n    ref: main\n  - source: path:./kept\n",
+    );
+    const result = await readCapabilitiesYml(file);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "acf.source.credential-in-url",
+    ]);
+    expect(result.diagnostics[0]?.severity).toBe("error");
+    expect(JSON.stringify(result)).not.toContain("s3cret");
+    expect(result.value.capabilities).toEqual([]);
+  } finally {
+    await cleanup(dir);
+  }
+});

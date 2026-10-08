@@ -1923,7 +1923,10 @@ command-line arguments, or persisted repository configuration. The same ephemera
 authentication is retained during checkout because blobless clones can fetch
 missing objects at that point. Git errors redact credentials, including raw and
 percent-encoded token text. Without a token, normal Git authentication applies; SSH sources
-retain their existing behavior.
+retain their existing behavior. Source URLs never carry credentials: a `git:` URL with
+userinfo (other than an SSH user name) or a credential-looking query or fragment parameter
+is rejected with `acf.source.credential-in-url` when added and when resolved, and the
+message masks the credential (`packages/installer/src/source-credentials.ts`).
 
 ```ts
 export async function fetchCapability(

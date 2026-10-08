@@ -34,24 +34,15 @@ export async function cloneFull(opts: CloneOptions): Promise<void> {
 }
 
 async function clone(args: string[], opts: CloneOptions): Promise<RunGitOptions> {
-  // Strip explicit HTTP credentials before invoking git: origin must never store
-  // them, even when cloning fails. SSH URLs remain unchanged.
-  const remote = stripHttpUserinfo(opts.url);
-  let authHeader = opts.authHeader;
-  if (remote !== opts.url && authHeader === undefined) {
-    const url = new URL(opts.url);
-    const credential = `${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`;
-    authHeader = `Authorization: Basic ${Buffer.from(credential).toString("base64")}`;
-  }
-
+  // Callers reject credential-bearing URLs (source-credentials.ts); auth arrives only as a header.
   const gitOptions: RunGitOptions =
-    authHeader === undefined
+    opts.authHeader === undefined
       ? {}
       : {
-          env: gitConfigEnv(`http.${remote}.extraHeader`, authHeader),
-          secrets: authSecrets(authHeader),
+          env: gitConfigEnv(`http.${opts.url}.extraHeader`, opts.authHeader),
+          secrets: authSecrets(opts.authHeader),
         };
-  args.push(remote, opts.destination);
+  args.push(opts.url, opts.destination);
   await runGit(args, undefined, gitOptions);
   return gitOptions;
 }
@@ -120,12 +111,9 @@ function gitConfigEnv(key: string, value: string): Record<string, string> {
   };
 }
 
-// Matches the userinfo part of http(s) URLs, e.g. `https://user:secret@`.
+// Matches the userinfo part of http(s) URLs, e.g. `https://user:secret@`. Source URLs never carry
+// one, but git may echo a redirect or configured remote that does.
 const HTTP_USERINFO = /\b(https?:[/][/])[^\s/@'"]+@/gi;
-
-function stripHttpUserinfo(url: string): string {
-  return url.replace(HTTP_USERINFO, "$1");
-}
 
 function redact(text: string, secrets: string[]): string {
   let result = text.replace(HTTP_USERINFO, "$1***@");

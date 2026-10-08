@@ -3,6 +3,7 @@ import type { CapabilityEntry, SourceSpec } from "@caplet/core";
 import { ensureCleanCache, getCachePath } from "./cache.js";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git.js";
 import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile.js";
+import { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";
 
 export type FetchOptions = {
   cacheDir: string;
@@ -54,6 +55,8 @@ async function fetchGitCapability(
   if (ref === undefined) throw new Error("acf.resolve.ref-required: git sources require ref");
   const destination = getCachePath(opts.cacheDir, id, ref);
   const url = gitUrl(entry.source);
+  const credentialProblem = sourceUrlCredentialProblem(url);
+  if (credentialProblem !== null) throw new Error(`${CREDENTIAL_IN_URL}: ${credentialProblem}`);
   const authHeader = githubAuthHeader(entry.source);
   const shallow = opts.shallow ?? true;
   const blobless = opts.blobless ?? true;
