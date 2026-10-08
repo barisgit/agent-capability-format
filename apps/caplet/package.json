@@ -30,7 +30,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js",
     "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for caplet'",
