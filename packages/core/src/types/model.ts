@@ -304,7 +304,21 @@ export type SourceSpec =
   | { kind: "github"; repo: string }
   | { kind: "git"; url: string }
   | { kind: "path"; location: string };
-export type FacetSelector = Partial<Record<FacetFamily, string[]>>;
+/**
+ * The `capabilities.yml` `include`/`exclude` key of each facet family (SPEC.md §17.5): the
+ * plural directory name, except `mcp`.
+ */
+export const selectorKeys = {
+  skill: "skills",
+  agent: "agents",
+  command: "commands",
+  instruction: "instructions",
+  hook: "hooks",
+  mcp: "mcp",
+} as const satisfies Record<FacetFamily, string>;
+export type SelectorKey = (typeof selectorKeys)[FacetFamily];
+/** Family-keyed facet names; `*` and `?` glob within a name. */
+export type FacetSelector = Partial<Record<SelectorKey, string[]>>;
 export type CapabilityEntry = {
   source: SourceSpec;
   ref?: string | undefined;

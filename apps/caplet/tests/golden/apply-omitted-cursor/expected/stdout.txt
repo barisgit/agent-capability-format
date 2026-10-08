@@ -1,8 +1,8 @@
 Compatibility
-  alpha-helper (alpha-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agent: [alpha-helper] } or except: [cursor]
-  beta-helper (beta-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agent: [beta-helper] } or except: [cursor]
-  always (alpha-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instruction: [always] } or except: [cursor]
-  always (beta-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instruction: [always] } or except: [cursor]
+  alpha-helper (alpha-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agents: [alpha-helper] } or except: [cursor]
+  beta-helper (beta-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agents: [beta-helper] } or except: [cursor]
+  always (alpha-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instructions: [always] } or except: [cursor]
+  always (beta-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instructions: [always] } or except: [cursor]
   cursor - native: 2 MCP servers
 
 Plan: 2 changes

@@ -44,7 +44,7 @@ test("a refusal blocks its capability for that target until the component is exc
       "background (alpha-cap) / codex - blocked: skill background is not installed for codex",
     );
     expect(refused.stdout).toContain(
-      "review, alpha-helper, always, alpha-server (alpha-cap) / codex - blocked: capability alpha-cap is not installed for codex (skill background). Recovery: exclude: { skill: [background] } or except: [codex]",
+      "review, alpha-helper, always, alpha-server (alpha-cap) / codex - blocked: capability alpha-cap is not installed for codex (skill background). Recovery: exclude: { skills: [background] } or except: [codex]",
     );
     expect(await exists(".claude", "skills", "background", "SKILL.md")).toBe(true);
     expect(await exists(".claude", "skills", "review", "SKILL.md")).toBe(true);
@@ -69,6 +69,50 @@ test("a refusal blocks its capability for that target until the component is exc
     expect(await exists(".agents", "skills", "background")).toBe(false);
     expect(await exists(".codex", "agents", "alpha-helper.md")).toBe(true);
     expect(await readText(path.join(scope.cwd, ".codex", "config.toml"))).toContain("alpha-server");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("the exclude recovery a refusal names unblocks the capability", async () => {
+  const scope = await makeScope();
+  try {
+    const alpha = path.join(scope.sourceRoot, "alpha");
+    await writeText(path.join(alpha, "skills", "background", "SKILL.md"), manualOnlySkill());
+    await writeText(
+      path.join(alpha, "skills", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review a change\n---\nReview.\n",
+    );
+    await writeText(
+      path.join(scope.agentsDir, "caplet.yml"),
+      "emit:\n  defaultTargets: [claude, codex]\n",
+    );
+    const args = ["apply", "--cwd", scope.cwd, "--scope", "project"];
+    const exists = (...parts: string[]) => Bun.file(path.join(scope.cwd, ...parts)).exists();
+
+    const refused = await runCaplet(scope, args);
+    expect(refused.exitCode).toBe(2);
+    expect(refused.stdout).toContain(
+      "Recovery: exclude: { skills: [background] } or except: [codex]",
+    );
+    expect(await exists(".claude", "skills", "background", "SKILL.md")).toBe(true);
+
+    await writeText(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${alpha}\n    exclude: { skills: [background] }\n  - source: path:${path.join(scope.sourceRoot, "beta")}\n`,
+    );
+    const recovered = await runCaplet(scope, args);
+
+    expect(recovered.stderr).not.toContain("acf.support.refused");
+    expect(recovered.exitCode).toBe(0);
+    expect(recovered.stdout).not.toContain("blocked");
+    expect(await exists(".agents", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".agents", "skills", "background")).toBe(false);
+    expect(await exists(".claude", "skills", "background")).toBe(false);
+    expect(await exists(".claude", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".codex", "agents", "alpha-helper.md")).toBe(true);
+    expect(await readText(path.join(scope.cwd, ".codex", "config.toml"))).toContain("alpha-server");
+    expect(await readText(path.join(scope.agentsDir, "capabilities.lock"))).toContain("background");
   } finally {
     await cleanup(scope);
   }

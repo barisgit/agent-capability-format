@@ -86,7 +86,7 @@ A writer SHALL, for each core field present on a component, apply exactly the ce
 
 #### Scenario: Manual-only skill to a target that cannot honor it
 - **WHEN** a skill with `invocation.model: false` is planned for OpenCode
-- **THEN** the plan shows the skill as blocked for OpenCode with the recovery `exclude: { skill: [<name>] }` or `except: [opencode]`, and apply makes no OpenCode changes for that capability
+- **THEN** the plan shows the skill as blocked for OpenCode with the recovery `exclude: { skills: [<name>] }` or `except: [opencode]`, and apply makes no OpenCode changes for that capability
 
 #### Scenario: Explicit exclusion unblocks the rest
 - **WHEN** the user adds `except: [opencode]` to that skill and re-plans

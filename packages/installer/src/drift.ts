@@ -1,4 +1,4 @@
-import type { CapabilitiesYml, Diagnostic } from "@caplet/core";
+import type { CapabilitiesYml, CapabilityEntry, Diagnostic } from "@caplet/core";
 import type { CapabilitiesLock } from "./lockfile.js";
 import { entrySourceId, sourceId } from "./lockfile.js";
 
@@ -50,8 +50,41 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
         },
       });
     }
+    if (!sameSelection(entry, lockEntry)) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.lock.drift",
+        message: `capabilities.yml include/exclude differs from lock for ${id}`,
+        data: {
+          sourceId: id,
+          ymlSelection: { include: entry.include ?? null, exclude: entry.exclude ?? null },
+          lockSelection: { include: lockEntry.include ?? null, exclude: lockEntry.exclude ?? null },
+        },
+      });
+    }
   }
   return diagnostics;
+}
+
+/** Whether two entries select the same facets: same families, same names in any order. */
+export function sameSelection(
+  left: Pick<CapabilityEntry, "include" | "exclude">,
+  right: Pick<CapabilityEntry, "include" | "exclude">,
+): boolean {
+  return (
+    selectorKey(left.include) === selectorKey(right.include) &&
+    selectorKey(left.exclude) === selectorKey(right.exclude)
+  );
+}
+
+function selectorKey(selector: CapabilityEntry["include"]): string {
+  if (selector === undefined) return "";
+  return JSON.stringify(
+    Object.entries(selector)
+      .filter((pair): pair is [string, string[]] => pair[1] !== undefined)
+      .map(([family, names]) => [family, [...names].sort()])
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  );
 }
 
 function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {

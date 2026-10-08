@@ -11,7 +11,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
-import type { CapabilityEntry, Diagnostic } from "../types/model.js";
+import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -321,7 +321,8 @@ function isSourceFormat(value: unknown): value is SourceFormat {
 
 function isSelector(value: unknown): value is NonNullable<CapabilityEntry["include"]> {
   if (!isRecord(value)) return false;
-  return Object.values(value).every(isStringArray);
+  const keys: readonly string[] = Object.values(selectorKeys);
+  return Object.entries(value).every(([key, names]) => keys.includes(key) && isStringArray(names));
 }
 
 function isRename(value: unknown): value is NonNullable<CapabilityEntry["rename"]> {

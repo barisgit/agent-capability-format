@@ -77,6 +77,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.support.refused",
   "acf.support.degraded",
   "acf.support.component-omitted",
+  "acf.selection.unmatched",
+  "acf.selection.remainder-references",
   "acf.extras.dropped",
   "acf.core.pending",
   "acf.extras.conflict",

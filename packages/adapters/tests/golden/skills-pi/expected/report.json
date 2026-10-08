@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "skill background is blocked for pi by skill.invocation.user=false: pi cannot honor skill.invocation.user=false: Pi always allows /skill:name and has no switch to refuse it. Recovery: exclude: { skill: [background] } or except: [pi]",
+      "message": "skill background is blocked for pi by skill.invocation.user=false: pi cannot honor skill.invocation.user=false: Pi always allows /skill:name and has no switch to refuse it. Recovery: exclude: { skills: [background] } or except: [pi]",
       "targetId": "pi",
       "capability": {
         "name": "demo"
@@ -15,7 +15,7 @@
         "blocks": "component",
         "source": "skill.invocation.user=false",
         "consequence": "skill background is not installed for pi",
-        "recovery": "exclude: { skill: [background] } or except: [pi]"
+        "recovery": "exclude: { skills: [background] } or except: [pi]"
       },
       "family": "skill"
     },
@@ -48,7 +48,7 @@
         "outcome": "changed-behavior",
         "source": "targets.claude.native.allowed-tools",
         "consequence": "skill review runs without allowed-tools on pi",
-        "recovery": "exclude: { skill: [review] } or except: [pi]",
+        "recovery": "exclude: { skills: [review] } or except: [pi]",
         "dropped": "targets.claude.native.allowed-tools"
       },
       "family": "skill"

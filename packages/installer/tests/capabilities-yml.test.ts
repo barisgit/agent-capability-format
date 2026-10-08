@@ -9,12 +9,29 @@ test("valid capabilities.yml parses source shorthands", async () => {
     const file = path.join(dir, "capabilities.yml");
     await writeText(
       file,
-      "acf: 1\ncapabilities:\n  - source: github:owner/repo\n    ref: main\n    include:\n      skill: [example]\n",
+      "acf: 1\ncapabilities:\n  - source: github:owner/repo\n    ref: main\n    include:\n      skills: [example]\n",
     );
     const result = await readCapabilitiesYml(file);
     expect(result.diagnostics).toEqual([]);
     expect(result.value.capabilities[0]?.source).toEqual({ kind: "github", repo: "owner/repo" });
-    expect(result.value.capabilities[0]?.include).toEqual({ skill: ["example"] });
+    expect(result.value.capabilities[0]?.include).toEqual({ skills: ["example"] });
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("include and exclude take plural family keys and suggest them for singular ones", async () => {
+  const dir = await tempDir("acf-installer-yml-selection-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    await writeText(
+      file,
+      "acf: 1\ncapabilities:\n  - source: path:./one\n    exclude:\n      skill: [draft]\n",
+    );
+    const result = await readCapabilitiesYml(file);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.message)).toEqual([
+      'unknown key "skill" — did you mean "skills"?',
+    ]);
   } finally {
     await cleanup(dir);
   }

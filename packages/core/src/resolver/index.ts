@@ -7,6 +7,7 @@ import {
   type CapabilitiesLock,
   digestMismatchDiagnostic,
   findLockedCapability,
+  type LockEntry,
   type LockedCapability,
   readLockfile,
 } from "../lock/index.js";
@@ -20,6 +21,9 @@ import type {
   ScopeRoot,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
+import { selectComponents } from "./selection.js";
+
+export { type FacetSelection, selectComponents } from "./selection.js";
 
 export type ResolveScopeOptions = {
   /**
@@ -106,6 +110,13 @@ export async function resolveScopeCapabilities(
   const capabilities: AcfCapability[] = [];
   if (!(await exists(root.capabilitiesDir))) return { capabilities, diagnostics };
   const lock = options.lock === undefined ? await readLockfile(root.lockPath) : options.lock;
+  // A lock entry mirrors its capabilities.yml include/exclude, so selection follows the lock.
+  const select = (capability: AcfCapability, entry: LockEntry | undefined): AcfCapability => {
+    if (entry === undefined) return capability;
+    const selected = selectComponents(capability, entry);
+    diagnostics.push(...selected.diagnostics);
+    return selected.capability;
+  };
   for (const entry of await readdir(root.capabilitiesDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const dir = path.join(root.capabilitiesDir, entry.name);
@@ -126,7 +137,7 @@ export async function resolveScopeCapabilities(
         sourcePath: record.path,
       });
       if (read.capability === undefined) diagnostics.push(...read.diagnostics);
-      else capabilities.push(read.capability);
+      else capabilities.push(select(read.capability, locked?.entry));
       continue;
     }
     const discovery = await discoverRepository(dir);
@@ -136,7 +147,7 @@ export async function resolveScopeCapabilities(
       cap.diagnostics.push(...discovery.diagnostics);
       const source = capRoot === dir ? await lockedSource(record, dir) : undefined;
       if (source !== undefined) cap.source = source;
-      capabilities.push(cap);
+      capabilities.push(select(cap, locked?.entry));
     }
   }
   diagnostics.push(...sameScopeCollisionDiagnostics(capabilities));

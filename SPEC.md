@@ -1847,10 +1847,12 @@ Each entry under `capabilities[]`:
 | `only`     | list    | no       | Entry-level target applicability (§6).                                         |
 | `except`   | list    | no       | Entry-level target applicability (§6).                                         |
 
-`include`/`exclude` family keys are the canonical facet family names
-(`skills`, `agents`, `commands`, `instructions`, `hooks`, `mcp`). For
-hooks and MCP, the values match against hook entry `name` or MCP server
-`name`.
+`include`/`exclude` family keys are the facet folder names (`skills`,
+`agents`, `commands`, `instructions`, `hooks`, `mcp`), the plural forms of
+the facet family kinds; any other key is invalid. Values are names or
+globs (`*` matches any run of characters, `?` exactly one) and match
+hook entry `name` and MCP server `name` for hooks and MCP. A value that
+matches nothing SHOULD be reported as a warning.
 
 ### 17.6 Cross-capability collisions
 

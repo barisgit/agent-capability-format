@@ -105,7 +105,7 @@ capabilities:
   - source: github:vercel-labs/agent-skills
     ref: v1.5.6
     include:
-      skill: [react-best-practices, next-app-router]
+      skills: [react-best-practices, next-app-router]
   - source: path:../my-private
     capabilities: engineering-workflows
   - source: github:myorg/capability-pack

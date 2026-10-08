@@ -11,7 +11,7 @@ import {
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
-import { detectLockDrift } from "./drift.js";
+import { detectLockDrift, sameSelection } from "./drift.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
 import {
   inspectSource,
@@ -179,7 +179,7 @@ async function resolveCapabilitiesStaged(
         !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)));
     if (!fetchNeeded) {
       if (locked !== undefined) {
-        nextEntries.push(locked);
+        nextEntries.push(withSelection(locked, entry));
         records.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
       }
       continue;
@@ -221,7 +221,8 @@ async function resolveCapabilitiesStaged(
     records.push(...materialized.records);
     // A verified restore leaves its entry exactly as locked; one predating per-capability
     // records takes the fresh entry so it gains them.
-    if (restoring && locked?.resolvedCapabilities !== undefined) nextEntries.push(locked);
+    if (restoring && locked?.resolvedCapabilities !== undefined)
+      nextEntries.push(withSelection(locked, entry));
     else if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
     fetched = true;
   }
@@ -422,17 +423,31 @@ function driftDiagnosticsForMode(
   const diagnostics = detectLockDrift(yml, lock);
   if (mode === "never") return diagnostics;
   return diagnostics.filter(
-    (diagnostic) =>
-      diagnostic.code !== "acf.lock.missing-entry" && !isCapabilitySelectorDrift(diagnostic),
+    (diagnostic) => diagnostic.code !== "acf.lock.missing-entry" && !isSelectionDrift(diagnostic),
   );
 }
 
-function isCapabilitySelectorDrift(diagnostic: Diagnostic): boolean {
+/** Drift this resolution reconciles: capability selectors refetch, include/exclude rewrite the lock. */
+function isSelectionDrift(diagnostic: Diagnostic): boolean {
   return (
     diagnostic.code === "acf.lock.drift" &&
     diagnostic.data !== undefined &&
-    "ymlCapabilities" in diagnostic.data
+    ("ymlCapabilities" in diagnostic.data || "ymlSelection" in diagnostic.data)
   );
+}
+
+/**
+ * `locked` with the entry's current include/exclude. Selection is applied when snapshots are
+ * read, so a changed selection needs no fetch; the lock mirror carries it to emission.
+ */
+function withSelection(locked: LockEntry, entry: CapabilityEntry): LockEntry {
+  if (sameSelection(locked, entry)) return locked;
+  const next: LockEntry = { ...locked };
+  delete next.include;
+  delete next.exclude;
+  if (entry.include !== undefined) next.include = entry.include;
+  if (entry.exclude !== undefined) next.exclude = entry.exclude;
+  return next;
 }
 
 /** Digest mismatches between restored records and the lock records they must reproduce. */

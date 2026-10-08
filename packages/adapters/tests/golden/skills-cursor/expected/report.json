@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "skill background is blocked for cursor by skill.invocation.user=false: cursor cannot honor skill.invocation.user=false: Cursor documents no key that refuses explicit invocation. Recovery: exclude: { skill: [background] } or except: [cursor]",
+      "message": "skill background is blocked for cursor by skill.invocation.user=false: cursor cannot honor skill.invocation.user=false: Cursor documents no key that refuses explicit invocation. Recovery: exclude: { skills: [background] } or except: [cursor]",
       "targetId": "cursor",
       "capability": {
         "name": "demo"
@@ -15,7 +15,7 @@
         "blocks": "component",
         "source": "skill.invocation.user=false",
         "consequence": "skill background is not installed for cursor",
-        "recovery": "exclude: { skill: [background] } or except: [cursor]"
+        "recovery": "exclude: { skills: [background] } or except: [cursor]"
       },
       "family": "skill"
     },
@@ -33,7 +33,7 @@
         "outcome": "omitted",
         "source": "skill",
         "consequence": "skill deploy is not installed for cursor",
-        "recovery": "exclude: { skill: [deploy] } or except: [cursor]"
+        "recovery": "exclude: { skills: [deploy] } or except: [cursor]"
       },
       "family": "skill"
     },
@@ -66,7 +66,7 @@
         "outcome": "changed-behavior",
         "source": "targets.claude.native.allowed-tools",
         "consequence": "skill review runs without allowed-tools on cursor",
-        "recovery": "exclude: { skill: [review] } or except: [cursor]",
+        "recovery": "exclude: { skills: [review] } or except: [cursor]",
         "dropped": "targets.claude.native.allowed-tools"
       },
       "family": "skill"

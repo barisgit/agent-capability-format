@@ -40,7 +40,7 @@
     "outcome": "blocked",
     "source": "skill.invocation.user=false",
     "consequence": "skill background is not installed for codex",
-    "recovery": "exclude: { skill: [background] } or except: [codex]"
+    "recovery": "exclude: { skills: [background] } or except: [codex]"
   },
   {
     "capability": "beta-cap",
@@ -50,7 +50,7 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
   },
   {
     "capability": "beta-cap",
@@ -60,7 +60,7 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
   },
   {
     "capability": "beta-cap",
@@ -70,7 +70,7 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
   },
   {
     "capability": "beta-cap",

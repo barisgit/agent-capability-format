@@ -9,6 +9,7 @@ import type {
   SupportCell,
   TargetId,
 } from "../types/index.js";
+import { selectorKeys } from "../types/index.js";
 import { carriersOf, findFieldSupport, supportCell } from "./field-support.js";
 import { nativeKeyInfo } from "./native-keys.js";
 
@@ -289,8 +290,9 @@ export function recoveryFor(subject: {
 }
 
 /**
- * The recovery that excludes every one of `components` for the target at once, or restricts
- * the capability to other targets. Families keep their first-seen order.
+ * The `capabilities.yml` recovery for blocked `components`: exclude all of them from the
+ * entry (for every target), or except the entry from `target`. Families keep their
+ * first-seen order and use the selector keys `exclude` accepts.
  */
 export function exclusionRecovery(
   components: readonly { family: FacetFamily; component: string }[],
@@ -300,6 +302,8 @@ export function exclusionRecovery(
   for (const { family, component } of components) {
     byFamily.set(family, [...(byFamily.get(family) ?? []), component]);
   }
-  const lists = [...byFamily].map(([family, names]) => `${family}: [${names.join(", ")}]`);
+  const lists = [...byFamily].map(
+    ([family, names]) => `${selectorKeys[family]}: [${names.join(", ")}]`,
+  );
   return `exclude: { ${lists.join(", ")} } or except: [${target}]`;
 }

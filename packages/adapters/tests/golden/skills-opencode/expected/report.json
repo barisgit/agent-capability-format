@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "skill background is blocked for opencode by skill.invocation.user=false: opencode cannot honor skill.invocation.user=false: OpenCode has no invocation control. Recovery: exclude: { skill: [background] } or except: [opencode]",
+      "message": "skill background is blocked for opencode by skill.invocation.user=false: opencode cannot honor skill.invocation.user=false: OpenCode has no invocation control. Recovery: exclude: { skills: [background] } or except: [opencode]",
       "targetId": "opencode",
       "capability": {
         "name": "demo"
@@ -15,14 +15,14 @@
         "blocks": "component",
         "source": "skill.invocation.user=false",
         "consequence": "skill background is not installed for opencode",
-        "recovery": "exclude: { skill: [background] } or except: [opencode]"
+        "recovery": "exclude: { skills: [background] } or except: [opencode]"
       },
       "family": "skill"
     },
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "skill deploy is blocked for opencode by skill.invocation.model=false: opencode cannot honor skill.invocation.model=false: OpenCode has no invocation control, so the model could load a manual-only skill on its own. Recovery: exclude: { skill: [deploy] } or except: [opencode]",
+      "message": "skill deploy is blocked for opencode by skill.invocation.model=false: opencode cannot honor skill.invocation.model=false: OpenCode has no invocation control, so the model could load a manual-only skill on its own. Recovery: exclude: { skills: [deploy] } or except: [opencode]",
       "targetId": "opencode",
       "capability": {
         "name": "demo"
@@ -34,7 +34,7 @@
         "blocks": "component",
         "source": "skill.invocation.model=false",
         "consequence": "skill deploy is not installed for opencode",
-        "recovery": "exclude: { skill: [deploy] } or except: [opencode]"
+        "recovery": "exclude: { skills: [deploy] } or except: [opencode]"
       },
       "family": "skill"
     },
@@ -67,7 +67,7 @@
         "outcome": "changed-behavior",
         "source": "targets.claude.native.allowed-tools",
         "consequence": "skill review runs without allowed-tools on opencode",
-        "recovery": "exclude: { skill: [review] } or except: [opencode]",
+        "recovery": "exclude: { skills: [review] } or except: [opencode]",
         "dropped": "targets.claude.native.allowed-tools"
       },
       "family": "skill"

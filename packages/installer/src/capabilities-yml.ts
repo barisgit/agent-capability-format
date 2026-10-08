@@ -2,13 +2,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
-  type CapabilityEntry,
   CREDENTIAL_IN_URL,
   capabilitiesYmlSchema,
   type Diagnostic,
-  type FacetFamily,
   parseYaml,
   pushZodIssues,
+  selectorKeys,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
 import { entrySourceId } from "./lockfile.js";
@@ -38,7 +37,7 @@ export async function readCapabilitiesYml(
     return { value: emptyCapabilitiesYml(), diagnostics };
   }
 
-  const parsed = capabilitiesYmlSchema.safeParse(padSelectorsForCoreSchema(parsedYaml));
+  const parsed = capabilitiesYmlSchema.safeParse(parsedYaml);
   if (!parsed.success) {
     describeUnknownKeys(parsed.error.issues);
     pushZodIssues(diagnostics, parsed.error, manifestPath, {
@@ -47,7 +46,7 @@ export async function readCapabilitiesYml(
     return { value: emptyCapabilitiesYml(), diagnostics };
   }
 
-  const value = restorePartialSelectors(parsed.data as CapabilitiesYml, parsedYaml);
+  const value = parsed.data as CapabilitiesYml;
   const credentialDiagnostics = credentialSourceDiagnostics(value, manifestPath);
   if (credentialDiagnostics.length > 0) {
     // Nothing from this manifest is used: any later message naming the entry could echo it.
@@ -55,48 +54,6 @@ export async function readCapabilitiesYml(
   }
   diagnostics.push(...duplicateEntryDiagnostics(value, path.dirname(manifestPath)));
   return { value, diagnostics };
-}
-
-const selectorFamilies: FacetFamily[] = ["skill", "agent", "command", "instruction", "hook", "mcp"];
-
-function padSelectorsForCoreSchema(value: unknown): unknown {
-  if (!isRecord(value) || !Array.isArray(value.capabilities)) return value;
-  return {
-    ...value,
-    capabilities: value.capabilities.map((entry) => {
-      if (!isRecord(entry)) return entry;
-      return {
-        ...entry,
-        include: padSelector(entry.include),
-        exclude: padSelector(entry.exclude),
-      };
-    }),
-  };
-}
-
-function padSelector(value: unknown): unknown {
-  if (!isSelector(value)) return value;
-  const padded: Record<string, string[]> = {};
-  for (const family of selectorFamilies) padded[family] = value[family] ?? [];
-  return padded;
-}
-
-function restorePartialSelectors(value: CapabilitiesYml, raw: unknown): CapabilitiesYml {
-  if (!isRecord(raw)) return value;
-  const rawCapabilities = raw.capabilities;
-  if (!Array.isArray(rawCapabilities)) return value;
-  const capabilities = value.capabilities.map((entry, index) => {
-    const restored: CapabilityEntry = { ...entry };
-    const rawEntry = rawCapabilities[index];
-    if (isRecord(rawEntry) && isSelector(rawEntry.include)) restored.include = rawEntry.include;
-    else if (restored.include !== undefined) delete restored.include;
-    if (isRecord(rawEntry) && isSelector(rawEntry.exclude)) restored.exclude = rawEntry.exclude;
-    else if (restored.exclude !== undefined) delete restored.exclude;
-    return restored;
-  });
-  const restored: CapabilitiesYml = { acf: 1, capabilities };
-  if (value.defaults !== undefined) restored.defaults = value.defaults;
-  return restored;
 }
 
 const knownKeysByPath: Record<string, string[]> = {
@@ -113,6 +70,8 @@ const knownKeysByPath: Record<string, string[]> = {
     "only",
     "except",
   ],
+  "capabilities.include": Object.values(selectorKeys),
+  "capabilities.exclude": Object.values(selectorKeys),
   defaults: ["fetch"],
   "defaults.fetch": ["shallow", "blobless"],
 };
@@ -201,17 +160,6 @@ function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string):
 
 function emptyCapabilitiesYml(): CapabilitiesYml {
   return { acf: 1, capabilities: [] };
-}
-
-function isSelector(value: unknown): value is NonNullable<CapabilityEntry["include"]> {
-  if (!isRecord(value)) return false;
-  return Object.values(value).every(
-    (item) => Array.isArray(item) && item.every((name) => typeof name === "string"),
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isErrno(error: unknown, code: string): error is { code: string } {

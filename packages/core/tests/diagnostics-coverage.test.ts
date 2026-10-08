@@ -46,6 +46,8 @@ const coveredByFixtures = new Set([
 ]);
 
 const exportedOnly = new Set([
+  "acf.selection.unmatched",
+  "acf.selection.remainder-references",
   "acf.hook.target-native-event.unknown-schema",
   "acf.adapter.scope-unsupported",
   "acf.adapter.effect-degraded",

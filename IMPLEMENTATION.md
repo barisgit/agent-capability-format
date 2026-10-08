@@ -1857,7 +1857,7 @@ capabilities:
   - source: github:vercel-labs/agent-skills
     ref: v1.5.6
     include:
-      skill: ["react-best-practices", "next-app-router"]
+      skills: ["react-best-practices", "next-app-router"]
   - source: github:myorg/private-pack
     ref: main
     capabilities: [team-defaults, hardware/*]
