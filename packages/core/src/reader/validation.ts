@@ -4,8 +4,10 @@ import {
   type CanonicalTriggerName,
   isProvisionalOperation,
 } from "@caplet/runtime-taxonomy";
+import { z } from "zod";
 import { applicableTargets } from "../applicability/index.js";
 import { makeDiagnostic } from "../diagnostics/index.js";
+import { AGENT_PLUGINS_DIALECT } from "../extras/index.js";
 import { isTargetId, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
@@ -16,13 +18,18 @@ import type {
   TargetExtensions,
 } from "../types/index.js";
 import { hookEffectMatrix, hookMatchRequired } from "../types/index.js";
+import { validateInlineExtras, validateNativeFileCollisions } from "./extras-rules.js";
 import { counts } from "./helpers.js";
+import { validateMcpServerValues } from "./mcp-rules.js";
 
 export function validateCapability(cap: AcfCapability): void {
   validateUniqueFacetNames(cap);
   validateHookFile(cap);
+  validateMcpServers(cap);
   validateOnlyExceptTargets(cap);
   validateTargetExtensions(cap);
+  validateInlineExtras(cap);
+  validateNativeFileCollisions(cap);
   validateActivationConstraints(cap);
   validateApplicability(cap);
 }
@@ -63,6 +70,12 @@ function validateHookFile(cap: AcfCapability): void {
         });
       }
     }
+  }
+}
+
+function validateMcpServers(cap: AcfCapability): void {
+  for (const server of cap.mcp?.servers ?? []) {
+    validateMcpServerValues(server, cap.mcp?.path, cap.diagnostics);
   }
 }
 
@@ -190,23 +203,43 @@ function validateTargetExtensions(cap: AcfCapability): void {
   for (const server of cap.mcp?.servers ?? []) {
     checks.push({ family: "mcp", targets: server.targets, path: cap.mcp?.path });
   }
-  for (const check of checks)
-    validateExtensions(check.family, check.targets, check.path, cap.diagnostics);
+  // Only format readers write the agent-plugins dialect (design, Implementation contracts).
+  const readerOutput = cap.source !== undefined && cap.source.format !== "acf";
+  for (const check of checks) {
+    validateExtensions(check.family, check.targets, check.path, cap.diagnostics, readerOutput);
+  }
 }
+
+const agentPluginsExtension = z.object({ native: z.record(z.string(), z.unknown()) }).strict();
 
 function validateExtensions(
   family: FacetFamily | "capability",
   targets: TargetExtensions | undefined,
   file: string | undefined,
   diagnostics: Diagnostic[],
+  readerOutput: boolean,
 ): void {
   if (targets === undefined) return;
   for (const [id, payload] of Object.entries(targets)) {
+    if (id === AGENT_PLUGINS_DIALECT && readerOutput) {
+      if (!agentPluginsExtension.safeParse(payload).success) {
+        diagnostics.push({
+          severity: "error",
+          code: "acf.target.extension.unknown-field",
+          message: `${id} extras hold only a native mapping`,
+          path: file,
+        });
+      }
+      continue;
+    }
     if (!isTargetId(id)) {
       diagnostics.push({
         severity: "error",
         code: "acf.target.unknown-id",
-        message: `unknown target id: ${id}`,
+        message:
+          id === AGENT_PLUGINS_DIALECT
+            ? `unknown target id: ${id} is an extras dialect that only format readers write`
+            : `unknown target id: ${id}`,
         path: file,
         targetId: id,
       });

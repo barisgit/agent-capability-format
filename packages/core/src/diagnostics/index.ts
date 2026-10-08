@@ -26,6 +26,11 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.hook.target-native-event.unknown-schema",
   "acf.mcp.transport.missing-url",
   "acf.mcp.transport.missing-command",
+  "acf.mcp.cwd.invalid",
+  "acf.mcp.url.insecure",
+  "acf.mcp.url.credential-in-url",
+  "acf.mcp.placeholder.unsupported",
+  "acf.skill.paths-not-core",
   "acf.path.absolute",
   "acf.path.traversal",
   "acf.assets.missing",
@@ -65,6 +70,12 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.support.component-omitted",
   "acf.extras.dropped",
   "acf.core.pending",
+  "acf.extras.conflict",
+  "acf.extras.unclassified",
+  "acf.extras.package-value-invalid",
+  "acf.native.unknown-target",
+  "acf.native.unsupported-entry",
+  "acf.native.collision",
 ] as const;
 
 export type AcfDiagnosticCode = (typeof ACF_DIAGNOSTIC_CODES)[number];

@@ -3,14 +3,15 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
+  CREDENTIAL_IN_URL,
   capabilitiesYmlSchema,
   type Diagnostic,
   type FacetFamily,
   parseYaml,
   pushZodIssues,
+  sourceUrlCredentialProblem,
 } from "@caplet/core";
 import { entrySourceId } from "./lockfile.js";
-import { CREDENTIAL_IN_URL, sourceUrlCredentialProblem } from "./source-credentials.js";
 
 export async function readCapabilitiesYml(
   manifestPath: string,

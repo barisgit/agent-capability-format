@@ -19,12 +19,28 @@ export const onlyExceptSchema = z
 
 const withOnlyExcept = <S extends z.ZodRawShape>(shape: S) => z.object(shape).and(onlyExceptSchema);
 
+/**
+ * One `authors` entry: a structured author, or a legacy free-form string kept verbatim
+ * (canonical-package-metadata, Legacy author strings). Unknown author keys are rejected rather
+ * than stripped so no authored value is lost silently.
+ */
+const authorSchema = z.union([
+  z.string(),
+  z
+    .object({
+      name: z.string().min(1),
+      email: z.string().optional(),
+      url: z.string().url().optional(),
+    })
+    .strict(),
+]);
+
 export const manifestSchema = withOnlyExcept({
   acf: z.literal(1),
   name: slugSchema,
   version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
   description: z.string().optional(),
-  authors: z.array(z.string()).optional(),
+  authors: z.array(authorSchema).optional(),
   license: z.string().optional(),
   homepage: z.string().url().optional(),
   repository: z.string().optional(),
@@ -41,6 +57,10 @@ export const skillFrontmatterSchema = withOnlyExcept({
   name: slugSchema,
   description: z.string().min(1),
   invocation: z.object({ user: z.boolean().optional(), model: z.boolean().optional() }).optional(),
+  license: z.string().optional(),
+  compatibility: z.string().max(500).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  "argument-hint": z.string().optional(),
   ...frontmatterBase,
 });
 
@@ -195,6 +215,7 @@ export const mcpServerSchema = mcpServerBaseSchema
       command: z.string().min(1).optional(),
       args: z.array(z.string()).optional(),
       env: z.record(z.string(), z.string()).optional(),
+      cwd: z.string().min(1).optional(),
       url: z.string().url().optional(),
       headers: z.record(z.string(), z.string()).optional(),
     }),

@@ -2,7 +2,10 @@
  * One read path for per-target raw extras (capability-model-layers, Inline native extras;
  * canonical-package-metadata, Per-target package values).
  *
- * Extras live at every extension attachment point as `targets.<dialect>.native` (a map of
+ * File extras live under `native/<target>/` in the capability tree and are recorded on
+ * `AcfCapability.nativeFiles`; read them through `nativeFiles` and `nativeFileTargets`.
+ *
+ * Inline extras live at every extension attachment point as `targets.<dialect>.native` (a map of
  * native keys in that dialect's own spelling), and at the package level of `acf.yml` also as
  * `targets.<target>.package` (native manifest values that replace the mapped core value for
  * that target). A dialect is a target id, or `agent-plugins` for Agent Plugins 1.0 keys that
@@ -11,7 +14,8 @@
  * Writers, readers and the plan read extras only through these functions so the storage
  * shape stays in one place.
  */
-import type { Manifest, TargetExtensions, TargetId } from "../types/model.js";
+import type { NativeFileExtra } from "../types/interop.js";
+import type { AcfCapability, Manifest, TargetExtensions, TargetId } from "../types/model.js";
 
 /** Owner of a set of native keys: a target id, or the Agent Plugins 1.0 dialect. */
 export type ExtrasDialect = TargetId | "agent-plugins";
@@ -78,4 +82,23 @@ export function withNativeExtras(
     ...(targets ?? {}),
     [dialect]: { ...entry, native: { ...nativeExtras(targets, dialect), ...extras } },
   };
+}
+
+/** Directory of a capability that holds per-target file extras, one subdirectory per target. */
+export const NATIVE_FILES_DIR = "native";
+
+/** Files under `native/<target>/` of the capability, sorted by path; empty when none. */
+export function nativeFiles(
+  capability: Pick<AcfCapability, "nativeFiles">,
+  target: TargetId,
+): readonly NativeFileExtra[] {
+  return (capability.nativeFiles ?? []).filter((file) => file.target === target);
+}
+
+/**
+ * Targets with at least one file under `native/<target>/`, sorted. Writers report
+ * `nativeTreeDropped` for every target other than one they carry the files to.
+ */
+export function nativeFileTargets(capability: Pick<AcfCapability, "nativeFiles">): TargetId[] {
+  return [...new Set((capability.nativeFiles ?? []).map((file) => file.target))].sort();
 }

@@ -7,7 +7,12 @@ import {
   provisionalOperations,
 } from "@caplet/runtime-taxonomy";
 import type { LockEntry } from "../lock/index.js";
-import type { CapabilitySource, NativeRemainderComponent, SourceFormat } from "./interop.js";
+import type {
+  CapabilitySource,
+  NativeFileExtra,
+  NativeRemainderComponent,
+  SourceFormat,
+} from "./interop.js";
 
 export {
   canonicalHookTypes,
@@ -32,12 +37,16 @@ export type CapabilityOrigin =
 
 export type TargetExtensions = Partial<Record<TargetId, unknown>>;
 
+/** A structured package author (canonical-package-metadata, Canonical package metadata fields). */
+export type PackageAuthor = { name: string; email?: string | undefined; url?: string | undefined };
+
 export type Manifest = {
   acf: 1;
   name: Slug;
   version: SemVer;
   description?: string | undefined;
-  authors?: string[] | undefined;
+  /** Structured authors, or legacy free-form strings kept verbatim (never decoded here). */
+  authors?: Array<string | PackageAuthor> | undefined;
   license?: string | undefined;
   homepage?: string | undefined;
   repository?: string | undefined;
@@ -246,6 +255,15 @@ export const acfPathPlaceholders = [
   ACF_PACKAGE_DIR_PLACEHOLDER,
   ACF_HOOK_DIR_PLACEHOLDER,
 ] as const;
+/** The capability root; also `acfPathPlaceholders[0]`. */
+export const acfCapabilityDirPlaceholder = ACF_CAPABILITY_DIR_PLACEHOLDER;
+/**
+ * Persistent, writable directory per capability and install scope that survives updates
+ * (canonical-mcp, Data directory placeholder). Valid in stdio MCP `command`, `args`, `env` and
+ * `cwd`; writers map it to `${CLAUDE_PLUGIN_DATA}` in Claude plugins and to
+ * `<install-root>/.acf/data/<capability>/` for loose carriers.
+ */
+export const acfDataDirPlaceholder = `${PLACEHOLDER_OPEN}{ACF_DATA_DIR}`;
 
 export type Diagnostic = {
   severity: "error" | "warn" | "info" | "lossy";
@@ -278,6 +296,8 @@ export type AcfCapability = {
   source?: CapabilitySource | undefined;
   /** Foreign components the reader preserved but did not project (empty or absent for native ACF). */
   remainder?: NativeRemainderComponent[] | undefined;
+  /** Files under `native/<target>/`, sorted by target then path; absent when there are none. */
+  nativeFiles?: NativeFileExtra[] | undefined;
 };
 
 export type SourceSpec =
