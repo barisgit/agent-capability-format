@@ -109,14 +109,17 @@ export const applyCommand = defineCommand({
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
       const appliedReach = await collectReach(plan);
+      const applyCode = exitCodeForDiagnostics(applied.diagnostics, context.args);
+      process.exitCode = applyCode;
       if (json) {
-        printJson("apply", true, diagnostics, {
+        printJson("apply", applyCode === 0, [...diagnostics, ...applied.diagnostics], {
           plan: planToJson(view),
           applied: { files: view.fileCount, writes: written, deletes: deleted },
           ...reachToJson(appliedReach),
         });
         return;
       }
+      printDiagnostics(applied.diagnostics, context.args);
       out.log("");
       out.done(
         `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,

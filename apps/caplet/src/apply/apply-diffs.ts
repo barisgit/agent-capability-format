@@ -1,14 +1,23 @@
 import { chmod, mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@caplet/adapters/common";
-import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@caplet/core";
+import type {
+  AcfManagedSidecar,
+  AcfOwnership,
+  Diagnostic,
+  FileContent,
+  FileDiff,
+} from "@caplet/core";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 import {
   hashOwnedRegions,
+  type ManagedEntry,
   mergeSidecarEntry,
+  ownershipKey,
   readSidecar,
   relativeSidecarPath,
   removeOwnedRegionsFromText,
+  type SidecarOwner,
   writeSidecar,
 } from "./sidecar.js";
 
@@ -16,17 +25,35 @@ export type ApplyResult = {
   written: string[];
   deleted: string[];
   unchanged: string[];
+  /** Absolute paths whose change was skipped because they no longer matched the plan. */
+  skipped: string[];
+  diagnostics: Diagnostic[];
   sidecar: AcfManagedSidecar;
 };
 
-export async function applyDiffs(
-  diffs: FileDiff[],
-  opts: { installRoot: string; capabilityName: string; sidecarPath: string },
-): Promise<ApplyResult> {
+export type ApplyDiffsOptions = {
+  installRoot: string;
+  capabilityName: string;
+  sidecarPath: string;
+  /** Recorded on new entries and filled into entries from older sidecars. */
+  owner?: SidecarOwner | undefined;
+};
+
+/**
+ * Applies one capability's diffs under one output root and records its ownership in the sidecar.
+ *
+ * A diff's `before` is the content its plan saw and acts as the precondition: when the regions
+ * the diff owns no longer match it on disk, the change is skipped with an `acf.apply.drift`
+ * warning and neither the file nor its sidecar entries change. Callers check output containment
+ * before calling (see `containmentViolation`).
+ */
+export async function applyDiffs(diffs: FileDiff[], opts: ApplyDiffsOptions): Promise<ApplyResult> {
   const sidecar = await readSidecar(opts.sidecarPath);
   const written: string[] = [];
   const deleted: string[] = [];
   const unchanged: string[] = [];
+  const skipped: string[] = [];
+  const diagnostics: Diagnostic[] = [];
 
   for (const diff of diffs) {
     const absolutePath = resolveDiffPath(opts.installRoot, diff.path);
@@ -34,11 +61,22 @@ export async function applyDiffs(
     if (diff.managementNotice !== undefined) {
       await assertNoticePathOwnedOrAbsent(sidecar, relativePath, absolutePath);
     }
+    if (!(await matchesPlan(diff, absolutePath))) {
+      skipped.push(absolutePath);
+      diagnostics.push(driftDiagnostic(diff, absolutePath, opts.capabilityName));
+      continue;
+    }
     const applied = await applyOneDiff(diff, absolutePath, opts.installRoot);
 
     if (diff.after === null) {
+      const removed = new Set(diff.owns.map(ownershipKey));
       sidecar.managed = sidecar.managed.filter(
-        (entry) => !(entry.path === relativePath && entry.capability === opts.capabilityName),
+        (entry) =>
+          !(
+            entry.path === relativePath &&
+            entry.capability === opts.capabilityName &&
+            entry.owns.every((own) => removed.has(ownershipKey(own)))
+          ),
       );
       if (!applied.changed) unchanged.push(absolutePath);
       else if (applied.content === null) deleted.push(absolutePath);
@@ -49,23 +87,66 @@ export async function applyDiffs(
     if (applied.changed) written.push(absolutePath);
     else unchanged.push(absolutePath);
 
-    const entry: AcfManagedSidecar["managed"][number] = {
+    const entry: ManagedEntry = {
       path: relativePath,
       owns: diff.owns,
       capability: opts.capabilityName,
       hash: hashOwnedRegions(applied.content, diff.owns),
     };
     if (diff.facet !== undefined) entry.facet = diff.facet;
+    if (opts.owner !== undefined) {
+      entry.target = opts.owner.target;
+      entry.carrier = opts.owner.carrier;
+    }
+    if (isWholeFile(diff.owns)) {
+      const mode = await readModeIfExists(absolutePath);
+      if (mode !== null) entry.mode = mode;
+    }
     mergeSidecarEntry(sidecar, entry);
   }
 
-  await writeSidecar(opts.sidecarPath, sidecar);
+  await writeSidecar(opts.sidecarPath, sidecar, opts.owner);
   return {
     written: uniqueSorted(written),
     deleted: uniqueSorted(deleted),
     unchanged: uniqueSorted(unchanged),
+    skipped: uniqueSorted(skipped),
+    diagnostics,
     sidecar,
   };
+}
+
+/** True when the regions `diff` owns are on disk exactly as the plan saw them in `before`. */
+async function matchesPlan(diff: FileDiff, absolutePath: string): Promise<boolean> {
+  if (isWholeFile(diff.owns)) {
+    const current =
+      diff.before instanceof Uint8Array
+        ? await readBytesIfExists(absolutePath)
+        : await readTextIfExists(absolutePath);
+    return contentEquals(current, diff.before);
+  }
+  const current = await readTextIfExists(absolutePath);
+  try {
+    return hashOwnedRegions(current, diff.owns) === hashOwnedRegions(diff.before, diff.owns);
+  } catch {
+    // The file no longer parses as the structure the owned regions point into.
+    return false;
+  }
+}
+
+function driftDiagnostic(diff: FileDiff, absolutePath: string, capability: string): Diagnostic {
+  const action = diff.after === null ? "delete" : "update";
+  return {
+    severity: "warn",
+    code: "acf.apply.drift",
+    message: `skipped ${action} of ${absolutePath}: it changed after the plan was computed; run apply again to review`,
+    path: absolutePath,
+    capability: { name: capability },
+  };
+}
+
+function isWholeFile(owns: readonly AcfOwnership[]): boolean {
+  return owns.some((own) => own.kind === "file");
 }
 
 async function assertNoticePathOwnedOrAbsent(

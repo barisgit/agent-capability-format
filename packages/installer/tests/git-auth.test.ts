@@ -126,19 +126,17 @@ test("failed authenticated clone does not leak the token in the error", async ()
   expect(message).not.toContain(TOKEN_B64);
 });
 
-test("explicit https userinfo is redacted in errors and stripped from the cached remote", async () => {
-  process.env.FAKE_GIT_FAIL = "1";
-  const message = await caughtMessage(fetchGit("https://alice:s3cret@example.com/repo.git"));
-  expect(message).not.toContain("s3cret");
-  expect(message).not.toContain("alice:");
-  expect(message).toContain("example.com/repo.git");
-
-  delete process.env.FAKE_GIT_FAIL;
-  await writeText(log, "");
-  await fetchGit("https://alice:s3cret@example.com/repo.git");
-  const calls = await readFile(log, "utf8");
-  expect(calls).toContain(" https://example.com/repo.git ");
-  expect(calls).not.toContain("alice:s3cret");
+test("credential-bearing git URLs are rejected before git runs, without echoing the secret", async () => {
+  for (const url of [
+    "https://alice:s3cret@example.com/repo.git",
+    "https://example.com/repo.git?token=s3cret",
+  ]) {
+    const message = await caughtMessage(fetchGit(url));
+    expect(message).toContain("acf.source.credential-in-url");
+    expect(message).toContain("example.com/repo.git");
+    expect(message).not.toContain("s3cret");
+  }
+  expect(await readFile(log, "utf8")).toBe("");
 });
 
 test("no token and SSH sources pass URLs through unchanged without auth config", async () => {
@@ -170,20 +168,6 @@ for (const ref of ["b".repeat(40), "topic"]) {
     expect(calls).toContain("--filter=blob:none");
   });
 }
-
-test("explicit HTTPS credentials survive authenticated blobless checkout without URL userinfo", async () => {
-  process.env.FAKE_GIT_EXPECT_AUTH = `Authorization: Basic ${Buffer.from("alice:s3cret").toString("base64")}`;
-  await fetchCapability(
-    {
-      source: { kind: "git", url: "https://alice:s3cret@example.com/repo.git" },
-      ref: "b".repeat(40),
-    },
-    { cacheDir: path.join(dir, "cache") },
-  );
-  const calls = await readFile(log, "utf8");
-  const args = calls.split("\n").filter((line) => line.startsWith("ARGS:"));
-  expect(args.join("\n")).not.toContain("alice:s3cret");
-});
 
 for (const operation of ["clone", "checkout"] as const) {
   for (const encoding of ["raw", "percent"] as const) {

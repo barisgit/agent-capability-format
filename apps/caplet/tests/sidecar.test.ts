@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyDiffs, detectDrift, readSidecar, removeOwnedRegions, writeSidecar } from "../src";
 import { cleanup, makeScope, readText, writeText } from "./helpers";
@@ -86,6 +86,47 @@ test("removeOwnedRegions cleans owned regions and preserves neighbours", async (
     await writeSidecar(sidecarPath, result.sidecar);
     expect(await readText(path.join(installRoot, "CLAUDE.md"))).toBe("user before\nuser after\n");
     expect((await readSidecar(sidecarPath)).managed).toHaveLength(0);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("sidecar entries record target, carrier and mode, and old entries are upgraded", async () => {
+  const scope = await makeScope();
+  try {
+    const installRoot = path.join(scope.cwd, ".claude");
+    const sidecarPath = path.join(installRoot, ".acf-managed.json");
+    await mkdir(installRoot, { recursive: true });
+    const legacy = { path: "old.md", owns: [{ kind: "file" }], capability: "beta-cap", hash: "x" };
+    await writeFile(sidecarPath, `${JSON.stringify({ acf: 1, managed: [legacy] })}\n`);
+    await applyDiffs(
+      [
+        {
+          path: path.join(installRoot, "tool.sh"),
+          before: null,
+          after: "echo\n",
+          afterMode: 0o755,
+          owns: [{ kind: "file" }],
+        },
+      ],
+      {
+        installRoot,
+        capabilityName: "alpha-cap",
+        sidecarPath,
+        owner: { target: "claude", carrier: "loose" },
+      },
+    );
+    const sidecar = await readSidecar(sidecarPath);
+    expect(sidecar.managed).toEqual([
+      expect.objectContaining({ path: "old.md", target: "claude", carrier: "loose" }),
+      expect.objectContaining({
+        path: "tool.sh",
+        capability: "alpha-cap",
+        target: "claude",
+        carrier: "loose",
+        mode: 0o755,
+      }),
+    ]);
   } finally {
     await cleanup(scope);
   }

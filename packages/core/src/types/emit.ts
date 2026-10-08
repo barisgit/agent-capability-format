@@ -1,4 +1,5 @@
 import type { ZodType } from "zod";
+import type { Carrier } from "./interop.js";
 import type {
   AcfCapability,
   CanonicalHookType,
@@ -79,6 +80,17 @@ export type AcfOwnership =
   | { kind: "yaml-pointer"; pointer: string }
   | { kind: "toml-pointer"; pointer: string }
   | { kind: "marker"; name: string };
+/**
+ * Owner of a sidecar entry: the target whose output root holds it, or `canonical` for the
+ * shared `.agents/skills` root that several targets discover.
+ */
+export type SidecarTarget = TargetId | "canonical";
+
+/**
+ * `.acf-managed.json`: what caplet owns under one output root (IMPLEMENTATION.md §4.2.2).
+ * `target`, `carrier` and `mode` are absent only in sidecars written before
+ * plugin-interop-foundation; caplet fills them in on its next write of the sidecar.
+ */
 export type AcfManagedSidecar = {
   acf: 1;
   managed: Array<{
@@ -86,6 +98,10 @@ export type AcfManagedSidecar = {
     owns: AcfOwnership[];
     capability: string;
     facet?: { family: FacetFamily; name: string } | undefined;
+    target?: SidecarTarget | undefined;
+    carrier?: Carrier | undefined;
+    /** POSIX permission bits of a whole-file entry after apply; absent for owned regions. */
+    mode?: number | undefined;
     hash: string;
   }>;
 };

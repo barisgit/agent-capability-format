@@ -15,6 +15,7 @@ import {
   readLockfile,
   sourceId,
   sourceString,
+  sourceUrlCredentialProblem,
   writeLockfile,
 } from "@caplet/installer";
 import { validationError } from "./args.js";
@@ -56,7 +57,12 @@ export function buildManifestEntry(
 
 export function parseSourceSpec(source: string): SourceSpec {
   if (source.startsWith("github:")) return { kind: "github", repo: source.slice("github:".length) };
-  if (source.startsWith("git:")) return { kind: "git", url: source.slice("git:".length) };
+  if (source.startsWith("git:")) {
+    const url = source.slice("git:".length);
+    const credentialProblem = sourceUrlCredentialProblem(url);
+    if (credentialProblem !== null) throw validationError(credentialProblem);
+    return { kind: "git", url };
+  }
   if (source.startsWith("path:")) return { kind: "path", location: source.slice("path:".length) };
   if (source.length > 0) return { kind: "path", location: source };
   throw validationError("source must not be empty");
