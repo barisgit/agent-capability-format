@@ -1911,7 +1911,11 @@ Local filesystem path:
 `path:` sources are user-local and not shareable across machines.
 Resolvers MUST NOT include `path:` entries in the lockfile content hash.
 
-### 18.4 Forward compatibility
+### 18.4 Credentials
+
+Source URLs MUST NOT carry credentials, because `capabilities.yml`, the lockfile, caches, plans and diagnostics all repeat them. Resolvers MUST reject, both when a source is added and when it is resolved, a `git:` URL whose authority contains userinfo (an SSH user name without a password, such as `ssh://git@host/repo.git` or `git@host:repo.git`, is not a credential) or whose query or fragment holds a credential-looking parameter (for example `token`, `access_token`, `password`, `secret`, a signature, or a well-known token value such as `ghp_…`). The rejection is the `error` diagnostic `acf.source.credential-in-url`; its message names the URL with every credential part masked, and the credential is never written to any file or output. Authentication instead comes from the environment: `github:` sources use `GITHUB_TOKEN` when it is set, and `git:` sources use SSH or the user's git credential configuration.
+
+### 18.5 Forward compatibility
 
 Future spec versions MAY define additional source schemes (e.g.
 `registry:`, `acf:`). Unknown source schemes MUST emit
