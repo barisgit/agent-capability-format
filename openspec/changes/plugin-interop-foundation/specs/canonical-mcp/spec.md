@@ -69,7 +69,7 @@ MCP writers SHALL apply this table. Columns as in the skill table; Pi refers to 
 | `${ACF_CAPABILITY_DIR}` in `url`, `headers` | functional | R | R | R | R | R | R |
 | `${ACF_DATA_DIR}` in `args`, `env`, `cwd` | functional | T `${CLAUDE_PLUGIN_DATA}` | T caplet dir | T caplet dir | T caplet dir | T caplet dir | T caplet dir |
 
-The Claude `cwd` cells are refusals because Claude documents neither a server `cwd` field nor the working directory it starts servers in. This includes the plugin-root `cwd` that the Agent Plugins reader materializes; if a `verified` registry cell records that Claude starts plugin MCP servers in the plugin root, `cwd: ${ACF_CAPABILITY_DIR}` becomes N (omitted) for CC/p only; a POSIX `cd` wrapper is not used because it changes the executed command and fails on Windows. Path placeholders in `url` and `headers` are refused everywhere because no tool shares a meaning for a filesystem path in a URL.
+The Claude `cwd` cells are refusals with `verified` evidence: Claude ignores a server `cwd` key (both `${CLAUDE_PLUGIN_ROOT}` and absolute values) and starts plugin stdio servers in the directory `claude` was launched from, not the plugin root (Claude 2.1.97). This includes the plugin-root `cwd` that the Agent Plugins reader materializes; a POSIX `cd` wrapper is not used because it changes the executed command and fails on Windows. Path placeholders in `url` and `headers` are refused everywhere because no tool shares a meaning for a filesystem path in a URL.
 
 #### Scenario: Agent Plugins server with cwd to Claude
 - **WHEN** an Agent Plugins server with `"cwd": "./server"` is planned for Claude

@@ -84,7 +84,7 @@ Alternative: define them now so hooks and permissions can translate. Rejected be
 
 ### D8. Claude: caplet-owned local marketplace driven through the `claude` CLI
 
-Each scope gets one marketplace directory at `<claude-install-root>/.acf/marketplace/` that lists caplet's generated plugins by relative path. Caplet registers it with `claude plugin marketplace add <dir> --scope <scope>`, installs with `claude plugin install <p>@<m> --scope <scope>`, refreshes, uninstalls and reads state through the CLI with flags pinned by task 5.1. Plugin versions carry `+acf.<digest>` so Claude never skips a content change. ACF `user`/`project` map to Claude `user`/`project`; project registration by default is gated on task 5.2 (open question 7).
+Each scope gets one marketplace directory at `<claude-install-root>/.acf/marketplace/` that lists caplet's generated plugins by relative path. Caplet drives the CLI with flags and exit codes pinned by task 5.1 (verified, Claude 2.1.97): an unconditional, idempotent `claude plugin marketplace add <dir> --scope <s>`, then `install` for new plugins, `update` for plugins whose version changed, `uninstall` for removed ones, always with `--scope`, and `claude plugin list --json` for host state. Claude copies each installed plugin into a cache keyed by version and `update` ignores a content change under an unchanged version, so every generated plugin version carries `+acf.<digest>`, including foreign Claude plugins whose declared version caplet rewrites in place (the one byte change of a same-format round trip). Caplet never runs `install` on an installed plugin, because it re-enables a user-disabled plugin (D15). Marketplace names are global per user, so the user marketplace is `acf-user` and each project's is `acf-project-<hash of the project root>`. ACF `user` maps to Claude `user`; ACF `project` maps to Claude `local` (D25).
 
 Alternative: edit `enabledPlugins` and `extraKnownMarketplaces` directly. Rejected because Claude also keeps private install records and caches, and going through the host's own path keeps its policy checks in force.
 
@@ -164,7 +164,7 @@ The Agent Skills definition is used unchanged; ACF reserves no keys inside it, b
 
 ### D22. Foreign default working directories are made explicit on read
 
-Agent Plugins 1.0 defines an omitted stdio `cwd` as the plugin root, so the Agent Plugins reader writes `cwd: ${ACF_CAPABILITY_DIR}` into the canonical server; relative arguments such as `./dist/index.js` then keep their meaning on every target, and targets that cannot set a working directory refuse the server instead of starting it elsewhere. Claude documents no server working directory, so a Claude plugin author cannot rely on one and the Claude reader leaves `cwd` omitted, which keeps the existing ACF meaning (no assumption) (canonical-mcp, Effective working directory on read).
+Agent Plugins 1.0 defines an omitted stdio `cwd` as the plugin root, so the Agent Plugins reader writes `cwd: ${ACF_CAPABILITY_DIR}` into the canonical server; relative arguments such as `./dist/index.js` then keep their meaning on every target, and targets that cannot set a working directory refuse the server instead of starting it elsewhere. Claude starts plugin stdio servers in the directory it was launched from and ignores `cwd` (verified, task 5.1), so a Claude plugin author cannot rely on a working directory and the Claude reader leaves `cwd` omitted, which keeps the existing ACF meaning (no assumption) (canonical-mcp, Effective working directory on read).
 
 Alternative: leave `cwd` omitted and let each host apply its default. Rejected because hosts start servers in different directories (project, plugin root, or undocumented), so a relative argument would silently point elsewhere. Alternative: emit a `cd` wrapper for Claude. Rejected for the D5 reason that it changes the executed command, and it fails on Windows.
 
@@ -179,6 +179,12 @@ Alternative: let package-level `native` extras override generated keys. Rejected
 `acf: 1` defines `authors` as free-form strings, and existing manifests use them. The canonical model keeps a string entry as it is, so hashes, the lock and validation are unaffected, and writers decode `Name <email>` only when re-encoding reproduces the string exactly (canonical-package-metadata, Legacy author strings).
 
 Alternative: parse every string into `{name, email, url}`. Rejected because free-form strings have no grammar, and a wrong parse would rewrite an author's identity.
+
+### D25. Project scope registers at Claude `local` scope (decided 2026-10-08 from task 5.2 evidence)
+
+Claude records a directory marketplace as an absolute path in the scope's settings file; at Claude `project` scope that file is the committed `.claude/settings.json`, so one teammate's machine path would be committed and a teammate's clone would see an unknown marketplace and fail to install. Caplet therefore registers the project marketplace and installs project plugins at Claude `local` scope (`.claude/settings.local.json`); each teammate's `caplet apply` registers them from the committed `capabilities.yml` and lock. Claude itself appends `**/.claude/settings.local.json` to the user's global git ignore on the first local-scope write; the README notes it.
+
+Alternative: Claude `project` scope (the earlier mapping). Rejected because it commits a machine-specific path and churns between teammates. Alternative: no automatic project registration (`registration required`). Rejected because new project installs would not load until each user ran manual commands, and loose installs would never migrate.
 
 ### Moved decisions
 
@@ -226,15 +232,15 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 
 ## Risks / Trade-offs
 
-- [Claude CLI flags for update, uninstall and list are undocumented] -> Task 5.1 pins them against the local Claude 2.1.97 and records `verified` evidence before automated registration ships; without it the host state is `registration required` with the exact commands.
-- [Project marketplace records may be machine-specific] -> Task 5.2 records what Claude writes at project scope; default project registration is gated on the answer to open question 7.
+- [Claude CLI behavior can change between versions] -> Flags, exit codes and JSON shapes are pinned by verified transcripts of 2.1.97 replayed by the fake CLI; the opt-in real-host test (task 5.9) re-checks them against the installed Claude.
+- [Policy-block output is not runtime-verified] -> Caplet recognizes the policy messages found in the 2.1.97 binary; an unrecognized failure is reported as `unknown` host state with Claude's message, never as a loose fallback.
 - [Plugin-qualified invocation names break user habits and scripts] -> One-time rename notice on migration (decided 2026-10-08).
 - [Refusals make some packages uninstallable for some targets] -> Behavior-first plan output names the recovery (`exclude`, `except`, carrier), and refusals are per component and target.
 - [Dropping an unclassified restricting key (D4)] -> The registry classifies every native key in the research inventories; the registry self-check fails if a known key lacks a class.
 - [Per-target extras for pending meanings need migration on promotion (D17)] -> `acf.core.pending` names the follow-up at authoring time, and `caplet check --fix` performs the rewrite.
 - [Executable changes are reported, not gated (D10)] -> A consumer may not read the report; the lock pins exact content, the report is in `--json` for CI review, and host trust prompts and policy remain in force because caplet writes no trust state.
 - [Loose Claude hooks stay broken until `claude-loose-hooks-repair` lands] -> Recorded as a known defect in the README (task 6.2); the repair is independent of this change.
-- [Agent Plugins stdio servers are refused for Claude (D22)] -> Agent Plugins servers carry the plugin root as their working directory, which Claude cannot be told; until task 5.1 verifies that Claude starts plugin MCP servers in the plugin root, these servers are refused for Claude with a recovery, and the dogfood run in task 7.3 records which public packages are affected. Skills of the same package still install.
+- [Agent Plugins stdio servers are refused for Claude (D22)] -> Agent Plugins servers carry the plugin root as their working directory, which Claude cannot be told; task 5.1 verified that Claude starts plugin MCP servers in the launch directory and ignores `cwd`, so these servers are refused for Claude with a recovery, and the dogfood run in task 7.3 records which public packages are affected. Skills of the same package still install.
 - [Lossless output depends on complete snapshots] -> Snapshot tests cover hidden files, modes, links and normalization collisions; links fail loudly instead of being dropped.
 
 ## Migration Plan
@@ -254,12 +260,12 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 4. **Claude invocation rename.** Decided (user delegated, 2026-10-08): migrate existing installs to `/capability:skill` on upgrade, with a one-time notice listing old and new names. Rejected: opt-in per capability, because it keeps two Claude carriers alive indefinitely for a small pilot user base.
 5. **First Agent Plugins client.** Answered: Codex first (the user's daily tool), Copilot second; Pi and Lume have no Agent Plugins support and stay loose or out of scope. Recorded in `agent-plugins-output`.
 6. **Which ACF repositories may also be Agent Plugins packages at their root.** Deferred to `acf-root-agent-plugins-package`, whose proposal states the choice in plain words: only repositories whose skills use plain Agent Skills frontmatter, or also those with a per-skill ACF side file.
-7. **Team sharing of the project Claude marketplace.** Open; the facts are unknown. Task 5.2 records what Claude writes into committed and user files for a project-scope marketplace. If it records a machine-specific absolute path, should caplet register the marketplace per machine (each teammate runs `caplet apply`) and share only plugin enablement, or keep Claude project registration out of committed settings entirely? Until answered, default project registration stays off in that case.
+7. **Team sharing of the project Claude marketplace.** Decided (user delegated, 2026-10-08) from task 5.2 evidence: Claude writes the marketplace's absolute path into the committed `.claude/settings.json` at project scope, so caplet keeps Claude registration out of committed settings entirely and registers per machine at Claude `local` scope (D25). Rejected: committed project registration, and leaving project registration off by default.
 
 ### Open technical questions (resolved by tasks)
 
-- Exact `claude plugin update|uninstall|list` flags and JSON shape, and whether relative-path local marketplace plugins load in place or are cached by version (task 5.1).
-- What Claude writes for a project-scope marketplace (task 5.2).
-- The working directory Claude starts plugin stdio MCP servers in (task 5.1), which decides whether Agent Plugins servers can reach Claude (D22).
+- Resolved by task 5.1 (`research/plugin-interop/tools/claude-code.md`, Runtime verification): CLI flags, exit codes and JSON shapes; plugins are cached by version, not loaded in place (D8); plugin stdio servers start in the launch directory and `cwd` is ignored (D22 refusal confirmed).
+- Resolved by task 5.2: project-scope marketplaces record an absolute path in committed settings (D25).
+- Still unknown: the policy-block exit code and output at runtime (needs root or a managed account; caplet matches the policy messages found in the 2.1.97 binary), the interactive trust prompt for project-declared marketplaces, and skill-body reload in a model session after update (needs an authenticated session; task 5.9).
 - Whether Cursor resolves a `./` command and the default working directory of an Agent Plugins package against the plugin root, and whether Codex connects plugin SSE servers (`agent-plugins-output` tasks 1.5 and 2.1); both are refused until verified.
 - Codex headless plugin install and `agents/openai.yaml` handling inside plugin skills, and Copilot directory-marketplace live loading (`agent-plugins-output` tasks 2.1 and 3.1).
