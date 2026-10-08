@@ -2373,7 +2373,6 @@ acf.adapter.scope-unsupported                # target has no installPath for req
 acf.adapter.effect-degraded                  # canonical effect maps to weaker native effect
 acf.adapter.hook-event-unsupported           # canonical hook event has no native equivalent
 acf.adapter.trigger-unsupported              # instruction trigger unsupported by target
-acf.adapter.mcp-unsupported                  # MCP not supported by target (e.g. Cursor)
 acf.adapter.facet-unsupported                # entire facet family unsupported by target
 acf.adapter.not-registered                   # target id has no adapter (impl error)
 acf.adapter.superseded                       # emit target has a direct-consumer extension available (info)
@@ -2551,7 +2550,7 @@ Adapters MUST:
 - diagnose every unrepresentable canonical field as `lossy` with a
   registry-listed code (`acf.adapter.effect-degraded`,
   `acf.adapter.hook-event-unsupported`, `acf.adapter.trigger-unsupported`,
-  `acf.adapter.mcp-unsupported`, `acf.adapter.facet-unsupported`),
+  `acf.adapter.facet-unsupported`),
 - preserve hook order where the host allows it,
 - map canonical instruction triggers to native equivalents where supported,
   else emit `lossy`,

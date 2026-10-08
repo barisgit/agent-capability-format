@@ -145,14 +145,6 @@ describe("component outcomes", () => {
       },
       {
         severity: "lossy",
-        code: "acf.adapter.mcp-unsupported",
-        message: "cursor does not support MCP transport stdio",
-        targetId: "cursor",
-        family: "mcp",
-        data: { server: "docs", transport: "stdio" },
-      },
-      {
-        severity: "lossy",
         code: "acf.adapter.facet-unsupported",
         message: "codex does not support skill",
         targetId: "codex",
@@ -169,7 +161,7 @@ describe("component outcomes", () => {
       "agent:helper": "omitted",
       "instruction:always": "omitted",
       "hook:guard": "changed-behavior",
-      "mcp:docs": "omitted",
+      "mcp:docs": "native",
     });
     const helper = outcomes.find((item) => item.component === "helper");
     expect(helper?.consequence).toBe(

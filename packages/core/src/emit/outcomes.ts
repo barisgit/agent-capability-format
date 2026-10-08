@@ -148,8 +148,6 @@ function legacyChanges(
             "changed-behavior",
             `instruction trigger ${String(data.trigger)}`,
           );
-    case "acf.adapter.mcp-unsupported":
-      return affect("mcp", named("server"), "omitted", `mcp transport ${String(data.transport)}`);
     default:
       return [];
   }

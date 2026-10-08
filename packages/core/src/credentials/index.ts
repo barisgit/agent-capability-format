@@ -7,6 +7,7 @@
  * userinfo and credential-looking query or fragment parameters, and masks every credential part
  * so that messages can name the URL without leaking it.
  */
+import type { AcfDiagnosticCode } from "../diagnostics/index.js";
 
 const SCHEME_URL = /^([a-z][a-z0-9+.-]*:[/][/])([^/?#]*)([^?#]*)(?:[?]([^#]*))?(?:#(.*))?$/is;
 // scp-like `[user@]host:path`, which git treats as SSH.
@@ -19,7 +20,7 @@ const TOKEN_VALUE = /^(?:gh[pousr]_|github_pat_|glpat-|xox[abprs]-)/;
 const MASK = "***";
 
 /** Diagnostic code for a rejected credential-bearing source URL. */
-export const CREDENTIAL_IN_URL = "acf.source.credential-in-url";
+export const CREDENTIAL_IN_URL = "acf.source.credential-in-url" satisfies AcfDiagnosticCode;
 
 /**
  * Returns the user-facing rejection message for a source URL that embeds credentials, or `null`
