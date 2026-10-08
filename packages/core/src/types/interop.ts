@@ -1,0 +1,145 @@
+/**
+ * Shared interop contracts for the plugin-interop-foundation change.
+ *
+ * These types are the settled boundary between format readers (installer/core),
+ * the field-level support registry (core/targets), writers (adapters) and caplet's
+ * plan/apply. Changing a shape here is a cross-lane decision, not a local one.
+ */
+import type { TargetId } from "./model.js";
+
+/** Source package formats caplet can read (SPEC.md §20, source-format-readers). */
+export type SourceFormat = "acf" | "agent-plugins" | "claude-plugin" | "skills";
+export const sourceFormats: readonly SourceFormat[] = [
+  "acf",
+  "agent-plugins",
+  "claude-plugin",
+  "skills",
+];
+
+/**
+ * Safety class of a field, value condition or native key (capability-model-layers,
+ * Safety classes). Only `descriptive` and `granting` may be degraded; `restricting`
+ * and `functional` are native, translated or refused. Keys the registry does not
+ * know are `unclassified`.
+ */
+export type SafetyClass = "restricting" | "granting" | "functional" | "descriptive";
+export type NativeKeyClass = SafetyClass | "unclassified";
+
+/** How a target receives a capability: a real host plugin package or loose files. */
+export type Carrier = "plugin" | "loose";
+
+/** Evidence behind a support cell (capability-model-layers, Recorded equivalence evidence). */
+export type CellEvidence = {
+  level: "documented" | "verified";
+  /** Citation: research inventory section or verified test name. */
+  source: string;
+  /** Host version for `verified` evidence, e.g. "claude 2.1.97". */
+  hostVersion?: string | undefined;
+};
+
+/**
+ * One cell of the field-level support table: what a writer for one target and
+ * carrier does with one core field or value condition.
+ */
+export type SupportCell =
+  | {
+      kind: "native";
+      /** Native spelling, e.g. "disable-model-invocation: true". */
+      spelling: string;
+      /** Where the spelling lives when not the obvious file, e.g. "agents/openai.yaml". */
+      location?: string | undefined;
+      /** Value-domain condition under which the mapping is exact. */
+      condition?: string | undefined;
+      evidence: CellEvidence;
+    }
+  | { kind: "translated"; rule: string; evidence: CellEvidence }
+  | {
+      kind: "degraded";
+      loss: string;
+      severity: "lossy" | "info" | "warn";
+      evidence: CellEvidence;
+    }
+  | {
+      kind: "refused";
+      reason: string;
+      evidence?: CellEvidence | undefined;
+      /** Test fixture id proving nothing is written (required for restricting fields). */
+      negativeFixture?: string | undefined;
+    };
+
+/** Component families covered by the field-level table in this change. */
+export type InteropFamily = "skill" | "mcp" | "package";
+
+/**
+ * Support declaration for one core field or value condition, e.g.
+ * `skill.invocation.model=false` or `mcp.cwd`.
+ */
+export type FieldSupport = {
+  family: InteropFamily;
+  /** Stable id: `<family>.<field path>` plus `=<value>` for a value condition. */
+  field: string;
+  class: SafetyClass;
+  cells: Partial<Record<TargetId, Partial<Record<Carrier, SupportCell>>>>;
+};
+
+/**
+ * A native key known to the registry for one target, attachment point and spelling.
+ * `generatedFrom` marks keys a writer derives from a core field (an extra with that key
+ * is `acf.extras.conflict`); `pending` names the future core field (`acf.core.pending`).
+ */
+export type NativeKeyInfo = {
+  target: TargetId;
+  family: InteropFamily;
+  key: string;
+  class: SafetyClass;
+  generatedFrom?: string | undefined;
+  pending?: { coreField: string } | undefined;
+};
+
+/** Provenance of a capability read through a format reader. */
+export type CapabilitySource = {
+  format: SourceFormat;
+  /** e.g. "1.0" for Agent Plugins; absent when the format has no version. */
+  formatVersion?: string | undefined;
+  /** Selected package root relative to the source root, POSIX separators, "." for the root. */
+  path: string;
+  /** Absolute path of the immutable materialized snapshot of the package root. */
+  snapshotRoot: string;
+};
+
+/** Kinds of foreign components a reader preserves without projecting them. */
+export type NativeRemainderKind =
+  | "agent"
+  | "command"
+  | "hook"
+  | "output-style"
+  | "lsp-server"
+  | "monitor"
+  | "bin"
+  | "settings"
+  | "user-config"
+  | "channel"
+  | "dependencies"
+  | "listing-metadata"
+  | "mcp-server"
+  | "extension-namespace"
+  | "other";
+
+/**
+ * A preserved, unprojected component of a foreign package (its native remainder).
+ * Writers of the same format copy `paths` unchanged; other targets omit or refuse it
+ * according to `class` (capability-model-layers, Component omission).
+ */
+export type NativeRemainderComponent = {
+  /** Format whose dialect the component is written in. */
+  format: Exclude<SourceFormat, "acf" | "skills">;
+  kind: NativeRemainderKind;
+  name: string;
+  /** Snapshot-relative POSIX paths belonging to the component (files or directories). */
+  paths: string[];
+  /** Manifest keys belonging to the component, when it lives (partly) in the manifest. */
+  manifestKeys?: string[] | undefined;
+  class: SafetyClass;
+  /** True when the component executes code (stdio server, hook, LSP, monitor, bin). */
+  executable: boolean;
+};

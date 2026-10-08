@@ -6,6 +6,7 @@ import {
   type ProvisionalOperationId,
   provisionalOperations,
 } from "@caplet/runtime-taxonomy";
+import type { CapabilitySource, NativeRemainderComponent, SourceFormat } from "./interop.js";
 
 export {
   canonicalHookTypes,
@@ -71,6 +72,10 @@ export type SkillFacet = {
     name: Slug;
     description: string;
     invocation?: { user?: boolean | undefined; model?: boolean | undefined } | undefined;
+    license?: string | undefined;
+    compatibility?: string | undefined;
+    metadata?: Record<string, string> | undefined;
+    "argument-hint"?: string | undefined;
   }>;
   body: string;
 };
@@ -219,6 +224,8 @@ export type McpTransport =
       command: string;
       args?: string[] | undefined;
       env?: Record<string, string> | undefined;
+      /** Working directory; starts with ${ACF_CAPABILITY_DIR}, ${ACF_DATA_DIR} or ./ . Omitted means no assumption. */
+      cwd?: string | undefined;
     }
   | { transport: "http"; url: string; headers?: Record<string, string> | undefined }
   | { transport: "sse"; url: string; headers?: Record<string, string> | undefined };
@@ -266,6 +273,10 @@ export type AcfCapability = {
   mcp: McpFile | undefined;
   assets: AssetRef[];
   diagnostics: Diagnostic[];
+  /** Where the capability was read from; absent for capabilities built before format readers existed. */
+  source?: CapabilitySource | undefined;
+  /** Foreign components the reader preserved but did not project (empty or absent for native ACF). */
+  remainder?: NativeRemainderComponent[] | undefined;
 };
 
 export type SourceSpec =
@@ -281,6 +292,8 @@ export type CapabilityEntry = {
   include?: FacetSelector | undefined;
   exclude?: FacetSelector | undefined;
   rename?: string | Record<string, string> | undefined;
+  /** Overrides format detection (source-format-readers, Deterministic format detection). */
+  format?: SourceFormat | undefined;
   only?: TargetId[] | undefined;
   except?: TargetId[] | undefined;
 };

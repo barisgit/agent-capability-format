@@ -213,6 +213,17 @@ Without a directory yet: marketplace and catalog inputs; `.codex-plugin`, `.curs
 
 Idea outside caplet: Lume (`/home/blaz/code/lume`, the user's own agent runtime, not a caplet target) could read Agent Plugins packages natively and serve as a second conformance client for packages caplet writes. Not part of any change here.
 
+## Implementation contracts
+
+Shared boundaries between the readers, the registry, the writers and caplet. Changing one is a cross-lane decision recorded here.
+
+- **Types.** `packages/core/src/types/interop.ts` defines `SourceFormat`, `SafetyClass`, `Carrier`, `SupportCell`, `FieldSupport`, `NativeKeyInfo`, `CapabilitySource` and `NativeRemainderComponent`. `AcfCapability` gains optional `source` (format, format version, selected path, snapshot root) and `remainder` (preserved, unprojected foreign components with safety class and an executable flag). Skill frontmatter gains `license`, `compatibility`, `metadata` and `argument-hint`; stdio MCP servers gain `cwd`; `CapabilityEntry` gains `format`.
+- **Registry API** (`packages/core/src/targets/`): `fieldSupport` (all `FieldSupport` declarations for skills, MCP and package fields), `supportCell(field, target, carrier)`, `nativeKeyInfo(target, family, key)`, and per-target carriers (`claude`: `plugin` and `loose`, default `plugin`; every other target: `loose`). Field ids are `<family>.<path>` with `=<value>` for value conditions (`skill.invocation.model=false`, `mcp.cwd`). Family-level `support` stays only for the facet families this change does not cover (agents, commands, instructions, hooks) until their follow-ups.
+- **Extras authoring.** Every extension attachment point (`acf.yml` package level, skill frontmatter, MCP server) accepts `targets.<t>.native: {<native key>: <value>}`; `acf.yml` alone accepts `targets.<t>.package: {<manifest key>: <value>}`. File extras live under `native/<target>/` in the capability tree. Readers record foreign native keys in the same places, so writers have one input path.
+- **Diagnostics.** `acf.support.refused` (error), `acf.support.component-omitted` (lossy), `acf.extras.dropped` (lossy), `acf.extras.conflict` (error), `acf.core.pending` (info), `acf.source.format-selected` (info), `acf.source.marketplace-unsupported` (error), `acf.source.format-version-unsupported` (error), `acf.lock.digest-mismatch` (error), `acf.claude.legacy-carrier` (info). Support diagnostics take code, severity and message text from registry cells.
+- **Lock.** One schema shared by core and installer. Each capability a source provides records `name`, `format`, `formatVersion` (when the format has one), selected `path`, `payloadDigest` (`acf-tree-2:sha256:<hex>`) and its v1 `capabilityHash`; old lockfiles read and are upgraded on the next write.
+- **Fake Claude CLI.** Transcripts from task 5.1 live in `apps/caplet/tests/fixtures/claude-cli/<scenario>.json` as `{argv, exitCode, stdout, stderr, notes}`; the host port's fake replays them.
+
 ## Risks / Trade-offs
 
 - [Claude CLI flags for update, uninstall and list are undocumented] -> Task 5.1 pins them against the local Claude 2.1.97 and records `verified` evidence before automated registration ships; without it the host state is `registration required` with the exact commands.
