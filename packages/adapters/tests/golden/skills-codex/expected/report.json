@@ -1,0 +1,73 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "skill background is blocked for codex by skill.invocation.user=false: codex cannot honor skill.invocation.user=false: Codex has no switch that refuses explicit $skill invocation. Recovery: exclude: { skill: [background] } or except: [codex]",
+      "targetId": "codex",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "background",
+        "outcome": "blocked",
+        "blocks": "component",
+        "source": "skill.invocation.user=false",
+        "consequence": "skill background is not installed for codex",
+        "recovery": "exclude: { skill: [background] } or except: [codex]"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.support.degraded",
+      "message": "codex: the argument hint is not shown (skill.argument-hint on skill review)",
+      "targetId": "codex",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "dropped": "skill.argument-hint"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "codex drops the granting claude key allowed-tools from skill review",
+      "targetId": "codex",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "outcome": "changed-behavior",
+        "source": "targets.claude.native.allowed-tools",
+        "consequence": "skill review runs without allowed-tools on codex",
+        "recovery": "exclude: { skill: [review] } or except: [codex]",
+        "dropped": "targets.claude.native.allowed-tools"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "codex drops the descriptive claude key when_to_use from skill review",
+      "targetId": "codex",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "dropped": "targets.claude.native.when_to_use"
+      },
+      "family": "skill"
+    }
+  ],
+  "outcomes": []
+}

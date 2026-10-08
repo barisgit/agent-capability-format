@@ -1,0 +1,43 @@
+{
+  "diagnostics": [
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "claude drops the functional codex key required from mcp tools",
+      "targetId": "claude",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "tools",
+        "outcome": "changed-behavior",
+        "source": "targets.codex.native.required",
+        "consequence": "mcp tools runs without required on claude",
+        "recovery": "exclude: { mcp: [tools] } or except: [claude]",
+        "dropped": "targets.codex.native.required"
+      },
+      "family": "mcp"
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "demo",
+      "target": "claude",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
+    },
+    {
+      "capability": "demo",
+      "target": "claude",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates"
+    }
+  ]
+}

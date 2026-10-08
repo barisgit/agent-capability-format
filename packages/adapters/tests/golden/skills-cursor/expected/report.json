@@ -1,0 +1,91 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "skill background is blocked for cursor by skill.invocation.user=false: cursor cannot honor skill.invocation.user=false: Cursor documents no key that refuses explicit invocation. Recovery: exclude: { skill: [background] } or except: [cursor]",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "background",
+        "outcome": "blocked",
+        "blocks": "component",
+        "source": "skill.invocation.user=false",
+        "consequence": "skill background is not installed for cursor",
+        "recovery": "exclude: { skill: [background] } or except: [cursor]"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.support.component-omitted",
+      "message": "skill deploy is omitted for cursor: the shared .agents/skills copy cannot serve every selected target and cursor has no native skill root",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "deploy",
+        "outcome": "omitted",
+        "source": "skill",
+        "consequence": "skill deploy is not installed for cursor",
+        "recovery": "exclude: { skill: [deploy] } or except: [cursor]"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.support.degraded",
+      "message": "cursor: the argument hint is not shown (skill.argument-hint on skill review)",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "dropped": "skill.argument-hint"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "cursor drops the granting claude key allowed-tools from skill review",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "outcome": "changed-behavior",
+        "source": "targets.claude.native.allowed-tools",
+        "consequence": "skill review runs without allowed-tools on cursor",
+        "recovery": "exclude: { skill: [review] } or except: [cursor]",
+        "dropped": "targets.claude.native.allowed-tools"
+      },
+      "family": "skill"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "cursor drops the descriptive claude key when_to_use from skill review",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "skill",
+        "component": "review",
+        "dropped": "targets.claude.native.when_to_use"
+      },
+      "family": "skill"
+    }
+  ],
+  "outcomes": []
+}

@@ -1,0 +1,43 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "mcp events is blocked for codex by mcp.transport=sse: codex cannot honor mcp.transport=sse: Codex documents no SSE transport. Recovery: exclude: { mcp: [events] } or except: [codex]",
+      "targetId": "codex",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "events",
+        "outcome": "blocked",
+        "blocks": "component",
+        "source": "mcp.transport=sse",
+        "consequence": "mcp events is not installed for codex",
+        "recovery": "exclude: { mcp: [events] } or except: [codex]"
+      },
+      "family": "mcp"
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "demo",
+      "target": "codex",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
+    },
+    {
+      "capability": "demo",
+      "target": "codex",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates"
+    }
+  ]
+}

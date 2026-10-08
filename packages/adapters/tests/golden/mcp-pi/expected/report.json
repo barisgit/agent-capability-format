@@ -1,0 +1,62 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "mcp events is blocked for pi by mcp.transport=sse: pi cannot honor mcp.transport=sse: pi-mcp-adapter has no SSE selector and tries Streamable HTTP first. Recovery: exclude: { mcp: [events] } or except: [pi]",
+      "targetId": "pi",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "events",
+        "outcome": "blocked",
+        "blocks": "component",
+        "source": "mcp.transport=sse",
+        "consequence": "mcp events is not installed for pi",
+        "recovery": "exclude: { mcp: [events] } or except: [pi]"
+      },
+      "family": "mcp"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "pi drops the functional codex key required from mcp tools",
+      "targetId": "pi",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "tools",
+        "outcome": "changed-behavior",
+        "source": "targets.codex.native.required",
+        "consequence": "mcp tools runs without required on pi",
+        "recovery": "exclude: { mcp: [tools] } or except: [pi]",
+        "dropped": "targets.codex.native.required"
+      },
+      "family": "mcp"
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "demo",
+      "target": "pi",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
+    },
+    {
+      "capability": "demo",
+      "target": "pi",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates"
+    }
+  ]
+}

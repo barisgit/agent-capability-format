@@ -1,0 +1,62 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "mcp events is blocked for cursor by mcp.transport=sse: cursor cannot honor mcp.transport=sse: Cursor's SSE selector is unverified. Recovery: exclude: { mcp: [events] } or except: [cursor]",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "events",
+        "outcome": "blocked",
+        "blocks": "component",
+        "source": "mcp.transport=sse",
+        "consequence": "mcp events is not installed for cursor",
+        "recovery": "exclude: { mcp: [events] } or except: [cursor]"
+      },
+      "family": "mcp"
+    },
+    {
+      "severity": "lossy",
+      "code": "acf.extras.dropped",
+      "message": "cursor drops the functional codex key required from mcp tools",
+      "targetId": "cursor",
+      "capability": {
+        "name": "demo"
+      },
+      "data": {
+        "family": "mcp",
+        "component": "tools",
+        "outcome": "changed-behavior",
+        "source": "targets.codex.native.required",
+        "consequence": "mcp tools runs without required on cursor",
+        "recovery": "exclude: { mcp: [tools] } or except: [cursor]",
+        "dropped": "targets.codex.native.required"
+      },
+      "family": "mcp"
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "demo",
+      "target": "cursor",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
+    },
+    {
+      "capability": "demo",
+      "target": "cursor",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates"
+    }
+  ]
+}
