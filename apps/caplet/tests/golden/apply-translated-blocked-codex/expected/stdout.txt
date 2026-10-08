@@ -5,3 +5,31 @@ Compatibility
   codex - native: 1 skill, 2 agents, 2 instructions, 1 MCP server
   codex - dropped: targets.claude.native.when_to_use (review (alpha-cap))
 
+Plan: 9 changes
+
+project  .
+  canonical  .agents
+    + skills/review/SKILL.md           alpha-cap
+    + managed notices         2 files  alpha-cap
+  codex  .codex
+    + .acf/instructions/alpha-cap/always.md    alpha-cap
+    + .acf/instructions/beta-cap/always.md     beta-cap
+    + agents/alpha-helper.md                   alpha-cap
+    + agents/beta-helper.md                    beta-cap
+    + config.toml                              alpha-cap, beta-cap
+    + managed notices
+
+  SCOPE    TARGET     CREATE  UPDATE  DELETE
+  project  canonical       3       -       -
+  project  codex           6       -       -
+
++ 9 create  ~ 0 update  - 0 delete
+
+Executable changes
+  codex
+    + MCP server alpha-server: ${ACF_CAPABILITY_DIR}/bin/server  alpha-cap
+    + MCP server beta-server: node server.js                     beta-cap
+
+warn 9 files
+targets
+    project  (nothing managed yet)

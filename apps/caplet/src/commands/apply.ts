@@ -3,7 +3,12 @@ import { type ArgsDef, defineCommand } from "citty";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
+import {
+  blockingExitCode,
+  exitCodeForDiagnostics,
+  printDiagnostics,
+  reporter,
+} from "../internal/output.js";
 import { buildPlanView, planToJson, reachBlock, reachToJson } from "../internal/plan-view.js";
 import { specToCittyArgs } from "../internal/spec.js";
 import {
@@ -61,26 +66,29 @@ export const applyCommand = defineCommand({
       const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
       if (!json) printDiagnostics(diagnostics, context.args);
       const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
-      const code = frozenStale ? 3 : exitCodeForDiagnostics(diagnostics, context.args);
+      const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, context.args);
+      // Refusals left their components out of the plan; the rest still applies.
+      const planCode = exitCodeForDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
       const reach = await collectReach(plan);
       const out = reporter(context.args);
       const executables = executableChanges(installed, plan.executables);
       const outcomes = { outcomes: plan.outcomes, executables };
-      if (code !== 0) {
+      if (blocking !== 0) {
         if (json) {
           printJson("apply", false, diagnostics, { plan: planToJson(view), ...outcomes });
         } else {
           out.compatibility(plan.outcomes, plan.targets);
         }
-        process.exitCode = code;
+        process.exitCode = blocking;
         return;
       }
+      process.exitCode = planCode;
       if (view.fileCount === 0) {
         const stale = plan.staleEntries.length;
         if (stale > 0 && !dryRun) await applyEmitPlan(plan);
         if (json) {
-          printJson("apply", true, diagnostics, {
+          printJson("apply", planCode === 0, diagnostics, {
             plan: planToJson(view),
             applied: stale > 0 && !dryRun ? { files: 0, writes: 0, deletes: 0 } : null,
             ...outcomes,
@@ -116,7 +124,7 @@ export const applyCommand = defineCommand({
       }
       if (dryRun) {
         if (json) {
-          printJson("apply", true, diagnostics, {
+          printJson("apply", planCode === 0, diagnostics, {
             plan: planToJson(view),
             applied: null,
             ...outcomes,
@@ -147,7 +155,10 @@ export const applyCommand = defineCommand({
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
       const appliedReach = await collectReach(plan);
-      const applyCode = exitCodeForDiagnostics(applied.diagnostics, context.args);
+      const applyCode = exitCodeForDiagnostics(
+        [...diagnostics, ...applied.diagnostics],
+        context.args,
+      );
       process.exitCode = applyCode;
       if (json) {
         printJson("apply", applyCode === 0, [...diagnostics, ...applied.diagnostics], {

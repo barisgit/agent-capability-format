@@ -1,7 +1,7 @@
 import { type Diagnostic, type ExecutableComponent, executableChanges } from "@caplet/core";
 import { readVerbose } from "./args.js";
 import { printJson, readJson } from "./json.js";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "./output.js";
+import { blockingExitCode, exitCodeForDiagnostics, printDiagnostics, reporter } from "./output.js";
 import { buildPlanView, planToJson } from "./plan-view.js";
 import { applyEmitPlan, buildEmitPlan } from "./workflow.js";
 
@@ -15,7 +15,7 @@ export type PlanAndApplyInput = {
   installed: readonly ExecutableComponent[];
   /** Command-specific fields of the `--json` envelope. */
   payload: Record<string, unknown>;
-  /** Human summary of the resolution, printed once the plan has no errors. */
+  /** Human summary of the resolution, printed once nothing in the plan blocks writing. */
   announce?: () => void;
 };
 
@@ -39,9 +39,11 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     applied,
     executables,
   });
-  const code = exitCodeForDiagnostics(diagnostics, args);
-  process.exitCode = code;
-  if (code !== 0) {
+  const blocking = blockingExitCode(diagnostics, args);
+  // Refusals left their components out of the plan; the rest still applies.
+  const planCode = exitCodeForDiagnostics(diagnostics, args);
+  process.exitCode = planCode;
+  if (blocking !== 0) {
     if (json) printJson(command, false, diagnostics, envelope(null));
     else printDiagnostics(diagnostics, args);
     return;
@@ -51,7 +53,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     input.announce?.();
   }
   if (view.fileCount === 0) {
-    if (json) printJson(command, true, diagnostics, envelope(null));
+    if (json) printJson(command, planCode === 0, diagnostics, envelope(null));
     else {
       out.done("Everything up to date");
       out.executables(executables);
@@ -66,7 +68,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   const applied = await applyEmitPlan(plan);
   const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
   const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
-  const applyCode = exitCodeForDiagnostics(applied.diagnostics, args);
+  const applyCode = exitCodeForDiagnostics([...diagnostics, ...applied.diagnostics], args);
   process.exitCode = applyCode;
   if (json) {
     printJson(

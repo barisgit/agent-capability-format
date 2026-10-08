@@ -162,6 +162,22 @@ export function printDiagnostics(
   }
 }
 
+/**
+ * The exit code of plan diagnostics that stop a command before it writes anything. A refusal
+ * (`acf.support.refused`) does not count: its writer already left the refused component out
+ * for that target, so the rest of the plan applies and the command exits non-zero afterwards
+ * through {@link exitCodeForDiagnostics}.
+ */
+export function blockingExitCode(
+  diagnostics: readonly Diagnostic[],
+  args: Record<string, unknown>,
+): ExitCode {
+  return exitCodeForDiagnostics(
+    diagnostics.filter((diagnostic) => diagnostic.code !== "acf.support.refused"),
+    args,
+  );
+}
+
 export function exitCodeForDiagnostics(
   diagnostics: readonly Diagnostic[],
   args: Record<string, unknown>,

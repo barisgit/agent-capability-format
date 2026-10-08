@@ -10,6 +10,48 @@ import {
   writeText,
 } from "../helpers";
 
+test("a refused skill is left out for one target while the rest applies and apply exits non-zero", async () => {
+  const scope = await makeScope();
+  try {
+    const alpha = path.join(scope.sourceRoot, "alpha");
+    const manualOnly = (except: string) =>
+      `---\nname: background\ndescription: House conventions\ninvocation:\n  user: false\n${except}---\nConventions.\n`;
+    await writeText(path.join(alpha, "skills", "background", "SKILL.md"), manualOnly(""));
+    await writeText(
+      path.join(alpha, "skills", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review a change\n---\nReview.\n",
+    );
+    await writeText(
+      path.join(scope.agentsDir, "caplet.yml"),
+      "emit:\n  defaultTargets: [claude, codex]\n",
+    );
+    const args = ["apply", "--cwd", scope.cwd, "--scope", "project"];
+
+    const exists = (...parts: string[]) => Bun.file(path.join(scope.cwd, ...parts)).exists();
+
+    const refused = await runCaplet(scope, args);
+
+    expect(refused.exitCode).toBe(2);
+    expect(refused.stdout).toContain("background (alpha-cap) / codex - blocked:");
+    expect(refused.stderr).toContain("acf.support.refused");
+    expect(await exists(".claude", "skills", "background", "SKILL.md")).toBe(true);
+    expect(await exists(".claude", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".agents", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".agents", "skills", "background")).toBe(false);
+
+    await writeText(
+      path.join(alpha, "skills", "background", "SKILL.md"),
+      manualOnly("except: [codex]\n"),
+    );
+    const recovered = await runCaplet(scope, [...args, "--mode", "force"]);
+
+    expect(recovered.exitCode).toBe(0);
+    expect(recovered.stdout).not.toContain("blocked");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("targeted apply preserves other targets in a shared-root inventory", async () => {
   const scope = await makeScope();
   try {
