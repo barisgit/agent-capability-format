@@ -4,5 +4,6 @@ export * from "./native-keys.js";
 export * from "./package-values.js";
 export * from "./plugin-layout.js";
 export * from "./registry.js";
+export * from "./remainder-support.js";
 export * from "./self-check.js";
 export * from "./support-diagnostics.js";

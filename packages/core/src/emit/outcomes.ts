@@ -132,7 +132,16 @@ function supportChanges(diagnostic: Diagnostic, components: readonly Component[]
     recovery: data.recovery,
   };
   if (data.blocks === "package") {
-    return components.map((component) => ({ ...component, ...change }));
+    // The refusing component may be one the report does not list, such as native remainder.
+    const listed =
+      data.family === "package" ||
+      components.some(
+        (component) => component.family === data.family && component.component === data.component,
+      );
+    const subjects = listed
+      ? components
+      : [...components, { family: data.family, component: data.component }];
+    return subjects.map((component) => ({ ...component, ...change }));
   }
   return [
     {

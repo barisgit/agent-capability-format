@@ -147,6 +147,24 @@ describe("component outcomes", () => {
     expect(outcomes.find((item) => item.component === "docs")?.source).toBe("hook guard");
   });
 
+  test("a package refusal by an unlisted component reports that component too", () => {
+    const outcomes = componentOutcomes({
+      capability: capability(),
+      target: "codex",
+      diagnostics: [
+        packageRefused(
+          { capability: "tools", family: "hook", component: "plugin-hooks", target: "codex" },
+          "is a restricting Claude plugin hook that codex cannot carry",
+        ),
+      ],
+    });
+    expect(outcomes.find((item) => item.component === "plugin-hooks")).toMatchObject({
+      family: "hook",
+      outcome: "blocked",
+      source: "hook plugin-hooks",
+    });
+  });
+
   test("legacy adapter diagnostics map to omitted and changed behavior", () => {
     const legacy: Diagnostic[] = [
       {

@@ -30,6 +30,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.mcp.url.insecure",
   "acf.mcp.url.credential-in-url",
   "acf.mcp.placeholder.unsupported",
+  "acf.mcp.config-conflict",
   "acf.skill.paths-not-core",
   "acf.skill.native-key-not-core",
   "acf.path.absolute",

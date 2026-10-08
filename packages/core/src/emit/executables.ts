@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
-import { targetMap } from "../targets/index.js";
+import { remainderTargets, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
   HookEntry,
@@ -41,17 +41,6 @@ export type ExecutableChange = Omit<ExecutableComponent, "fingerprint"> & {
   /** The earlier `detail` of a changed component when it differs from the current one. */
   previous?: string | undefined;
 };
-
-/**
- * Targets that receive a foreign format's native remainder: only the writer of the same format
- * copies it (capability-model-layers, Component omission). The Agent Plugins writer is a
- * follow-up change, so its remainder reaches no target yet.
- */
-const remainderTargets: Readonly<Record<NativeRemainderComponent["format"], readonly TargetId[]>> =
-  {
-    "claude-plugin": ["claude"],
-    "agent-plugins": [],
-  };
 
 /** Package manifest holding a format's manifest keys, relative to the package root. */
 const manifestPaths: Readonly<Record<NativeRemainderComponent["format"], string>> = {

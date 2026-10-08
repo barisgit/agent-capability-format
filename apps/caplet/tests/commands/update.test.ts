@@ -63,3 +63,32 @@ test("caplet update with a name refreshes only that capability", async () => {
     await cleanup(scope);
   }
 });
+
+test("caplet update sweeps stale sidecar entries when no file changes", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(
+      path.join(scope.agentsDir, "caplet.yml"),
+      "emit:\n  defaultTargets: [claude]\n",
+    );
+    const args = ["--cwd", scope.cwd, "--scope", "project"];
+    expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
+    // A recorded output that is neither planned nor on disk any more: only the sidecar keeps it.
+    const sidecarPath = path.join(scope.cwd, ".claude", ".acf-managed.json");
+    const sidecar = JSON.parse(await readText(sidecarPath)) as { managed: { path: string }[] };
+    const [template] = sidecar.managed;
+    if (template === undefined) throw new Error("apply recorded no sidecar entry");
+    sidecar.managed.push({ ...template, path: "agents/ghost.md" });
+    await writeText(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`);
+
+    const result = await runCaplet(scope, ["update", ...args]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Cleaned up 1 stale sidecar entry");
+    expect(result.stdout).not.toContain("Everything up to date");
+    const after = JSON.parse(await readText(sidecarPath)) as { managed: { path: string }[] };
+    expect(after.managed.map((entry) => entry.path)).not.toContain("agents/ghost.md");
+  } finally {
+    await cleanup(scope);
+  }
+});
