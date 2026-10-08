@@ -138,3 +138,31 @@ test("a native ACF capability with a skill and a hook stays whole on loose Claud
   expect(paths).toContain(".claude/skills/review/SKILL.md");
   expect(paths.some((p) => p.includes(".acf/marketplace"))).toBe(false);
 });
+
+test("Agent Plugins remainder is omitted from a Claude plugin, or refuses it when restricting", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "write", description: "Write docs" })],
+    source: { format: "agent-plugins", path: ".", snapshotRoot: CAP_ROOT },
+  });
+  const server = {
+    format: "agent-plugins" as const,
+    kind: "mcp-server" as const,
+    name: "search",
+    paths: ["mcp.json"],
+    class: "functional" as const,
+    executable: true,
+  };
+  capability.remainder = [server];
+  const omitted = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
+  expect(omitted.plugins).toHaveLength(1);
+  expect(omitted.diagnostics.map((d) => [d.code, d.severity])).toContainEqual([
+    "acf.support.component-omitted",
+    "lossy",
+  ]);
+
+  capability.remainder = [{ ...server, class: "restricting" }];
+  const refused = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
+  expect(refused.plugins ?? []).toEqual([]);
+  expect(refused.diffs).toEqual([]);
+  expect(refused.diagnostics.map((d) => d.code)).toContain("acf.support.refused");
+});

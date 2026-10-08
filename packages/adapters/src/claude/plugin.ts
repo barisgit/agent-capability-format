@@ -25,10 +25,10 @@ import {
   nativeFiles,
   nativeFileTargets,
   nativeTreeDropped,
-  packageRefused,
   payloadDigestOfEntries,
   pluginPackageDir,
   type ReadOnlyFs,
+  remainderSupport,
   type SupportSubject,
 } from "@caplet/core";
 import { makeFileDiff } from "../common/diff.js";
@@ -362,7 +362,8 @@ async function rawServerEntry(
 /**
  * Reports remainder Claude cannot carry. A Claude plugin's remainder is Claude's own and goes
  * into the plugin unchanged, with a warning when rename or selection changed the package around
- * it. Agent Plugins remainder has no Claude form.
+ * it. Other remainder has no Claude form and is omitted or refuses the package
+ * (`remainderSupport`).
  */
 function reportRemainder(capability: AcfCapability, report: EmitReport): void {
   const remainder = capability.remainder ?? [];
@@ -379,29 +380,7 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
     });
     return;
   }
-  for (const component of remainder) {
-    const subject = { capability: name, target: "claude" as const, carrier: "plugin" as const };
-    if (component.kind === "mcp-server")
-      report.diagnostics.push(
-        componentOmitted(
-          { ...subject, family: "mcp", component: component.name },
-          `Claude cannot run this ${component.format} server`,
-        ),
-      );
-    else if (component.class === "restricting")
-      report.diagnostics.push(
-        packageRefused(
-          { ...subject, family: "package", component: name },
-          "its " +
-            component.format +
-            " " +
-            component.kind +
-            " " +
-            component.name +
-            " restricts the package and has no Claude form",
-        ),
-      );
-  }
+  report.diagnostics.push(...remainderSupport(capability, "claude"));
 }
 
 /**
