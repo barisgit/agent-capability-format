@@ -1,6 +1,6 @@
 import { colors } from "consola/utils";
-import { CAPLET_VERSION } from "./internal/json";
-import { columns } from "./internal/render";
+import { CAPLET_VERSION } from "./internal/json.js";
+import { columns } from "./internal/render.js";
 import {
   COMMAND_SPECS,
   type CommandGroup,
@@ -9,7 +9,7 @@ import {
   type FlagSpec,
   GLOBAL_FLAGS,
   TARGET_FLAG,
-} from "./internal/spec";
+} from "./internal/spec.js";
 
 const GROUP_ORDER: CommandGroup[] = ["MANAGE", "SYNC", "INSPECT", "SETUP"];
 

@@ -1,4 +1,4 @@
-import type { AcfOwnership, FacetFamily } from "../types";
+import type { AcfOwnership, FacetFamily } from "../types/index.js";
 
 export const MANAGEMENT_NOTICE_FILENAME = "ACF-MANAGED.md";
 export const ACF_SYSTEM_OWNER = "acf-system";

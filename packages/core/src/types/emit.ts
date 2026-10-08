@@ -8,7 +8,7 @@ import type {
   Scope,
   SupportLevel,
   TargetId,
-} from "./model";
+} from "./model.js";
 
 export type InstallPaths = { user: string | null; project: string | null };
 export type TargetMappings = {

@@ -1,8 +1,8 @@
 import path from "node:path";
 import matter from "gray-matter";
-import type { Diagnostic, FacetFamily, Manifest } from "../types";
-import { exists, readText } from "../utils/fs";
-import { parseYaml } from "../yaml";
+import type { Diagnostic, FacetFamily, Manifest } from "../types/index.js";
+import { exists, readText } from "../utils/fs.js";
+import { parseYaml } from "../yaml.js";
 
 export async function pickFamilyYaml(
   dir: string,

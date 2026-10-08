@@ -1,8 +1,8 @@
-import { chmod, mkdir, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@caplet/adapters/common";
 import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@caplet/core";
-import { getJsonPointer, hasJsonPointer } from "./json-pointer";
+import { getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 import {
   hashOwnedRegions,
   mergeSidecarEntry,
@@ -10,7 +10,7 @@ import {
   relativeSidecarPath,
   removeOwnedRegionsFromText,
   writeSidecar,
-} from "./sidecar";
+} from "./sidecar.js";
 
 export type ApplyResult = {
   written: string[];
@@ -115,7 +115,7 @@ async function applyOneDiff(
   if (diff.after === null) {
     if (before === null) return { content: null, changed: false };
     const stripped = removeOwnedRegionsFromText(before, diff.owns);
-    if (stripped !== before) await writeText(absolutePath, stripped);
+    if (stripped !== before) await writeContent(absolutePath, stripped);
     return { content: stripped, changed: stripped !== before };
   }
   const diffAfter = textContent(diff.after);
@@ -126,7 +126,7 @@ async function applyOneDiff(
     else throw new Error(`unsupported ownership kind for apply: ${own.kind}`);
   }
 
-  if (after !== before) await writeText(absolutePath, after);
+  if (after !== before) await writeContent(absolutePath, after);
   return { content: after, changed: after !== before };
 }
 
@@ -169,14 +169,9 @@ function defaultTextFor(owns: readonly AcfOwnership[]): string {
   return "";
 }
 
-async function writeText(filePath: string, text: string): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await Bun.write(filePath, text);
-}
-
 async function writeContent(filePath: string, content: FileContent): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await Bun.write(filePath, content);
+  await writeFile(filePath, content);
 }
 
 async function readTextIfExists(filePath: string): Promise<string | null> {

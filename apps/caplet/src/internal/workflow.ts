@@ -27,7 +27,7 @@ import {
   resolveCapabilities,
   sourceId,
 } from "@caplet/installer";
-import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs";
+import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs.js";
 import {
   detectDrift,
   hashOwnedRegions,
@@ -35,12 +35,12 @@ import {
   readSidecar,
   relativeSidecarPath,
   writeSidecar,
-} from "../apply/sidecar";
-import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args";
-import { diskReadOnlyFs } from "./fs";
-import { addManagementNotices } from "./managed-notices";
-import { anchorPathSource } from "./manifest";
-import { resolveScopeRoots } from "./scopes";
+} from "../apply/sidecar.js";
+import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args.js";
+import { diskReadOnlyFs } from "./fs.js";
+import { addManagementNotices } from "./managed-notices.js";
+import { anchorPathSource } from "./manifest.js";
+import { resolveScopeRoots } from "./scopes.js";
 
 export type EmittedDiff = {
   scopeRoot: ScopeRoot;

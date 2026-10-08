@@ -2,14 +2,14 @@ import path from "node:path";
 import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { readCwd, readScope } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { printJson, readJson } from "../internal/json";
-import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
-import { displayPath } from "../internal/plan-view";
-import { columns } from "../internal/render";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
+import { readCwd, readScope } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
+import { displayPath } from "../internal/plan-view.js";
+import { columns } from "../internal/render.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
 
 export const listCommand = defineCommand({
   meta: { name: "list", description: "list installed capabilities (alias: ls)" },

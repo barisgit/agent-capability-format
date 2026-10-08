@@ -1,16 +1,16 @@
 import { defineCommand } from "citty";
-import { addCommand } from "./commands/add";
-import { applyCommand } from "./commands/apply";
-import { checkCommand } from "./commands/check";
-import { completionCommand } from "./commands/completion";
-import { doctorCommand } from "./commands/doctor";
-import { initCommand } from "./commands/init";
-import { listCommand } from "./commands/list";
-import { removeCommand } from "./commands/remove";
-import { showCommand } from "./commands/show";
-import { statusCommand } from "./commands/status";
-import { updateCommand } from "./commands/update";
-import { CAPLET_VERSION } from "./internal/json";
+import { addCommand } from "./commands/add.js";
+import { applyCommand } from "./commands/apply.js";
+import { checkCommand } from "./commands/check.js";
+import { completionCommand } from "./commands/completion.js";
+import { doctorCommand } from "./commands/doctor.js";
+import { initCommand } from "./commands/init.js";
+import { listCommand } from "./commands/list.js";
+import { removeCommand } from "./commands/remove.js";
+import { showCommand } from "./commands/show.js";
+import { statusCommand } from "./commands/status.js";
+import { updateCommand } from "./commands/update.js";
+import { CAPLET_VERSION } from "./internal/json.js";
 
 export const rootCommand = defineCommand({
   meta: {

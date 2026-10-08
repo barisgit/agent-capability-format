@@ -1,4 +1,4 @@
-export { type ApplyResult, applyDiffs } from "./apply/apply-diffs";
+export { type ApplyResult, applyDiffs } from "./apply/apply-diffs.js";
 export {
   type DriftFs,
   detectDrift,
@@ -10,5 +10,5 @@ export {
   relativeSidecarPath,
   removeOwnedRegions,
   writeSidecar,
-} from "./apply/sidecar";
-export { rootCommand } from "./cli";
+} from "./apply/sidecar.js";
+export { rootCommand } from "./cli.js";

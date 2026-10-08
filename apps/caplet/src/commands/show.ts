@@ -6,14 +6,14 @@ import {
 } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { readCwd, readScope, validationError } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { printJson, readJson } from "../internal/json";
-import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
-import { columns } from "../internal/render";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
-import { capabilitySummary } from "../internal/workflow";
+import { readCwd, readScope, validationError } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
+import { columns } from "../internal/render.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { capabilitySummary } from "../internal/workflow.js";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },

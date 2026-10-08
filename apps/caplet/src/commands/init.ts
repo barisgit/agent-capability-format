@@ -1,10 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { type ArgsDef, defineCommand } from "citty";
-import { readCwd } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { reporter } from "../internal/output";
-import { specToCittyArgs } from "../internal/spec";
+import { readCwd } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { exists } from "../internal/fs.js";
+import { reporter } from "../internal/output.js";
+import { specToCittyArgs } from "../internal/spec.js";
 
 const TEMPLATE = `acf: 1\ncapabilities: []\n`;
 
@@ -17,7 +18,7 @@ export const initCommand = defineCommand({
       const agentsDir = path.join(cwd, ".agents");
       const manifestPath = path.join(agentsDir, "capabilities.yml");
       const out = reporter(context.args);
-      if (await Bun.file(manifestPath).exists()) {
+      if (await exists(manifestPath)) {
         out.done(`Already initialized: ${manifestPath}`);
         return;
       }

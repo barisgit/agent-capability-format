@@ -4,9 +4,9 @@ import {
   type CanonicalTriggerName,
   isProvisionalOperation,
 } from "@caplet/runtime-taxonomy";
-import { applicableTargets } from "../applicability";
-import { makeDiagnostic } from "../diagnostics";
-import { isTargetId, targetMap } from "../targets";
+import { applicableTargets } from "../applicability/index.js";
+import { makeDiagnostic } from "../diagnostics/index.js";
+import { isTargetId, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -14,9 +14,9 @@ import type {
   HookEntry,
   HookMatch,
   TargetExtensions,
-} from "../types";
-import { hookEffectMatrix, hookMatchRequired } from "../types";
-import { counts } from "./helpers";
+} from "../types/index.js";
+import { hookEffectMatrix, hookMatchRequired } from "../types/index.js";
+import { counts } from "./helpers.js";
 
 export function validateCapability(cap: AcfCapability): void {
   validateUniqueFacetNames(cap);

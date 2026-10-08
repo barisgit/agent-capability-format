@@ -9,7 +9,7 @@ import type {
   FacetFamily,
   FileContent,
 } from "@caplet/core";
-import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer";
+import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
 export type DriftFs = {

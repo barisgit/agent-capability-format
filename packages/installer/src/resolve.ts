@@ -7,10 +7,14 @@ import {
   type Diagnostic,
   type ScopeRoot,
 } from "@caplet/core";
-import { readCapabilitiesYml } from "./capabilities-yml";
-import { detectLockDrift } from "./drift";
-import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch";
-import { inspectSource, type SourceCapabilityCandidate, type SourceInventory } from "./inventory";
+import { readCapabilitiesYml } from "./capabilities-yml.js";
+import { detectLockDrift } from "./drift.js";
+import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
+import {
+  inspectSource,
+  type SourceCapabilityCandidate,
+  type SourceInventory,
+} from "./inventory.js";
 import {
   type CapabilitiesLock,
   cacheKeyFor,
@@ -22,7 +26,7 @@ import {
   sourceId,
   sourceString,
   writeLockfile,
-} from "./lockfile";
+} from "./lockfile.js";
 
 export type ResolveOptions = {
   scope: "user" | "project";

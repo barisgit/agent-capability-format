@@ -1,2 +1,2 @@
-export * from "./extensions";
-export * from "./registry";
+export * from "./extensions.js";
+export * from "./registry.js";

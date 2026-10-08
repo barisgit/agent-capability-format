@@ -11,9 +11,9 @@ import {
   type SkillFacet,
   type TargetDefinition,
 } from "@caplet/core";
-import { type AssetPayload, readAssets } from "./assets";
-import { makeFileDiff } from "./diff";
-import { renderMarkdownFile } from "./text";
+import { type AssetPayload, readAssets } from "./assets.js";
+import { makeFileDiff } from "./diff.js";
+import { renderMarkdownFile } from "./text.js";
 
 export type SkillEmitOptions = { native?: boolean | undefined; canonical?: boolean | undefined };
 

@@ -1,13 +1,13 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
-import { readCwd, readScope } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { printJson, readJson } from "../internal/json";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
-import { buildEmitPlan } from "../internal/workflow";
+import { readCwd, readScope } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { buildEmitPlan } from "../internal/workflow.js";
 
 export const checkCommand = defineCommand({
   meta: {

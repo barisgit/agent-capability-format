@@ -1,8 +1,8 @@
-export * from "./managed-notices";
+export * from "./managed-notices.js";
 
-import { applicableTargets } from "../applicability";
-import { resolveScopeCapabilities } from "../resolver";
-import { targetIds, targetMap } from "../targets";
+import { applicableTargets } from "../applicability/index.js";
+import { resolveScopeCapabilities } from "../resolver/index.js";
+import { targetIds, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -17,7 +17,7 @@ import type {
   Scope,
   TargetDefinition,
   TargetId,
-} from "../types";
+} from "../types/index.js";
 
 export type {
   AcfManagedSidecar,
@@ -28,7 +28,7 @@ export type {
   EmitRequest,
   EmitResult,
   FileDiff,
-} from "../types";
+} from "../types/index.js";
 
 export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport> {
   const report: EmitReport = { perScopeTarget: {} };

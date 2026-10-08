@@ -1,17 +1,17 @@
 import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
-import { readCwd, readScope, readVerbose, validationError } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
+import { readCwd, readScope, readVerbose, validationError } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
 import {
   exitCodeForDiagnostics,
   finishWithDiagnostics,
   printDiagnostics,
   reporter,
-} from "../internal/output";
-import { buildPlanView } from "../internal/plan-view";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
-import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
+} from "../internal/output.js";
+import { buildPlanView } from "../internal/plan-view.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow.js";
 
 export const updateCommand = defineCommand({
   meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },

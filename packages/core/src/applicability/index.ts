@@ -1,5 +1,5 @@
-import { targetIds } from "../targets";
-import type { AcfCapability, Diagnostic, TargetId } from "../types";
+import { targetIds } from "../targets/index.js";
+import type { AcfCapability, Diagnostic, TargetId } from "../types/index.js";
 
 export type ApplicabilityDecl = { only?: TargetId[] | undefined; except?: TargetId[] | undefined };
 

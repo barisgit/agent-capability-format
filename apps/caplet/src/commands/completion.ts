@@ -1,5 +1,5 @@
 import { type ArgsDef, defineCommand } from "citty";
-import { commandNames, SCOPE_VALUES, specToCittyArgs, TARGET_IDS } from "../internal/spec";
+import { commandNames, SCOPE_VALUES, specToCittyArgs, TARGET_IDS } from "../internal/spec.js";
 
 const COMMANDS = [...commandNames(), "ls"].join(" ");
 const SCOPES = SCOPE_VALUES.join(" ");

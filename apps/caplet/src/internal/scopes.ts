@@ -2,7 +2,7 @@ import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { type Scope, type ScopeRoot, scopeRoot } from "@caplet/core";
-import type { ScopeSelection } from "./args";
+import type { ScopeSelection } from "./args.js";
 
 export async function resolveScopeRoots(
   selection: ScopeSelection,

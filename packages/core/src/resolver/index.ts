@@ -1,9 +1,15 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { readCapability } from "../reader";
-import type { AcfCapability, CapabilityOrigin, Diagnostic, Scope, ScopeRoot } from "../types";
-import { exists } from "../utils/fs";
+import { readCapability } from "../reader/index.js";
+import type {
+  AcfCapability,
+  CapabilityOrigin,
+  Diagnostic,
+  Scope,
+  ScopeRoot,
+} from "../types/index.js";
+import { exists } from "../utils/fs.js";
 
 export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[]; legacy: boolean };
 

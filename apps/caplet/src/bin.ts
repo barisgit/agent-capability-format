@@ -1,9 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { runMain } from "citty";
-import { rewriteAlias, rootCommand } from "./cli";
-import { renderCommandHelp, renderRootHelp } from "./help";
-import { CAPLET_VERSION } from "./internal/json";
-import { commandSpec, unknownFlagError } from "./internal/spec";
+import { rewriteAlias, rootCommand } from "./cli.js";
+import { renderCommandHelp, renderRootHelp } from "./help.js";
+import { CAPLET_VERSION } from "./internal/json.js";
+import { commandSpec, unknownFlagError } from "./internal/spec.js";
 
 const rawArgs = process.argv.slice(2);
 const first = rawArgs[0];

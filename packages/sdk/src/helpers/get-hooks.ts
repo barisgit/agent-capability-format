@@ -1,8 +1,8 @@
 import type { CanonicalHookType, TargetId } from "@caplet/core";
-import { loadApplicableCapabilities } from "./get-facets";
-import type { GetOptions } from "./options";
-import type { HookView } from "./views";
-import { toFacetBundle } from "./views";
+import { loadApplicableCapabilities } from "./get-facets.js";
+import type { GetOptions } from "./options.js";
+import type { HookView } from "./views.js";
+import { toFacetBundle } from "./views.js";
 
 export async function getHooks(
   opts: GetOptions & { target: TargetId; hookType?: CanonicalHookType },

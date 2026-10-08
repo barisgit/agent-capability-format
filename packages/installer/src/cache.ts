@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { cacheKeyFor } from "./lockfile";
+import { cacheKeyFor } from "./lockfile.js";
 
 export function getCachePath(cacheDir: string, sourceId: string, ref?: string | undefined): string {
   return path.join(cacheDir, cacheKeyFor(sourceId, ref));

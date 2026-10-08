@@ -1,13 +1,13 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { pushZodIssues } from "../diagnostics";
-import { capletConfigSchema } from "../schemas";
-import type { CapletConfig, Diagnostic } from "../types";
-import { exists, readText } from "../utils/fs";
-import { parseYaml } from "../yaml";
+import { pushZodIssues } from "../diagnostics/index.js";
+import { capletConfigSchema } from "../schemas/index.js";
+import type { CapletConfig, Diagnostic } from "../types/index.js";
+import { exists, readText } from "../utils/fs.js";
+import { parseYaml } from "../yaml.js";
 
-export { capletConfigSchema } from "../schemas";
-export type { CapletConfig } from "../types";
+export { capletConfigSchema } from "../schemas/index.js";
+export type { CapletConfig } from "../types/index.js";
 
 export const capletConfigLocations = [
   path.join(homedir(), ".agents", "caplet.yml"),

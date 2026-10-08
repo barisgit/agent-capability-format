@@ -1,8 +1,8 @@
 import type { TargetId } from "@caplet/core";
-import { loadApplicableCapabilities } from "./get-facets";
-import type { GetOptions } from "./options";
-import type { McpServerView } from "./views";
-import { toFacetBundle } from "./views";
+import { loadApplicableCapabilities } from "./get-facets.js";
+import type { GetOptions } from "./options.js";
+import type { McpServerView } from "./views.js";
+import { toFacetBundle } from "./views.js";
 
 export async function getMcpServers(
   opts: GetOptions & { target: TargetId },

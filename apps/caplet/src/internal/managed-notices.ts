@@ -9,8 +9,8 @@ import {
   type RootInventoryArtifact,
   renderRootInventory,
 } from "@caplet/core";
-import { readSidecar } from "../apply/sidecar";
-import type { EmittedDiff, RootContext } from "./workflow";
+import { readSidecar } from "../apply/sidecar.js";
+import type { EmittedDiff, RootContext } from "./workflow.js";
 
 export async function addManagementNotices(
   desired: readonly EmittedDiff[],

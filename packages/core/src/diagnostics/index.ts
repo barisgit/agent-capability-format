@@ -1,7 +1,7 @@
 import type { ZodError, ZodIssue } from "zod";
-import type { Diagnostic, FacetFamily, TargetId } from "../types";
+import type { Diagnostic, FacetFamily, TargetId } from "../types/index.js";
 
-export type { Diagnostic } from "../types";
+export type { Diagnostic } from "../types/index.js";
 
 export const ACF_DIAGNOSTIC_CODES = [
   "acf.manifest.invalid-name",

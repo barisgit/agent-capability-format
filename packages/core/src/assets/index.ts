@@ -9,8 +9,8 @@ import type {
   Diagnostic,
   InstructionFacet,
   SkillFacet,
-} from "../types";
-import { exists } from "../utils/fs";
+} from "../types/index.js";
+import { exists } from "../utils/fs.js";
 
 export type AssetInput = Pick<
   AcfCapability,

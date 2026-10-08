@@ -6,8 +6,8 @@ import {
   type TargetAdapter,
   targetMap,
 } from "@caplet/core";
-import { emitStandardAdapter, layoutFor } from "../common/emitter";
-import { emitSkills } from "../common/skills";
+import { emitStandardAdapter, layoutFor } from "../common/emitter.js";
+import { emitSkills } from "../common/skills.js";
 
 const codexTarget = targetMap.codex;
 if (codexTarget === undefined) throw new Error("missing target definition for codex");

@@ -17,7 +17,7 @@ import {
   sourceString,
   writeLockfile,
 } from "@caplet/installer";
-import { validationError } from "./args";
+import { validationError } from "./args.js";
 
 export type ParsedAddSource = {
   source: string;

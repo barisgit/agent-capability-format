@@ -1,11 +1,11 @@
-export { readCapabilitiesYml } from "./capabilities-yml";
-export { detectLockDrift } from "./drift";
-export type { FetchedCapability, FetchOptions } from "./fetch";
-export { fetchCapability } from "./fetch";
-export { cloneFull, cloneShallow, fetchRef, revParseHead } from "./git";
-export type { SourceCapabilityCandidate, SourceInventory } from "./inventory";
-export { inspectSource } from "./inventory";
-export type { CapabilitiesLock, LockEntry } from "./lockfile";
+export { readCapabilitiesYml } from "./capabilities-yml.js";
+export { detectLockDrift } from "./drift.js";
+export type { FetchedCapability, FetchOptions } from "./fetch.js";
+export { fetchCapability } from "./fetch.js";
+export { cloneFull, cloneShallow, fetchRef, revParseHead } from "./git.js";
+export type { SourceCapabilityCandidate, SourceInventory } from "./inventory.js";
+export { inspectSource } from "./inventory.js";
+export type { CapabilitiesLock, LockEntry } from "./lockfile.js";
 export {
   canonicalizeLock,
   canonicalizePathLocation,
@@ -15,8 +15,13 @@ export {
   sourceId,
   sourceString,
   writeLockfile,
-} from "./lockfile";
-export type { PruneResult } from "./prune";
-export { pruneCapabilities } from "./prune";
-export type { CapabilityRecord, PrefetchedSource, ResolveOptions, ResolveResult } from "./resolve";
-export { resolveCapabilities } from "./resolve";
+} from "./lockfile.js";
+export type { PruneResult } from "./prune.js";
+export { pruneCapabilities } from "./prune.js";
+export type {
+  CapabilityRecord,
+  PrefetchedSource,
+  ResolveOptions,
+  ResolveResult,
+} from "./resolve.js";
+export { resolveCapabilities } from "./resolve.js";

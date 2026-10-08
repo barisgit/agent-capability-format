@@ -1,8 +1,8 @@
 import type { Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
-import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args";
-import type { PlanView } from "./plan-view";
-import { columns, glyphs } from "./render";
+import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
+import type { PlanView } from "./plan-view.js";
+import { columns, glyphs } from "./render.js";
 
 export type Reporter = {
   log(message: string): void;

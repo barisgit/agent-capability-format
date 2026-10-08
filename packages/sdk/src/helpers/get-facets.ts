@@ -8,15 +8,15 @@ import {
   type TargetId,
 } from "@caplet/core";
 import { resolveCapabilities } from "@caplet/installer";
-import { emitDiagnostics, throwOnErrorDiagnostics } from "./diagnostics";
+import { emitDiagnostics, throwOnErrorDiagnostics } from "./diagnostics.js";
 import {
   type GetOptions,
   type NormalizedGetOptions,
   normalizeGetOptions,
   selectedScopeRoots,
   validateTarget,
-} from "./options";
-import { type FacetBundle, toFacetBundle } from "./views";
+} from "./options.js";
+import { type FacetBundle, toFacetBundle } from "./views.js";
 
 export type LoadedFacets = {
   capabilities: AcfCapability[];

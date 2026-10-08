@@ -9,21 +9,21 @@ import {
   readVerbose,
   readYes,
   validationError,
-} from "../internal/args";
-import { runCommandSafely } from "../internal/command";
+} from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
 import {
   addManifestEntry,
   anchorPathSource,
   buildManifestEntry,
   parseAddSource,
   readManifestForMutation,
-} from "../internal/manifest";
-import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output";
-import { buildPlanView } from "../internal/plan-view";
-import { inferScope, resolveScopeRoots } from "../internal/scopes";
-import { chooseSourceCapabilities } from "../internal/source-selection";
-import { specToCittyArgs } from "../internal/spec";
-import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow";
+} from "../internal/manifest.js";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
+import { buildPlanView } from "../internal/plan-view.js";
+import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
+import { chooseSourceCapabilities } from "../internal/source-selection.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow.js";
 
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },

@@ -1,16 +1,18 @@
 import "@caplet/adapters";
+import { execFile } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { type Diagnostic, targetIds, targetMap } from "@caplet/core";
 import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
-import { readCwd, readScope } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { printJson, readJson } from "../internal/json";
-import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
+import { readCwd, readScope } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
+import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
 
 export const doctorCommand = defineCommand({
   meta: { name: "doctor", description: "check caplet environment and setup" },
@@ -59,9 +61,7 @@ type DoctorCheck = {
 };
 
 async function checkGit(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promise<void> {
-  const proc = Bun.spawn(["git", "--version"], { stdout: "pipe", stderr: "pipe" });
-  const code = await proc.exited;
-  if (code === 0) {
+  if (await gitRuns()) {
     checks.push({ section: "Environment", status: "pass", message: "Git available" });
     return;
   }
@@ -71,6 +71,16 @@ async function checkGit(checks: DoctorCheck[], diagnostics: Diagnostic[]): Promi
     message: "git is not available",
   });
   checks.push({ section: "Environment", status: "fail", message: "Git unavailable" });
+}
+
+/** True when `git --version` succeeds; a missing binary counts as unavailable, not a crash. */
+async function gitRuns(): Promise<boolean> {
+  try {
+    await promisify(execFile)("git", ["--version"]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function checkAgentsReadable(

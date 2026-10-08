@@ -1,10 +1,10 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
-import { readCwd, readScope, readVerbose } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { printJson, readJson } from "../internal/json";
-import { printDiagnostics, reporter } from "../internal/output";
+import { readCwd, readScope, readVerbose } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
+import { printDiagnostics, reporter } from "../internal/output.js";
 import {
   buildPlanView,
   displayPath,
@@ -12,11 +12,11 @@ import {
   footprintToJson,
   reachToJson,
   shortenSource,
-} from "../internal/plan-view";
-import { columns } from "../internal/render";
-import { resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
-import { buildEmitPlan, collectFootprint, collectReach } from "../internal/workflow";
+} from "../internal/plan-view.js";
+import { columns } from "../internal/render.js";
+import { resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { buildEmitPlan, collectFootprint, collectReach } from "../internal/workflow.js";
 
 export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },

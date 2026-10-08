@@ -1,6 +1,6 @@
 import type { CapabilitiesYml, Diagnostic } from "@caplet/core";
-import type { CapabilitiesLock } from "./lockfile";
-import { entrySourceId, sourceId } from "./lockfile";
+import type { CapabilitiesLock } from "./lockfile.js";
+import { entrySourceId, sourceId } from "./lockfile.js";
 
 export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | null): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];

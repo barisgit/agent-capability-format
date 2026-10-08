@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { collectImportedSkillAssets, collectReferencedAssets } from "../assets";
-import { pushZodIssues } from "../diagnostics";
+import { collectImportedSkillAssets, collectReferencedAssets } from "../assets/index.js";
+import { pushZodIssues } from "../diagnostics/index.js";
 import {
   agentFrontmatterSchema,
   capabilityMarkdownFrontmatterSchema,
@@ -11,7 +11,7 @@ import {
   manifestSchema,
   mcpFileSchema,
   skillFrontmatterSchema,
-} from "../schemas";
+} from "../schemas/index.js";
 import type {
   AcfCapability,
   AgentFacet,
@@ -26,8 +26,8 @@ import type {
   McpFile,
   Scope,
   SkillFacet,
-} from "../types";
-import { exists } from "../utils/fs";
+} from "../types/index.js";
+import { exists } from "../utils/fs.js";
 import {
   byName,
   collectUnknown,
@@ -41,11 +41,11 @@ import {
   sortDiagnostics,
   validateNameMatch,
   validateSingularFolders,
-} from "./helpers";
-import { validateCapability } from "./validation";
+} from "./helpers.js";
+import { validateCapability } from "./validation.js";
 
-export { parseMarkdown } from "./helpers";
-export { validateCapability } from "./validation";
+export { parseMarkdown } from "./helpers.js";
+export { validateCapability } from "./validation.js";
 
 const manifestKeys = new Set([
   "acf",

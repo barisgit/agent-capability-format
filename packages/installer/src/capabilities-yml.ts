@@ -9,7 +9,7 @@ import {
   parseYaml,
   pushZodIssues,
 } from "@caplet/core";
-import { entrySourceId } from "./lockfile";
+import { entrySourceId } from "./lockfile.js";
 
 export async function readCapabilitiesYml(
   manifestPath: string,

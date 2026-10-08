@@ -7,14 +7,14 @@ import type {
   TargetAdapter,
   TargetDefinition,
   TargetId,
-} from "../types";
+} from "../types/index.js";
 import {
   claudeExtensionSchemas,
   codexExtensionSchemas,
   cursorExtensionSchemas,
   opencodeExtensionSchemas,
   piExtensionSchemas,
-} from "./extensions";
+} from "./extensions.js";
 
 const HOME = homedir();
 const hookKeys: readonly CanonicalHookType[] = [

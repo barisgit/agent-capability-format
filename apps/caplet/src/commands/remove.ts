@@ -1,17 +1,17 @@
 import path from "node:path";
 import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
-import { applyDiffs } from "../apply/apply-diffs";
-import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";
-import { readCwd, readExplicitScope, validationError } from "../internal/args";
-import { runCommandSafely } from "../internal/command";
-import { diskReadOnlyFs } from "../internal/fs";
-import { rootNoticeDiffFromSidecar } from "../internal/managed-notices";
-import { removeManifestEntry } from "../internal/manifest";
-import { reporter } from "../internal/output";
-import { inferScope, resolveScopeRoots } from "../internal/scopes";
-import { specToCittyArgs } from "../internal/spec";
-import { installRootFor } from "../internal/workflow";
+import { applyDiffs } from "../apply/apply-diffs.js";
+import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar.js";
+import { readCwd, readExplicitScope, validationError } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { diskReadOnlyFs } from "../internal/fs.js";
+import { rootNoticeDiffFromSidecar } from "../internal/managed-notices.js";
+import { removeManifestEntry } from "../internal/manifest.js";
+import { reporter } from "../internal/output.js";
+import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
+import { specToCittyArgs } from "../internal/spec.js";
+import { installRootFor } from "../internal/workflow.js";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },

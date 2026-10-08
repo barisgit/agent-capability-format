@@ -1,1 +1,1 @@
-export { validateCapability } from "../reader";
+export { validateCapability } from "../reader/index.js";

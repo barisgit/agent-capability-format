@@ -22,18 +22,18 @@ import {
   type TargetId,
   targetMap,
 } from "@caplet/core";
-import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets";
-import { pushLossy } from "./diagnostics";
-import { makeFileDiff } from "./diff";
-import { jsonPointerEscape, mergeJson, readJsonObject } from "./json-merge";
-import { replaceMarkedBlock } from "./markers";
+import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets.js";
+import { pushLossy } from "./diagnostics.js";
+import { makeFileDiff } from "./diff.js";
+import { jsonPointerEscape, mergeJson, readJsonObject } from "./json-merge.js";
+import { replaceMarkedBlock } from "./markers.js";
 import {
   type PlaceholderValues,
   substitutePlaceholders,
   substituteStringArray,
   substituteStringRecord,
-} from "./placeholders";
-import { renderGeneratedMarkdown, renderMarkdownFile } from "./text";
+} from "./placeholders.js";
+import { renderGeneratedMarkdown, renderMarkdownFile } from "./text.js";
 
 export type AdapterLayout = {
   targetId: TargetId;

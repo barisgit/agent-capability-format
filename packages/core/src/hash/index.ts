@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { listRegularFilesRecursive } from "../utils/fs";
+import { listRegularFilesRecursive } from "../utils/fs.js";
 
 export async function computeContentHash(root: string): Promise<string> {
   const absRoot = path.resolve(root);

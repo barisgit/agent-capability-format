@@ -1,5 +1,5 @@
-import { validationError } from "./args";
-import { selectCapabilities } from "./picker";
+import { validationError } from "./args.js";
+import { selectCapabilities } from "./picker.js";
 
 export type SourceSelectionOptions = {
   requested?: string;

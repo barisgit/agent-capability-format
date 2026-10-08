@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hookEntrySchema, mcpServerSchema } from "../schemas";
+import { hookEntrySchema, mcpServerSchema } from "../schemas/index.js";
 
 const stringArray = z.array(z.string());
 const unknownRecord = z.record(z.string(), z.unknown());

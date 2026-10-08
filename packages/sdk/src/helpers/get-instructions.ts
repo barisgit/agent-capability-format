@@ -1,8 +1,8 @@
 import type { CanonicalTriggerName, TargetId } from "@caplet/core";
-import { loadApplicableCapabilities } from "./get-facets";
-import type { GetOptions } from "./options";
-import type { InstructionView } from "./views";
-import { matchesTrigger, toFacetBundle } from "./views";
+import { loadApplicableCapabilities } from "./get-facets.js";
+import type { GetOptions } from "./options.js";
+import type { InstructionView } from "./views.js";
+import { matchesTrigger, toFacetBundle } from "./views.js";
 
 export async function getInstructions(
   opts: GetOptions & { target: TargetId; trigger?: CanonicalTriggerName },
