@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "list",
+    "--json"
+  ],
+  "exitCode": 0,
+  "stdout": "[\n  {\n    \"id\": \"probe@spike-mkt\",\n    \"version\": \"1.0.0+acf.aaa\",\n    \"scope\": \"user\",\n    \"enabled\": true,\n    \"installPath\": \"<HOME>/.claude/plugins/cache/spike-mkt/probe/1.0.0-acf.aaa\",\n    \"installedAt\": \"2026-10-08T21:22:44.429Z\",\n    \"lastUpdated\": \"2026-10-08T21:22:44.429Z\",\n    \"mcpServers\": {\n      \"probe_plain\": {\n        \"command\": \"node\",\n        \"args\": [\n          \"${CLAUDE_PLUGIN_ROOT}/server.js\",\n          \"probe_plain\"\n        ]\n      },\n      \"probe_rel\": {\n        \"command\": \"node\",\n        \"args\": [\n          \"./server.js\",\n          \"probe_rel\"\n        ]\n      },\n      \"probe_cwdroot\": {\n        \"command\": \"node\",\n        \"args\": [\n          \"${CLAUDE_PLUGIN_ROOT}/server.js\",\n          \"probe_cwdroot\"\n        ]\n      },\n      \"probe_cwdabs\": {\n        \"command\": \"node\",\n        \"args\": [\n          \"${CLAUDE_PLUGIN_ROOT}/server.js\",\n          \"probe_cwdabs\"\n        ]\n      },\n      \"probe_cmdexp\": {\n        \"command\": \"${CLAUDE_PLUGIN_ROOT}/server.js\",\n        \"args\": [\n          \"probe_cmdexp\"\n        ]\n      }\n    }\n  }\n]\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Array of {id, version, scope, enabled, installPath, installedAt, lastUpdated, mcpServers}; mcpServers omits the server cwd key."
+}

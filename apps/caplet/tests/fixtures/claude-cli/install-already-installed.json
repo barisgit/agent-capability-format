@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Installing plugin \"probe@spike-mkt\"...\n✔ Successfully installed plugin: probe@spike-mkt (scope: user)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Exit 0 and the same success text; no reinstall."
+}

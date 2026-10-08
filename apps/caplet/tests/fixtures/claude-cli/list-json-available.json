@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "list",
+    "--json",
+    "--available"
+  ],
+  "exitCode": 0,
+  "stdout": "{\n  \"installed\": [],\n  \"available\": [\n    {\n      \"pluginId\": \"probe@spike-mkt\",\n      \"name\": \"probe\",\n      \"description\": \"spike probe\",\n      \"marketplaceName\": \"spike-mkt\",\n      \"source\": \"./plugins/probe\"\n    }\n  ]\n}\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. --available changes the shape to {installed: [...], available: [{pluginId, name, description, marketplaceName, source}]}."
+}

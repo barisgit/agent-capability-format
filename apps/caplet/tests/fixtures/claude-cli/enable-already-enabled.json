@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "enable",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Failed to enable plugin \"probe@spike-mkt\": Plugin \"probe@spike-mkt\" is already enabled at user scope\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "disable",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Failed to disable plugin \"probe@spike-mkt\": Plugin \"probe@spike-mkt\" is already disabled at user scope\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

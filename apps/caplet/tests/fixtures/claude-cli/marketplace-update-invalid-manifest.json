@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "update",
+    "spike-mkt"
+  ],
+  "exitCode": 1,
+  "stdout": "Updating marketplace: spike-mkt...\nValidating local marketplace\n",
+  "stderr": "✘ Failed to update marketplace(s): Failed to refresh marketplace 'spike-mkt': Invalid JSON in <MARKETPLACE_DIR>/.claude-plugin/marketplace.json: JSON Parse error: Expected '}'\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>. marketplace.json is not valid JSON."
+}

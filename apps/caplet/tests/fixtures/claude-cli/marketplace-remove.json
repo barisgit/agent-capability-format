@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "remove",
+    "spike-mkt"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully removed marketplace: spike-mkt\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Removes the declaration from every scope's settings and uninstalls that marketplace's plugins in every scope (see names/12)."
+}

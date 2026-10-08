@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "list",
+    "--json"
+  ],
+  "exitCode": 0,
+  "stdout": "[\n  {\n    \"name\": \"spike-mkt\",\n    \"source\": \"directory\",\n    \"path\": \"<MARKETPLACE_DIR>\",\n    \"installLocation\": \"<MARKETPLACE_DIR>\"\n  }\n]\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. One entry per known marketplace name; no scope field."
+}

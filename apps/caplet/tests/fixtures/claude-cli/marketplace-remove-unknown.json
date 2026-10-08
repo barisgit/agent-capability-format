@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "remove",
+    "nope-mkt"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Failed to remove marketplace: Marketplace 'nope-mkt' not found\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

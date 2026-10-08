@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "update",
+    "nope-mkt"
+  ],
+  "exitCode": 1,
+  "stdout": "Updating marketplace: nope-mkt...\n",
+  "stderr": "✘ Failed to update marketplace(s): Marketplace 'nope-mkt' not found. Available marketplaces: spike-mkt\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

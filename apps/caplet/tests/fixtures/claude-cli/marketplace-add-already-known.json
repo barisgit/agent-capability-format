@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "<MARKETPLACE_DIR>",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Adding marketplace...\n✔ Marketplace 'spike-mkt' already on disk — declared in user settings\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Re-adding a known name exits 0 with 'already on disk'; the same text appears when another scope already registered the name."
+}

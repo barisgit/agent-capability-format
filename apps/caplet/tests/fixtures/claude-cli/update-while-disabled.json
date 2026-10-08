@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "update",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Checking for updates for plugin \"probe@spike-mkt\" at user scope…\n✔ Plugin \"probe\" updated from banana to 1.0.2 for scope user. Restart to apply changes.\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Updates a disabled plugin and keeps it disabled."
+}

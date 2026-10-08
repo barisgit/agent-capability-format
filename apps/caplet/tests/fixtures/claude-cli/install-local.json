@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "local1@acf-project-spike",
+    "--scope",
+    "local"
+  ],
+  "exitCode": 0,
+  "stdout": "Installing plugin \"local1@acf-project-spike\"...\n✔ Successfully installed plugin: local1@acf-project-spike (scope: local)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. enabledPlugins in <PROJECT>/.claude/settings.local.json; Claude appends **/.claude/settings.local.json to the user's global git ignore ($XDG_CONFIG_HOME/git/ignore)."
+}

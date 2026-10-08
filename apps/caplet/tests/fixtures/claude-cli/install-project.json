@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "probe@acf-project-spike",
+    "--scope",
+    "project"
+  ],
+  "exitCode": 0,
+  "stdout": "Installing plugin \"probe@acf-project-spike\"...\n✔ Successfully installed plugin: probe@acf-project-spike (scope: project)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. enabledPlugins in <PROJECT>/.claude/settings.json; install record (with projectPath) and cache stay under <HOME>."
+}

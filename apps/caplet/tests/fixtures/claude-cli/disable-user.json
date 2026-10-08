@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "disable",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully disabled plugin: probe (scope: user)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Writes enabledPlugins.<id> false in the scope's settings file."
+}

@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "claude",
+    "mcp",
+    "list"
+  ],
+  "exitCode": 0,
+  "stdout": "Checking MCP server health...\n\nplugin:probe:probe_plain: node <HOME>/.claude/plugins/cache/spike-mkt/probe/banana/server.js probe_plain - ✓ Connected\nplugin:probe:probe_rel: node ./server.js probe_rel - ✗ Failed to connect\nplugin:probe:probe_cwdroot: node <HOME>/.claude/plugins/cache/spike-mkt/probe/banana/server.js probe_cwdroot - ✓ Connected\nplugin:probe:probe_cwdabs: node <HOME>/.claude/plugins/cache/spike-mkt/probe/banana/server.js probe_cwdabs - ✓ Connected\nplugin:probe:probe_cmdexp: <HOME>/.claude/plugins/cache/spike-mkt/probe/banana/server.js probe_cmdexp - ✓ Connected\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Health check spawns plugin stdio servers in claude's working directory; ${CLAUDE_PLUGIN_ROOT} expands in command and args; ./server.js fails because the cwd is not the plugin root; the cwd key is ignored."
+}

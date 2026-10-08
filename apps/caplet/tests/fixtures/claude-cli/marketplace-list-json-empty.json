@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "list",
+    "--json"
+  ],
+  "exitCode": 0,
+  "stdout": "[]\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. After marketplace remove."
+}

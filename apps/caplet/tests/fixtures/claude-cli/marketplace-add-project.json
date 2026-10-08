@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "./.claude/.acf/marketplace",
+    "--scope",
+    "project"
+  ],
+  "exitCode": 0,
+  "stdout": "Adding marketplace...\n✔ Successfully added marketplace: acf-project-spike (declared in project settings)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>, git repo. Relative argument is resolved: <PROJECT>/.claude/settings.json gets the ABSOLUTE path in extraKnownMarketplaces; the user-level known_marketplaces.json also records it."
+}

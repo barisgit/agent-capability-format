@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "probe@nope-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "Installing plugin \"probe@nope-mkt\"...\n",
+  "stderr": "✘ Failed to install plugin \"probe@nope-mkt\": Plugin \"probe\" not found in marketplace \"nope-mkt\"\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Same message shape as an unknown plugin; only the exit code (1) is reliable."
+}

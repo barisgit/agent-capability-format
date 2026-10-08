@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "update",
+    "probe@acf-project-spike",
+    "--scope",
+    "project"
+  ],
+  "exitCode": 0,
+  "stdout": "Checking for updates for plugin \"probe@acf-project-spike\" at project scope…\n✔ Plugin \"probe\" updated from 1.0.0+acf.aaa to 1.0.1+acf.bbb for scope project (<PROJECT>). Restart to apply changes.\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. --scope project required; message names the project path."
+}

@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "update",
+    "spike-mkt"
+  ],
+  "exitCode": 0,
+  "stdout": "Updating marketplace: spike-mkt...\nValidating local marketplace\n✔ Successfully updated marketplace: spike-mkt\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Directory marketplace refresh; needed neither for content nor version pickup (plugin update reads the directory directly)."
+}

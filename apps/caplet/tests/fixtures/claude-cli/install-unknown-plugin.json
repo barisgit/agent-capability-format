@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "nope@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "Installing plugin \"nope@spike-mkt\"...\n",
+  "stderr": "✘ Failed to install plugin \"nope@spike-mkt\": Plugin \"nope\" not found in marketplace \"spike-mkt\"\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Marketplace known, plugin not listed."
+}

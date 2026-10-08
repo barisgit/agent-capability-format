@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "<SPIKE_ROOT>/failures/nope",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Path does not exist: <SPIKE_ROOT>/failures/nope\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Nonexistent local path."
+}

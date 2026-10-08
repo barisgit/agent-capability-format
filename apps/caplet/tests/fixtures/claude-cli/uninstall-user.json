@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "uninstall",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully uninstalled plugin: probe (scope: user)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Removes the install record and the enabledPlugins key; cache directories stay with an .orphaned_at marker."
+}

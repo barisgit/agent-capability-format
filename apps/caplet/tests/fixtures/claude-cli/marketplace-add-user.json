@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "<MARKETPLACE_DIR>",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Adding marketplace...\n✔ Successfully added marketplace: spike-mkt (declared in user settings)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Writes extraKnownMarketplaces.<name> {source:{source:directory,path:<abs>}} to <HOME>/.claude/settings.json and <HOME>/.claude/plugins/known_marketplaces.json (installLocation = the directory itself, no copy)."
+}

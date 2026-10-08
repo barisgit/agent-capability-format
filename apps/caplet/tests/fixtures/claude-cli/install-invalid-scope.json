@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "probe@spike-mkt",
+    "--scope",
+    "managed"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "Invalid scope: managed. Must be one of: user, project, local.\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

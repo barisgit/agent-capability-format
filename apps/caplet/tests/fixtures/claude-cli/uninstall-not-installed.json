@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "uninstall",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Failed to uninstall plugin \"probe@spike-mkt\": Plugin \"probe@spike-mkt\" not found in installed plugins\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>."
+}

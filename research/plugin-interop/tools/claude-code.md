@@ -709,7 +709,7 @@ Settings precedence: **managed > explicit CLI settings > local > project > user 
 
 ### Versions, updates, dependencies and cache behavior
 
-- Local relative-path marketplace plugins can load **in place**; other source types are copied/cached. Do not assume every installed plugin runs from a versioned cache. [Loading](https://code.claude.com/docs/en/plugins/loading)
+- Local relative-path marketplace plugins can load **in place**; other source types are copied/cached. Do not assume every installed plugin runs from a versioned cache. [Loading](https://code.claude.com/docs/en/plugins/loading) Superseded for `claude` 2.1.97 by the runtime verification below: a directory marketplace's `./plugins/<name>` plugin is copied into a version-keyed cache on install.
 - Version identity uses manifest version first, entry version next, with source-derived fallback where documented—for example short Git commit identity or archive hash. Exact fallback for every local/npm case is **UNKNOWN**. Reusing the same version can prevent expected payload refresh; bump versions for changed releases. [Loading](https://code.claude.com/docs/en/plugins/loading)
 - Official marketplace auto-updates default on; other marketplace auto-updates require configuration. Updating a marketplace and refreshing plugin payloads are related but distinct operations. [Installation/update](https://code.claude.com/docs/en/discover-plugins)
 - Persistent plugin data survives version updates; the final uninstall removes it unless retention is requested. [Plugin components](https://code.claude.com/docs/en/plugins/components)
@@ -724,4 +724,107 @@ Settings precedence: **managed > explicit CLI settings > local > project > user 
 - **Signatures:** checksum/commit integrity is documented; publisher-signature verification is **UNKNOWN**. [Marketplace reference](https://code.claude.com/docs/en/plugin-marketplaces)
 - **Lossless round trips:** preserve raw manifests/frontmatter, source modules, bundled files, spelling variants and unknown fields before normalization. Claude strips some unknown fields, rejects others, and ignores some accepted agent/plugin settings; reserializing its effective configuration cannot reconstruct the original package. [Plugin reference](https://code.claude.com/docs/en/plugins-reference), [Subagents](https://code.claude.com/docs/en/sub-agents)
 - **Canonical-model hazards:** permission grants versus tool availability; CLI agent fields versus ignored plugin-agent fields; command/frontmatter spelling differences; session-lived skill hooks; event-specific decision contracts; replacement versus additive component paths; catalog sources versus plugin sources; and in-place versus cached installs require separate meanings, not shared fields with contradictory semantics. Sources are cited in the corresponding sections.
-- **Verification:** documentation/source research only. No installation, runtime, sandbox, trust-dialog or round-trip tests were run; no repository/application state was changed.
+- **Verification:** the sections above are documentation/source research only. Plugin and marketplace CLI mechanics, caching and the plugin MCP working directory were later run against `claude` 2.1.97; see the runtime verification section below.
+
+## Runtime verification (claude 2.1.97, 2026-10-08)
+
+Scope: tasks 5.1 and 5.2 of `openspec/changes/plugin-interop-foundation`. Every result below comes from `research/plugin-interop/tools/claude-spike.sh`, which runs the installed `claude` 2.1.97 (`~/.local/bin/claude`) with a throwaway `HOME` and `CLAUDE_CONFIG_DIR` under `/tmp/claude-spike.*`, an empty environment (`env -i`), `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, no credentials and no model session. It checks that the real `~/.claude/plugins` tree and `~/.claude/settings.json` are unchanged. Transcripts (argv, exit code, stdout, stderr) are replayable as fake-CLI fixtures in `apps/caplet/tests/fixtures/claude-cli/`; step names below (`core/06`) refer to the script's transcript names. Test layout: a directory marketplace `.claude-plugin/marketplace.json` listing plugins by `"source": "./plugins/<name>"`, each plugin with one skill and a stdio MCP probe that logs its `process.cwd()` and argv.
+
+Evidence levels: **verified** = observed in a transcript or file snapshot of this run; **static** = read from strings in the 2.1.97 binary, not exercised; **UNKNOWN** = not established.
+
+### CLI surface (verified, `claude plugin <cmd> --help`)
+
+| Command | Flags |
+|---|---|
+| `plugin marketplace add <source>` | `--scope user\|project\|local` (default user), `--sparse <paths...>` |
+| `plugin marketplace list` | `--json` |
+| `plugin marketplace remove\|rm <name>` | none (no `--scope`) |
+| `plugin marketplace update [name]` | none; all marketplaces without a name |
+| `plugin install\|i <plugin>` | `-s, --scope user\|project\|local` (default user) |
+| `plugin uninstall\|remove <plugin>` | `-s, --scope user\|project\|local` (default user), `--keep-data` |
+| `plugin update <plugin>` | `-s, --scope user\|project\|local\|managed` (default user) |
+| `plugin enable <plugin>` | `-s, --scope user\|project\|local` (default auto-detect) |
+| `plugin disable [plugin]` | `-s, --scope ...` (default auto-detect), `-a, --all` |
+| `plugin list` | `--json`, `--available` (requires `--json`) |
+| `plugin validate <path>` | none; accepts a plugin or marketplace directory |
+
+`--scope managed` is rejected by `marketplace add` and `install` with exit 1 (`failures/02`, `failures/14`). All successes exit 0 and print to stdout; all failures seen exit 1 and print one `✘ ...` line to stderr. Text output uses `✔`/`✘` glyphs; caplet should key on exit codes and `--json`, not on text.
+
+### JSON shapes (verified)
+
+- `plugin marketplace list --json` (`core/04`): array of `{name, source: "directory", path, installLocation}`. No scope field; one entry per name.
+- `plugin list --json` (`core/07`, `project/05`): array of `{id: "<plugin>@<marketplace>", version, scope: "user"|"project"|"local", enabled, installPath, installedAt, lastUpdated, projectPath?, mcpServers?}`. `projectPath` (absolute) appears for project and local installs. `mcpServers` echoes the plugin's servers without a `cwd` key. Empty: `[]`.
+- `plugin list --json --available` (`core/05`): object `{installed: [...], available: [{pluginId, name, description, marketplaceName, source}]}`.
+
+### Files Claude writes (verified, file snapshots)
+
+| Action | Files written |
+|---|---|
+| `marketplace add <dir> --scope user` | `~/.claude/settings.json` `extraKnownMarketplaces.<name> = {source: {source: "directory", path: <absolute dir>}}`; `~/.claude/plugins/known_marketplaces.json` `<name> = {source, installLocation: <the dir itself>, lastUpdated}`. The directory is not copied. |
+| `marketplace add <dir> --scope project` | Same record in `<project>/.claude/settings.json`, plus the user-level `known_marketplaces.json` entry. |
+| `marketplace add <dir> --scope local` | Same record in `<project>/.claude/settings.local.json`, plus `known_marketplaces.json`. |
+| `install p@m --scope user` | `~/.claude/settings.json` `enabledPlugins["p@m"] = true`; `~/.claude/plugins/installed_plugins.json` `{version: 2, plugins: {"p@m": [{scope, installPath, version, installedAt, lastUpdated, projectPath?}]}}`; payload copy in `~/.claude/plugins/cache/<m>/<p>/<version>/`. |
+| `install --scope project` | `enabledPlugins` in `<project>/.claude/settings.json`; install record (with `projectPath`) and cache under `~/.claude`. |
+| `install --scope local` | `enabledPlugins` in `<project>/.claude/settings.local.json`; Claude also appends `**/.claude/settings.local.json` to the user's global git ignore (`$XDG_CONFIG_HOME/git/ignore`, normally `~/.config/git/ignore`). |
+| `disable` / `enable` | Only `enabledPlugins["p@m"] = false/true` in the scope's settings file; install record and cache unchanged. |
+| `uninstall` | Removes the `installed_plugins.json` record and the `enabledPlugins` key; cache directories stay with an `.orphaned_at` marker. |
+| `marketplace remove <name>` | Removes `<name>` from `known_marketplaces.json` and from `extraKnownMarketplaces` in every scope's settings, and uninstalls that marketplace's plugins in every scope (`names/12`, `names/13`). Leaves empty `{"enabledPlugins": {}, "extraKnownMarketplaces": {}}` objects behind in settings files. |
+
+Any CLI run also creates `~/.claude/.claude.json` and a backup; `install` fetched `~/.claude/plugins/install-counts-cache.json` (official-marketplace install counts) over the network despite `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`.
+
+### Facts and answers to the design's open technical questions
+
+| Question | Answer | Evidence | Level |
+|---|---|---|---|
+| In-place loading or version cache | Copied. `install` copies the plugin into `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`, with `+` in the version replaced by `-` (`1.0.0+acf.aaa` -> `1.0.0-acf.aaa`); `installPath` and spawned servers use the copy. The docs' "local relative-path plugins load in place" does not hold for a directory marketplace. | `core/06`, `core/07`, `core/50` | verified |
+| Content change, same version, `plugin update` | Not picked up: "already at the latest version", cache keeps old content, also after `marketplace update`. | `core/10`, `core/12` | verified |
+| Content change, same version, `plugin install` again | Exit 0 and the same version's cache directory is refreshed with the new content; `uninstall` + `install` also refreshes. `install` re-enables a plugin the user disabled. | `core/13`, `core/15`, `core/69b`, `core/69c` | verified |
+| Build metadata only (`1.0.0+acf.aaa` -> `1.0.0+acf.bbb`) | Picked up by `plugin update` alone (no `marketplace update` needed): new cache directory, new content, `version` updated. | `core/20`, `core/23` | verified |
+| Base version change | Picked up by `plugin update`. | `core/31` | verified |
+| Non-SemVer version (`banana`) | Accepted by `validate`, `update` and the cache (`cache/.../banana`). | `core/40`, `core/42`, `core/43` | verified |
+| Old cache directories | Kept with `.orphaned_at` after update or uninstall; cleanup timing UNKNOWN. | snapshots after `core/42`, `core/70` | verified (cleanup UNKNOWN) |
+| Directory marketplace refresh | `plugin update` reads the directory directly; `marketplace update` is not required for version or content pickup. An invalid `marketplace.json` makes `marketplace update` and `install` fail with exit 1. | `core/20`, `failures/15`, `failures/16` | verified |
+| Are marketplace names global | Yes, per user. `known_marketplaces.json` holds one record per name. Adding another directory under an existing name at any scope silently replaces the on-disk record (exit 0), while each scope's settings keeps the path it was given, so user, project and local settings can disagree (`names/11`: user settings -> B, project -> A, local -> B, known -> A, the last added). Re-adding an existing name prints "already on disk — declared in <scope> settings" with exit 0. | `names/01`-`names/11` | verified |
+| Update/uninstall scope | `update` and `uninstall` default to `user`; a project-scope plugin needs `--scope project` (`not installed at scope user`, exit 1); uninstall at the wrong scope names the right one. | `project/08`, `project/09`, `project/31` | verified |
+| Native disable | `disable --scope <s>` writes `enabledPlugins[id] = false` in that scope's settings; `list --json` keeps the entry with `enabled: false`; `mcp list` no longer starts its servers; `update` still updates it and it stays disabled; disabling twice exits 1 ("already disabled"). | `core/60`-`core/66` | verified |
+| Local disable of a project plugin | `disable --scope local` writes `false` to `settings.local.json`. `list --json` shows one entry, `scope: "project"`, `enabled: false`; the local origin is visible only in `settings.local.json`. | `project/06`, `project/07` | verified |
+| enable/disable of a plugin that is not installed | Exit 0 and writes `enabledPlugins[id]` anyway. | `failures/09`, `failures/10` | verified |
+| Unknown plugin or marketplace | `install` exits 1 with `Plugin "<p>" not found in marketplace "<m>"` for both an unknown plugin and an unknown marketplace. `uninstall`/`update` of a plugin that is not installed exit 1. `marketplace remove`/`update` of an unknown name exit 1. `marketplace add` of a missing path exits 1 (`Path does not exist`). `install <p>` without `@<m>` resolves through known marketplaces. | `failures/01`-`failures/13` | verified |
+| Policy block output | Not inducible without root: `strictKnownMarketplaces`/`blockedMarketplaces` are read only from policy settings (`/etc/claude-code/managed-settings.json` or `managed-settings.d/`, or remote managed settings for authenticated team/enterprise accounts). In user settings they are ignored (`policy/01` adds the blocked marketplace, exit 0). `CLAUDE_CODE_REMOTE_SETTINGS_PATH` is compiled out (`Cn()` returns undefined), so `policy/03`/`policy/04` are not blocked either. Exit code and exact output UNKNOWN. Message templates in the binary: `Marketplace source '<src>' is blocked by enterprise policy.`, `Marketplace '<m>' is blocked by enterprise policy`, `Marketplace '<m>' is not in the allowed marketplace list`, `Plugin "<p>" is blocked by your organization's policy and cannot be installed`. | `policy/*`, binary strings | UNKNOWN (templates static) |
+| Plugin stdio MCP working directory (D22) | Claude's own process working directory: the directory `claude` was started in, not the plugin root and not the git root (started from `<project>/sub`, servers ran in `<project>/sub`). Same for the `mcp list` health check and for session start (`claude -p` without credentials starts plugin servers before failing with "Not logged in"). | `core/50`, `session/03`, `session/04` and the spawn logs | verified |
+| `cwd` key in a plugin `.mcp.json` server | Ignored: servers with `cwd: "${CLAUDE_PLUGIN_ROOT}"` and with an absolute `cwd` both ran in the launch directory, and `list --json` drops the key. A relative argument (`node ./server.js`) fails to connect. | `core/50`, `core/07` | verified |
+| `${CLAUDE_PLUGIN_ROOT}` expansion | Expanded in `command` and `args` to the cache directory of the installed version. Servers receive `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` (`~/.claude/plugins/data/<plugin>-<marketplace>`) in their environment, not `CLAUDE_PROJECT_DIR`. | spawn logs | verified |
+| Content update visible in a new session | Subsequent processes start servers from the new version's cache directory (`core/50` after the `banana` update). That a new model session loads the changed skill body needs an authenticated session. | `core/50` | verified for MCP; UNKNOWN for skills |
+
+### Project-scope registration (task 5.2, open question 7)
+
+- `claude plugin marketplace add ./.claude/.acf/marketplace --scope project` run from the project root writes the **absolute, machine-specific** path into the committed `<project>/.claude/settings.json` (`project/01`); passing the absolute path gives the same record (`project/10`):
+
+  ```json
+  {"extraKnownMarketplaces": {"acf-project-spike": {"source": {"source": "directory", "path": "/tmp/claude-spike.<id>/project/project/.claude/.acf/marketplace"}}}}
+  ```
+
+  It also records the marketplace in the user-level `~/.claude/plugins/known_marketplaces.json` (absolute `installLocation`).
+- `install --scope project` adds `"enabledPlugins": {"probe@acf-project-spike": true}` to the committed `.claude/settings.json`; the install record (`installed_plugins.json`, with absolute `projectPath`) and the cache are user-level (`project/03`).
+- `install --scope local` and `disable --scope local` write only `.claude/settings.local.json` `enabledPlugins`, and add `**/.claude/settings.local.json` to the user's global git ignore (`project/04`, `project/06`).
+- A teammate who clones the project (committed `settings.json` only, fresh home) sees nothing through the CLI: `marketplace list --json` and `list --json` return `[]`, `list --json --available` lists nothing, and `install probe@acf-project-spike --scope project` exits 1 with `Plugin "probe" not found in marketplace "acf-project-spike"` (`project/20`-`project/24`). Whether the interactive trust flow would offer to add the project-declared marketplace is UNKNOWN (needs an interactive session).
+- Uninstalling everything and removing the marketplace leaves `{"enabledPlugins": {}, "extraKnownMarketplaces": {}}` in the committed file (`project/33`).
+
+Consequence for open question 7: Claude records a machine-specific absolute path in a committed file, so under `claude-plugin-output` "Scope mapping" default project registration stays off and project host state is `registration required` until the user answers the team-sharing question.
+
+### Implications for the plugin interop change
+
+- `+acf.<digest>` versions (D8) are required and sufficient: `claude plugin update <p>@<m> --scope <s>` picks up a build-metadata-only change, while a content change under an unchanged version is ignored by `update`.
+- The `claude-plugin-output` rule that an unchanged foreign Claude plugin keeps its declared `version` and is refreshed with "the update command" does not work: `update` skips same-version content. `install` refreshes it but re-enables a plugin the user disabled (conflicts with D15), so a disabled plugin can only be refreshed by `install` followed by `disable`, or not at all.
+- Read host state from `plugin list --json`, but a local-scope disable of a project plugin appears only as `enabled: false` on the project entry; telling `disabled by user (local scope)` apart needs `.claude/settings.local.json` (read only).
+- `marketplace list --json` has no scope, and `marketplace add` is idempotent (exit 0), so "when the marketplace is not yet known for that scope" is cheapest as an unconditional `add`.
+- Marketplace names are per-user global: the project marketplace name must differ from `acf-user` and between projects, otherwise one registration silently repoints the other.
+- `marketplace remove` uninstalls every plugin of that marketplace in every scope; remove the caplet marketplace only when it has no desired plugins.
+- D22: Claude starts plugin stdio servers in the directory `claude` was launched from and ignores `cwd`, so Claude cannot honor an explicit working directory; under D22 a server with `cwd: ${ACF_CAPABILITY_DIR}` (every Agent Plugins stdio server read with D22's default) is refused for Claude. Paths in `command` and `args` can use `${CLAUDE_PLUGIN_ROOT}`.
+
+### Not established
+
+- Policy-block exit code and output at runtime (needs root for `/etc/claude-code/managed-settings.json` or an authenticated managed account).
+- Skill body reload in a model session after update, and the interactive trust prompt for project-declared marketplaces (need an authenticated interactive session).
+- When Claude deletes `.orphaned_at` cache directories.
+- Whether `cwd` is honored for non-plugin (project `.mcp.json` or `claude mcp add`) servers; only plugin servers were probed.

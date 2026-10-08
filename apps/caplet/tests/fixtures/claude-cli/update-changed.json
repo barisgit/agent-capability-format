@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "update",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Checking for updates for plugin \"probe@spike-mkt\" at user scope…\n✔ Plugin \"probe\" updated from 1.0.0+acf.aaa to 1.0.0+acf.bbb for scope user. Restart to apply changes.\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Only build metadata changed (1.0.0+acf.aaa -> 1.0.0+acf.bbb) with new content; picked up without marketplace update."
+}

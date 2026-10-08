@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "enable",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully enabled plugin: probe (scope: user)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Succeeds and writes enabledPlugins true for a plugin that is not installed."
+}

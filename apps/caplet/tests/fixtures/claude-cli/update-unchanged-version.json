@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "update",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 0,
+  "stdout": "Checking for updates for plugin \"probe@spike-mkt\" at user scope…\n✔ probe is already at the latest version (1.0.0+acf.aaa).\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Content changed but version unchanged: not picked up, cache keeps old content."
+}

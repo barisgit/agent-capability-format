@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "<MARKETPLACE_DIR>",
+    "--scope",
+    "managed"
+  ],
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "✘ Invalid scope 'managed'. Use: user, project, or local\n",
+  "notes": "cwd <PROJECT>, fresh <HOME>. managed is not an accepted scope."
+}
