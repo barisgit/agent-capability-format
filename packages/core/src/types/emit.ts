@@ -41,6 +41,11 @@ export type TargetDefinition<Id extends string = string> = {
   adapter?: TargetAdapter<Id> | undefined;
 };
 
+/**
+ * Read access writers get to sources and existing output. Reading a missing path or a directory
+ * yields null; listing a missing path or a file yields no entries, so a writer can walk a tree by
+ * trying both.
+ */
 export type ReadOnlyFs = {
   exists(absPath: string): Promise<boolean>;
   readText(absPath: string): Promise<string | null>;

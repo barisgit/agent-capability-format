@@ -18,7 +18,7 @@ export function diskReadOnlyFs(): ReadOnlyFs {
       try {
         return await readFile(absPath, "utf8");
       } catch (error) {
-        if (isErrno(error, "ENOENT")) return null;
+        if (isErrno(error, "ENOENT") || isErrno(error, "EISDIR")) return null;
         throw error;
       }
     },
@@ -26,7 +26,7 @@ export function diskReadOnlyFs(): ReadOnlyFs {
       try {
         return await readFile(absPath);
       } catch (error) {
-        if (isErrno(error, "ENOENT")) return null;
+        if (isErrno(error, "ENOENT") || isErrno(error, "EISDIR")) return null;
         throw error;
       }
     },
@@ -34,7 +34,7 @@ export function diskReadOnlyFs(): ReadOnlyFs {
       try {
         return await readdir(absPath);
       } catch (error) {
-        if (isErrno(error, "ENOENT")) return [];
+        if (isErrno(error, "ENOENT") || isErrno(error, "ENOTDIR")) return [];
         throw error;
       }
     },
