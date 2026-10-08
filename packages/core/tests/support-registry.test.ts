@@ -105,13 +105,18 @@ test("supportCell answers per field, target and carrier", () => {
   });
 });
 
-test("Claude MCP cwd is refused as an evidence gap until the verification spike", () => {
+test("Claude MCP cwd is refused on verified evidence that Claude ignores it", () => {
   for (const carrier of ["plugin", "loose"] as const) {
     const cell = supportCell("mcp.cwd", "claude", carrier);
     expect(cell?.kind).toBe("refused");
     if (cell?.kind !== "refused") continue;
-    expect(cell.reason).toContain("working directory");
-    expect(cell.reason).toContain("5.1");
+    expect(cell.reason).toContain("ignores a server cwd key");
+    expect(cell.evidence).toEqual({
+      level: "verified",
+      source:
+        "research/plugin-interop/tools/claude-code.md#Runtime verification (claude 2.1.97, 2026-10-08)",
+      hostVersion: "claude 2.1.97",
+    });
   }
   expect(supportCell("mcp.cwd", "codex", "loose")?.kind).toBe("native");
 });
