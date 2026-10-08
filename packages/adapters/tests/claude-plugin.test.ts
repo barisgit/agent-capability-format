@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { pluginPackageDir } from "@caplet/core";
+import { pluginPackageDir, readClaudePluginPackage } from "@caplet/core";
 import { claudeAdapter, codexAdapter } from "../src";
+import { claudeAuthor } from "../src/claude/manifest";
 import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
 
 const INSTALL_ROOT = path.join(PROJECT, ".claude");
@@ -51,4 +54,87 @@ test("a loose target reports package-level Claude keys and native/claude/ files 
     expect.stringContaining("dependencies"),
     expect.stringContaining("native/claude/"),
   ]);
+});
+
+test("Claude authors decode only an exact Name <email> string", () => {
+  expect(claudeAuthor("Ada Lovelace <ada@example.com>")).toEqual({
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+  });
+  for (const raw of [
+    "Ada Lovelace  <ada@example.com>",
+    " Ada <ada@example.com>",
+    "Ada <ada@example.com> (math)",
+    "<ada@example.com>",
+    "Ada",
+  ])
+    expect(claudeAuthor(raw)).toEqual({ name: raw });
+  expect(claudeAuthor({ name: "Ada", url: "https://ada.example" })).toEqual({
+    name: "Ada",
+    url: "https://ada.example",
+  });
+});
+
+test("an unchanged Claude plugin without a version gets one inserted and nothing else", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "acf-claude-plugin-"));
+  const manifest = '{\n  "name": "notes",\n  "description": "Notes"\n}\n';
+  const skill = "---\nname: jot\ndescription: Jot a note\n---\nJot it down.\n";
+  await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(root, "skills", "jot"), { recursive: true });
+  await writeFile(path.join(root, ".claude-plugin", "plugin.json"), manifest);
+  await writeFile(path.join(root, "skills", "jot", "SKILL.md"), skill);
+  const read = await readClaudePluginPackage(root, {
+    scope: "project",
+    origin: { kind: "local", directory: root },
+    revision: null,
+  });
+  if (read.capability === undefined) throw new Error("the plugin did not read");
+  const result = await emitModel(
+    claudeAdapter,
+    read.capability,
+    INSTALL_ROOT,
+    {},
+    {
+      [path.join(root, ".claude-plugin", "plugin.json")]: manifest,
+      [path.join(root, "skills", "jot", "SKILL.md")]: skill,
+    },
+  );
+  const version = result.plugins?.[0]?.version ?? "";
+  const dir = pluginPackageDir(INSTALL_ROOT, "notes");
+  const files = Object.fromEntries(
+    result.diffs.map((diff) => [
+      path.relative(dir, diff.path),
+      typeof diff.after === "string"
+        ? diff.after
+        : new TextDecoder().decode(diff.after ?? undefined),
+    ]),
+  );
+  expect(files).toEqual({
+    ".claude-plugin/plugin.json": manifest.replace(
+      '"description": "Notes"\n',
+      `"description": "Notes",\n  "version": ${JSON.stringify(version)}\n`,
+    ),
+    "skills/jot/SKILL.md": skill,
+  });
+});
+
+test("a native ACF capability with a skill and a hook stays whole on loose Claude files", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "review", description: "Review a change" })],
+  });
+  capability.hooks = {
+    path: "hooks/hooks.yml",
+    buckets: { pre_tool: [{ name: "guard", run: { command: "guard" }, effect: "block" }] },
+  };
+  const result = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
+  expect(result.plugins ?? []).toEqual([]);
+  expect(result.diagnostics.filter((d) => d.code === "acf.claude.legacy-carrier")).toEqual([
+    expect.objectContaining({
+      severity: "info",
+      data: expect.objectContaining({ families: ["hooks"] }),
+    }),
+  ]);
+  const paths = result.diffs.map((diff) => diff.path);
+  expect(paths).toContain(".claude/skills/review/SKILL.md");
+  expect(paths.some((p) => p.includes(".acf/marketplace"))).toBe(false);
 });
