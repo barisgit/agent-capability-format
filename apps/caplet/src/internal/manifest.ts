@@ -4,6 +4,7 @@ import type { ScopeRoot } from "@caplet/core";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
+  retainLockedCapabilities,
   type SourceSpec,
   stringifyYml,
 } from "@caplet/core";
@@ -176,7 +177,7 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
         .map((entry) => {
           const update = lockUpdates.get(entry.sourceId);
           if (update === undefined) return entry;
-          const next = { ...entry, ...update };
+          const next = { ...retainLockedCapabilities(entry, update.capabilityNames), ...update };
           if (update.rename === undefined) delete next.rename;
           return next;
         }),

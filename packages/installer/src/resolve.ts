@@ -3,8 +3,11 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
-  computeContentHash,
+  computeCapabilityDigests,
   type Diagnostic,
+  digestMismatchDiagnostic,
+  entryCapabilityHash,
+  type LockedCapability,
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
@@ -27,12 +30,17 @@ import {
   sourceString,
   writeLockfile,
 } from "./lockfile.js";
+import { copySnapshot, SnapshotRejectedError } from "./snapshot.js";
 
 export type ResolveOptions = {
   scope: "user" | "project";
   scopeRoot: ScopeRoot;
   mode: "auto" | "never" | "force";
   sourceIds?: readonly string[] | undefined;
+  /**
+   * `false` previews resolution: neither the lock nor the installed snapshots change, and
+   * the result's `preview` holds the snapshots the resolution would install.
+   */
   updateLock?: boolean | undefined;
   prefetchedSources?: ReadonlyMap<string, PrefetchedSource> | undefined;
 };
@@ -46,6 +54,15 @@ export type ResolveResult = {
   capabilities: CapabilityRecord[];
   lockfile: CapabilitiesLock;
   diagnostics: Diagnostic[];
+  /** Present when `updateLock` was `false`; the caller must `dispose` it. */
+  preview?: ResolvePreview | undefined;
+};
+
+/** Snapshots a previewing resolution would install, matching the returned `lockfile`. */
+export type ResolvePreview = {
+  /** Temporary stand-in for `scopeRoot.capabilitiesDir`. */
+  capabilitiesDir: string;
+  dispose(): Promise<void>;
 };
 
 export type CapabilityRecord = {
@@ -54,7 +71,10 @@ export type CapabilityRecord = {
   selector: string;
   root: string;
   commit: string | null;
+  /** v1 `capabilityHash` of the snapshot at `root`. */
   contentHash: string;
+  /** Per-capability lock record; absent for capabilities locked before records existed. */
+  lockRecord?: LockedCapability | undefined;
 };
 
 export async function resolveCapabilities(opts: ResolveOptions): Promise<ResolveResult> {
@@ -70,12 +90,44 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
     };
   }
   await mkdir(opts.scopeRoot.agentsDir, { recursive: true });
+  const preview = opts.updateLock === false ? await createPreview(opts.scopeRoot) : undefined;
   const stagingDir = await mkdtemp(path.join(opts.scopeRoot.agentsDir, ".acf-staging-"));
   try {
-    return await resolveCapabilitiesStaged(opts, stagingDir, manifest, existingLock);
+    const scopeRoot =
+      preview === undefined
+        ? opts.scopeRoot
+        : { ...opts.scopeRoot, capabilitiesDir: preview.capabilitiesDir };
+    const result = await resolveCapabilitiesStaged(
+      { ...opts, scopeRoot },
+      stagingDir,
+      manifest,
+      existingLock,
+    );
+    return preview === undefined ? result : { ...result, preview };
+  } catch (error) {
+    await preview?.dispose();
+    throw error;
   } finally {
     await rm(stagingDir, { recursive: true, force: true });
   }
+}
+
+/** Copies the installed snapshots aside so a preview can change them freely. */
+async function createPreview(scopeRoot: ScopeRoot): Promise<ResolvePreview> {
+  const root = await mkdtemp(path.join(scopeRoot.agentsDir, ".acf-preview-"));
+  const capabilitiesDir = path.join(root, "capabilities");
+  try {
+    await cp(scopeRoot.capabilitiesDir, capabilitiesDir, { recursive: true, errorOnExist: true });
+  } catch (error) {
+    if (!isErrno(error, "ENOENT")) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  }
+  return {
+    capabilitiesDir,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
 }
 
 async function resolveCapabilitiesStaged(
@@ -133,9 +185,18 @@ async function resolveCapabilitiesStaged(
       continue;
     }
 
-    const prefetched = opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId);
+    // Only a missing snapshot triggered this fetch: restore the locked content from the
+    // locked commit rather than wherever the moving ref points now.
+    const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
+    const prefetched = restoring
+      ? undefined
+      : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));
+    const fetchEntry =
+      restoring && locked?.resolvedSha !== undefined
+        ? { ...entry, ref: locked.resolvedSha }
+        : entry;
     const fetchedCapability =
-      prefetched?.fetched ?? (await fetchCapability(entry, fetchOptions(yml, opts.scopeRoot)));
+      prefetched?.fetched ?? (await fetchCapability(fetchEntry, fetchOptions(yml, opts.scopeRoot)));
     const sourceStagingDir = path.join(
       stagingDir,
       cacheKeyFor(fetchedCapability.sourceId, entry.ref),
@@ -146,8 +207,10 @@ async function resolveCapabilitiesStaged(
       sourceStagingDir,
       prefetched?.inventory,
     );
-    diagnostics.push(...materialized.diagnostics);
-    if (!materialized.ok) {
+    const mismatches =
+      restoring && materialized.ok ? restoreMismatches(locked, materialized.records) : [];
+    diagnostics.push(...materialized.diagnostics, ...mismatches);
+    if (!materialized.ok || mismatches.length > 0) {
       failed = true;
       if (locked !== undefined) {
         nextEntries.push(locked);
@@ -156,7 +219,10 @@ async function resolveCapabilitiesStaged(
       continue;
     }
     records.push(...materialized.records);
-    if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
+    // A verified restore leaves its entry exactly as locked; one predating per-capability
+    // records takes the fresh entry so it gains them.
+    if (restoring && locked?.resolvedCapabilities !== undefined) nextEntries.push(locked);
+    else if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
     fetched = true;
   }
 
@@ -363,6 +429,20 @@ function isCapabilitySelectorDrift(diagnostic: Diagnostic): boolean {
   );
 }
 
+/** Digest mismatches between restored records and the lock records they must reproduce. */
+function restoreMismatches(locked: LockEntry, restored: CapabilityRecord[]): Diagnostic[] {
+  if (locked.resolvedCapabilities === undefined) return [];
+  const actual = new Map(
+    restored.map((record) => [record.name, record.lockRecord?.payloadDigest ?? "nothing"]),
+  );
+  return locked.resolvedCapabilities.flatMap((expected) => {
+    const digest = actual.get(expected.name) ?? "no such capability";
+    return digest === expected.payloadDigest
+      ? []
+      : [digestMismatchDiagnostic(expected.name, "restore", expected.payloadDigest, digest)];
+  });
+}
+
 function shouldFetch(
   mode: ResolveOptions["mode"],
   entry: CapabilityEntry,
@@ -381,6 +461,11 @@ function requiresRef(entry: CapabilityEntry): boolean {
   return entry.source.kind === "github" || entry.source.kind === "git";
 }
 
+/**
+ * Whether every locked snapshot directory exists, deciding only whether a restore is due.
+ * Whether a present snapshot still matches its lock is verified where snapshots are read
+ * (core `resolveScopeCapabilities`); a modified one is reported, never silently replaced.
+ */
 async function lockInstalled(lockEntry: LockEntry, capabilitiesDir: string): Promise<boolean> {
   if (lockEntry.capabilityNames.length === 0) return false;
   for (const name of lockEntry.capabilityNames) {
@@ -408,14 +493,18 @@ function recordsFromLock(
   lockEntry: LockEntry,
   capabilitiesDir: string,
 ): CapabilityRecord[] {
-  return lockEntry.capabilityNames.map((name) => ({
-    entry,
-    name,
-    selector: lockEntry.selectorsByCapability?.[name] ?? name,
-    root: capabilityPath(capabilitiesDir, name),
-    commit: lockEntry.resolvedSha ?? null,
-    contentHash: lockEntry.capabilityHash,
-  }));
+  return lockEntry.capabilityNames.map((name) => {
+    const lockRecord = lockEntry.resolvedCapabilities?.find((record) => record.name === name);
+    return {
+      entry,
+      name,
+      selector: lockEntry.selectorsByCapability?.[name] ?? name,
+      root: capabilityPath(capabilitiesDir, name),
+      commit: lockEntry.resolvedSha ?? null,
+      contentHash: lockRecord?.capabilityHash ?? lockEntry.capabilityHash,
+      lockRecord,
+    };
+  });
 }
 
 async function materializeFetched(
@@ -441,19 +530,31 @@ async function materializeFetched(
   for (const candidate of selected.candidates) {
     const name = finalCapabilityName(entry, candidate.name);
     const destination = capabilityPath(stagingDir, name);
-    if (candidate.synthesized) {
-      await materializeImportedSkill(candidate, destination, fetched.commit);
-    } else {
-      await copyRegularTree(candidate.root, destination);
+    try {
+      if (candidate.synthesized) {
+        await materializeImportedSkill(candidate, destination, fetched.commit);
+      } else {
+        await copySnapshot(candidate.root, destination);
+      }
+    } catch (error) {
+      if (!(error instanceof SnapshotRejectedError)) throw error;
+      diagnostics.push(snapshotRejectedDiagnostic(name, error));
+      return { ok: false, records: [], lockEntry: null, diagnostics };
     }
-    const contentHash = await computeContentHash(destination);
+    const digests = await computeCapabilityDigests(destination);
     records.push({
       entry,
       name,
       selector: candidate.selector,
       root: destination,
       commit: fetched.commit,
-      contentHash,
+      contentHash: digests.capabilityHash,
+      lockRecord: {
+        name,
+        format: candidate.synthesized ? "skills" : "acf",
+        path: selectedSourcePath(entry, candidate),
+        ...digests,
+      },
     });
   }
 
@@ -468,9 +569,11 @@ function lockEntryFor(
   records: CapabilityRecord[],
   synthesized: boolean,
 ): LockEntry {
-  const first = records[0];
+  const lockRecords = records.flatMap((record) =>
+    record.lockRecord === undefined ? [] : [record.lockRecord],
+  );
   const lockEntry: LockEntry = {
-    capabilityHash: first?.contentHash ?? emptyTreeHash(),
+    capabilityHash: entryCapabilityHash(lockRecords) ?? emptyTreeHash(),
     capabilityNames: records.map((record) => record.name).sort(),
     selectorsByCapability: Object.fromEntries(
       records.map((record) => [record.name, record.selector]),
@@ -484,6 +587,7 @@ function lockEntryFor(
   if (entry.ref !== undefined) lockEntry.ref = entry.ref;
   if (entry.rename !== undefined) lockEntry.rename = entry.rename;
   if (synthesized) lockEntry.synthesized = true;
+  lockEntry.resolvedCapabilities = lockRecords;
   lockEntry.resolvedAt = new Date().toISOString();
   if (fetched.commit !== null) lockEntry.resolvedSha = fetched.commit;
   return lockEntry;
@@ -495,8 +599,11 @@ async function materializeImportedSkill(
   revision: string | null,
 ): Promise<void> {
   await rm(destination, { recursive: true, force: true });
-  await mkdir(path.join(destination, "skills", candidate.name), { recursive: true });
-  await copyPortableSkillTree(candidate.root, path.join(destination, "skills", candidate.name));
+  // Leave out notices caplet itself emitted, so a target directory read back as a source
+  // does not carry them into the snapshot.
+  await copySnapshot(candidate.root, path.join(destination, "skills", candidate.name), {
+    exclude: (relativePath) => path.posix.basename(relativePath) === "ACF-MANAGED.md",
+  });
   const version = `0.0.0-unmanifested+${revision ?? "local"}`;
   await writeFile(
     path.join(destination, "acf.yml"),
@@ -510,40 +617,25 @@ async function materializeImportedSkill(
   );
 }
 
-async function copyPortableSkillTree(source: string, destination: string): Promise<void> {
-  await cp(source, destination, {
-    recursive: true,
-    dereference: false,
-    filter: async (candidate) => {
-      const relative = path.relative(source, candidate);
-      const segments = relative.split(path.sep).filter(Boolean);
-      if (segments.some((segment) => segment.startsWith(".") || segment === "node_modules")) {
-        return false;
-      }
-      if (path.basename(candidate) === "ACF-MANAGED.md") return false;
-      const stat = await lstat(candidate);
-      return stat.isDirectory() || stat.isFile();
-    },
-  });
-}
-
-async function copyRegularTree(source: string, destination: string): Promise<void> {
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(path.dirname(destination), { recursive: true });
-  await cp(source, destination, {
-    recursive: true,
-    dereference: false,
-    filter: async (candidate) => {
-      const stat = await lstat(candidate);
-      return stat.isDirectory() || stat.isFile();
-    },
-  });
+/** Package root of `candidate` relative to the source root (before `path:`), POSIX. */
+function selectedSourcePath(entry: CapabilityEntry, candidate: SourceCapabilityCandidate): string {
+  const entryPath = path.posix.normalize((entry.path ?? ".").replaceAll("\\", "/"));
+  return path.posix.join(entryPath, candidate.sourcePath);
 }
 
 function finalCapabilityName(entry: CapabilityEntry, manifestName: string): string {
   if (typeof entry.rename === "string") return entry.rename;
   if (entry.rename !== undefined) return entry.rename[manifestName] ?? manifestName;
   return manifestName;
+}
+
+function snapshotRejectedDiagnostic(name: string, error: SnapshotRejectedError): Diagnostic {
+  return {
+    severity: "error",
+    code: "acf.source.snapshot-rejected",
+    message: `capability ${name}: ${error.message}`,
+    data: { name, path: error.relativePath, reason: error.reason },
+  };
 }
 
 function refRequiredDiagnostic(entry: CapabilityEntry, id: string): Diagnostic {

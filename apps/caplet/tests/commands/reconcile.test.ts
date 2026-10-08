@@ -248,8 +248,27 @@ test("dry-run does not mutate the sidecar when a facet's source is deleted", asy
     expect(dry.exitCode).toBe(0);
     expect(dry.stdout).not.toContain("Everything up to date");
     expect(await readFile(sidecarPath, "utf8")).toBe(before);
+    // Nor the installed snapshots: a later apply must not see a half-applied preview.
+    const snapshotSkill = path.join(
+      scope.agentsDir,
+      "capabilities",
+      "alpha-cap",
+      "skills",
+      "doomed",
+    );
+    expect(await Bun.file(path.join(snapshotSkill, "SKILL.md")).exists()).toBe(true);
 
-    const heal = await applyProject(scope);
+    const heal = await runCaplet(scope, [
+      "apply",
+      "--mode",
+      "force",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
     expect(heal.exitCode).toBe(0);
     const after = await readFile(sidecarPath, "utf8");
     expect(after).not.toContain("doomed");

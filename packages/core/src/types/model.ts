@@ -6,6 +6,7 @@ import {
   type ProvisionalOperationId,
   provisionalOperations,
 } from "@caplet/runtime-taxonomy";
+import type { LockEntry } from "../lock/index.js";
 import type { CapabilitySource, NativeRemainderComponent, SourceFormat } from "./interop.js";
 
 export {
@@ -304,12 +305,3 @@ export type CapabilitiesYml = {
     | { fetch?: { shallow?: boolean | undefined; blobless?: boolean | undefined } | undefined }
     | undefined;
 };
-export type LockEntry = {
-  sourceId: string;
-  synthesized?: true | undefined;
-  commit: string;
-  contentHash: string;
-  installedAt: string;
-  capabilityName: string;
-};
-export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };

@@ -1,27 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { CapabilityEntry, SourceSpec } from "@caplet/core";
 
-export type LockEntry = {
-  capabilityHash: string;
-  capabilityNames: string[];
-  capabilities?: string[] | undefined;
-  selectorsByCapability?: Record<string, string> | undefined;
-  exclude?: CapabilityEntry["exclude"] | undefined;
-  include?: CapabilityEntry["include"] | undefined;
-  ref?: string | undefined;
-  rename?: CapabilityEntry["rename"] | undefined;
-  resolvedAt?: string | undefined;
-  resolvedSha?: string | undefined;
-  source: string;
-  sourceId: string;
-  synthesized?: true | undefined;
-};
-export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
-
-type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
+// The lock schema lives in @caplet/core so core, the installer and caplet share one
+// definition; these re-exports keep the installer's public surface unchanged.
+export type { CapabilitiesLock, LockEntry, LockedCapability } from "@caplet/core";
+export {
+  canonicalizeLock,
+  readLockfile,
+  sortLockEntries,
+  writeLockfile,
+} from "@caplet/core";
 
 export function canonicalizePathLocation(location: string, baseDir = process.cwd()): string {
   if (location === "~") return homedir();
@@ -58,173 +48,4 @@ export function cacheKeyFor(sourceIdValue: string, ref: string | undefined): str
     .update("\0")
     .update(ref ?? "")
     .digest("hex");
-}
-
-export async function readLockfile(lockPath: string): Promise<CapabilitiesLock | null> {
-  let raw: string;
-  try {
-    raw = await readFile(lockPath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-  const parsed: unknown = JSON.parse(raw) as unknown;
-  return parseLock(parsed, lockPath);
-}
-
-export async function writeLockfile(lockPath: string, lock: CapabilitiesLock): Promise<void> {
-  await mkdir(path.dirname(lockPath), { recursive: true });
-  const canonical = canonicalizeLock(lock);
-  await writeFile(lockPath, `${JSON.stringify(canonical, null, 2)}\n`, "utf8");
-}
-
-export function canonicalizeLock(lock: CapabilitiesLock): CapabilitiesLock {
-  return { acf: 1, entries: sortLockEntries(lock.entries) };
-}
-
-export function sortLockEntries(entries: LockEntry[]): LockEntry[] {
-  return [...entries].sort((a, b) => a.sourceId.localeCompare(b.sourceId)).map(canonicalizeEntry);
-}
-
-function canonicalizeEntry(entry: LockEntry): LockEntry {
-  const ordered: MutableLockEntry = {};
-  ordered.capabilityHash = entry.capabilityHash;
-  ordered.capabilityNames = [...entry.capabilityNames].sort();
-  if (entry.capabilities !== undefined) ordered.capabilities = [...entry.capabilities].sort();
-  if (entry.selectorsByCapability !== undefined) {
-    ordered.selectorsByCapability = sortStringRecord(entry.selectorsByCapability);
-  }
-  if (entry.exclude !== undefined) ordered.exclude = sortSelector(entry.exclude);
-  if (entry.include !== undefined) ordered.include = sortSelector(entry.include);
-  if (entry.ref !== undefined) ordered.ref = entry.ref;
-  if (entry.rename !== undefined) ordered.rename = sortRename(entry.rename);
-  if (entry.resolvedAt !== undefined) ordered.resolvedAt = entry.resolvedAt;
-  if (entry.resolvedSha !== undefined && !entry.source.startsWith("path:")) {
-    ordered.resolvedSha = entry.resolvedSha;
-  }
-  if (entry.synthesized === true) ordered.synthesized = true;
-  ordered.source = entry.source;
-  ordered.sourceId = entry.sourceId;
-  return ordered as LockEntry;
-}
-
-function sortSelector(
-  selector: NonNullable<CapabilityEntry["include"]>,
-): CapabilityEntry["include"] {
-  const sorted: Record<string, string[]> = {};
-  const record = selector as Record<string, string[] | undefined>;
-  for (const key of Object.keys(record).sort()) {
-    const value = record[key];
-    if (value !== undefined) sorted[key] = [...value].sort();
-  }
-  return sorted as CapabilityEntry["include"];
-}
-
-function sortRename(rename: NonNullable<CapabilityEntry["rename"]>): CapabilityEntry["rename"] {
-  if (typeof rename === "string") return rename;
-  const sorted: Record<string, string> = {};
-  for (const key of Object.keys(rename).sort()) {
-    const value = rename[key];
-    if (value !== undefined) sorted[key] = value;
-  }
-  return sorted;
-}
-
-function sortStringRecord(record: Record<string, string>): Record<string, string> {
-  const sorted: Record<string, string> = {};
-  for (const key of Object.keys(record).sort()) {
-    const value = record[key];
-    if (value !== undefined) sorted[key] = value;
-  }
-  return sorted;
-}
-
-function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
-  if (!isRecord(value)) throw new Error(`invalid capabilities.lock at ${lockPath}`);
-  if (typeof value.acf !== "number") {
-    throw new Error(`invalid capabilities.lock acf at ${lockPath}`);
-  }
-  if (!Array.isArray(value.entries)) {
-    throw new Error(`invalid capabilities.lock entries at ${lockPath}`);
-  }
-  const entries = value.entries.map((entry) => parseLockEntry(entry, lockPath));
-  return { acf: value.acf as 1, entries };
-}
-
-function parseLockEntry(value: unknown, lockPath: string): LockEntry {
-  if (!isRecord(value)) throw new Error(`invalid capabilities.lock entry at ${lockPath}`);
-  const required = {
-    capabilityHash: value.capabilityHash,
-    capabilityNames: value.capabilityNames,
-    source: value.source,
-    sourceId: value.sourceId,
-  };
-  if (typeof required.capabilityHash !== "string") throw new Error("invalid lock capabilityHash");
-  if (!isCapabilityNameArray(required.capabilityNames)) {
-    throw new Error("invalid lock capabilityNames");
-  }
-  if (typeof required.source !== "string") throw new Error("invalid lock source");
-  if (typeof required.sourceId !== "string") throw new Error("invalid lock sourceId");
-  const entry: MutableLockEntry = {
-    capabilityHash: required.capabilityHash,
-    capabilityNames: required.capabilityNames,
-    source: required.source,
-    sourceId: required.sourceId,
-  };
-  if (isStringArray(value.capabilities) && value.capabilities.length > 0) {
-    entry.capabilities = value.capabilities;
-  }
-  if (isCapabilitySelectorMap(value.selectorsByCapability)) {
-    entry.selectorsByCapability = value.selectorsByCapability;
-  }
-  if (isSelector(value.exclude)) entry.exclude = value.exclude;
-  if (isSelector(value.include)) entry.include = value.include;
-  if (typeof value.ref === "string") entry.ref = value.ref;
-  if (isRename(value.rename)) entry.rename = value.rename;
-  if (typeof value.resolvedAt === "string") entry.resolvedAt = value.resolvedAt;
-  if (typeof value.resolvedSha === "string") entry.resolvedSha = value.resolvedSha;
-  if (value.synthesized === true) entry.synthesized = true;
-  return entry as LockEntry;
-}
-
-function isSelector(value: unknown): value is NonNullable<CapabilityEntry["include"]> {
-  if (!isRecord(value)) return false;
-  for (const item of Object.values(value)) {
-    if (!isStringArray(item)) return false;
-  }
-  return true;
-}
-
-function isRename(value: unknown): value is NonNullable<CapabilityEntry["rename"]> {
-  if (typeof value === "string") return true;
-  if (!isRecord(value)) return false;
-  return Object.values(value).every((item) => typeof item === "string");
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isCapabilityNameArray(value: unknown): value is string[] {
-  return isStringArray(value) && value.every((item) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(item));
-}
-
-function isCapabilitySelectorMap(value: unknown): value is Record<string, string> {
-  return (
-    isRecord(value) &&
-    Object.entries(value).every(
-      ([name, selector]) =>
-        /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
-        typeof selector === "string" &&
-        selector.length > 0,
-    )
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return isRecord(error) && error.code === code;
 }

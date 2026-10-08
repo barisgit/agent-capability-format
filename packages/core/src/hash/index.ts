@@ -1,22 +1,23 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { listRegularFilesRecursive } from "../utils/fs.js";
+import { listTreeFiles } from "./tree.js";
 
+export {
+  type CapabilityDigests,
+  computeCapabilityDigests,
+  computePayloadDigest,
+  PAYLOAD_DIGEST_PATTERN,
+} from "./payload-digest.js";
+
+/**
+ * Computes the v1 `capabilityHash` (`sha256-<hex>`) of a materialized capability tree
+ * exactly as SPEC.md §19.5 defines it. The encoding is frozen for `acf: 1`: it ignores
+ * file modes and frames entries with `0x00` separators only, so it is ambiguous; use
+ * {@link computePayloadDigest} for integrity checks.
+ */
 export async function computeContentHash(root: string): Promise<string> {
-  const absRoot = path.resolve(root);
-  const files = await listRegularFilesRecursive(absRoot, {
-    rejectSymlinks: true,
-    rejectSpecial: true,
-  });
-  const entries = files.map((absPath) => ({
-    absPath,
-    rel: path.relative(absRoot, absPath).split(path.sep).join("/").normalize("NFC"),
-  }));
-  entries.sort((a, b) => Buffer.compare(Buffer.from(a.rel, "utf8"), Buffer.from(b.rel, "utf8")));
-
   const hash = createHash("sha256");
-  for (const entry of entries) {
+  for (const entry of await listTreeFiles(root)) {
     hash.update(Buffer.from(entry.rel, "utf8"));
     hash.update(Buffer.from([0]));
     hash.update(await readFile(entry.absPath));

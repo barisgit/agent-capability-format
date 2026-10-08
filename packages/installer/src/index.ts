@@ -5,7 +5,7 @@ export { fetchCapability } from "./fetch.js";
 export { cloneFull, cloneShallow, fetchRef, revParseHead } from "./git.js";
 export type { SourceCapabilityCandidate, SourceInventory } from "./inventory.js";
 export { inspectSource } from "./inventory.js";
-export type { CapabilitiesLock, LockEntry } from "./lockfile.js";
+export type { CapabilitiesLock, LockEntry, LockedCapability } from "./lockfile.js";
 export {
   canonicalizeLock,
   canonicalizePathLocation,
