@@ -8,6 +8,7 @@
 import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
+import type { PreservedForeignData } from "../targets/self-check.js";
 import type {
   Diagnostic,
   Manifest,
@@ -40,18 +41,18 @@ import {
 } from "./shared.js";
 import { readForeignSkill, skillAssets, skillDirectories } from "./skills.js";
 
-const METADATA_KEYS = new Set([
-  "name",
-  "version",
-  "description",
-  "author",
-  "homepage",
-  "repository",
-  "license",
-  "keywords",
-  "skills",
-  "mcpServers",
-]);
+/** Manifest keys projected into core package fields, with the field each becomes. */
+const PROJECTED_PACKAGE_KEYS: Readonly<Record<string, string>> = {
+  name: "package.name",
+  version: "package.version",
+  description: "package.description",
+  author: "package.authors",
+  homepage: "package.homepage",
+  repository: "package.repository",
+  license: "package.license",
+  keywords: "package.keywords",
+};
+const METADATA_KEYS = new Set([...Object.keys(PROJECTED_PACKAGE_KEYS), "skills", "mcpServers"]);
 const STRING_KEYS = ["version", "description", "homepage", "repository", "license"] as const;
 
 /** Reads the Claude plugin at `root` as one capability. */
@@ -349,3 +350,28 @@ function hasMonitors(raw: Record<string, unknown>, key: string): boolean {
     key === "monitors" || (isRecord(raw.experimental) && raw.experimental.monitors !== undefined)
   );
 }
+
+/**
+ * What this reader keeps beyond core fields, derived from the tables it reads with. The registry
+ * self-check proves native ACF can author each datum. `mcpServers` stays for bundle and URL
+ * references; `version` and `author` package values are set in `projectManifest`.
+ */
+export const claudePluginPreserved: PreservedForeignData = {
+  target: "claude",
+  projectedKeys: PROJECTED_PACKAGE_KEYS,
+  manifestKeys: [
+    ...LISTING_KEYS,
+    ...FILE_COMPONENTS.map((spec) => spec.key),
+    ...MERGED_COMPONENTS.map((spec) => spec.key),
+    ...KEY_COMPONENTS.map((spec) => spec.key),
+    "monitors",
+    "experimental",
+    "mcpServers",
+  ],
+  files: [
+    ...FILE_COMPONENTS.map((spec) => `${spec.dir}/`),
+    ...MERGED_COMPONENTS.map((spec) => spec.file),
+    "bin/",
+  ],
+  packageValues: ["version", "author"],
+};

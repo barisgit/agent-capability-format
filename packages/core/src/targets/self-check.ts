@@ -1,12 +1,15 @@
 /**
  * Consistency check over the field-level support registry and the native key inventory
  * (capability-model-layers: Safety classes, Native key classification, Negative fixtures for
- * data-only restrictions). A unit test runs it on the shipped registry; later tasks extend it
- * (4.5 checks that negative fixtures exist, 4.7 that preserved data has an authoring form).
+ * data-only restrictions, Foreign and native parity). A unit test runs it on the shipped registry
+ * and on what each foreign reader preserves.
  */
 import type { FieldSupport, NativeKeyInfo, SafetyClass } from "../types/interop.js";
+import type { TargetId } from "../types/model.js";
 import { targetCarriers } from "./field-support.js";
 import { pendingCoreFields } from "./native-keys.js";
+import { packageValueSchemas } from "./package-values.js";
+import { generatedPathCollision, generatedPluginPaths } from "./plugin-layout.js";
 
 const SAFETY_CLASSES: ReadonlySet<string> = new Set<SafetyClass>([
   "restricting",
@@ -22,6 +25,24 @@ export type SupportRegistryCheckOptions = {
    * Package fields are exempt: they only have a destination in the Claude plugin manifest.
    */
   requireComplete?: boolean;
+  /** What foreign readers keep beyond core; each datum needs a native ACF authoring form. */
+  preserved?: readonly PreservedForeignData[];
+};
+
+/**
+ * What a foreign reader keeps for its target beyond core fields. Native ACF must be able to
+ * author each datum, so a native capability can produce the same package (foreign/native parity).
+ */
+export type PreservedForeignData = {
+  target: TargetId;
+  /** Manifest keys projected into core, each with the core field it becomes. */
+  projectedKeys: Readonly<Record<string, string>>;
+  /** Manifest keys kept verbatim; native ACF authors them as package-level `targets.<t>.native`. */
+  manifestKeys: readonly string[];
+  /** Package-relative files kept verbatim (`/` ends a directory); native ACF uses `native/<t>/`. */
+  files: readonly string[];
+  /** Keys kept as `targets.<t>.package` values. */
+  packageValues: readonly string[];
 };
 
 /**
@@ -29,14 +50,19 @@ export type SupportRegistryCheckOptions = {
  * consistent. Fails when a restricting or functional cell is degraded, a refusing
  * restricting cell lacks a `negativeFixture`, a skill or MCP field lacks a cell, a native key
  * lacks a safety class or is listed twice, or a key's `generatedFrom` or `pending` names a
- * field that does not exist (or, for `generatedFrom`, has no usable cell on the key's target).
+ * field that does not exist (or, for `generatedFrom`, has no usable cell on the key's target),
+ * or a datum in `options.preserved` has no native authoring form.
  */
 export function checkSupportRegistry(
   fields: readonly FieldSupport[],
   keys: readonly NativeKeyInfo[],
   options: SupportRegistryCheckOptions = {},
 ): string[] {
-  return [...checkFields(fields, options.requireComplete ?? true), ...checkKeys(fields, keys)];
+  return [
+    ...checkFields(fields, options.requireComplete ?? true),
+    ...checkKeys(fields, keys),
+    ...(options.preserved ?? []).flatMap((data) => checkPreserved(keys, data)),
+  ];
 }
 
 function checkFields(fields: readonly FieldSupport[], requireComplete: boolean): string[] {
@@ -109,4 +135,58 @@ function checkKeys(fields: readonly FieldSupport[], keys: readonly NativeKeyInfo
 
 function hasUsableCell(entry: FieldSupport, target: string): boolean {
   return Object.values(entry.cells[target] ?? {}).some((cell) => cell.kind !== "refused");
+}
+
+/**
+ * A projected key must be generated from the core field it was read into; a kept manifest key
+ * must be a classified native key the writer does not generate; a kept file must not collide
+ * with generated plugin output (worst case: the package also has skills and a server); a kept
+ * package value must be one `targets.<t>.package` accepts.
+ */
+function checkPreserved(keys: readonly NativeKeyInfo[], data: PreservedForeignData): string[] {
+  const { target } = data;
+  const reader = `${target} reader`;
+  const packageKey = (key: string): NativeKeyInfo | undefined =>
+    keys.find((info) => info.target === target && info.family === "package" && info.key === key);
+  const problems: string[] = [];
+  for (const [key, field] of Object.entries(data.projectedKeys)) {
+    const generatedFrom = packageKey(key)?.generatedFrom;
+    if (generatedFrom !== field) {
+      const actual =
+        generatedFrom === undefined
+          ? "does not generate it"
+          : `writes ${key} from ${generatedFrom}`;
+      problems.push(
+        `${reader} projects manifest key ${key} into ${field}, but ${target} ${actual}`,
+      );
+    }
+  }
+  for (const key of data.manifestKeys) {
+    const info = packageKey(key);
+    const why =
+      info === undefined
+        ? "the key is unclassified"
+        : info.generatedFrom === undefined
+          ? undefined
+          : `${target} writes it from ${info.generatedFrom}`;
+    if (why !== undefined)
+      problems.push(
+        `${reader} preserves manifest key ${key}, which targets.${target}.native cannot author: ${why}`,
+      );
+  }
+  const generated = generatedPluginPaths(target, { skills: [], mcp: true });
+  for (const file of data.files) {
+    const collision = generatedPathCollision(generated, file);
+    if (collision !== undefined)
+      problems.push(
+        `${reader} preserves ${file}, which native/${target}/ cannot author: the plugin writer generates ${collision}`,
+      );
+  }
+  for (const key of data.packageValues) {
+    if (packageValueSchemas[target]?.[key] === undefined)
+      problems.push(
+        `${reader} preserves package value ${key}, which targets.${target}.package does not accept`,
+      );
+  }
+  return problems;
 }

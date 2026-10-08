@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   checkSupportRegistry,
+  claudePluginPreserved,
   type FieldSupport,
   fieldSupport,
   type NativeKeyInfo,
@@ -267,3 +268,30 @@ test("self-check fails on unclassified keys and dangling generatedFrom or pendin
 // Task 4.5 adds the negative fixtures. It replaces this todo with an assertion that every
 // `negativeFixture` id in `fieldSupport` names an existing fixture directory.
 test.todo("every negativeFixture id names an existing negative fixture", () => {});
+
+test("every datum the Claude reader preserves has a native ACF authoring form", () => {
+  expect(
+    checkSupportRegistry(fieldSupport, nativeKeys, { preserved: [claudePluginPreserved] }),
+  ).toEqual([]);
+});
+
+test("self-check fails when preserved Claude data has no native authoring form", () => {
+  const problems = checkSupportRegistry(fieldSupport, nativeKeys, {
+    preserved: [
+      {
+        target: "claude",
+        projectedKeys: { homepage: "package.license" },
+        manifestKeys: ["mystery", "name"],
+        files: [".mcp.json", "agents/"],
+        packageValues: ["bogus"],
+      },
+    ],
+  });
+  expect(problems).toEqual([
+    "claude reader projects manifest key homepage into package.license, but claude writes homepage from package.homepage",
+    "claude reader preserves manifest key mystery, which targets.claude.native cannot author: the key is unclassified",
+    "claude reader preserves manifest key name, which targets.claude.native cannot author: claude writes it from package.name",
+    "claude reader preserves .mcp.json, which native/claude/ cannot author: the plugin writer generates .mcp.json",
+    "claude reader preserves package value bogus, which targets.claude.package does not accept",
+  ]);
+});

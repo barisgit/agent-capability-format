@@ -18,7 +18,7 @@ export {
   agentPluginsSchemaVersion,
   readAgentPluginsPackage,
 } from "./agent-plugins.js";
-export { readClaudePluginPackage } from "./claude-plugin.js";
+export { claudePluginPreserved, readClaudePluginPackage } from "./claude-plugin.js";
 export type { ForeignReadOptions, ForeignReadResult } from "./package.js";
 
 /** Formats read by a foreign format reader in this module. */
