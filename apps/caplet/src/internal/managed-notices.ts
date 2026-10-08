@@ -45,6 +45,8 @@ export async function addManagementNotices(
       destination: context.destination,
       installRoot,
       capabilityName: ACF_SYSTEM_OWNER,
+      // The install-root inventory is a loose file even when it lists plugin packages.
+      carrier: "loose",
       diff: {
         path: noticePath,
         before,

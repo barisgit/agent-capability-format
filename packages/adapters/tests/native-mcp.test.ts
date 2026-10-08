@@ -31,7 +31,7 @@ async function emitServers(
     writer.adapter,
     capabilityModel({ servers }),
     writer.root,
-    {},
+    { carrier: "loose" },
     files,
   );
   return { result, config: fileText(result, writer.file) };
@@ -141,7 +141,9 @@ test("Agent Plugins cwd is refused for Claude and absolute for Codex", async () 
     servers: [server],
     source: { format: "agent-plugins", formatVersion: "1.0", path: ".", snapshotRoot: CAP_ROOT },
   });
-  const claude = await emitModel(claudeAdapter, capability, "/project/.claude");
+  const claude = await emitModel(claudeAdapter, capability, "/project/.claude", {
+    carrier: "loose",
+  });
   const refusals = withCode(claude, "acf.support.refused");
   expect(refusals).toHaveLength(1);
   expect(refusals[0]?.data?.source).toBe("mcp.cwd");

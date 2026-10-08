@@ -28,7 +28,7 @@ test("native serialization keeps canonical-only keys out of SKILL.md", async () 
 
 test("manual-only skill carries disable-model-invocation to Claude and Pi", async () => {
   const capability = capabilityModel({ skills: [manualOnly] });
-  const claude = await emitModel(claudeAdapter, capability, ".claude");
+  const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier: "loose" });
   const pi = await emitModel(piAdapter, capability, ".pi", { canonicalSkillReaders: ["pi"] });
   expect(fileText(claude, ".claude/skills/deploy/SKILL.md")).toContain(
     "disable-model-invocation: true",
@@ -129,6 +129,7 @@ test("a skill excluded for one discovering target is not written to the shared r
 test("Claude-only selection writes no canonical copy", async () => {
   const capability = capabilityModel({ skills: [manualOnly] });
   const result = await emitModel(claudeAdapter, capability, ".claude", {
+    carrier: "loose",
     canonicalSkillReaders: [],
   });
   expect(result.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
@@ -145,7 +146,7 @@ test("a Claude grant stays with Claude and is reported as not carried to Codex",
       }),
     ],
   });
-  const claude = await emitModel(claudeAdapter, capability, ".claude");
+  const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier: "loose" });
   const codex = await emitModel(codexAdapter, capability, ".codex", {
     canonicalSkillReaders: ["codex"],
   });
@@ -166,7 +167,7 @@ test("argument-hint is native for Claude and degraded elsewhere", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "fix", description: "Fix", "argument-hint": "[issue]" })],
   });
-  const claude = await emitModel(claudeAdapter, capability, ".claude");
+  const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier: "loose" });
   const pi = await emitModel(piAdapter, capability, ".pi", { canonicalSkillReaders: ["pi"] });
   expect(fileText(claude, ".claude/skills/fix/SKILL.md")).toContain("argument-hint: ");
   expect(fileText(pi, ".agents/skills/fix/SKILL.md")).not.toContain("argument-hint");

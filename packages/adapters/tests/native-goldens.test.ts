@@ -90,6 +90,7 @@ async function emitFor(
   const writer = writers[target];
   if (writer === undefined) throw new Error(`unknown writer ${target}`);
   return await emitModel(writer.adapter, capability, path.join(PROJECT, writer.root), {
+    carrier: "loose",
     canonicalSkillReaders: readers,
   });
 }

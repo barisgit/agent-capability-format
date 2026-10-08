@@ -26,7 +26,7 @@ test("an imported skill keeps each restricting key: written for Claude, refused 
     }
     const capability = await readCapability(root, "project", { kind: "local", directory: root });
 
-    const claude = await emitModel(claudeAdapter, capability, ".claude");
+    const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier: "loose" });
     for (const [name, key] of Object.entries(SKILLS)) {
       expect(fileText(claude, `.claude/skills/${name}/SKILL.md`)).toContain(key);
     }

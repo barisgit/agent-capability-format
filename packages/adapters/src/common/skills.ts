@@ -244,7 +244,8 @@ export function skillsRootForScope(scope: Scope): string {
     : path.join(".", ".agents", "skills");
 }
 
-async function readSkillAssets(
+/** The skill's assets, relative to the skill's own directory. */
+export async function readSkillAssets(
   cap: AcfCapability,
   skill: SkillFacet,
   fs: ReadOnlyFs,

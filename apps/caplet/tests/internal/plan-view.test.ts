@@ -30,6 +30,7 @@ function diff(options: {
     destination: options.destination,
     installRoot: options.installRoot,
     capabilityName: options.capability,
+    carrier: "loose",
     diff: fileDiff,
   };
 }

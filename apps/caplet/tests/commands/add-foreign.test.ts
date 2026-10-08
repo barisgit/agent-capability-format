@@ -16,7 +16,7 @@ async function lockedFormats(agentsDir: string, name: string): Promise<string[] 
     ?.resolvedCapabilities?.map((record) => record.format);
 }
 
-test("caplet add installs a Claude plugin into the loose targets", async () => {
+test("caplet add installs a Claude plugin into the loose targets and refuses it on loose Claude files", async () => {
   const scope = await makeScope();
   try {
     const plugin = path.join(scope.sourceRoot, "review-plugin");
@@ -58,7 +58,10 @@ test("caplet add installs a Claude plugin into the loose targets", async () => {
       "project",
     ]);
 
-    expect(result.exitCode).toBe(0);
+    // The agent is plugin remainder, which Claude's loose carrier cannot hold.
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("agent reviewer");
+    expect(result.stderr).toContain("targets.claude.carrier: plugin or except: [claude]");
     expect(result.stdout).toContain("Capabilities  review-kit");
     expect(await lockedFormats(scope.agentsDir, "review-kit")).toEqual(["claude-plugin"]);
     const snapshot = path.join(scope.agentsDir, "capabilities", "review-kit");
@@ -74,7 +77,9 @@ test("caplet add installs a Claude plugin into the loose targets", async () => {
       expect(await Bun.file(path.join(scope.agentsDir, "skills", file)).exists()).toBe(true);
     }
     const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
-    expect(claudeMcp.mcpServers.files).toEqual({
+    expect(claudeMcp.mcpServers.files).toBeUndefined();
+    const piMcp = JSON.parse(await readText(path.join(scope.cwd, ".pi", "mcp.json")));
+    expect(piMcp.mcpServers.files).toEqual({
       command: path.join(snapshot, "bin", "files"),
       args: ["--stdio"],
     });

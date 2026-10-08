@@ -8,10 +8,12 @@ import {
   type AcfOwnership,
   applyApplicability,
   type CapletConfig,
+  type Carrier,
   type ComponentOutcome,
   componentOutcomes,
   type Diagnostic,
   type EmitOptions,
+  type EmittedPlugin,
   type ExecutableComponent,
   executableComponents,
   type FileDiff,
@@ -57,8 +59,13 @@ export type EmittedDiff = {
   destination: "canonical" | "native";
   installRoot: string;
   capabilityName: string;
+  /** Carrier of the output the diff belongs to, recorded on its sidecar entry. */
+  carrier: Carrier;
   diff: FileDiff;
 };
+
+/** A generated plugin package, with the scope and output root it was planned for. */
+export type PlannedPlugin = EmittedPlugin & { scopeRoot: ScopeRoot; installRoot: string };
 
 /** A sidecar entry the plan no longer wants, identified exactly as the sidecar stores it. */
 export type StaleSidecarEntry = {
@@ -77,6 +84,8 @@ export type EmitPlan = {
   targets: TargetId[];
   diagnostics: Diagnostic[];
   diffs: EmittedDiff[];
+  /** Every plugin package the plan writes, whether or not its files changed. */
+  plugins: PlannedPlugin[];
   staleEntries: StaleSidecarEntry[];
   /**
    * Compatibility-report outcome of every planned component per target, independent of whether
@@ -143,6 +152,7 @@ export async function buildEmitPlan(
   const targets = targetSelection(args, configResult.config);
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const desiredDiffs: EmittedDiff[] = [];
+  const plugins: PlannedPlugin[] = [];
   const outcomes = new Map<string, ComponentOutcome>();
   const executables: ExecutableComponent[] = [];
   const canonicalDiffs = new Set<string>();
@@ -249,6 +259,11 @@ export async function buildEmitPlan(
         diagnostics.push(...validation);
         const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
+        const pluginDirs = new Set<string>();
+        for (const plugin of result.plugins ?? []) {
+          plugins.push({ ...plugin, scopeRoot, installRoot });
+          pluginDirs.add(plugin.dir);
+        }
         for (const outcome of componentOutcomes({
           capability: filtered,
           target: targetId,
@@ -271,6 +286,10 @@ export async function buildEmitPlan(
             destination: canonical ? "canonical" : "native",
             installRoot: canonical ? scopeRoot.agentsDir : installRoot,
             capabilityName: filtered.manifest.name,
+            carrier:
+              diff.artifactRoot !== undefined && pluginDirs.has(diff.artifactRoot)
+                ? "plugin"
+                : "loose",
             diff,
           });
         }
@@ -303,6 +322,7 @@ export async function buildEmitPlan(
     targets,
     diagnostics,
     diffs,
+    plugins,
     staleEntries: sweep.staleEntries,
     outcomes: [...outcomes.values()],
     executables,
@@ -452,7 +472,7 @@ async function sweepStaleSidecarEntries(
           path: entry.path,
           capability: entry.capability,
           owns: entry.owns,
-          owner: sidecarOwner(context),
+          owner: sidecarOwner({ ...context, carrier: entry.carrier ?? "loose" }),
         });
         if (stale.length < entry.owns.length) forcedPaths.add(pathKey);
         const orphaned = stale.filter(
@@ -471,6 +491,7 @@ async function sweepStaleSidecarEntries(
           ...context,
           installRoot: candidate.installRoot,
           capabilityName: entry.capability,
+          carrier: entry.carrier ?? "loose",
           diff,
         });
       }
@@ -622,11 +643,12 @@ function isInsideOrEqual(candidate: string, root: string): boolean {
   );
 }
 
-function sidecarOwner(context: Pick<RootContext, "targetId" | "destination">): SidecarOwner {
-  // Every output written today is loose files; the Claude plugin carrier arrives with task 5.3.
+function sidecarOwner(
+  context: Pick<EmittedDiff, "targetId" | "destination" | "carrier">,
+): SidecarOwner {
   return {
     target: context.destination === "canonical" ? "canonical" : context.targetId,
-    carrier: "loose",
+    carrier: context.carrier,
   };
 }
 
@@ -716,7 +738,12 @@ function emitOptionsForTarget(
   config: CapletConfig,
   canonicalSkillReaders: readonly TargetId[],
 ): EmitOptions {
-  const options: EmitOptions = { canonicalSkillReaders };
+  // Until migration (task 5.8) registers plugins, Claude keeps its loose output unless
+  // `targets.claude.carrier` asks for plugins; every other target is loose-only.
+  const options: EmitOptions = {
+    canonicalSkillReaders,
+    carrier: config.targets?.[targetId]?.carrier ?? "loose",
+  };
   const skills = config.targets?.[targetId]?.skills;
   if (skills !== undefined) options.skills = skills;
   return options;

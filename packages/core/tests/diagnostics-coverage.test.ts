@@ -85,6 +85,10 @@ const exportedOnly = new Set([
   "acf.support.degraded",
   "acf.support.component-omitted",
   "acf.extras.dropped",
+  // Built by the Claude plugin writer; packages/adapters/tests/claude-plugin.test.ts covers them.
+  "acf.emit.transformed-remainder",
+  "acf.claude.legacy-carrier",
+  "acf.claude.plugin-file-ignored",
 ]);
 
 test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {
