@@ -168,7 +168,8 @@ const mcpKeys: Record<TargetId, Record<string, KeySpec>> = {
     ...MCP_PROCESS_KEYS,
     type: gen("functional", "mcp.transport"),
     envFile: pend("functional", "mcp.envFile"),
-    cwd: gen("functional", "mcp.cwd"),
+    // Not generated from core mcp.cwd: that cell is refused for loose Cursor output.
+    cwd: functional,
     headers: gen("functional", "mcp.headers"),
     auth: pend("functional", "mcp.oauth"),
   },

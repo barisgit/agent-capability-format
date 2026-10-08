@@ -276,11 +276,21 @@ function placeholderRow(
 }
 
 /** Placeholder rows for `cwd`: Claude refuses `cwd` itself, so the placeholder is refused too. */
+/**
+ * Cursor documents `cwd` only for plugin MCP servers; its behavior for the loose
+ * `.cursor/mcp.json` that caplet writes is unknown, so the functional field is refused
+ * until a verified test exists (capability-model-layers, Recorded equivalence evidence).
+ */
+const cursorCwdRefusal: SupportCell = refused(
+  "Cursor documents cwd only for plugin MCP servers; loose .cursor/mcp.json behavior is unknown",
+  SRC.cursorMcp,
+);
+
 function cwdPlaceholderRow(id: string, loose: (source: string) => SupportCell): FieldSupport {
   return field("mcp", id, "functional", {
     ...claude(claudeCwdRefusal),
     codex: loose(SRC.codexMcp),
-    cursor: loose(SRC.cursorMcp),
+    cursor: cursorCwdRefusal,
     opencode: loose(SRC.opencodeMcp),
     pi: loose(SRC.mcpTable),
   });
@@ -342,6 +352,7 @@ const mcpFields: FieldSupport[] = [
   }),
   sameKey("mcp", "mcp.cwd", "functional", "cwd", {
     ...claude(claudeCwdRefusal),
+    cursor: cursorCwdRefusal,
   }),
   sameKey("mcp", "mcp.url", "functional", "url"),
   sameKey("mcp", "mcp.headers", "functional", "headers", {

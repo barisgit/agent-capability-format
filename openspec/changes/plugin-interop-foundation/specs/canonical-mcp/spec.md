@@ -23,7 +23,7 @@ Readers SHALL map Agent Plugins `${PLUGIN_ROOT}` and Claude `${CLAUDE_PLUGIN_ROO
 - **THEN** the canonical server has `command: ${ACF_CAPABILITY_DIR}/bin/server` and `args: ["--db", "${ACF_DATA_DIR}/x.db"]`
 
 ### Requirement: Effective working directory on read
-Readers SHALL write a source format's documented default working directory into the canonical `cwd`, so that relative paths in `command`, `args` and `env` keep their meaning on every target. The Agent Plugins reader SHALL set `cwd: ${ACF_CAPABILITY_DIR}` for a stdio server that omits `cwd`, because Agent Plugins 1.0 defaults it to the plugin root. Claude documents no server working directory, so a Claude plugin author cannot rely on one; the Claude reader SHALL leave `cwd` omitted, with the meaning in Canonical MCP server fields. A writer whose target cannot carry the resulting `cwd` SHALL refuse the server; it SHALL NOT drop `cwd` on the assumption that the host's default is the same directory unless a `verified` registry cell records that it is.
+Readers SHALL write a source format's documented default working directory into the canonical `cwd`, so that relative paths in `command`, `args` and `env` keep their meaning on every target. The Agent Plugins reader SHALL set `cwd: ${ACF_CAPABILITY_DIR}` for a stdio server that omits `cwd`, because Agent Plugins 1.0 defaults it to the plugin root. Claude ignores a server `cwd` and starts plugin servers in its launch directory (verified, Claude 2.1.97), so a Claude plugin author cannot rely on one; the Claude reader SHALL leave `cwd` omitted, with the meaning in Canonical MCP server fields. A writer whose target cannot carry the resulting `cwd` SHALL refuse the server; it SHALL NOT drop `cwd` on the assumption that the host's default is the same directory unless a `verified` registry cell records that it is.
 
 #### Scenario: Omitted cwd in an Agent Plugins server
 - **WHEN** an Agent Plugins stdio server declares `"command": "node"`, `"args": ["./dist/index.js"]` and no `cwd`, and is installed for Codex
@@ -63,13 +63,13 @@ MCP writers SHALL apply this table. Columns as in the skill table; Pi refers to 
 | `command` under `${ACF_CAPABILITY_DIR}` | functional | T `${CLAUDE_PLUGIN_ROOT}/x` | T absolute | T absolute | T absolute | T absolute | T absolute |
 | `command` (absolute path) | functional | N | N | N | N | N | N |
 | `args`, `env` | functional | N | N | N | N | T `environment` | N |
-| `cwd` | functional | R | R | N | N | N | N |
+| `cwd` | functional | R | R | N | R | N | N |
 | `url`, literal `headers` | functional | N | N | N `url`, `http_headers` | N | N | N |
 | `${ACF_CAPABILITY_DIR}` in `args`, `env`, `cwd` | functional | T `${CLAUDE_PLUGIN_ROOT}` | T absolute | T absolute | T absolute | T absolute | T absolute |
 | `${ACF_CAPABILITY_DIR}` in `url`, `headers` | functional | R | R | R | R | R | R |
 | `${ACF_DATA_DIR}` in `args`, `env`, `cwd` | functional | T `${CLAUDE_PLUGIN_DATA}` | T caplet dir | T caplet dir | T caplet dir | T caplet dir | T caplet dir |
 
-The Claude `cwd` cells are refusals with `verified` evidence: Claude ignores a server `cwd` key (both `${CLAUDE_PLUGIN_ROOT}` and absolute values) and starts plugin stdio servers in the directory `claude` was launched from, not the plugin root (Claude 2.1.97). This includes the plugin-root `cwd` that the Agent Plugins reader materializes; a POSIX `cd` wrapper is not used because it changes the executed command and fails on Windows. Path placeholders in `url` and `headers` are refused everywhere because no tool shares a meaning for a filesystem path in a URL.
+The Claude `cwd` cells are refusals with `verified` evidence: Claude ignores a server `cwd` key (both `${CLAUDE_PLUGIN_ROOT}` and absolute values) and starts plugin stdio servers in the directory `claude` was launched from, not the plugin root (Claude 2.1.97). This includes the plugin-root `cwd` that the Agent Plugins reader materializes; a POSIX `cd` wrapper is not used because it changes the executed command and fails on Windows. Placeholders inside `cwd` follow the `cwd` row: where `cwd` is refused, so is every placeholder in it. The Cursor `cwd` cell is a refusal because Cursor documents `cwd` only for plugin MCP servers and its behavior for the loose `.cursor/mcp.json` is unknown. Path placeholders in `url` and `headers` are refused everywhere because no tool shares a meaning for a filesystem path in a URL.
 
 #### Scenario: Agent Plugins server with cwd to Claude
 - **WHEN** an Agent Plugins server with `"cwd": "./server"` is planned for Claude

@@ -2,9 +2,9 @@ Every task starts with a failing test and ends when it passes. "Golden" means a 
 
 ## 1. Harness, registry and plan report
 
-- [ ] 1.1 Add a golden-tree harness (in-memory and on-disk) that diffs emitted trees against `expected/` by path, bytes and executable bit, prints a readable diff, and regenerates with `UPDATE_GOLDEN=1`; verify with a self-test whose golden fails on a byte, path and mode change.
-- [ ] 1.2 Replace family-level skill and MCP `support` in `packages/core/src/targets/registry.ts` with per-field, per-carrier cells (native with value-domain conditions, translated, degraded, refused), safety classes and evidence levels for the fields of this change; verify with a registry self-check that fails when a `restricting` or `functional` cell is degradable, a known native key lacks a class, or a refusing restricting cell lacks a negative fixture.
-- [ ] 1.3 Derive diagnostics (`acf.support.*`, `acf.extras.dropped`, `acf.core.pending`) from registry cells and add the behavior-first compatibility report to `caplet apply` and `--dry-run` human and `--json` output; verify with output goldens for native, translated, omitted and blocked components.
+- [x] 1.1 Add a golden-tree harness (in-memory and on-disk) that diffs emitted trees against `expected/` by path, bytes and executable bit, prints a readable diff, and regenerates with `UPDATE_GOLDEN=1`; verify with a self-test whose golden fails on a byte, path and mode change.
+- [x] 1.2 Replace family-level skill and MCP `support` in `packages/core/src/targets/registry.ts` with per-field, per-carrier cells (native with value-domain conditions, translated, degraded, refused), safety classes and evidence levels for the fields of this change; verify with a registry self-check that fails when a `restricting` or `functional` cell is degradable, a known native key lacks a class, or a refusing restricting cell lacks a negative fixture.
+- [x] 1.3 Derive diagnostics (`acf.support.*`, `acf.extras.dropped`, `acf.core.pending`) from registry cells and add the behavior-first compatibility report to `caplet apply` and `--dry-run` human and `--json` output; verify with output goldens for native, translated, omitted and blocked components.
 
 ## 2. Integrity and preservation
 
