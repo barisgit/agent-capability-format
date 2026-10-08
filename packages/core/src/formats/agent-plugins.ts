@@ -128,6 +128,7 @@ export async function readAgentPluginsPackage(
     diagnostics,
     source: { format: "agent-plugins", formatVersion: "1.0" },
     remainder,
+    manifestName: raw.name as string,
   });
   return { capability, diagnostics };
 }

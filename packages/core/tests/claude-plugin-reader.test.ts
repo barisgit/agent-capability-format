@@ -63,6 +63,26 @@ const fullPlugin = {
 };
 
 describe("Claude plugin reader", () => {
+  test("records the package as projected, before rename, so writers can tell it unchanged", async () => {
+    const root = await tempDir();
+    dirs.push(root);
+    await makeCapability(root, fullPlugin);
+    const { capability } = await readClaudePluginPackage(root, {
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      revision: null,
+      rename: "kit",
+    });
+
+    expect(capability?.manifest.name).toBe("kit");
+    expect(capability?.source?.projected).toEqual({
+      name: "review-kit",
+      skills: ["review", "triage"],
+      servers: capability?.mcp?.servers.map((server) => server.name) ?? [],
+    });
+    expect(capability?.source?.projected?.servers.length).toBeGreaterThan(0);
+  });
+
   test("projects metadata, skills and MCP and keeps the rest as remainder", async () => {
     const { capability, diagnostics } = await read(fullPlugin, { executables: ["bin/inline"] });
     expect(diagnostics).toEqual([]);

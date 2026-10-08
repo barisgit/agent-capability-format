@@ -119,6 +119,13 @@ export type CapabilitySource = {
   path: string;
   /** Absolute path of the immutable materialized snapshot of the package root. */
   snapshotRoot: string;
+  /**
+   * The package as its reader projected it, before `rename`, facet selection and applicability:
+   * the manifest's own name and the projected skill and MCP server names, sorted. Writers compare
+   * it with the capability they receive to tell an unchanged package, which they write
+   * losslessly, from a transformed one. Absent for native ACF.
+   */
+  projected?: { name: string; skills: string[]; servers: string[] } | undefined;
 };
 
 /** Kinds of foreign components a reader preserves without projecting them. */

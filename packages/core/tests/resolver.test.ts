@@ -132,6 +132,7 @@ test("foreign snapshots are read with the reader their lock record names", async
       format: "claude-plugin",
       path: "plugins/review",
       snapshotRoot: snapshot,
+      projected: { name: "review-kit", skills: ["review"], servers: [] },
     });
   } finally {
     await cleanup(dir);

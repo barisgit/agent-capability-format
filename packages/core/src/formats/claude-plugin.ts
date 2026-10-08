@@ -92,6 +92,7 @@ export async function readClaudePluginPackage(
     diagnostics,
     source: { format: "claude-plugin" },
     remainder,
+    manifestName: raw.name as string,
   });
   return { capability, diagnostics };
 }
