@@ -254,10 +254,21 @@ function diagnostic(
   return result;
 }
 
+/** Singular and plural nouns that name a component of each family in user-facing text. */
+export const outcomeFamilyNouns: Readonly<Record<OutcomeFamily, readonly [string, string]>> = {
+  package: ["package", "packages"],
+  skill: ["skill", "skills"],
+  agent: ["agent", "agents"],
+  command: ["command", "commands"],
+  instruction: ["instruction", "instructions"],
+  hook: ["hook", "hooks"],
+  mcp: ["MCP server", "MCP servers"],
+};
+
 function componentLabel(subject: SupportSubject): string {
   return subject.family === "package"
     ? `capability ${subject.component}`
-    : `${subject.family} ${subject.component}`;
+    : `${outcomeFamilyNouns[subject.family][0]} ${subject.component}`;
 }
 
 /**

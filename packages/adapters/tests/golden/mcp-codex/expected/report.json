@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "mcp events is blocked for codex by mcp.transport=sse: codex cannot honor mcp.transport=sse: Codex documents no SSE transport. Recovery: exclude: { mcp: [events] } or except: [codex]",
+      "message": "MCP server events is blocked for codex by mcp.transport=sse: codex cannot honor mcp.transport=sse: Codex documents no SSE transport. Recovery: exclude: { mcp: [events] } or except: [codex]",
       "targetId": "codex",
       "capability": {
         "name": "demo"
@@ -14,7 +14,7 @@
         "outcome": "blocked",
         "blocks": "component",
         "source": "mcp.transport=sse",
-        "consequence": "mcp events is not installed for codex",
+        "consequence": "MCP server events is not installed for codex",
         "recovery": "exclude: { mcp: [events] } or except: [codex]"
       },
       "family": "mcp"

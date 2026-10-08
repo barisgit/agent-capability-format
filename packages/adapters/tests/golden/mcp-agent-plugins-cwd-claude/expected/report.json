@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "mcp plugin-server is blocked for claude by mcp.cwd: claude cannot honor mcp.cwd: Claude ignores a server cwd key and starts plugin stdio servers in the directory claude was launched from, so the server would run elsewhere than declared. Recovery: exclude: { mcp: [plugin-server] } or except: [claude]",
+      "message": "MCP server plugin-server is blocked for claude by mcp.cwd: claude cannot honor mcp.cwd: Claude ignores a server cwd key and starts plugin stdio servers in the directory claude was launched from, so the server would run elsewhere than declared. Recovery: exclude: { mcp: [plugin-server] } or except: [claude]",
       "targetId": "claude",
       "capability": {
         "name": "demo"
@@ -14,7 +14,7 @@
         "outcome": "blocked",
         "blocks": "component",
         "source": "mcp.cwd",
-        "consequence": "mcp plugin-server is not installed for claude",
+        "consequence": "MCP server plugin-server is not installed for claude",
         "recovery": "exclude: { mcp: [plugin-server] } or except: [claude]"
       },
       "family": "mcp"

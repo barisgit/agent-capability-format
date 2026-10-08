@@ -2,6 +2,7 @@ import {
   type ComponentOutcome,
   componentOutcomeKinds,
   type OutcomeFamily,
+  outcomeFamilyNouns,
   type TargetId,
 } from "@caplet/core";
 import { colors } from "consola/utils";
@@ -15,16 +16,6 @@ const familyOrder: readonly OutcomeFamily[] = [
   "hook",
   "mcp",
 ];
-
-const familyNouns: Readonly<Record<OutcomeFamily, readonly [string, string]>> = {
-  package: ["package", "packages"],
-  skill: ["skill", "skills"],
-  agent: ["agent", "agents"],
-  command: ["command", "commands"],
-  instruction: ["instruction", "instructions"],
-  hook: ["hook", "hooks"],
-  mcp: ["MCP server", "MCP servers"],
-};
 
 /**
  * Behavior-first compatibility report (capability-model-layers): per target in `targets`
@@ -82,7 +73,7 @@ function familyCounts(items: readonly ComponentOutcome[]): string {
   return familyOrder
     .map((family) => {
       const count = items.filter((item) => item.family === family).length;
-      const [one, many] = familyNouns[family];
+      const [one, many] = outcomeFamilyNouns[family];
       return count === 0 ? "" : `${count} ${count === 1 ? one : many}`;
     })
     .filter((part) => part.length > 0)

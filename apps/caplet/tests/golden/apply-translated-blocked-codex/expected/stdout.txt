@@ -1,6 +1,6 @@
 Compatibility
   background (alpha-cap) / codex - blocked: skill background is not installed for codex (skill.invocation.user=false). Recovery: exclude: { skill: [background] } or except: [codex]
-  events (alpha-cap) / codex - blocked: mcp events is not installed for codex (mcp.transport=sse). Recovery: exclude: { mcp: [events] } or except: [codex]
+  events (alpha-cap) / codex - blocked: MCP server events is not installed for codex (mcp.transport=sse). Recovery: exclude: { mcp: [events] } or except: [codex]
   alpha-server (alpha-cap) / codex - translated: ${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory (mcp.command=${ACF_CAPABILITY_DIR})
   codex - native: 1 skill, 2 agents, 2 instructions, 1 MCP server
   codex - dropped: targets.claude.native.when_to_use (review (alpha-cap))

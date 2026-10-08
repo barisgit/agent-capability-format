@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "mcp events is blocked for opencode by mcp.transport=sse: opencode cannot honor mcp.transport=sse: OpenCode's SSE support is untraced. Recovery: exclude: { mcp: [events] } or except: [opencode]",
+      "message": "MCP server events is blocked for opencode by mcp.transport=sse: opencode cannot honor mcp.transport=sse: OpenCode's SSE support is untraced. Recovery: exclude: { mcp: [events] } or except: [opencode]",
       "targetId": "opencode",
       "capability": {
         "name": "demo"
@@ -14,7 +14,7 @@
         "outcome": "blocked",
         "blocks": "component",
         "source": "mcp.transport=sse",
-        "consequence": "mcp events is not installed for opencode",
+        "consequence": "MCP server events is not installed for opencode",
         "recovery": "exclude: { mcp: [events] } or except: [opencode]"
       },
       "family": "mcp"
@@ -22,7 +22,7 @@
     {
       "severity": "lossy",
       "code": "acf.extras.dropped",
-      "message": "opencode drops the functional codex key required from mcp tools",
+      "message": "opencode drops the functional codex key required from MCP server tools",
       "targetId": "opencode",
       "capability": {
         "name": "demo"
@@ -32,7 +32,7 @@
         "component": "tools",
         "outcome": "changed-behavior",
         "source": "targets.codex.native.required",
-        "consequence": "mcp tools runs without required on opencode",
+        "consequence": "MCP server tools runs without required on opencode",
         "recovery": "exclude: { mcp: [tools] } or except: [opencode]",
         "dropped": "targets.codex.native.required"
       },

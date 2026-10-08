@@ -40,6 +40,17 @@ describe("support diagnostics derived from registry cells", () => {
     });
   });
 
+  test("an MCP server is named in its proper form, not by its family id", () => {
+    const diagnostic = supportDiagnostic(
+      { capability: "tools", family: "mcp", component: "events", target: "codex" },
+      "mcp.transport=sse",
+    );
+    expect(diagnostic?.message).toStartWith("MCP server events is blocked for codex");
+    expect(readSupportData(diagnostic)?.consequence).toBe(
+      "MCP server events is not installed for codex",
+    );
+  });
+
   test("a degraded cell supplies code, severity and message (Codex argument-hint)", () => {
     const diagnostic = supportDiagnostic({ ...review, target: "codex" }, "skill.argument-hint");
     const cell = supportCell("skill.argument-hint", "codex", "loose");

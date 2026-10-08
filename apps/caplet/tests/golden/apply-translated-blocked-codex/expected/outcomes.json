@@ -49,7 +49,7 @@
     "component": "events",
     "outcome": "blocked",
     "source": "mcp.transport=sse",
-    "consequence": "mcp events is not installed for codex",
+    "consequence": "MCP server events is not installed for codex",
     "recovery": "exclude: { mcp: [events] } or except: [codex]"
   },
   {

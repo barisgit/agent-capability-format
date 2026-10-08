@@ -3,7 +3,7 @@
     {
       "severity": "lossy",
       "code": "acf.extras.dropped",
-      "message": "claude drops the functional codex key required from mcp tools",
+      "message": "claude drops the functional codex key required from MCP server tools",
       "targetId": "claude",
       "capability": {
         "name": "demo"
@@ -13,7 +13,7 @@
         "component": "tools",
         "outcome": "changed-behavior",
         "source": "targets.codex.native.required",
-        "consequence": "mcp tools runs without required on claude",
+        "consequence": "MCP server tools runs without required on claude",
         "recovery": "exclude: { mcp: [tools] } or except: [claude]",
         "dropped": "targets.codex.native.required"
       },

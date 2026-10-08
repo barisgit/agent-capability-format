@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "mcp events is blocked for cursor by mcp.transport=sse: cursor cannot honor mcp.transport=sse: Cursor's SSE selector is unverified. Recovery: exclude: { mcp: [events] } or except: [cursor]",
+      "message": "MCP server events is blocked for cursor by mcp.transport=sse: cursor cannot honor mcp.transport=sse: Cursor's SSE selector is unverified. Recovery: exclude: { mcp: [events] } or except: [cursor]",
       "targetId": "cursor",
       "capability": {
         "name": "demo"
@@ -14,7 +14,7 @@
         "outcome": "blocked",
         "blocks": "component",
         "source": "mcp.transport=sse",
-        "consequence": "mcp events is not installed for cursor",
+        "consequence": "MCP server events is not installed for cursor",
         "recovery": "exclude: { mcp: [events] } or except: [cursor]"
       },
       "family": "mcp"
@@ -22,7 +22,7 @@
     {
       "severity": "lossy",
       "code": "acf.extras.dropped",
-      "message": "cursor drops the functional codex key required from mcp tools",
+      "message": "cursor drops the functional codex key required from MCP server tools",
       "targetId": "cursor",
       "capability": {
         "name": "demo"
@@ -32,7 +32,7 @@
         "component": "tools",
         "outcome": "changed-behavior",
         "source": "targets.codex.native.required",
-        "consequence": "mcp tools runs without required on cursor",
+        "consequence": "MCP server tools runs without required on cursor",
         "recovery": "exclude: { mcp: [tools] } or except: [cursor]",
         "dropped": "targets.codex.native.required"
       },
