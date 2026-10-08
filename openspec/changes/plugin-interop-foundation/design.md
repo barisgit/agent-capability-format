@@ -88,7 +88,7 @@ Each scope gets one marketplace directory at `<claude-install-root>/.acf/marketp
 
 Alternative: edit `enabledPlugins` and `extraKnownMarketplaces` directly. Rejected because Claude also keeps private install records and caches, and going through the host's own path keeps its policy checks in force.
 
-### D9. Mixed Claude capabilities stay whole on the loose carrier (provisional, open question 2)
+### D9. Mixed Claude capabilities stay whole on the loose carrier (decided 2026-10-08)
 
 A native ACF capability that selects agents, commands, hooks or instructions for Claude stays whole on today's loose Claude output with `acf.claude.legacy-carrier`. Foreign Claude plugins are unaffected: their agents, commands and hooks are native remainder and go into the plugin unchanged; a foreign Claude plugin with remainder under `carrier: loose` is refused for Claude.
 
@@ -217,7 +217,7 @@ Idea outside caplet: Lume (`/home/blaz/code/lume`, the user's own agent runtime,
 
 - [Claude CLI flags for update, uninstall and list are undocumented] -> Task 5.1 pins them against the local Claude 2.1.97 and records `verified` evidence before automated registration ships; without it the host state is `registration required` with the exact commands.
 - [Project marketplace records may be machine-specific] -> Task 5.2 records what Claude writes at project scope; default project registration is gated on the answer to open question 7.
-- [Plugin-qualified invocation names break user habits and scripts] -> One-time rename notice on migration (open question 4, provisional).
+- [Plugin-qualified invocation names break user habits and scripts] -> One-time rename notice on migration (decided 2026-10-08).
 - [Refusals make some packages uninstallable for some targets] -> Behavior-first plan output names the recovery (`exclude`, `except`, carrier), and refusals are per component and target.
 - [Dropping an unclassified restricting key (D4)] -> The registry classifies every native key in the research inventories; the registry self-check fails if a known key lacks a class.
 - [Per-target extras for pending meanings need migration on promotion (D17)] -> `acf.core.pending` names the follow-up at authoring time, and `caplet check --fix` performs the rewrite.
@@ -238,9 +238,9 @@ Idea outside caplet: Lume (`/home/blaz/code/lume`, the user's own agent runtime,
 ### Open questions for the user
 
 1. **ACF extension namespace.** Open. Agent Plugins extension namespaces are reverse-domain names the publisher controls. Which domain should ACF own (for example a domain registered for the project, or `io.github.barisgit.acf`)? Until answered, no ACF namespace is emitted. This change emits no Agent Plugins packages, so the question blocks only the follow-ups.
-2. **Mixed Claude capabilities.** Provisional answer: a native ACF capability with agents, commands, hooks or instructions for Claude stays whole on loose output (D9). Alternative: hard switch to the plugin, dropping those families for Claude until their follow-ups land. Please confirm.
+2. **Mixed Claude capabilities.** Decided (user delegated, 2026-10-08): a native ACF capability with agents, commands, hooks or instructions for Claude stays whole on loose output (D9). Rejected: hard switch to the plugin, because it would silently remove working features until their follow-ups land.
 3. **Executable content on updates.** Answered: caplet keeps no acceptance gate or state; adding or updating a source is the approval, and caplet lists executable additions and changes without prompting or blocking (D10).
-4. **Claude invocation rename.** Provisional answer: migrate existing installs to `/capability:skill` on upgrade, with a one-time notice listing old and new names. Alternative: keep existing installs loose until the user sets `targets.claude.carrier: plugin`. Please confirm.
+4. **Claude invocation rename.** Decided (user delegated, 2026-10-08): migrate existing installs to `/capability:skill` on upgrade, with a one-time notice listing old and new names. Rejected: opt-in per capability, because it keeps two Claude carriers alive indefinitely for a small pilot user base.
 5. **First Agent Plugins client.** Answered: Codex first (the user's daily tool), Copilot second; Pi and Lume have no Agent Plugins support and stay loose or out of scope. Recorded in `agent-plugins-output`.
 6. **Which ACF repositories may also be Agent Plugins packages at their root.** Deferred to `acf-root-agent-plugins-package`, whose proposal states the choice in plain words: only repositories whose skills use plain Agent Skills frontmatter, or also those with a per-skill ACF side file.
 7. **Team sharing of the project Claude marketplace.** Open; the facts are unknown. Task 5.2 records what Claude writes into committed and user files for a project-scope marketplace. If it records a machine-specific absolute path, should caplet register the marketplace per machine (each teammate runs `caplet apply`) and share only plugin enablement, or keep Claude project registration out of committed settings entirely? Until answered, default project registration stays off in that case.
