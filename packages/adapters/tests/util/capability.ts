@@ -6,7 +6,7 @@ import {
   readCapability,
   type Scope,
   type TargetAdapter,
-} from "@acf/core";
+} from "@caplet/core";
 import { makeInMemoryFs } from "./in-memory-fs";
 
 export const fixtureRoot = path.resolve("tests", "fixtures", "full");

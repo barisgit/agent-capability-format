@@ -5,7 +5,7 @@ import {
   parseMarkdown,
   readRepositoryCapabilities,
   skillFrontmatterSchema,
-} from "@acf/core";
+} from "@caplet/core";
 
 export type SourceCapabilityCandidate = {
   name: string;

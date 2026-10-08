@@ -1,9 +1,9 @@
-import "@acf/adapters";
+import "@caplet/adapters";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { type Diagnostic, targetIds, targetMap } from "@acf/core";
-import { readLockfile } from "@acf/installer";
+import { type Diagnostic, targetIds, targetMap } from "@caplet/core";
+import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";

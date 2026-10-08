@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { CapabilityEntry, SourceSpec } from "@acf/core";
+import type { CapabilityEntry, SourceSpec } from "@caplet/core";
 import { ensureCleanCache, getCachePath } from "./cache";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git";
 import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile";

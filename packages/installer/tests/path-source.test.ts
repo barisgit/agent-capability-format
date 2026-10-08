@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { access, cp, readFile, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { computeContentHash } from "@acf/core/hash";
+import { computeContentHash } from "@caplet/core/hash";
 import {
   entrySourceId,
   fetchCapability,

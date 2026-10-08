@@ -1,7 +1,7 @@
 import { chmod, mkdir, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@acf/adapters/common";
-import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@acf/core";
+import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@caplet/adapters/common";
+import type { AcfManagedSidecar, AcfOwnership, FileContent, FileDiff } from "@caplet/core";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer";
 import {
   hashOwnedRegions,

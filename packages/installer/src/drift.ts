@@ -1,4 +1,4 @@
-import type { CapabilitiesYml, Diagnostic } from "@acf/core";
+import type { CapabilitiesYml, Diagnostic } from "@caplet/core";
 import type { CapabilitiesLock } from "./lockfile";
 import { entrySourceId, sourceId } from "./lockfile";
 

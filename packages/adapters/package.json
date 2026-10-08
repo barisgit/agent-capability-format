@@ -1,5 +1,5 @@
 {
-  "name": "@acf/adapters",
+  "name": "@caplet/adapters",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,14 +13,14 @@
     "./pi": "./src/pi/index.ts"
   },
   "scripts": {
-    "build": "echo 'no build for @acf/adapters'",
+    "build": "echo 'no build for @caplet/adapters'",
     "check-types": "tsgo --noEmit -p tsconfig.json",
-    "lint": "echo 'no lint for @acf/adapters'",
+    "lint": "echo 'no lint for @caplet/adapters'",
     "test": "bun test"
   },
   "dependencies": {
-    "@acf/core": "workspace:*",
-    "@acf/runtime-taxonomy": "workspace:*",
+    "@caplet/core": "workspace:*",
+    "@caplet/runtime-taxonomy": "workspace:*",
     "yaml": "2.8.1"
   },
   "devDependencies": {

@@ -15,16 +15,16 @@
       },
     },
     "apps/caplet": {
-      "name": "caplet",
+      "name": "@caplet/cli",
       "version": "0.1.0",
       "bin": {
         "caplet": "./src/bin.ts",
       },
       "dependencies": {
-        "@acf/adapters": "workspace:*",
-        "@acf/core": "workspace:*",
-        "@acf/installer": "workspace:*",
-        "@acf/sdk": "workspace:*",
+        "@caplet/adapters": "workspace:*",
+        "@caplet/core": "workspace:*",
+        "@caplet/installer": "workspace:*",
+        "@caplet/sdk": "workspace:*",
         "citty": "0.1.6",
         "consola": "3.4.0",
       },
@@ -34,11 +34,11 @@
       },
     },
     "packages/adapters": {
-      "name": "@acf/adapters",
+      "name": "@caplet/adapters",
       "version": "0.1.0",
       "dependencies": {
-        "@acf/core": "workspace:*",
-        "@acf/runtime-taxonomy": "workspace:*",
+        "@caplet/core": "workspace:*",
+        "@caplet/runtime-taxonomy": "workspace:*",
         "yaml": "2.8.1",
       },
       "devDependencies": {
@@ -47,10 +47,10 @@
       },
     },
     "packages/core": {
-      "name": "@acf/core",
+      "name": "@caplet/core",
       "version": "0.1.0",
       "dependencies": {
-        "@acf/runtime-taxonomy": "workspace:*",
+        "@caplet/runtime-taxonomy": "workspace:*",
         "gray-matter": "4.0.3",
         "picomatch": "4.0.2",
         "semver": "7.6.3",
@@ -63,10 +63,10 @@
       },
     },
     "packages/installer": {
-      "name": "@acf/installer",
+      "name": "@caplet/installer",
       "version": "0.1.0",
       "dependencies": {
-        "@acf/core": "workspace:*",
+        "@caplet/core": "workspace:*",
         "yaml": "2.8.1",
       },
       "devDependencies": {
@@ -75,7 +75,7 @@
       },
     },
     "packages/runtime-taxonomy": {
-      "name": "@acf/runtime-taxonomy",
+      "name": "@caplet/runtime-taxonomy",
       "version": "0.1.0",
       "devDependencies": {
         "@typescript/native-preview": "7.0.0-dev.20251104.1",
@@ -83,12 +83,12 @@
       },
     },
     "packages/sdk": {
-      "name": "@acf/sdk",
+      "name": "@caplet/sdk",
       "version": "0.1.0",
       "dependencies": {
-        "@acf/adapters": "workspace:*",
-        "@acf/core": "workspace:*",
-        "@acf/installer": "workspace:*",
+        "@caplet/adapters": "workspace:*",
+        "@caplet/core": "workspace:*",
+        "@caplet/installer": "workspace:*",
       },
       "devDependencies": {
         "@typescript/native-preview": "7.0.0-dev.20251104.1",
@@ -97,16 +97,6 @@
     },
   },
   "packages": {
-    "@acf/adapters": ["@acf/adapters@workspace:packages/adapters"],
-
-    "@acf/core": ["@acf/core@workspace:packages/core"],
-
-    "@acf/installer": ["@acf/installer@workspace:packages/installer"],
-
-    "@acf/runtime-taxonomy": ["@acf/runtime-taxonomy@workspace:packages/runtime-taxonomy"],
-
-    "@acf/sdk": ["@acf/sdk@workspace:packages/sdk"],
-
     "@biomejs/biome": ["@biomejs/biome@2.2.0", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.2.0", "@biomejs/cli-darwin-x64": "2.2.0", "@biomejs/cli-linux-arm64": "2.2.0", "@biomejs/cli-linux-arm64-musl": "2.2.0", "@biomejs/cli-linux-x64": "2.2.0", "@biomejs/cli-linux-x64-musl": "2.2.0", "@biomejs/cli-win32-arm64": "2.2.0", "@biomejs/cli-win32-x64": "2.2.0" }, "bin": { "biome": "bin/biome" } }, "sha512-3On3RSYLsX+n9KnoSgfoYlckYBoU6VRM22cw1gB4Y0OuUVSYd/O/2saOJMrA4HFfA1Ff0eacOvMN1yAAvHtzIw=="],
 
     "@biomejs/cli-darwin-arm64": ["@biomejs/cli-darwin-arm64@2.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-zKbwUUh+9uFmWfS8IFxmVD6XwqFcENjZvEyfOxHs1epjdH3wyyMQG80FGDsmauPwS2r5kXdEM0v/+dTIA9FXAg=="],
@@ -124,6 +114,18 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-n9a1/f2CwIDmNMNkFs+JI0ZjFnMO0jdOyGNtihgUNFnlmd84yIYY2KMTBmMV58ZlVHjgmY5Y6E1hVTnSRieggA=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nawu5nHjP/zPKTIryh2AavzTc/KEg4um/MxWdXW0A6P/RZOyIpa7+QSjeXwAwX/utJGaCoXRPWtF3m5U/bB3Ww=="],
+
+    "@caplet/adapters": ["@caplet/adapters@workspace:packages/adapters"],
+
+    "@caplet/cli": ["@caplet/cli@workspace:apps/caplet"],
+
+    "@caplet/core": ["@caplet/core@workspace:packages/core"],
+
+    "@caplet/installer": ["@caplet/installer@workspace:packages/installer"],
+
+    "@caplet/runtime-taxonomy": ["@caplet/runtime-taxonomy@workspace:packages/runtime-taxonomy"],
+
+    "@caplet/sdk": ["@caplet/sdk@workspace:packages/sdk"],
 
     "@types/bun": ["@types/bun@1.3.2", "", { "dependencies": { "bun-types": "1.3.2" } }, "sha512-t15P7k5UIgHKkxwnMNkJbWlh/617rkDGEdSsDbu+qNHTaz9SKf7aC8fiIlUdD5RPpH6GEkP0cK7WlvmrEBRtWg=="],
 
@@ -154,8 +156,6 @@
     "argparse": ["argparse@1.0.10", "", { "dependencies": { "sprintf-js": "~1.0.2" } }, "sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg=="],
 
     "bun-types": ["bun-types@1.3.2", "", { "dependencies": { "@types/node": "*" }, "peerDependencies": { "@types/react": "^19" } }, "sha512-i/Gln4tbzKNuxP70OWhJRZz1MRfvqExowP7U6JKoI8cntFrtxg7RJK3jvz7wQW54UuvNC8tbKHHri5fy74FVqg=="],
-
-    "caplet": ["caplet@workspace:apps/caplet"],
 
     "citty": ["citty@0.1.6", "", { "dependencies": { "consola": "^3.2.3" } }, "sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ=="],
 

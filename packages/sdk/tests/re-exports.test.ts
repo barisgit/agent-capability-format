@@ -4,9 +4,9 @@ import {
   computeContentHash,
   provisionalOperations,
   resolveCapabilities,
-} from "@acf/sdk";
+} from "@caplet/sdk";
 
-test("@acf/sdk re-exports core, adapters, and installer symbols", () => {
+test("@caplet/sdk re-exports core, adapters, and installer symbols", () => {
   expect(provisionalOperations).toContain("shell");
   expect(typeof computeContentHash).toBe("function");
   expect(claudeAdapter.id).toBe("claude");

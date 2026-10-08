@@ -1,4 +1,4 @@
-import "@acf/adapters";
+import "@caplet/adapters";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -15,7 +15,7 @@ import {
   type TargetId,
   targetIds,
   targetMap,
-} from "@acf/core";
+} from "@caplet/core";
 import {
   type CapabilitiesLock,
   detectLockDrift,
@@ -26,7 +26,7 @@ import {
   readLockfile,
   resolveCapabilities,
   sourceId,
-} from "@acf/installer";
+} from "@caplet/installer";
 import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs";
 import {
   detectDrift,

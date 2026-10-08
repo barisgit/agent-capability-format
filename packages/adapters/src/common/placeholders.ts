@@ -1,4 +1,4 @@
-import { acfPathPlaceholders } from "@acf/core";
+import { acfPathPlaceholders } from "@caplet/core";
 
 export type PlaceholderValues = {
   capabilityDir: string;

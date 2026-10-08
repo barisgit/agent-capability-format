@@ -1,8 +1,8 @@
-// @acf/runtime-taxonomy
+// @caplet/runtime-taxonomy
 //
 // Reserved package for the runtime taxonomy (operation, event, permission,
 // message-surface vocabularies). In acf:1 the only canonical artifact is the
-// provisional operation set from SPEC §24; it lives in `@acf/core` as the
+// provisional operation set from SPEC §24; it lives in `@caplet/core` as the
 // authoritative constant. This package re-exports it so direct consumers
 // have a stable import path once the taxonomy graduates into its own repo.
 

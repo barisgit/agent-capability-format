@@ -1,4 +1,4 @@
-import type { AcfOwnership, FileContent, FileDiff } from "@acf/core";
+import type { AcfOwnership, FileContent, FileDiff } from "@caplet/core";
 
 export function makeFileDiff(
   path: string,

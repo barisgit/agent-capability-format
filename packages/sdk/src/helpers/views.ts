@@ -16,7 +16,7 @@ import type {
   SkillFacet,
   TargetExtensions,
   TargetId,
-} from "@acf/core";
+} from "@caplet/core";
 
 export type SkillView = {
   name: string;

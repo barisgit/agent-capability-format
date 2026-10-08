@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { CapabilitiesYml } from "@acf/core";
+import type { CapabilitiesYml } from "@caplet/core";
 import { type CapabilitiesLock, detectLockDrift } from "../src";
 
 test("yml entries missing from lock are diagnosed", () => {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { CapabilityEntry, SourceSpec } from "@acf/core";
+import type { CapabilityEntry, SourceSpec } from "@caplet/core";
 
 export type LockEntry = {
   capabilityHash: string;

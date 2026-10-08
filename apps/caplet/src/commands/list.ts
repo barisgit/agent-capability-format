@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@acf/core";
+import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope } from "../internal/args";

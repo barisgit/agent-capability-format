@@ -5,7 +5,7 @@ import {
   canonicalTriggerNames,
   type ProvisionalOperationId,
   provisionalOperations,
-} from "@acf/runtime-taxonomy";
+} from "@caplet/runtime-taxonomy";
 
 export {
   canonicalHookTypes,

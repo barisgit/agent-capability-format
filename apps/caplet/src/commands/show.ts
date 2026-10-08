@@ -3,7 +3,7 @@ import {
   type Diagnostic,
   resolveScopeCapabilities,
   targetIds,
-} from "@acf/core";
+} from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope, validationError } from "../internal/args";
@@ -76,7 +76,7 @@ export const showCommand = defineCommand({
           .map(([family, names]) => [`  ${colors.dim(family)}`, names.join(", ")]);
         for (const line of columns(rows)) out.log(line);
         out.log("");
-        const { applyApplicability } = await import("@acf/core");
+        const { applyApplicability } = await import("@caplet/core");
         const head = ["  TARGET", ...targetIds].map((cell) => colors.dim(cell));
         const support = [
           "  supported",

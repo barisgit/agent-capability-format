@@ -8,7 +8,7 @@ import {
   type ReadOnlyFs,
   type RootInventoryArtifact,
   renderRootInventory,
-} from "@acf/core";
+} from "@caplet/core";
 import { readSidecar } from "../apply/sidecar";
 import type { EmittedDiff, RootContext } from "./workflow";
 

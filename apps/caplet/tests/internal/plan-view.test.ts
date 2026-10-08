@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { type FileDiff, scopeRoot } from "@acf/core";
+import { type FileDiff, scopeRoot } from "@caplet/core";
 import { renderPlan } from "../../src/internal/output";
 import { buildPlanView, planToJson } from "../../src/internal/plan-view";
 import type { EmittedDiff } from "../../src/internal/workflow";

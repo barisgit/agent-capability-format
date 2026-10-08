@@ -1,4 +1,4 @@
-import type { Diagnostic } from "@acf/core";
+import type { Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args";
 import type { PlanView } from "./plan-view";

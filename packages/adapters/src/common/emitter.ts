@@ -21,7 +21,7 @@ import {
   type Scope,
   type TargetId,
   targetMap,
-} from "@acf/core";
+} from "@caplet/core";
 import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets";
 import { pushLossy } from "./diagnostics";
 import { makeFileDiff } from "./diff";

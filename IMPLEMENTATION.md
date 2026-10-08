@@ -46,11 +46,11 @@ agent-capability-format/
 Five packages and one app. Boundaries follow consumer needs, not arbitrary
 splits:
 
-- A CI linter or browser validator imports `@acf/core` only — pure JS, no
+- A CI linter or browser validator imports `@caplet/core` only — pure JS, no
   network, no git, no `Bun.*`.
-- The caplet CLI imports `@acf/sdk` (or core + adapters + installer
+- The caplet CLI imports `@caplet/sdk` (or core + adapters + installer
   directly) — needs everything.
-- A direct consumer (Pi extension, OpenCode extension) imports `@acf/sdk`
+- A direct consumer (Pi extension, OpenCode extension) imports `@caplet/sdk`
   for the convenience API (`getSkills`, `getFacets`, auto-fetch).
 
 Turborepo convention: `apps/` for runnable end-user binaries, `packages/` for
@@ -64,7 +64,7 @@ specs instead of ADRs. Hard decisions live in OpenSpec change artifacts;
 
 ### apps/caplet
 
-Reference CLI. Uses `@acf/sdk` (or core + adapters + installer directly) to:
+Reference CLI. Uses `@caplet/sdk` (or core + adapters + installer directly) to:
 
 - validate capabilities and `capabilities.yml`,
 - resolve and fetch remote capabilities,
@@ -121,13 +121,13 @@ Owns:
   `appendSection`, `FileDiff` type) — used by adapters; not in core.
 
 For v1 all built-in adapters live together. They MAY be split into
-`@acf/adapter-claude` etc. only when dependency boundaries justify it.
+`@caplet/adapter-claude` etc. only when dependency boundaries justify it.
 
-Adapters import `@acf/core` for types, capability shape, and the per-target
+Adapters import `@caplet/core` for types, capability shape, and the per-target
 extension schemas defined there. Adding a target requires:
 
-1. an entry in `@acf/core/targets/registry.ts` (id + extension schema), and
-2. an adapter file in `@acf/adapters/<id>/adapter.ts`.
+1. an entry in `@caplet/core/targets/registry.ts` (id + extension schema), and
+2. an adapter file in `@caplet/adapters/<id>/adapter.ts`.
 
 The registry uses a TypeScript exhaustiveness check so a missing pair fails
 typecheck (§4.4).
@@ -144,7 +144,7 @@ Owns:
 
 Installer invariants:
 
-- imports `@acf/core` for types and schemas; never the inverse,
+- imports `@caplet/core` for types and schemas; never the inverse,
 - uses `node:child_process` for `git`; never `Bun.spawn`,
 - emits structured `Diagnostic[]`; no console output.
 
@@ -152,9 +152,9 @@ Installer invariants:
 
 Owns the direct-consumer convenience API. Re-exports:
 
-- everything from `@acf/core`,
-- adapter functions from `@acf/adapters`,
-- fetch helpers from `@acf/installer`.
+- everything from `@caplet/core`,
+- adapter functions from `@caplet/adapters`,
+- fetch helpers from `@caplet/installer`.
 
 Adds:
 
@@ -164,13 +164,13 @@ Adds:
 - diagnostic capture pattern.
 
 This is what Pi extension, OpenCode extension, and similar direct consumers
-import. Strict tools (CI linter, browser validator) import `@acf/core` only.
+import. Strict tools (CI linter, browser validator) import `@caplet/core` only.
 
 ### packages/runtime-taxonomy
 
 Reserved. The runtime taxonomy / registry intentionally lives outside the
 normative specification (`SPEC.md` §14.5, §24). The provisional operation set
-(`SPEC.md` §24) is part of `acf: 1` and lives in `@acf/core` as a frozen
+(`SPEC.md` §24) is part of `acf: 1` and lives in `@caplet/core` as a frozen
 constant, not in this package. When this package becomes real, it owns:
 
 - canonical operation identifiers (full list, semantics, target mappings),
@@ -207,7 +207,7 @@ produced inconsistent and lower-quality results.
 | Globbing | `picomatch` |
 | Semver | `semver` |
 | Logger | `consola` in `apps/caplet` only; libraries return `Diagnostic[]` |
-| Process spawn | `node:child_process` in `apps/caplet` and `@acf/installer`; never in core/adapters/sdk |
+| Process spawn | `node:child_process` in `apps/caplet` and `@caplet/installer`; never in core/adapters/sdk |
 | Git for fetch | shell out to `git` binary via `node:child_process`; no `isomorphic-git` |
 | Engines | root: `"bun": ">=1.3.0"`; library packages also `"node": ">=20"` |
 
@@ -246,7 +246,7 @@ Lint runs once at the repository root with Biome; Turbo runs the per-package
 `check-types`, `test`, and `build` tasks.
 
 Every package MUST declare a `test` script. Packages with no tests yet use a
-non-failing placeholder (`echo 'no tests for @acf/<pkg>'`) so
+non-failing placeholder (`echo 'no tests for @caplet/<pkg>'`) so
 `turbo run test --force` succeeds. The `--force` flag is the canonical audit
 form — cached evidence does not count.
 
@@ -750,11 +750,11 @@ export type EmitInput = {
   options: EmitOptions
 }
 
-// Canonical EmitOptions lives in @acf/core; identical for every target.
+// Canonical EmitOptions lives in @caplet/core; identical for every target.
 // Per-target divergence is expressed via degradation diagnostics, not new
 // options. Per-target *extension data* on facets (e.g. `targets.claude.foo`)
 // remains per-target and is validated by the per-target extension schemas
-// in @acf/core/targets/<target>.ts.
+// in @caplet/core/targets/<target>.ts.
 export type EmitOptions = {
   cleanBeforeEmit?: boolean
   dryRun?: boolean
@@ -816,7 +816,7 @@ import {
   removeMarkerSection,
   type FileDiff,
   type AcfOwnership,
-} from "@acf/adapters/common"
+} from "@caplet/adapters/common"
 
 // Example: insert an MCP server entry into Claude's settings.json
 const before = await fs.readText(`${installRoot}/settings.json`)
@@ -2546,8 +2546,8 @@ Adapters MUST:
 Recommended adapter file shape:
 
 ```ts
-import type { TargetAdapter } from "@acf/adapters"
-import { patchJson } from "@acf/adapters/common"
+import type { TargetAdapter } from "@caplet/adapters"
+import { patchJson } from "@caplet/adapters/common"
 
 export const claudeAdapter: TargetAdapter<"claude"> = {
   id: "claude",
@@ -2607,21 +2607,21 @@ recorded in `RESULTS.md`.
 
 Pi and OpenCode are emit targets in v1, but the long-term plan is
 **direct-consumer extensions**: Pi extension and OpenCode plugin would
-import `@acf/sdk`, read facets from the resolved capability tree natively,
+import `@caplet/sdk`, read facets from the resolved capability tree natively,
 and bypass the emit pipeline entirely. Until those extensions ship, the emit
 adapter pipeline serves them.
 
 See SPEC §22b for the normative direct-consumer contract. See §13a for the
 consumer-facing convenience API.
 
-## 13a. SDK convenience API (`@acf/sdk`)
+## 13a. SDK convenience API (`@caplet/sdk`)
 
 Direct consumers (Pi extension, OpenCode extension, future webapp,
-third-party tooling) import `@acf/sdk` for a high-level facet-fetching API
+third-party tooling) import `@caplet/sdk` for a high-level facet-fetching API
 that hides the resolve/applicability/fetch pipeline.
 
-Power users that need finer control still drop down to `@acf/core`,
-`@acf/adapters`, and `@acf/installer` directly. The SDK re-exports those.
+Power users that need finer control still drop down to `@caplet/core`,
+`@caplet/adapters`, and `@caplet/installer` directly. The SDK re-exports those.
 
 ### 13a.1 Helper functions
 
@@ -2657,7 +2657,7 @@ export type FacetQueryOptions = {
   cwd?: string
 
   /** Fetch policy for declared sources that are not materialized yet.
-   *  - `"auto"`  (default): fetch transparently via `@acf/installer`.
+   *  - `"auto"`  (default): fetch transparently via `@caplet/installer`.
    *  - `"never"`: return what's already on disk plus diagnostics.
    *  - `"force"`: re-fetch everything, ignore lockfile.
    */
@@ -2698,7 +2698,7 @@ const { facets, diagnostics } = await getSkills({
 })
 
 // global subscription (per-process)
-import { onDiagnostic } from "@acf/sdk"
+import { onDiagnostic } from "@caplet/sdk"
 const unsub = onDiagnostic((d) => log.warn(d.code, d.message))
 ```
 
@@ -2718,7 +2718,7 @@ later; it is intentionally not in v1.
 ### 13a.4 Example: Pi extension consuming skills
 
 ```ts
-import { getSkills } from "@acf/sdk"
+import { getSkills } from "@caplet/sdk"
 
 const skills = await getSkills({
   target: "pi",        // Pi extension hardcodes its target

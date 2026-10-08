@@ -1,4 +1,4 @@
-import { readLockfile } from "@acf/installer";
+import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope, readVerbose, validationError } from "../internal/args";
 import { runCommandSafely } from "../internal/command";

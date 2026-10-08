@@ -10,7 +10,7 @@ import {
   type Scope,
   type SkillFacet,
   type TargetDefinition,
-} from "@acf/core";
+} from "@caplet/core";
 import { type AssetPayload, readAssets } from "./assets";
 import { makeFileDiff } from "./diff";
 import { renderMarkdownFile } from "./text";

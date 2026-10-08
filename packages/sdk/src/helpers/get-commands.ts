@@ -1,4 +1,4 @@
-import type { TargetId } from "@acf/core";
+import type { TargetId } from "@caplet/core";
 import { loadApplicableCapabilities } from "./get-facets";
 import type { GetOptions } from "./options";
 import type { CommandView } from "./views";

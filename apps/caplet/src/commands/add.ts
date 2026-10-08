@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { CapabilityEntry, ScopeRoot } from "@acf/core";
-import { fetchCapability, inspectSource, type PrefetchedSource } from "@acf/installer";
+import type { CapabilityEntry, ScopeRoot } from "@caplet/core";
+import { fetchCapability, inspectSource, type PrefetchedSource } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import {
   readCwd,

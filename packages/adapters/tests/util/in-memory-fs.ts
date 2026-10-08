@@ -1,4 +1,4 @@
-import type { FileContent, ReadOnlyFs } from "@acf/core";
+import type { FileContent, ReadOnlyFs } from "@caplet/core";
 
 type InMemoryFile = FileContent | { content: FileContent; mode: number };
 

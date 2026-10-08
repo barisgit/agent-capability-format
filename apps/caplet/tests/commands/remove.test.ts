@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { scopeRoot } from "@acf/core";
+import { scopeRoot } from "@caplet/core";
 import { removeManifestEntry } from "../../src/internal/manifest";
 import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 

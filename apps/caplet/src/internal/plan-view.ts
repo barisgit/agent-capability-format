@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { ACF_SYSTEM_OWNER } from "@acf/core";
+import { ACF_SYSTEM_OWNER } from "@caplet/core";
 import { colors } from "consola/utils";
 import { columns } from "./render";
 import type { EmittedDiff, FootprintEntry, Reach } from "./workflow";

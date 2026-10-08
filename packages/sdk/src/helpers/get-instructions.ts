@@ -1,4 +1,4 @@
-import type { CanonicalTriggerName, TargetId } from "@acf/core";
+import type { CanonicalTriggerName, TargetId } from "@caplet/core";
 import { loadApplicableCapabilities } from "./get-facets";
 import type { GetOptions } from "./options";
 import type { InstructionView } from "./views";

@@ -214,16 +214,16 @@ The reference implementation ships as one app plus five libraries:
 | `packages/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
 | `packages/runtime-taxonomy` | Stub for the future sibling registry spec. |
 
-CI linters and browser validators import `@acf/core` only. Caplet and
-direct consumers import `@acf/sdk` for the ergonomic API.
+CI linters and browser validators import `@caplet/core` only. Caplet and
+direct consumers import `@caplet/sdk` for the ergonomic API.
 
 ## SDK in 20 lines
 
 Direct ACF consumers (e.g. a future Pi extension) skip emit entirely and
-read the canonical capability tree at runtime via `@acf/sdk`:
+read the canonical capability tree at runtime via `@caplet/sdk`:
 
 ```ts
-import { getSkills, getInstructions, getMcpServers } from '@acf/sdk';
+import { getSkills, getInstructions, getMcpServers } from '@caplet/sdk';
 
 const skills = await getSkills({
   target: 'pi',          // required

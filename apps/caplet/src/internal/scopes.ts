@@ -1,7 +1,7 @@
 import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { type Scope, type ScopeRoot, scopeRoot } from "@acf/core";
+import { type Scope, type ScopeRoot, scopeRoot } from "@caplet/core";
 import type { ScopeSelection } from "./args";
 
 export async function resolveScopeRoots(

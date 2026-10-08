@@ -1,4 +1,4 @@
-import type { CanonicalHookType, TargetId } from "@acf/core";
+import type { CanonicalHookType, TargetId } from "@caplet/core";
 import { loadApplicableCapabilities } from "./get-facets";
 import type { GetOptions } from "./options";
 import type { HookView } from "./views";

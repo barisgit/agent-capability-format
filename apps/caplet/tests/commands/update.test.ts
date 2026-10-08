@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { readLockfile } from "@acf/installer";
+import { readLockfile } from "@caplet/installer";
 import { cleanup, fetchProject, makeScope, readText, runCaplet, writeText } from "../helpers";
 
 test("caplet update refreshes lockfile", async () => {

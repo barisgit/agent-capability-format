@@ -1,7 +1,7 @@
-export * from "@acf/adapters";
-export * from "@acf/core";
-export type { CapabilitiesLock, LockEntry } from "@acf/installer";
-export * from "@acf/installer";
+export * from "@caplet/adapters";
+export * from "@caplet/core";
+export type { CapabilitiesLock, LockEntry } from "@caplet/installer";
+export * from "@caplet/installer";
 export type { DiagnosticHandler, Unsubscribe } from "./helpers/diagnostics";
 export { AcfError, onDiagnostic } from "./helpers/diagnostics";
 export { getAgents } from "./helpers/get-agents";

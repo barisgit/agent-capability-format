@@ -1,6 +1,6 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
-import type { Diagnostic, ScopeRoot } from "@acf/core";
+import type { Diagnostic, ScopeRoot } from "@caplet/core";
 
 export type PruneResult = { removed: string[]; diagnostics: Diagnostic[] };
 

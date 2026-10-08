@@ -1,5 +1,5 @@
 {
-  "name": "@acf/runtime-taxonomy",
+  "name": "@caplet/runtime-taxonomy",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "echo 'no build for @acf/runtime-taxonomy'",
+    "build": "echo 'no build for @caplet/runtime-taxonomy'",
     "check-types": "tsgo --noEmit -p tsconfig.json",
-    "lint": "echo 'no lint for @acf/runtime-taxonomy'",
+    "lint": "echo 'no lint for @caplet/runtime-taxonomy'",
     "test": "bun test"
   },
   "devDependencies": {

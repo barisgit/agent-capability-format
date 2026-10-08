@@ -3,7 +3,7 @@ import {
   type CanonicalHookType,
   type CanonicalTriggerName,
   isProvisionalOperation,
-} from "@acf/runtime-taxonomy";
+} from "@caplet/runtime-taxonomy";
 import { applicableTargets } from "../applicability";
 import { makeDiagnostic } from "../diagnostics";
 import { isTargetId, targetMap } from "../targets";

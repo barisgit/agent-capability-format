@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { type RootInventoryArtifact, renderArtifactNotice, renderRootInventory } from "@acf/core";
+import {
+  type RootInventoryArtifact,
+  renderArtifactNotice,
+  renderRootInventory,
+} from "@caplet/core";
 
 const artifacts: RootInventoryArtifact[] = [
   {

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@acf/core";
+import { ACF_SYSTEM_OWNER, readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { applyDiffs } from "../apply/apply-diffs";
 import { readSidecar, removeOwnedRegions, writeSidecar } from "../apply/sidecar";

@@ -1,5 +1,5 @@
-import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
-import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@acf/installer";
+import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
+import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope } from "../internal/args";
 import { runCommandSafely } from "../internal/command";

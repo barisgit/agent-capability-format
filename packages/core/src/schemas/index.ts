@@ -1,5 +1,5 @@
-import type { CanonicalTriggerName } from "@acf/runtime-taxonomy";
-import { canonicalTriggerNames } from "@acf/runtime-taxonomy";
+import type { CanonicalTriggerName } from "@caplet/runtime-taxonomy";
+import { canonicalTriggerNames } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
 
 export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);

@@ -1,12 +1,12 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ScopeRoot } from "@acf/core";
+import type { ScopeRoot } from "@caplet/core";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
   type SourceSpec,
   stringifyYml,
-} from "@acf/core";
+} from "@caplet/core";
 import {
   canonicalizePathLocation,
   entrySourceId,
@@ -16,7 +16,7 @@ import {
   sourceId,
   sourceString,
   writeLockfile,
-} from "@acf/installer";
+} from "@caplet/installer";
 import { validationError } from "./args";
 
 export type ParsedAddSource = {

@@ -1,4 +1,4 @@
-import { type Diagnostic, resolveScopeCapabilities } from "@acf/core";
+import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope, readVerbose } from "../internal/args";

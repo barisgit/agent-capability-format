@@ -6,8 +6,8 @@ import {
   resolveScopeCapabilities,
   type Scope,
   type TargetId,
-} from "@acf/core";
-import { resolveCapabilities } from "@acf/installer";
+} from "@caplet/core";
+import { resolveCapabilities } from "@caplet/installer";
 import { emitDiagnostics, throwOnErrorDiagnostics } from "./diagnostics";
 import {
   type GetOptions,

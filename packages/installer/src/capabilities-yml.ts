@@ -8,7 +8,7 @@ import {
   type FacetFamily,
   parseYaml,
   pushZodIssues,
-} from "@acf/core";
+} from "@caplet/core";
 import { entrySourceId } from "./lockfile";
 
 export async function readCapabilitiesYml(

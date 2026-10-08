@@ -1,4 +1,4 @@
-import { stringifyYml } from "@acf/core";
+import { stringifyYml } from "@caplet/core";
 
 export function renderMarkdownFile(frontmatter: Record<string, unknown>, body: string): string {
   return `---\n${stringifyYml(frontmatter).trimEnd()}\n---\n${body.trimStart()}`;

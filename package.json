@@ -15,7 +15,7 @@
     "format": "biome format --write .",
     "ci": "bun run lint && turbo run check-types test build --force",
     "caplet": "bun run --silent --cwd apps/caplet caplet",
-    "caplet:link": "bun run --filter caplet link"
+    "caplet:link": "bun run --filter @caplet/cli link"
   },
   "engines": {
     "bun": ">=1.3.0"

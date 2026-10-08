@@ -1,5 +1,5 @@
 {
-  "name": "@acf/core",
+  "name": "@caplet/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,13 +18,13 @@
     "./assets": "./src/assets/index.ts"
   },
   "scripts": {
-    "build": "echo 'no build for @acf/core'",
+    "build": "echo 'no build for @caplet/core'",
     "check-types": "tsgo --noEmit -p tsconfig.json",
-    "lint": "echo 'no lint for @acf/core'",
+    "lint": "echo 'no lint for @caplet/core'",
     "test": "bun test"
   },
   "dependencies": {
-    "@acf/runtime-taxonomy": "workspace:*",
+    "@caplet/runtime-taxonomy": "workspace:*",
     "gray-matter": "4.0.3",
     "picomatch": "4.0.2",
     "semver": "7.6.3",

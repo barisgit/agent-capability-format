@@ -398,18 +398,18 @@ its config (`caplet.yml`) is defined in `IMPLEMENTATION.md`, not `SPEC.md`.
 
 ### SDK
 
-The `@acf/sdk` npm package. Re-exports `@acf/core`, `@acf/adapters`, and
-`@acf/installer` plus a small set of convenience helpers (`getSkills`,
+The `@caplet/sdk` npm package. Re-exports `@caplet/core`, `@caplet/adapters`, and
+`@caplet/installer` plus a small set of convenience helpers (`getSkills`,
 `getInstructions`, `getMcpServers`, `getFacets`, etc.) for direct ACF
 consumers. Direct consumers (e.g. a future Pi extension) import the SDK
 instead of subprocessing `caplet`; CI linters and browser validators
-import `@acf/core` only.
+import `@caplet/core` only.
 
 ### Installer
 
-The `@acf/installer` npm package. Handles git + network fetch of remote
+The `@caplet/installer` npm package. Handles git + network fetch of remote
 capability sources, resolves `capabilities.yml`, and writes the
-lockfile. Separated from `@acf/core` so that core stays pure (no
+lockfile. Separated from `@caplet/core` so that core stays pure (no
 network, no git, no `Bun.*`, no logger) and browser-safe modulo a
 filesystem port. Caplet and the SDK both depend on the installer.
 

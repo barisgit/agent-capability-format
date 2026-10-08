@@ -1,4 +1,4 @@
-import type { Diagnostic } from "@acf/core";
+import type { Diagnostic } from "@caplet/core";
 
 export type DiagnosticHandler = (d: Diagnostic) => void;
 export type Unsubscribe = () => void;

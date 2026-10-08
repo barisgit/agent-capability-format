@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { AcfCapability, AssetRef, FacetFamily, ReadOnlyFs } from "@acf/core";
+import type { AcfCapability, AssetRef, FacetFamily, ReadOnlyFs } from "@caplet/core";
 
 export type AssetPayload = {
   relativePath: string;

@@ -6,7 +6,7 @@ import {
   computeContentHash,
   type Diagnostic,
   type ScopeRoot,
-} from "@acf/core";
+} from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml";
 import { detectLockDrift } from "./drift";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch";

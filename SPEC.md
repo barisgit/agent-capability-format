@@ -2298,7 +2298,7 @@ deferred. The rules below define the semantics that apply once they
 ship; they are informative for `acf: 1`.
 
 - A direct consumer reads `~/.agents/capabilities/` and the nearest
-  project's `./.agents/capabilities/` via `@acf/sdk`. It MUST apply the
+  project's `./.agents/capabilities/` via `@caplet/sdk`. It MUST apply the
   same applicability cascade (§6.4) as adapters, with its own target id
   passed explicitly.
 - A direct consumer MUST handle each facet family natively at runtime

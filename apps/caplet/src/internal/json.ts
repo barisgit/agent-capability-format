@@ -1,4 +1,4 @@
-import type { Diagnostic } from "@acf/core";
+import type { Diagnostic } from "@caplet/core";
 import packageJson from "../../package.json" with { type: "json" };
 
 /** The caplet release version; package.json is the single source of truth. */

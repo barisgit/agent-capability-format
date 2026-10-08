@@ -1,5 +1,5 @@
 {
-  "name": "@acf/installer",
+  "name": "@caplet/installer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,13 +7,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "echo 'no build for @acf/installer'",
+    "build": "echo 'no build for @caplet/installer'",
     "check-types": "tsgo --noEmit -p tsconfig.json",
-    "lint": "echo 'no lint for @acf/installer'",
+    "lint": "echo 'no lint for @caplet/installer'",
     "test": "bun test"
   },
   "dependencies": {
-    "@acf/core": "workspace:*",
+    "@caplet/core": "workspace:*",
     "yaml": "2.8.1"
   },
   "devDependencies": {

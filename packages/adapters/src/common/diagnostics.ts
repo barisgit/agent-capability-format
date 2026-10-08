@@ -1,4 +1,4 @@
-import type { Diagnostic, FacetFamily, TargetId } from "@acf/core";
+import type { Diagnostic, FacetFamily, TargetId } from "@caplet/core";
 
 export type AdapterLossyCode =
   | "acf.adapter.facet-unsupported"

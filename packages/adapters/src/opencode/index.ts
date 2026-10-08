@@ -5,7 +5,7 @@ import {
   registerAdapter,
   type TargetAdapter,
   targetMap,
-} from "@acf/core";
+} from "@caplet/core";
 import { emitStandardAdapter, layoutFor } from "../common/emitter";
 import { emitSkills } from "../common/skills";
 

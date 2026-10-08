@@ -10,7 +10,7 @@ import {
   type ScopeRoot,
   scopeRoot,
   type TargetId,
-} from "@acf/core";
+} from "@caplet/core";
 
 export type GetOptions = {
   scope?: "user" | "project" | "all";

@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { extractMarkedBlock } from "@acf/adapters/common";
+import { extractMarkedBlock } from "@caplet/adapters/common";
 import type {
   AcfManagedSidecar,
   AcfOwnership,
   Diagnostic,
   FacetFamily,
   FileContent,
-} from "@acf/core";
+} from "@caplet/core";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer";
 
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
