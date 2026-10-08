@@ -104,6 +104,7 @@ const knownKeysByPath: Record<string, string[]> = {
     "source",
     "ref",
     "path",
+    "format",
     "capabilities",
     "include",
     "exclude",

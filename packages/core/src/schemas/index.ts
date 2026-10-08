@@ -1,6 +1,7 @@
 import type { CanonicalTriggerName } from "@caplet/runtime-taxonomy";
 import { canonicalTriggerNames } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
+import { sourceFormats } from "../types/interop.js";
 
 export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 export const targetIdSchema = slugSchema;
@@ -280,6 +281,7 @@ export const capabilitiesYmlSchema = z.strictObject({
         source: sourceSpecSchema,
         ref: z.string().optional(),
         path: z.string().optional(),
+        format: z.enum(sourceFormats).optional(),
         capabilities: capabilitySelectorSchema.optional(),
         include: selectorSchema.optional(),
         exclude: selectorSchema.optional(),

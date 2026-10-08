@@ -1,18 +1,27 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
+  type CapabilityEntry,
   type Diagnostic,
+  isForeignFormat,
+  marketplaceDiagnostic,
   parseMarkdown,
+  readForeignPackage,
   readRepositoryCapabilities,
+  type SourceFormat,
+  selectSourceFormat,
   skillFrontmatterSchema,
 } from "@caplet/core";
 
 export type SourceCapabilityCandidate = {
+  /** Capability name; for Agent Plugins and Claude plugin packages, after `rename`. */
   name: string;
   selector: string;
   root: string;
   sourcePath: string;
   synthesized: boolean;
+  format: SourceFormat;
+  formatVersion?: string | undefined;
 };
 
 export type SourceInventory = {
@@ -21,13 +30,59 @@ export type SourceInventory = {
   synthesized: boolean;
 };
 
-export async function inspectSource(sourceRoot: string): Promise<SourceInventory> {
+/** The `capabilities.yml` entry fields and source revision that shape inspection. */
+export type InspectSourceOptions = {
+  format?: SourceFormat | undefined;
+  rename?: CapabilityEntry["rename"];
+  /** Resolved commit for unversioned foreign packages; null or absent for local sources. */
+  revision?: string | null | undefined;
+};
+
+/**
+ * Lists the capabilities the source at `sourceRoot` provides. The source format is
+ * detected (or taken from `options.format`); an ACF source yields its capabilities, an
+ * Agent Plugins or Claude plugin package exactly one, and bare skills one synthesized
+ * capability per skill. A source that is only a plugin marketplace fails with
+ * `acf.source.marketplace-unsupported`.
+ */
+export async function inspectSource(
+  sourceRoot: string,
+  options: InspectSourceOptions = {},
+): Promise<SourceInventory> {
   const root = path.resolve(sourceRoot);
-  if (
-    (await isRegularFile(path.join(root, "acf.yml"))) ||
-    (await isRegularFile(path.join(root, "acf.yaml"))) ||
-    (await isDirectory(path.join(root, "acf")))
-  ) {
+  const selection = await selectSourceFormat(root, options.format);
+  if (selection.format === undefined)
+    return { candidates: [], diagnostics: selection.diagnostics, synthesized: false };
+  if (isForeignFormat(selection.format)) {
+    const { capability, diagnostics } = await readForeignPackage(selection.format, root, {
+      // Inspection keeps only the identity and diagnostics; the resolver reads the snapshot
+      // again with its real scope and origin.
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      rename: options.rename,
+      revision: options.revision ?? null,
+    });
+    const candidates: SourceCapabilityCandidate[] =
+      capability === undefined
+        ? []
+        : [
+            {
+              name: capability.manifest.name,
+              selector: capability.manifest.name,
+              root,
+              sourcePath: ".",
+              synthesized: false,
+              format: selection.format,
+              formatVersion: capability.source?.formatVersion,
+            },
+          ];
+    return {
+      candidates,
+      diagnostics: [...selection.diagnostics, ...diagnostics],
+      synthesized: false,
+    };
+  }
+  if (selection.format === "acf") {
     const repository = await readRepositoryCapabilities(root);
     const collectionRoot = path.join(root, "acf");
     return {
@@ -41,9 +96,10 @@ export async function inspectSource(sourceRoot: string): Promise<SourceInventory
           root: capability.root,
           sourcePath: path.relative(root, capability.root).replaceAll(path.sep, "/") || ".",
           synthesized: false,
+          format: "acf" as const,
         };
       }),
-      diagnostics: repository.diagnostics,
+      diagnostics: [...selection.diagnostics, ...repository.diagnostics],
       synthesized: false,
     };
   }
@@ -86,6 +142,7 @@ export async function inspectSource(sourceRoot: string): Promise<SourceInventory
       root: skillRoot,
       sourcePath: path.relative(root, skillRoot).replaceAll(path.sep, "/") || ".",
       synthesized: true,
+      format: "skills",
     });
   }
 
@@ -105,6 +162,9 @@ export async function inspectSource(sourceRoot: string): Promise<SourceInventory
     }
   }
   if (skillRoots.length === 0) {
+    const marketplace = await marketplaceDiagnostic(root);
+    if (marketplace !== undefined)
+      return { candidates: [], diagnostics: [marketplace], synthesized: false };
     diagnostics.push({
       severity: "error",
       code: "acf.resolve.no-capabilities",
