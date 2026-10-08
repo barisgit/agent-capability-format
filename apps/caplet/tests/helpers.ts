@@ -73,6 +73,17 @@ export async function applyProject(scope: TestScope): Promise<RunResult> {
   ]);
 }
 
+/**
+ * Opts Claude into the shared `.agents/skills` root, which a Claude-only selection does not
+ * write by default, for tests about shared-root bookkeeping.
+ */
+export async function forceCanonicalSkills(scope: TestScope): Promise<void> {
+  await writeText(
+    path.join(scope.agentsDir, "caplet.yml"),
+    "targets:\n  claude:\n    skills:\n      canonical: true\n",
+  );
+}
+
 export async function readText(filePath: string): Promise<string> {
   return await readFile(filePath, "utf8");
 }

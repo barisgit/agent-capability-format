@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://mcp.example.com/docs",
+      "headers": {
+        "X-Client": "caplet"
+      }
+    },
+    "tools": {
+      "command": "/caps/demo/bin/server",
+      "args": [
+        "--cache",
+        "/project/.pi/.acf/data/demo/cache"
+      ],
+      "env": {
+        "LOG": "info"
+      }
+    }
+  }
+}

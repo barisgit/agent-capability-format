@@ -1,0 +1,22 @@
+{
+  "mcp": {
+    "docs": {
+      "type": "remote",
+      "url": "https://mcp.example.com/docs",
+      "headers": {
+        "X-Client": "caplet"
+      }
+    },
+    "tools": {
+      "type": "local",
+      "command": [
+        "/caps/demo/bin/server",
+        "--cache",
+        "/project/.opencode/.acf/data/demo/cache"
+      ],
+      "environment": {
+        "LOG": "info"
+      }
+    }
+  }
+}

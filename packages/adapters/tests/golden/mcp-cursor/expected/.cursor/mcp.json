@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://mcp.example.com/docs",
+      "headers": {
+        "X-Client": "caplet"
+      }
+    },
+    "tools": {
+      "type": "stdio",
+      "command": "/caps/demo/bin/server",
+      "args": [
+        "--cache",
+        "/project/.cursor/.acf/data/demo/cache"
+      ],
+      "env": {
+        "LOG": "info"
+      }
+    }
+  }
+}

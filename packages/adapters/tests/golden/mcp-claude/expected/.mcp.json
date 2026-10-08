@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "docs": {
+      "type": "http",
+      "url": "https://mcp.example.com/docs",
+      "headers": {
+        "X-Client": "caplet"
+      }
+    },
+    "events": {
+      "type": "sse",
+      "url": "https://mcp.example.com/events"
+    },
+    "tools": {
+      "command": "/caps/demo/bin/server",
+      "args": [
+        "--cache",
+        "/project/.claude/.acf/data/demo/cache"
+      ],
+      "env": {
+        "LOG": "info"
+      }
+    }
+  }
+}

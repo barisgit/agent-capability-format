@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+import {
+  applyProject,
+  cleanup,
+  forceCanonicalSkills,
+  makeScope,
+  readText,
+  runCaplet,
+  writeText,
+} from "../helpers";
 
 async function narrowToAlpha(scope: Awaited<ReturnType<typeof makeScope>>): Promise<void> {
   await writeFile(
@@ -14,6 +22,7 @@ async function narrowToAlpha(scope: Awaited<ReturnType<typeof makeScope>>): Prom
 test("apply plans deletes for capabilities dropped from the manifest", async () => {
   const scope = await makeScope();
   try {
+    await forceCanonicalSkills(scope);
     await writeText(
       path.join(scope.sourceRoot, "beta", "skills", "beta-skill", "SKILL.md"),
       "---\nname: beta-skill\ndescription: Beta skill\n---\nBeta skill body.\n",
@@ -117,6 +126,7 @@ test("apply --dry-run previews deletes for changed selectors without touching th
 test("byte-identical ownership transfer updates the sidecar owner", async () => {
   const scope = await makeScope();
   try {
+    await forceCanonicalSkills(scope);
     const skillBody = "---\nname: shared-skill\ndescription: Shared skill\n---\nShared body.\n";
     await writeText(
       path.join(scope.sourceRoot, "alpha", "skills", "shared-skill", "SKILL.md"),
@@ -287,6 +297,7 @@ test("dry-run does not mutate the sidecar when a facet's source is deleted", asy
 test("synthesized skill deletion removes owned files but preserves unmanaged files", async () => {
   const scope = await makeScope();
   try {
+    await forceCanonicalSkills(scope);
     const bare = path.join(scope.sourceRoot, "bare-skills");
     const docsBytes = "---\nname: docs\n---\ndocs\n";
     await writeText(path.join(bare, "skills", "docs", "SKILL.md"), docsBytes);

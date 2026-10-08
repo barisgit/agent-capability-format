@@ -75,7 +75,6 @@ test("caplet add installs a Claude plugin into the loose targets", async () => {
     }
     const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
     expect(claudeMcp.mcpServers.files).toEqual({
-      transport: "stdio",
       command: path.join(snapshot, "bin", "files"),
       args: ["--stdio"],
     });

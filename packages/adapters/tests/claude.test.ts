@@ -14,19 +14,14 @@ import { makeInMemoryFs } from "./util/in-memory-fs";
 
 test("claude emits all native artifacts with marker and JSON pointer ownership", async () => {
   const result = await emitFixture(claudeAdapter, ".claude");
-  expect(byPath(result.diffs, ".agents/skills/research/SKILL.md").after).toContain(
-    "Research skill",
-  );
+  expect(result.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
   expect(byPath(result.diffs, ".claude/skills/research/SKILL.md").after).toContain(
     "Research skill",
   );
-  const canonicalNotice = byPath(result.diffs, ".agents/skills/research/ACF-MANAGED.md");
-  expect(canonicalNotice.after).toContain("Owning capability: `test-cap`");
-  expect(canonicalNotice.managementNotice).toBe("artifact");
-  expect(canonicalNotice.artifactRoot).toEndWith(".agents/skills/research");
-  expect(byPath(result.diffs, ".claude/skills/research/ACF-MANAGED.md").after).toBe(
-    canonicalNotice.after,
-  );
+  const notice = byPath(result.diffs, ".claude/skills/research/ACF-MANAGED.md");
+  expect(notice.after).toContain("Owning capability: `test-cap`");
+  expect(notice.managementNotice).toBe("artifact");
+  expect(notice.artifactRoot).toEndWith(".claude/skills/research");
   expect(byPath(result.diffs, ".claude/agents/reviewer.md").after).toContain("Review code");
   expect(byPath(result.diffs, ".claude/commands/fix.md").after).toContain("Fix an issue");
   const instructions = byPath(result.diffs, ".claude/CLAUDE.md");
@@ -64,7 +59,7 @@ test("claude preserves unrelated shared JSON text and uses absolute user skill r
     result.diffs.some(
       (diff) => diff.path === path.join(homedir(), ".agents", "skills", "research", "SKILL.md"),
     ),
-  ).toBe(true);
+  ).toBe(false);
   expect(
     result.diffs.some(
       (diff) => diff.path === path.join(homedir(), ".claude", "skills", "research", "SKILL.md"),
@@ -72,11 +67,11 @@ test("claude preserves unrelated shared JSON text and uses absolute user skill r
   ).toBe(true);
 });
 
-test("claude emits referenced skill assets to canonical and native skills roots", async () => {
+test("claude emits referenced skill assets to both roots when canonical is forced", async () => {
   const cap = await readFixtureCapability();
   const assetPath = path.join(cap.root, "skills", "research", "references", "guide.md");
   const result = await claudeAdapter.emit(
-    emitInput(cap, ".claude"),
+    emitInput(cap, ".claude", { skills: { canonical: true } }),
     makeInMemoryFs({ [assetPath]: "# Research Guide\n\nUse cited notes.\n" }),
   );
   expect(textAfter(byPath(result.diffs, ".agents/skills/research/references/guide.md"))).toContain(
@@ -101,7 +96,7 @@ test("claude skill emission can suppress canonical or native destinations", asyn
   ).toBe(true);
 
   const nativeOff = await claudeAdapter.emit(
-    emitInput(cap, ".claude", { skills: { native: false } }),
+    emitInput(cap, ".claude", { skills: { canonical: true, native: false } }),
     makeInMemoryFs(),
   );
   expect(
@@ -206,9 +201,6 @@ test("claude transports skill assets outside the skill directory with root-relat
     makeInMemoryFs({ [sharedAsset]: "shared asset\n" }),
   );
 
-  expect(textAfter(byPath(result.diffs, ".agents/skills/research/shared/outside.md"))).toBe(
-    "shared asset\n",
-  );
   expect(textAfter(byPath(result.diffs, ".claude/skills/research/shared/outside.md"))).toBe(
     "shared asset\n",
   );
@@ -235,7 +227,7 @@ test("claude preserves binary asset bytes and executable mode", async () => {
     makeInMemoryFs({ [binaryAsset]: { content: bytes, mode: 0o755 } }),
   );
 
-  const diff = byPath(result.diffs, ".agents/skills/research/image.png");
+  const diff = byPath(result.diffs, ".claude/skills/research/image.png");
   expect(diff.after).toEqual(bytes);
   expect(diff.afterMode).toBe(0o755);
   expect(codes(result)).not.toContain("acf.assets.unsupported");

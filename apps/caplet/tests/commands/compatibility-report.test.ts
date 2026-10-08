@@ -4,14 +4,13 @@ import type { ComponentOutcome } from "@caplet/core";
 import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
 import { renderCompatibility } from "../../src/internal/compatibility.js";
 import { stripAnsi } from "../../src/internal/render.js";
-import { cleanup, makeScope, runCaplet, type TestScope } from "../helpers.js";
+import { cleanup, makeScope, runCaplet, type TestScope, writeText } from "../helpers.js";
 
 const testsDir = path.resolve(import.meta.dir, "..");
 
 /**
- * Outcomes no current writer produces end to end (translated, blocked, changed behavior,
- * descriptive drops). Group-4 writers add apply goldens for them; until then the renderer is
- * pinned with constructed data.
+ * One of every outcome kind, so the renderer is pinned independently of which outcomes the
+ * writers happen to produce for the fixture capabilities.
  */
 const constructed: ComponentOutcome[] = [
   {
@@ -125,7 +124,11 @@ describe("caplet apply --dry-run compatibility report", () => {
     await cleanup(scope);
   });
 
-  async function dryRun(target: string): Promise<{ stdout: string; outcomes: string }> {
+  /** Runs `apply --dry-run` for `target`; refused components make the plan exit 2. */
+  async function dryRun(
+    target: string,
+    exitCode = 0,
+  ): Promise<{ stdout: string; outcomes: string }> {
     const args = [
       "apply",
       "--dry-run",
@@ -137,9 +140,9 @@ describe("caplet apply --dry-run compatibility report", () => {
       target,
     ];
     const human = await runCaplet(scope, args);
-    expect(human.exitCode).toBe(0);
+    expect(human.exitCode).toBe(exitCode);
     const json = await runCaplet(scope, [...args, "--json"]);
-    expect(json.exitCode).toBe(0);
+    expect(json.exitCode).toBe(exitCode);
     const parsed = JSON.parse(json.stdout) as { outcomes: unknown };
     return {
       stdout: human.stdout.replaceAll(scope.dir, "<tmp>"),
@@ -153,6 +156,30 @@ describe("caplet apply --dry-run compatibility report", () => {
     await assertGoldenTree(
       treeFromFiles({ "stdout.txt": result.stdout, "outcomes.json": result.outcomes }),
       goldenCase(testsDir, "apply-native-claude").expected,
+    );
+  });
+
+  test("translated, blocked and dropped components on Codex", async () => {
+    const capabilityDir = ["$", "{ACF_CAPABILITY_DIR}"].join("");
+    const alpha = path.join(scope.sourceRoot, "alpha");
+    await writeText(
+      path.join(alpha, "skills", "background", "SKILL.md"),
+      "---\nname: background\ndescription: House conventions\ninvocation:\n  user: false\n---\nConventions.\n",
+    );
+    await writeText(
+      path.join(alpha, "skills", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review a change\ntargets:\n  claude:\n    native:\n      when_to_use: before merging\n---\nReview.\n",
+    );
+    await writeText(
+      path.join(alpha, "mcp", "mcp.yml"),
+      `servers:\n  - name: alpha-server\n    transport: stdio\n    command: "${capabilityDir}/bin/server"\n  - name: events\n    transport: sse\n    url: https://mcp.example.com/events\n`,
+    );
+    const result = await dryRun("codex", 2);
+    for (const outcome of ["translated", "blocked", "dropped"])
+      expect(result.stdout).toContain(` - ${outcome}: `);
+    await assertGoldenTree(
+      treeFromFiles({ "stdout.txt": result.stdout, "outcomes.json": result.outcomes }),
+      goldenCase(testsDir, "apply-translated-blocked-codex").expected,
     );
   });
 

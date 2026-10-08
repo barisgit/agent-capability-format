@@ -12,4 +12,4 @@ servers:
     transport: http
     url: https://mcp.example.com/docs
     headers:
-      Authorization: "Bearer ${ACF_CAPABILITY_DIR}"
+      X-Client: caplet

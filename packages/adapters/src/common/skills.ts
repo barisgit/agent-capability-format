@@ -2,7 +2,10 @@ import { homedir } from "node:os";
 import path from "node:path";
 import {
   type AcfCapability,
+  applicableTargets,
+  componentOmitted,
   type Diagnostic,
+  type EmitInput,
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
   type ReadOnlyFs,
@@ -10,105 +13,247 @@ import {
   type Scope,
   type SkillFacet,
   type TargetDefinition,
+  type TargetId,
 } from "@caplet/core";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
+import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
+import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
 
-export type SkillEmitOptions = { native?: boolean | undefined; canonical?: boolean | undefined };
+/** One skill directory to write: its root and the rendering (or verbatim primary bytes). */
+type SkillCopy = { root: string; rendering: NativeSkill | "verbatim" };
 
+/**
+ * Emits the capability's skills for one target. A target that discovers the shared
+ * `.agents/skills` root writes its skills there when one rendering satisfies every selected
+ * reader of that root (`options.canonicalSkillReaders`); otherwise, and for targets that do not
+ * discover it, skills go to the target's native skill root. `options.skills` overrides both
+ * defaults. Refused skills are not written anywhere for the target.
+ */
 export async function emitSkills(
-  cap: AcfCapability,
-  scope: Scope,
+  input: EmitInput,
   fs: ReadOnlyFs,
   target: TargetDefinition,
-  opts: SkillEmitOptions = {},
-  diagnostics: Diagnostic[] = [],
+  report: EmitReport,
 ): Promise<FileDiff[]> {
-  const destinations = skillDestinations(scope, target, opts);
-  if (destinations.length === 0) return [];
+  const cap = input.capability;
   const diffs: FileDiff[] = [];
   const emittedPaths = new Set<string>();
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
+    const copies = cap.synthesized
+      ? verbatimCopies(input, target)
+      : renderedCopies(input, target, skill, report);
+    if (copies.length === 0) continue;
     const assets = await readSkillAssets(cap, skill, fs);
-    for (const root of destinations) {
-      const skillRoot = path.join(root, skill.name);
-      const skillPath = path.join(skillRoot, "SKILL.md");
-      const facet = { family: "skill" as const, name: skill.name };
-      if (cap.synthesized) {
-        await pushSkillPrimaryBytes(diffs, emittedPaths, fs, skillPath, skill, {
-          artifactRoot: skillRoot,
-          facet,
-        });
-      } else {
-        await pushTextDiff(
-          diffs,
-          emittedPaths,
-          fs,
-          skillPath,
-          renderMarkdownFile(skill.frontmatter, skill.body),
-          { artifactRoot: skillRoot, facet },
-        );
-      }
-
-      await pushTextDiff(
-        diffs,
-        emittedPaths,
-        fs,
-        path.join(skillRoot, MANAGEMENT_NOTICE_FILENAME),
-        renderArtifactNotice(cap.manifest.name),
-        { artifactRoot: skillRoot, facet, managementNotice: "artifact" },
-      );
-
-      for (const asset of assets) {
-        if (asset.relativePath === MANAGEMENT_NOTICE_FILENAME) {
-          diagnostics.push({
-            severity: "error",
-            code: "acf.emit.managed-notice-reserved-path",
-            message: `${MANAGEMENT_NOTICE_FILENAME} is reserved for ACF management notices`,
-            path: path.join(skillRoot, asset.relativePath),
-            family: "skill",
-            capability: { name: cap.manifest.name },
-            data: { facet: skill.name, sourcePath: asset.sourcePath },
-          });
-          continue;
-        }
-        await pushAssetDiff(
-          diffs,
-          emittedPaths,
-          fs,
-          path.join(skillRoot, asset.relativePath),
-          asset,
-          { artifactRoot: skillRoot, facet },
-        );
-      }
-
-      async function pushAssetDiff(
-        diffs: FileDiff[],
-        emittedPaths: Set<string>,
-        fs: ReadOnlyFs,
-        outPath: string,
-        asset: AssetPayload,
-        metadata: Pick<FileDiff, "artifactRoot" | "facet">,
-      ): Promise<void> {
-        if (emittedPaths.has(outPath)) return;
-        emittedPaths.add(outPath);
-        const [before, beforeMode] = await Promise.all([
-          fs.readBytes(outPath),
-          fs.readMode(outPath),
-        ]);
-        const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
-          before: beforeMode,
-          after: asset.mode,
-        });
-        Object.assign(diff, metadata);
-        diffs.push(diff);
-      }
+    for (const copy of copies) {
+      await pushSkillCopy(diffs, emittedPaths, fs, cap, skill, copy, assets, report.diagnostics);
     }
   }
 
   return diffs.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function renderedCopies(
+  input: EmitInput,
+  target: TargetDefinition,
+  skill: SkillFacet,
+  report: EmitReport,
+): SkillCopy[] {
+  const own = renderNativeSkill(input.capability, skill, target.id);
+  report.diagnostics.push(...own.diagnostics);
+  report.outcomes.push(...own.outcomes);
+  if (own.refused) return [];
+
+  const discovers = target.discoversCanonicalSkills === true;
+  const writeShared = input.options.skills?.canonical ?? discovers;
+  const readers = sharedRootReaders(input, target);
+  const shared = writeShared
+    ? readers.length === 0
+      ? own
+      : sharedRendering(input.capability, skill, readers)
+    : null;
+  // A discovering target relies on the shared copy; when none can be written it falls back to
+  // its native root, which other readers of the shared root do not discover.
+  const fallback = discovers && writeShared && shared === null;
+  const writeNative = input.options.skills?.native ?? (!discovers || fallback);
+
+  const copies: SkillCopy[] = [];
+  if (shared !== null) copies.push({ root: skillsRootForScope(input.scope), rendering: shared });
+  const nativeRoot = target.skillInstallPaths?.[input.scope] ?? null;
+  if (writeNative && nativeRoot !== null) copies.push({ root: nativeRoot, rendering: own });
+  else if (fallback) {
+    report.diagnostics.push(
+      componentOmitted(
+        {
+          capability: input.capability.manifest.name,
+          target: target.id,
+          family: "skill",
+          component: skill.name,
+        },
+        `the shared .agents/skills copy cannot serve every selected target and ${target.id} has no native skill root`,
+      ),
+    );
+  }
+  return copies;
+}
+
+function verbatimCopies(input: EmitInput, target: TargetDefinition): SkillCopy[] {
+  const discovers = target.discoversCanonicalSkills === true;
+  const copies: SkillCopy[] = [];
+  if (input.options.skills?.canonical ?? discovers) {
+    copies.push({ root: skillsRootForScope(input.scope), rendering: "verbatim" });
+  }
+  const nativeRoot = target.skillInstallPaths?.[input.scope] ?? null;
+  if ((input.options.skills?.native ?? !discovers) && nativeRoot !== null) {
+    copies.push({ root: nativeRoot, rendering: "verbatim" });
+  }
+  return copies;
+}
+
+/** Selected readers of the shared root, sorted so every writer renders the same copy. */
+function sharedRootReaders(input: EmitInput, target: TargetDefinition): TargetId[] {
+  const readers = new Set(
+    input.options.canonicalSkillReaders ?? (target.discoversCanonicalSkills ? [target.id] : []),
+  );
+  if (target.discoversCanonicalSkills) readers.add(target.id);
+  return [...readers].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The one rendering of `skill` for the shared root that every reader accepts, or null when
+ * there is none: a reader excludes or refuses the skill, the readers' own extras differ (an
+ * extra in a shared file counts as emitted to every reader), or two renderings disagree on a
+ * key. Core translations of different readers are merged, since each states the same meaning.
+ */
+function sharedRendering(
+  cap: AcfCapability,
+  skill: SkillFacet,
+  readers: readonly TargetId[],
+): NativeSkill | null {
+  const applicable = applicableTargets(cap, skill.frontmatter);
+  if (!readers.every((reader) => applicable.includes(reader))) return null;
+  const renderings = readers.map((reader) => renderNativeSkill(cap, skill, reader));
+  if (renderings.some((rendering) => rendering.refused)) return null;
+  const extras = new Set(renderings.map((rendering) => stableJson(rendering.extras)));
+  if (extras.size > 1) return null;
+
+  const merged: NativeSkill = {
+    frontmatter: {},
+    files: {},
+    extras: renderings[0]?.extras ?? {},
+    diagnostics: [],
+    outcomes: [],
+    refused: false,
+  };
+  for (const rendering of renderings) {
+    if (!mergeInto(merged.frontmatter, rendering.frontmatter)) return null;
+    if (!mergeInto(merged.files, rendering.files)) return null;
+  }
+  return merged;
+}
+
+function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(source)) {
+    if (key in target && stableJson(target[key]) !== stableJson(value)) return false;
+    target[key] = value;
+  }
+  return true;
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    typeof item === "object" && item !== null && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : item,
+  );
+}
+
+async function pushSkillCopy(
+  diffs: FileDiff[],
+  emittedPaths: Set<string>,
+  fs: ReadOnlyFs,
+  cap: AcfCapability,
+  skill: SkillFacet,
+  copy: SkillCopy,
+  assets: AssetPayload[],
+  diagnostics: Diagnostic[],
+): Promise<void> {
+  const skillRoot = path.join(copy.root, skill.name);
+  const facet = { family: "skill" as const, name: skill.name };
+  const metadata = { artifactRoot: skillRoot, facet };
+  const skillPath = path.join(skillRoot, "SKILL.md");
+  if (copy.rendering === "verbatim") {
+    await pushSkillPrimaryBytes(diffs, emittedPaths, fs, skillPath, skill, metadata);
+  } else {
+    const { frontmatter, files } = copy.rendering;
+    await pushTextDiff(
+      diffs,
+      emittedPaths,
+      fs,
+      skillPath,
+      renderMarkdownFile(frontmatter, skill.body),
+      metadata,
+    );
+    for (const [relativePath, content] of Object.entries(files)) {
+      const outPath = path.join(skillRoot, ...relativePath.split("/"));
+      await pushTextDiff(diffs, emittedPaths, fs, outPath, content, metadata);
+    }
+  }
+
+  await pushTextDiff(
+    diffs,
+    emittedPaths,
+    fs,
+    path.join(skillRoot, MANAGEMENT_NOTICE_FILENAME),
+    renderArtifactNotice(cap.manifest.name),
+    { ...metadata, managementNotice: "artifact" },
+  );
+
+  for (const asset of assets) {
+    if (asset.relativePath === MANAGEMENT_NOTICE_FILENAME) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.emit.managed-notice-reserved-path",
+        message: `${MANAGEMENT_NOTICE_FILENAME} is reserved for ACF management notices`,
+        path: path.join(skillRoot, asset.relativePath),
+        family: "skill",
+        capability: { name: cap.manifest.name },
+        data: { facet: skill.name, sourcePath: asset.sourcePath },
+      });
+      continue;
+    }
+    await pushAssetDiff(
+      diffs,
+      emittedPaths,
+      fs,
+      path.join(skillRoot, asset.relativePath),
+      asset,
+      metadata,
+    );
+  }
+}
+
+async function pushAssetDiff(
+  diffs: FileDiff[],
+  emittedPaths: Set<string>,
+  fs: ReadOnlyFs,
+  outPath: string,
+  asset: AssetPayload,
+  metadata: Pick<FileDiff, "artifactRoot" | "facet">,
+): Promise<void> {
+  if (emittedPaths.has(outPath)) return;
+  emittedPaths.add(outPath);
+  const [before, beforeMode] = await Promise.all([fs.readBytes(outPath), fs.readMode(outPath)]);
+  const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
+    before: beforeMode,
+    after: asset.mode,
+  });
+  Object.assign(diff, metadata);
+  diffs.push(diff);
 }
 
 async function pushSkillPrimaryBytes(
@@ -136,24 +281,11 @@ async function pushSkillPrimaryBytes(
   diffs.push(diff);
 }
 
+/** The shared ACF skills root for `scope`; a target's install root is not used for it. */
 export function skillsRootForScope(scope: Scope): string {
-  // Shared ACF skills root; target installRoot is intentionally not used for skills.
   return scope === "user"
     ? path.join(homedir(), ".agents", "skills")
     : path.join(".", ".agents", "skills");
-}
-
-function skillDestinations(
-  scope: Scope,
-  target: TargetDefinition,
-  opts: SkillEmitOptions,
-): string[] {
-  const roots: string[] = [];
-  if (opts.canonical !== false) roots.push(skillsRootForScope(scope));
-  const nativeRoot = target.skillInstallPaths?.[scope] ?? null;
-  const emitNative = opts.native ?? !target.discoversCanonicalSkills;
-  if (emitNative && nativeRoot !== null) roots.push(nativeRoot);
-  return [...new Set(roots)].sort((a, b) => a.localeCompare(b));
 }
 
 async function readSkillAssets(

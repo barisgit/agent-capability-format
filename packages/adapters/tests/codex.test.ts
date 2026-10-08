@@ -19,7 +19,8 @@ test("codex emits artifacts and diagnoses unsupported pre_compact hook event", a
   >;
   expect(hooks.PreCompact).toBeUndefined();
   expect(JSON.stringify(hooks.PermissionRequest)).toContain("acf:test-cap:ask");
-  expect(
-    JSON.stringify(parseJsonDiff(byPath(result.diffs, ".codex/mcp.json")).mcpServers),
-  ).toContain("server.js");
+  const config = Bun.TOML.parse(String(byPath(result.diffs, ".codex/config.toml").after)) as {
+    mcp_servers: Record<string, { args: string[] }>;
+  };
+  expect(config.mcp_servers.fs?.args[0]).toEndWith("server.js");
 });

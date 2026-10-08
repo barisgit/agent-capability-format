@@ -1,40 +1,13 @@
-import {
-  type Diagnostic,
-  type EmitResult,
-  type ReadOnlyFs,
-  registerAdapter,
-  type TargetAdapter,
-  targetMap,
-} from "@caplet/core";
-import { emitStandardAdapter, layoutFor } from "../common/emitter.js";
-import { emitSkills } from "../common/skills.js";
+import { type ReadOnlyFs, registerAdapter, type TargetAdapter, targetMap } from "@caplet/core";
+import { emitTarget } from "../common/target.js";
 
-const cursorTarget = targetMap.cursor;
-if (cursorTarget === undefined) throw new Error("missing target definition for cursor");
+const target = targetMap.cursor;
+if (target === undefined) throw new Error("missing target definition for cursor");
 
 export const cursorAdapter: TargetAdapter<"cursor"> = {
   id: "cursor",
-  async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
-    const diagnostics: Diagnostic[] = [];
-    const diffs = [
-      ...(await emitSkills(
-        input.capability,
-        input.scope,
-        fs,
-        cursorTarget,
-        { ...input.options.skills, native: false },
-        diagnostics,
-      )),
-      ...(await emitStandardAdapter(
-        input,
-        fs,
-        layoutFor("cursor", input.installRoot, input.scope),
-        diagnostics,
-        { cursorRulesOnly: true, skipUnsupportedHooks: true },
-      )),
-    ];
-    return { diffs, diagnostics };
-  },
+  emit: (input, fs: ReadOnlyFs) =>
+    emitTarget(input, fs, target, { cursorRulesOnly: true, skipUnsupportedHooks: true }),
 };
 
 registerAdapter("cursor", cursorAdapter);

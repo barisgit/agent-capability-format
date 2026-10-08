@@ -1,10 +1,19 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+import {
+  applyProject,
+  cleanup,
+  forceCanonicalSkills,
+  makeScope,
+  readText,
+  runCaplet,
+  writeText,
+} from "../helpers";
 
 test("targeted apply preserves other targets in a shared-root inventory", async () => {
   const scope = await makeScope();
   try {
+    await forceCanonicalSkills(scope);
     await writeText(
       path.join(scope.sourceRoot, "alpha", "skills", "codex-only", "SKILL.md"),
       "---\nname: codex-only\ndescription: Codex-only skill\nonly: [codex]\n---\nUse Codex.\n",
@@ -98,6 +107,7 @@ test("caplet detects and repairs management notice drift", async () => {
 test("caplet apply fetches and writes native artifacts", async () => {
   const scope = await makeScope();
   try {
+    await forceCanonicalSkills(scope);
     await writeText(
       path.join(scope.sourceRoot, "alpha", "skills", "research", "SKILL.md"),
       "---\nname: research\ndescription: Research skill\n---\nUse structured research notes.\n",

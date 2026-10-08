@@ -1,0 +1,13 @@
+# acf:begin mcp_servers.docs
+[mcp_servers.docs]
+url = "https://mcp.example.com/docs"
+http_headers = { X-Client = "caplet" }
+# acf:end mcp_servers.docs
+
+# acf:begin mcp_servers.tools
+[mcp_servers.tools]
+command = "/caps/demo/bin/server"
+args = ["--cache", "/project/.codex/.acf/data/demo/cache"]
+env = { LOG = "info" }
+required = true
+# acf:end mcp_servers.tools

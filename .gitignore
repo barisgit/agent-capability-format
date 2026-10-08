@@ -7,7 +7,7 @@ dist/
 coverage/
 .env
 .env.local
-.pi/
+/.pi/
 .worktrees/
 evidence/video/*.mov
 # Small rendered artifacts (.cast/.gif/.mp4) ARE committed; large raw screen recordings are not.

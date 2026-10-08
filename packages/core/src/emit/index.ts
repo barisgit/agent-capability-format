@@ -37,6 +37,13 @@ export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport
   for (const scopeRoot of req.scopes) {
     const resolved = await resolveScopeCapabilities(scopeRoot);
     const capabilities = resolved.capabilities.sort(byCapabilityName);
+    const canonicalSkillReaders = requestedTargets.filter((targetId) => {
+      const target = targetMap[targetId];
+      return (
+        target?.discoversCanonicalSkills === true &&
+        resolveInstallRoot(target, scopeRoot.scope) !== null
+      );
+    });
     for (const targetId of requestedTargets) {
       const target = targetMap[targetId];
       if (target === undefined) {
@@ -87,7 +94,7 @@ export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport
           capability: filtered,
           scope: scopeRoot.scope,
           installRoot,
-          options: req.options,
+          options: { canonicalSkillReaders, ...req.options },
         };
         if (adapter.validate !== undefined) diagnostics.push(...(await adapter.validate(input)));
         const result = await adapter.emit(input, fs);

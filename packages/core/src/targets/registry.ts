@@ -129,8 +129,8 @@ export const targets = defineTargets([
         file_context: "full",
       },
       mcpInstallPath: {
-        user: path.join(HOME, ".codex", "mcp.json"),
-        project: path.join(".", ".codex", "mcp.json"),
+        user: path.join(HOME, ".codex", "config.toml"),
+        project: path.join(".", ".codex", "config.toml"),
       },
     },
     extensions: codexExtensionSchemas,
@@ -138,6 +138,7 @@ export const targets = defineTargets([
   defineTarget({
     id: "cursor",
     displayName: "Cursor",
+    discoversCanonicalSkills: true,
     support: {
       agent: "partial",
       command: "partial",
@@ -203,8 +204,8 @@ export const targets = defineTargets([
         file_context: "partial",
       },
       mcpInstallPath: {
-        user: path.join(HOME, ".config", "opencode", "mcp.json"),
-        project: path.join(".", ".opencode", "mcp.json"),
+        user: path.join(HOME, ".config", "opencode", "opencode.json"),
+        project: path.join(".", "opencode.json"),
       },
     },
     extensions: opencodeExtensionSchemas,
