@@ -41,7 +41,7 @@ An Agent Plugins or Claude plugin source SHALL become exactly one capability. It
 - **THEN** resolution fails with a diagnostic recommending `rename`, and succeeds once `rename: acme-docs` is set
 
 ### Requirement: Preserved source snapshot
-For every source format the materialized snapshot SHALL contain every regular file under the selected package root except `.git/`, including hidden files, with exact bytes and the executable bit. Symbolic links, special files, and paths that collide after NFC and case-preserving normalization SHALL fail resolution with an error naming the path. The snapshot SHALL be immutable after materialization and SHALL be enough to re-read the capability offline with an identical projection.
+For every source format the materialized snapshot SHALL contain every regular file under the selected package root except `.git/`, including hidden files, with exact bytes and the executable bit. Symbolic links, special files, and sibling names that collide after NFC normalization or case folding (as on a case-insensitive file system) SHALL fail resolution with the error `acf.source.snapshot-rejected` naming the path. The snapshot SHALL be immutable after materialization and SHALL be enough to re-read the capability offline with an identical projection.
 
 #### Scenario: Hidden manifest and executable script
 - **WHEN** a Claude plugin contains `.claude-plugin/plugin.json` and an executable `scripts/run.sh`

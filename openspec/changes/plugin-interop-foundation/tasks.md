@@ -8,10 +8,10 @@ Every task starts with a failing test and ends when it passes. "Golden" means a 
 
 ## 2. Integrity and preservation
 
-- [ ] 2.1 Unify the core and installer lock schemas into one module and record per-capability `name`, `format`, `formatVersion`, source path and `payloadDigest`; verify existing lockfile fixtures round-trip and a multi-capability lock golden.
-- [ ] 2.2 Implement the `acf-tree-2` payload digest; verify with fixtures for mode-only changes, ambiguous v1 encodings and a pinned digest value.
-- [ ] 2.3 Verify digests before emission and in installed checks, and make frozen restores fetch `resolvedSha`; verify with a tampered-cache test and a local git fixture whose branch moves after locking.
-- [ ] 2.4 Preserve complete snapshots (hidden files, executable bits) and reject links, special files and normalization collisions; verify with snapshot fixtures for each case and an offline re-read test.
+- [x] 2.1 Unify the core and installer lock schemas into one module and record per-capability `name`, `format`, `formatVersion`, source path and `payloadDigest`; verify existing lockfile fixtures round-trip and a multi-capability lock golden.
+- [x] 2.2 Implement the `acf-tree-2` payload digest; verify with fixtures for mode-only changes, ambiguous v1 encodings and a pinned digest value.
+- [x] 2.3 Verify digests before emission and in installed checks, and make frozen restores fetch `resolvedSha`; verify with a tampered-cache test and a local git fixture whose branch moves after locking.
+- [x] 2.4 Preserve complete snapshots (hidden files, executable bits) and reject links, special files and normalization collisions; verify with snapshot fixtures for each case and an offline re-read test.
 - [x] 2.5 Extend sidecar entries with `target`, `carrier` and mode, add expected-hash preconditions to apply, fix stale-entry sweeping for renamed paths, and enforce output containment through resolved parents; verify with plan/apply race, renamed-skill and symlinked `.claude/skills` integration tests.
 - [x] 2.6 Reject credential-bearing source URLs and redact them in messages; verify with `caplet add` tests asserting no file or output contains the credential.
 - [ ] 2.7 List executable components added, changed or removed per capability and target in `add`, `update` and `apply` output (human and `--json`), without prompting or blocking, and write no host trust or approval state; verify with output goldens for a new MCP stdio server, a changed Claude plugin hook, an executable file and an unchanged update.
