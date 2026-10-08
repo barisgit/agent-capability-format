@@ -3,6 +3,7 @@ export * from "./assets/index.js";
 export * from "./caplet-config/index.js";
 export * from "./diagnostics/index.js";
 export * from "./emit/index.js";
+export * from "./extras/index.js";
 export * from "./hash/index.js";
 export * from "./lock/index.js";
 export * from "./reader/index.js";
