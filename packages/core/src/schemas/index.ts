@@ -19,12 +19,28 @@ export const onlyExceptSchema = z
 
 const withOnlyExcept = <S extends z.ZodRawShape>(shape: S) => z.object(shape).and(onlyExceptSchema);
 
+/**
+ * One `authors` entry: a structured author, or a legacy free-form string kept verbatim
+ * (canonical-package-metadata, Legacy author strings). Unknown author keys are rejected rather
+ * than stripped so no authored value is lost silently.
+ */
+const authorSchema = z.union([
+  z.string(),
+  z
+    .object({
+      name: z.string().min(1),
+      email: z.string().optional(),
+      url: z.string().url().optional(),
+    })
+    .strict(),
+]);
+
 export const manifestSchema = withOnlyExcept({
   acf: z.literal(1),
   name: slugSchema,
   version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
   description: z.string().optional(),
-  authors: z.array(z.string()).optional(),
+  authors: z.array(authorSchema).optional(),
   license: z.string().optional(),
   homepage: z.string().url().optional(),
   repository: z.string().optional(),

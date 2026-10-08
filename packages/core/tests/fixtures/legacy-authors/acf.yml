@@ -1,0 +1,10 @@
+acf: 1
+name: legacy-authors
+version: 1.2.0
+description: Notes helpers written before structured authors
+authors:
+  - Ada Lovelace <ada@example.com>
+  - The Docs Team
+  - "Grace Hopper <grace@example.com> (maintainer)"
+license: MIT
+keywords: [notes]

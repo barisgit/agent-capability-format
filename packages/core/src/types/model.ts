@@ -37,12 +37,16 @@ export type CapabilityOrigin =
 
 export type TargetExtensions = Partial<Record<TargetId, unknown>>;
 
+/** A structured package author (canonical-package-metadata, Canonical package metadata fields). */
+export type PackageAuthor = { name: string; email?: string | undefined; url?: string | undefined };
+
 export type Manifest = {
   acf: 1;
   name: Slug;
   version: SemVer;
   description?: string | undefined;
-  authors?: string[] | undefined;
+  /** Structured authors, or legacy free-form strings kept verbatim (never decoded here). */
+  authors?: Array<string | PackageAuthor> | undefined;
   license?: string | undefined;
   homepage?: string | undefined;
   repository?: string | undefined;
