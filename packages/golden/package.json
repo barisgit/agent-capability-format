@@ -1,0 +1,18 @@
+{
+  "name": "@caplet/golden",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Golden-tree test harness shared by the workspace packages. Test-only; never a runtime dependency.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "check-types": "tsgo --noEmit -p tsconfig.json",
+    "lint": "echo 'no lint for @caplet/golden'",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20251104.1",
+    "typescript": "5.9.3"
+  }
+}

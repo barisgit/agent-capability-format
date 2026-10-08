@@ -26,6 +26,7 @@
       "@caplet/adapters/*": ["./packages/adapters/src/*/index.ts"],
       "@caplet/core": ["./packages/core/src/index.ts"],
       "@caplet/core/*": ["./packages/core/src/*/index.ts"],
+      "@caplet/golden": ["./packages/golden/src/index.ts"],
       "@caplet/installer": ["./packages/installer/src/index.ts"],
       "@caplet/runtime-taxonomy": ["./packages/runtime-taxonomy/src/index.ts"],
       "@caplet/sdk": ["./packages/sdk/src/index.ts"]

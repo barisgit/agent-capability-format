@@ -225,6 +225,11 @@ to npm in lockstep versions:
 | `packages/sdk` | `@caplet/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
 | `packages/runtime-taxonomy` | `@caplet/runtime-taxonomy` | Stub for the future sibling registry spec. |
 
+`packages/golden` (`@caplet/golden`) is private and never published: it is the
+golden-tree test harness. A case lives at `tests/golden/<case>/` with `input/`
+and `expected/` trees, compared by path, bytes and executable bit; run the
+tests with `UPDATE_GOLDEN=1` to rewrite `expected/`.
+
 CI linters and browser validators import `@caplet/core` only. Caplet and
 direct consumers import `@caplet/sdk` for the ergonomic API.
 
