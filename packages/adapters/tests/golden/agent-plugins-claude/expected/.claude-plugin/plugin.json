@@ -1,0 +1,13 @@
+{
+  "name": "docs-kit",
+  "version": "1.2.0+acf.18b7b5b5a3cf",
+  "description": "Docs helpers",
+  "author": {
+    "name": "Ada",
+    "email": "ada@example.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "docs"
+  ]
+}

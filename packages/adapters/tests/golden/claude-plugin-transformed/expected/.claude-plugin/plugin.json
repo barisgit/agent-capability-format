@@ -1,0 +1,10 @@
+{
+  "name": "code-review",
+  "version": "1.4.0+acf.48671cd9eb59",
+  "description": "Review helpers",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "displayName": "Review Kit"
+}

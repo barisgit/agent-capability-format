@@ -1,0 +1,9 @@
+acf: 1
+name: deps
+version: 0.3.0
+description: Needs a helper plugin
+targets:
+  claude:
+    native:
+      dependencies:
+        - formatter@acme-tools

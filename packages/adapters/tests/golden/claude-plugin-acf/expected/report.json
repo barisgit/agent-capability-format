@@ -1,0 +1,52 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "review",
+      "version": "1.2.0+acf.f4057935d155",
+      "dir": ".claude/.acf/marketplace/plugins/review"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "acf.claude.plugin-file-ignored",
+      "message": ".claude-plugin is not read from ACF capability review; put files for its Claude plugin under native/claude/",
+      "path": "<input>/.claude-plugin",
+      "targetId": "claude",
+      "capability": {
+        "name": "review"
+      }
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "review",
+      "target": "claude",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR}/x becomes ${CLAUDE_PLUGIN_ROOT}/x"
+    },
+    {
+      "capability": "review",
+      "target": "claude",
+      "family": "mcp",
+      "component": "tools",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes ${CLAUDE_PLUGIN_DATA}"
+    },
+    {
+      "capability": "review",
+      "target": "claude",
+      "family": "package",
+      "component": "review",
+      "outcome": "translated",
+      "source": "package.authors",
+      "consequence": "the first entry becomes author; legacy \"Name <email>\" strings are decoded"
+    }
+  ]
+}

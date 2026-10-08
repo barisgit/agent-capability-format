@@ -1,0 +1,38 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "authored",
+      "version": "2.0.0+build.7.acf.a69e6a6615a1",
+      "dir": ".claude/.acf/marketplace/plugins/authored"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "lossy",
+      "code": "acf.support.degraded",
+      "message": "claude: authors after the first are dropped; plugin.json has a single author (package.authors.additional on capability authored)",
+      "targetId": "claude",
+      "capability": {
+        "name": "authored"
+      },
+      "data": {
+        "family": "package",
+        "component": "authored",
+        "dropped": "package.authors.additional"
+      }
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "authored",
+      "target": "claude",
+      "family": "package",
+      "component": "authored",
+      "outcome": "translated",
+      "source": "package.authors",
+      "consequence": "the first entry becomes author; legacy \"Name <email>\" strings are decoded"
+    }
+  ]
+}

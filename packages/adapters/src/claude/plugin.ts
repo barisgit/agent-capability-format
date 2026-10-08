@@ -372,12 +372,7 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
     report.diagnostics.push({
       severity: "lossy",
       code: "acf.emit.transformed-remainder",
-      message:
-        "renamed or selected Claude plugin " +
-        name +
-        " keeps its preserved components (" +
-        remainder.map((c) => c.name).join(", ") +
-        "), which may still reference renamed or excluded items",
+      message: `Claude plugin ${name} was renamed or had components removed; its preserved ${remainder.map((c) => `${c.kind} ${c.name}`).join(", ")} may still reference renamed or excluded items`,
       targetId: "claude",
       capability: { name },
       data: { components: remainder.map((c) => ({ kind: c.kind, name: c.name })) },
@@ -444,11 +439,7 @@ async function supportFiles(
       diagnostics.push({
         severity: "info",
         code: "acf.claude.plugin-file-ignored",
-        message:
-          relativePath +
-          " in ACF capability " +
-          capability.manifest.name +
-          " is not Claude configuration; files for the Claude plugin belong under native/claude/",
+        message: `${relativePath} is not read from ACF capability ${capability.manifest.name}; put files for its Claude plugin under native/claude/`,
         path: path.join(capability.root, relativePath),
         targetId: "claude",
         capability: { name: capability.manifest.name },

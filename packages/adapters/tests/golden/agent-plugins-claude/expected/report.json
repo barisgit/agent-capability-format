@@ -1,0 +1,23 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "docs-kit",
+      "version": "1.2.0+acf.18b7b5b5a3cf",
+      "dir": ".claude/.acf/marketplace/plugins/docs-kit"
+    }
+  ],
+  "diagnostics": [],
+  "outcomes": [
+    {
+      "capability": "docs-kit",
+      "target": "claude",
+      "family": "package",
+      "component": "docs-kit",
+      "outcome": "translated",
+      "source": "package.authors",
+      "consequence": "the first entry becomes author; legacy \"Name <email>\" strings are decoded"
+    }
+  ]
+}

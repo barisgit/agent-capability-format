@@ -1,0 +1,8 @@
+servers:
+  - name: tools
+    transport: stdio
+    command: "${ACF_CAPABILITY_DIR}/bin/server"
+    args: ["--cache", "${ACF_DATA_DIR}/cache"]
+  - name: docs
+    transport: http
+    url: https://mcp.example.com/docs

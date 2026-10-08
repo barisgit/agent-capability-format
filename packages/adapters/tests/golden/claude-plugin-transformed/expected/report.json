@@ -1,0 +1,67 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "code-review",
+      "version": "1.4.0+acf.48671cd9eb59",
+      "dir": ".claude/.acf/marketplace/plugins/code-review"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "lossy",
+      "code": "acf.emit.transformed-remainder",
+      "message": "Claude plugin code-review was renamed or had components removed; its preserved agent reviewer, bin files, listing-metadata listing may still reference renamed or excluded items",
+      "targetId": "claude",
+      "capability": {
+        "name": "code-review"
+      },
+      "data": {
+        "components": [
+          {
+            "kind": "agent",
+            "name": "reviewer"
+          },
+          {
+            "kind": "bin",
+            "name": "files"
+          },
+          {
+            "kind": "listing-metadata",
+            "name": "listing"
+          }
+        ]
+      }
+    }
+  ],
+  "outcomes": [
+    {
+      "capability": "code-review",
+      "target": "claude",
+      "family": "mcp",
+      "component": "files",
+      "outcome": "translated",
+      "source": "mcp.command=${ACF_CAPABILITY_DIR}",
+      "consequence": "${ACF_CAPABILITY_DIR}/x becomes ${CLAUDE_PLUGIN_ROOT}/x"
+    },
+    {
+      "capability": "code-review",
+      "target": "claude",
+      "family": "mcp",
+      "component": "files",
+      "outcome": "translated",
+      "source": "mcp.args=${ACF_DATA_DIR}",
+      "consequence": "${ACF_DATA_DIR} becomes ${CLAUDE_PLUGIN_DATA}"
+    },
+    {
+      "capability": "code-review",
+      "target": "claude",
+      "family": "package",
+      "component": "code-review",
+      "outcome": "translated",
+      "source": "package.authors",
+      "consequence": "the first entry becomes author; legacy \"Name <email>\" strings are decoded"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "deps",
+      "version": "0.3.0+acf.78b58a046c2a",
+      "dir": ".claude/.acf/marketplace/plugins/deps"
+    }
+  ],
+  "diagnostics": [],
+  "outcomes": [],
+  "otherTargets": {
+    "codex": [
+      "codex drops the functional claude key dependencies from capability deps"
+    ],
+    "cursor": [
+      "cursor drops the functional claude key dependencies from capability deps"
+    ],
+    "opencode": [
+      "opencode drops the functional claude key dependencies from capability deps"
+    ],
+    "pi": [
+      "pi drops the functional claude key dependencies from capability deps"
+    ]
+  }
+}

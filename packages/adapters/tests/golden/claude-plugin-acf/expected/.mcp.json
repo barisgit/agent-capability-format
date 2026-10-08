@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "docs": {
+      "type": "http",
+      "url": "https://mcp.example.com/docs"
+    },
+    "tools": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/server",
+      "args": [
+        "--cache",
+        "${CLAUDE_PLUGIN_DATA}/cache"
+      ]
+    }
+  }
+}

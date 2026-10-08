@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "files": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/files",
+      "args": [
+        "--stdio"
+      ]
+    }
+  }
+}

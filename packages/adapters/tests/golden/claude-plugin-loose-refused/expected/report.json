@@ -1,0 +1,24 @@
+{
+  "plugins": [],
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "acf.support.refused",
+      "message": "capability review-kit is blocked for claude: capability review-kit has plugin components that loose Claude files cannot carry: agent reviewer. Recovery: targets.claude.carrier: plugin or except: [claude]",
+      "targetId": "claude",
+      "capability": {
+        "name": "review-kit"
+      },
+      "data": {
+        "family": "package",
+        "component": "review-kit",
+        "outcome": "blocked",
+        "blocks": "package",
+        "source": "capability review-kit",
+        "consequence": "capability review-kit is not installed for claude",
+        "recovery": "targets.claude.carrier: plugin or except: [claude]"
+      }
+    }
+  ],
+  "outcomes": []
+}

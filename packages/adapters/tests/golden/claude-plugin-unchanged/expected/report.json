@@ -1,0 +1,13 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "review-kit",
+      "version": "2024.10+acf.0c9e6f8e5030",
+      "dir": ".claude/.acf/marketplace/plugins/review-kit"
+    }
+  ],
+  "diagnostics": [],
+  "outcomes": []
+}

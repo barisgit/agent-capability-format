@@ -1,0 +1,8 @@
+{
+  "name": "deps",
+  "version": "0.3.0+acf.78b58a046c2a",
+  "description": "Needs a helper plugin",
+  "dependencies": [
+    "formatter@acme-tools"
+  ]
+}

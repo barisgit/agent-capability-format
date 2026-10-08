@@ -1,0 +1,8 @@
+acf: 1
+name: authored
+version: 2.0.0+build.7
+authors:
+  - Ada Lovelace <ada@example.com>
+  - Grace Hopper
+  - name: Linus
+    url: https://example.com/linus

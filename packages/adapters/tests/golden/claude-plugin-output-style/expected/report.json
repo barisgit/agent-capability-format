@@ -1,0 +1,27 @@
+{
+  "plugins": [
+    {
+      "target": "claude",
+      "scope": "project",
+      "name": "terse",
+      "version": "1.0.0+acf.4e6d1968ea23",
+      "dir": ".claude/.acf/marketplace/plugins/terse"
+    }
+  ],
+  "diagnostics": [],
+  "outcomes": [],
+  "otherTargets": {
+    "codex": [
+      "codex drops native/claude/ from capability terse"
+    ],
+    "cursor": [
+      "cursor drops native/claude/ from capability terse"
+    ],
+    "opencode": [
+      "opencode drops native/claude/ from capability terse"
+    ],
+    "pi": [
+      "pi drops native/claude/ from capability terse"
+    ]
+  }
+}

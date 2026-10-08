@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "docs-kit",
+  "version": "1.2.0",
+  "description": "Docs helpers",
+  "author": {
+    "name": "Ada",
+    "email": "ada@example.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "docs"
+  ]
+}

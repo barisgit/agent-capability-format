@@ -1,0 +1,11 @@
+{
+  "name": "review-kit",
+  "version": "1.4.0",
+  "description": "Review helpers",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "displayName": "Review Kit",
+  "skills": "./extra-skills"
+}
