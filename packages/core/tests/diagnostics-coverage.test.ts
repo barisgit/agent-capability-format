@@ -59,6 +59,12 @@ const exportedOnly = new Set([
   "acf.emit.managed-notice-reserved-path",
   "acf.emit.managed-notice-destination-collision",
   "acf.cli.partial-implementation",
+  // Built by targets/support-diagnostics.ts; group-4 writer fixtures cover them end to end.
+  "acf.support.refused",
+  "acf.support.degraded",
+  "acf.support.component-omitted",
+  "acf.extras.dropped",
+  "acf.core.pending",
 ]);
 
 test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {

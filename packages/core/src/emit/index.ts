@@ -1,4 +1,5 @@
 export * from "./managed-notices.js";
+export * from "./outcomes.js";
 
 import { applicableTargets } from "../applicability/index.js";
 import { resolveScopeCapabilities } from "../resolver/index.js";

@@ -411,6 +411,7 @@ function diagnoseSupport(
         message: `${targetId} only partially supports ${family} facets; emitted a degraded artifact`,
         targetId,
         family,
+        data: { outcome: "changed-behavior" },
       });
     }
   }
