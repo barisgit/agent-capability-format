@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nativeExtras } from "../src";
 import { baseManifest, cleanup, codes, readTempCapability } from "./helpers";
 
 test("skills require directory shape", async () => {
@@ -45,6 +46,28 @@ test("import marker allows missing descriptions and collects every portable skil
       "skills/imported/scripts/run.py",
     ]);
     expect(await Bun.file(cap.skills[0]?.primaryFile ?? "").text()).toBe(skillBytes);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("import marker keeps every bare skill key: core, per target, or agent-plugins", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": "acf: 1\nname: imported\nversion: 0.0.0-unmanifested+local\n",
+    ".acf-import.json": '{"acf":1,"synthesized":true}\n',
+    "skills/guarded/SKILL.md":
+      "---\nname: guarded\ndescription: Guarded\ndisable-model-invocation: true\n" +
+      "user-invocable: false\npaths:\n  - src/**\nallowed-tools: Read\nx-team: docs\n---\nBody.\n",
+  });
+  try {
+    const frontmatter = cap.skills[0]?.frontmatter;
+    expect(frontmatter?.invocation).toEqual({ model: false, user: false });
+    const targets = frontmatter?.targets;
+    expect(nativeExtras(targets, "claude")).toEqual({ paths: ["src/**"], "allowed-tools": "Read" });
+    expect(nativeExtras(targets, "cursor")).toEqual({});
+    expect(nativeExtras(targets, "agent-plugins")).toEqual({ "x-team": "docs" });
+    expect(codes(cap)).not.toContain("acf.markdown.unknown-frontmatter-field");
+    expect(cap.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
   } finally {
     await cleanup(dir);
   }

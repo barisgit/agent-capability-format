@@ -203,8 +203,10 @@ function validateTargetExtensions(cap: AcfCapability): void {
   for (const server of cap.mcp?.servers ?? []) {
     checks.push({ family: "mcp", targets: server.targets, path: cap.mcp?.path });
   }
-  // Only format readers write the agent-plugins dialect (design, Implementation contracts).
-  const readerOutput = cap.source !== undefined && cap.source.format !== "acf";
+  // Only format readers and the bare-skill import write the agent-plugins dialect (design,
+  // Implementation contracts).
+  const readerOutput =
+    cap.synthesized === true || (cap.source !== undefined && cap.source.format !== "acf");
   for (const check of checks) {
     validateExtensions(check.family, check.targets, check.path, cap.diagnostics, readerOutput);
   }

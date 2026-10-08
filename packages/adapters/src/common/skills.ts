@@ -21,8 +21,8 @@ import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
 
-/** One skill directory to write: its root and the rendering (or verbatim primary bytes). */
-type SkillCopy = { root: string; rendering: NativeSkill | "verbatim" };
+/** One skill directory to write: its root and the rendering. */
+type SkillCopy = { root: string; rendering: NativeSkill };
 
 /**
  * Emits the capability's skills for one target. A target that discovers the shared
@@ -42,9 +42,7 @@ export async function emitSkills(
   const emittedPaths = new Set<string>();
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
-    const copies = cap.synthesized
-      ? verbatimCopies(input, target)
-      : renderedCopies(input, target, skill, report);
+    const copies = renderedCopies(input, target, skill, report);
     if (copies.length === 0) continue;
     const assets = await readSkillAssets(cap, skill, fs);
     for (const copy of copies) {
@@ -95,19 +93,6 @@ function renderedCopies(
         `the shared .agents/skills copy cannot serve every selected target and ${target.id} has no native skill root`,
       ),
     );
-  }
-  return copies;
-}
-
-function verbatimCopies(input: EmitInput, target: TargetDefinition): SkillCopy[] {
-  const discovers = target.discoversCanonicalSkills === true;
-  const copies: SkillCopy[] = [];
-  if (input.options.skills?.canonical ?? discovers) {
-    copies.push({ root: skillsRootForScope(input.scope), rendering: "verbatim" });
-  }
-  const nativeRoot = target.skillInstallPaths?.[input.scope] ?? null;
-  if ((input.options.skills?.native ?? !discovers) && nativeRoot !== null) {
-    copies.push({ root: nativeRoot, rendering: "verbatim" });
   }
   return copies;
 }
@@ -186,22 +171,18 @@ async function pushSkillCopy(
   const facet = { family: "skill" as const, name: skill.name };
   const metadata = { artifactRoot: skillRoot, facet };
   const skillPath = path.join(skillRoot, "SKILL.md");
-  if (copy.rendering === "verbatim") {
-    await pushSkillPrimaryBytes(diffs, emittedPaths, fs, skillPath, skill, metadata);
-  } else {
-    const { frontmatter, files } = copy.rendering;
-    await pushTextDiff(
-      diffs,
-      emittedPaths,
-      fs,
-      skillPath,
-      renderMarkdownFile(frontmatter, skill.body),
-      metadata,
-    );
-    for (const [relativePath, content] of Object.entries(files)) {
-      const outPath = path.join(skillRoot, ...relativePath.split("/"));
-      await pushTextDiff(diffs, emittedPaths, fs, outPath, content, metadata);
-    }
+  const { frontmatter, files } = copy.rendering;
+  await pushTextDiff(
+    diffs,
+    emittedPaths,
+    fs,
+    skillPath,
+    renderMarkdownFile(frontmatter, skill.body),
+    metadata,
+  );
+  for (const [relativePath, content] of Object.entries(files)) {
+    const outPath = path.join(skillRoot, ...relativePath.split("/"));
+    await pushTextDiff(diffs, emittedPaths, fs, outPath, content, metadata);
   }
 
   await pushTextDiff(
@@ -251,31 +232,6 @@ async function pushAssetDiff(
   const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
     before: beforeMode,
     after: asset.mode,
-  });
-  Object.assign(diff, metadata);
-  diffs.push(diff);
-}
-
-async function pushSkillPrimaryBytes(
-  diffs: FileDiff[],
-  emittedPaths: Set<string>,
-  fs: ReadOnlyFs,
-  outPath: string,
-  skill: SkillFacet,
-  metadata: Pick<FileDiff, "artifactRoot" | "facet">,
-): Promise<void> {
-  if (emittedPaths.has(outPath)) return;
-  emittedPaths.add(outPath);
-  const [before, after, beforeMode, afterMode] = await Promise.all([
-    fs.readBytes(outPath),
-    fs.readBytes(skill.primaryFile),
-    fs.readMode(outPath),
-    fs.readMode(skill.primaryFile),
-  ]);
-  if (after === null) return;
-  const diff = makeFileDiff(outPath, before, after, [{ kind: "file" }], {
-    before: beforeMode,
-    after: afterMode ?? 0o644,
   });
   Object.assign(diff, metadata);
   diffs.push(diff);

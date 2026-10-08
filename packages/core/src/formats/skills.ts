@@ -6,8 +6,10 @@
 import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { type ExtrasDialect, withNativeExtras } from "../extras/index.js";
+import { AGENT_PLUGINS_DIALECT, type ExtrasDialect, withNativeExtras } from "../extras/index.js";
 import { parseMarkdown } from "../reader/helpers.js";
+import { nativeKeyInfo } from "../targets/native-keys.js";
+import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
 import { filesUnder, isFile, isRecord, isSlug } from "./shared.js";
 
@@ -119,15 +121,70 @@ function projectClaudeSkill(
   take("argument-hint", typeof raw["argument-hint"] === "string", () => {
     frontmatter["argument-hint"] = raw["argument-hint"] as string;
   });
-  take("disable-model-invocation", typeof raw["disable-model-invocation"] === "boolean", () => {
-    if (raw["disable-model-invocation"] === true)
-      frontmatter.invocation = { ...frontmatter.invocation, model: false };
-  });
-  take("user-invocable", typeof raw["user-invocable"] === "boolean", () => {
-    if (raw["user-invocable"] === false)
-      frontmatter.invocation = { ...frontmatter.invocation, user: false };
-  });
+  const invocation = claudeInvocation(raw);
+  for (const key of invocation.consumed) consumed.add(key);
+  if (Object.keys(invocation.restrictions).length > 0)
+    frontmatter.invocation = { ...frontmatter.invocation, ...invocation.restrictions };
   return withExtras(frontmatter, raw, consumed, "claude");
+}
+
+/** Claude's boolean invocation keys, the core field each sets and the value that restricts. */
+const CLAUDE_INVOCATION_KEYS = [
+  ["disable-model-invocation", "model", true],
+  ["user-invocable", "user", false],
+] as const;
+
+/**
+ * Claude's invocation keys as core `invocation` restrictions: `disable-model-invocation: true`
+ * is `model: false` and `user-invocable: false` is `user: false`; the other boolean is the
+ * default. A non-boolean value is not consumed, so the caller keeps it as an extra.
+ */
+function claudeInvocation(raw: Record<string, unknown>): {
+  consumed: string[];
+  restrictions: { model?: false; user?: false };
+} {
+  const consumed: string[] = [];
+  const restrictions: { model?: false; user?: false } = {};
+  for (const [key, field, restricting] of CLAUDE_INVOCATION_KEYS) {
+    if (typeof raw[key] !== "boolean") continue;
+    consumed.push(key);
+    if (raw[key] === restricting) restrictions[field] = false;
+  }
+  return { consumed, restrictions };
+}
+
+/**
+ * Maps bare skill frontmatter (a skills directory imported without a package manifest; SPEC.md
+ * §20.3) the way the format readers map theirs, so no key, and in particular no restricting
+ * key, is lost (design D4, D5). `coreKeys` stay as written for the caller's schema check;
+ * Claude's boolean invocation keys become `invocation` restrictions; a key a target's registry
+ * classifies becomes the extra of the first such target in registry order (Claude first, so a
+ * key Claude and Cursor share, such as `paths`, stays one dialect's key and is not copied into a
+ * second tool's field); any other key becomes an `agent-plugins` extra. Returns the core
+ * candidate and the extras per dialect, to attach after the schema check.
+ */
+export function mapBareSkill(
+  raw: Record<string, unknown>,
+  coreKeys: ReadonlySet<string>,
+): { core: Record<string, unknown>; extras: Map<ExtrasDialect, Record<string, unknown>> } {
+  const core = Object.fromEntries(Object.entries(raw).filter(([key]) => coreKeys.has(key)));
+  const invocation = claudeInvocation(raw);
+  if (Object.keys(invocation.restrictions).length > 0) {
+    // A malformed authored `invocation` is left for the schema check to report.
+    if (core.invocation === undefined || isRecord(core.invocation))
+      core.invocation = { ...core.invocation, ...invocation.restrictions };
+  }
+  const consumed = new Set([...coreKeys, ...invocation.consumed]);
+  const extras = new Map<ExtrasDialect, Record<string, unknown>>();
+  const keep = (dialect: ExtrasDialect, key: string, value: unknown): void => {
+    extras.set(dialect, { ...extras.get(dialect), [key]: value });
+  };
+  for (const [key, value] of Object.entries(raw)) {
+    if (consumed.has(key)) continue;
+    const owner = targetIds.find((target) => nativeKeyInfo(target, "skill", key) !== undefined);
+    keep(owner ?? AGENT_PLUGINS_DIALECT, key, value);
+  }
+  return { core, extras };
 }
 
 function withExtras(

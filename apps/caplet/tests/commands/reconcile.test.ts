@@ -316,7 +316,10 @@ test("synthesized skill deletion removes owned files but preserves unmanaged fil
     const first = await applyProject(scope);
     if (first.exitCode !== 0) throw new Error(first.stdout + first.stderr);
     const docsOutput = path.join(scope.agentsDir, "skills", "docs");
-    expect(await Bun.file(path.join(docsOutput, "SKILL.md")).text()).toBe(docsBytes);
+    // Imported skills are rendered like any other skill, with the reader's fallback description.
+    expect(await Bun.file(path.join(docsOutput, "SKILL.md")).text()).toBe(
+      "---\nname: docs\ndescription: Imported skill\n---\ndocs\n",
+    );
     expect(await Bun.file(path.join(docsOutput, "references", "guide.md")).exists()).toBe(true);
     await writeText(path.join(docsOutput, "unmanaged.txt"), "keep\n");
 
