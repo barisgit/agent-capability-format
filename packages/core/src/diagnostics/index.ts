@@ -51,6 +51,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.capabilities-yml.duplicate-entry",
   "acf.resolve.capability-selector-direct-source",
   "acf.resolve.capability-selector-unmatched",
+  "acf.lock.digest-mismatch",
   "acf.lock.drift",
   "acf.lock.missing-entry",
   "acf.lock.unsupported-version",

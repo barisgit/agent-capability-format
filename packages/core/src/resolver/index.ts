@@ -1,7 +1,14 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { type CapabilitiesLock, findLockedCapability, readLockfile } from "../lock/index.js";
+import { computePayloadDigest } from "../hash/payload-digest.js";
+import {
+  type CapabilitiesLock,
+  digestMismatchDiagnostic,
+  findLockedCapability,
+  type LockedCapability,
+  readLockfile,
+} from "../lock/index.js";
 import { readCapability } from "../reader/index.js";
 import type {
   AcfCapability,
@@ -100,12 +107,19 @@ export async function resolveScopeCapabilities(
   for (const entry of await readdir(root.capabilitiesDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const dir = path.join(root.capabilitiesDir, entry.name);
+    const record = lock === null ? undefined : findLockedCapability(lock, entry.name)?.capability;
+    // A snapshot counts as installed only while it still matches its lock record.
+    const mismatch = record === undefined ? undefined : await verifySnapshot(dir, record);
+    if (mismatch !== undefined) {
+      diagnostics.push(mismatch);
+      continue;
+    }
     const discovery = await discoverRepository(dir);
     diagnostics.push(...discovery.diagnostics);
     for (const capRoot of discovery.roots) {
       const cap = await readCapability(capRoot, root.scope, { kind: "local", directory: capRoot });
       cap.diagnostics.push(...discovery.diagnostics);
-      const source = capRoot === dir ? await lockedSource(lock, entry.name, dir) : undefined;
+      const source = capRoot === dir ? await lockedSource(record, dir) : undefined;
       if (source !== undefined) cap.source = source;
       capabilities.push(cap);
     }
@@ -120,16 +134,30 @@ export async function resolveScopeCapabilities(
  * `acf.yml`, so that directory is its snapshot root.
  */
 async function lockedSource(
-  lock: CapabilitiesLock | null,
-  name: string,
+  record: LockedCapability | undefined,
   dir: string,
 ): Promise<CapabilitySource | undefined> {
-  const record = lock === null ? undefined : findLockedCapability(lock, name)?.capability;
   if (record === undefined) return undefined;
   const snapshotRoot = record.format === "skills" ? await skillPackageRoot(dir) : dir;
   const source: CapabilitySource = { format: record.format, path: record.path, snapshotRoot };
   if (record.formatVersion !== undefined) source.formatVersion = record.formatVersion;
   return source;
+}
+
+/** The digest-mismatch error when snapshot `dir` no longer matches `record`. */
+async function verifySnapshot(
+  dir: string,
+  record: LockedCapability,
+): Promise<Diagnostic | undefined> {
+  let actual: string;
+  try {
+    actual = await computePayloadDigest(dir);
+  } catch (error) {
+    // Links or special files added after locking make the tree undigestable.
+    actual = `unreadable snapshot (${error instanceof Error ? error.message : String(error)})`;
+  }
+  if (actual === record.payloadDigest) return undefined;
+  return digestMismatchDiagnostic(record.name, "snapshot", record.payloadDigest, actual);
 }
 
 async function skillPackageRoot(dir: string): Promise<string> {

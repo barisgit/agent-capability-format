@@ -5,6 +5,7 @@ import {
   type CapabilityEntry,
   computeCapabilityDigests,
   type Diagnostic,
+  digestMismatchDiagnostic,
   entryCapabilityHash,
   type LockedCapability,
   type ScopeRoot,
@@ -184,9 +185,18 @@ async function resolveCapabilitiesStaged(
       continue;
     }
 
-    const prefetched = opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId);
+    // Only a missing snapshot triggered this fetch: restore the locked content from the
+    // locked commit rather than wherever the moving ref points now.
+    const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
+    const prefetched = restoring
+      ? undefined
+      : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));
+    const fetchEntry =
+      restoring && locked?.resolvedSha !== undefined
+        ? { ...entry, ref: locked.resolvedSha }
+        : entry;
     const fetchedCapability =
-      prefetched?.fetched ?? (await fetchCapability(entry, fetchOptions(yml, opts.scopeRoot)));
+      prefetched?.fetched ?? (await fetchCapability(fetchEntry, fetchOptions(yml, opts.scopeRoot)));
     const sourceStagingDir = path.join(
       stagingDir,
       cacheKeyFor(fetchedCapability.sourceId, entry.ref),
@@ -197,8 +207,10 @@ async function resolveCapabilitiesStaged(
       sourceStagingDir,
       prefetched?.inventory,
     );
-    diagnostics.push(...materialized.diagnostics);
-    if (!materialized.ok) {
+    const mismatches =
+      restoring && materialized.ok ? restoreMismatches(locked, materialized.records) : [];
+    diagnostics.push(...materialized.diagnostics, ...mismatches);
+    if (!materialized.ok || mismatches.length > 0) {
       failed = true;
       if (locked !== undefined) {
         nextEntries.push(locked);
@@ -207,7 +219,10 @@ async function resolveCapabilitiesStaged(
       continue;
     }
     records.push(...materialized.records);
-    if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
+    // A verified restore leaves its entry exactly as locked; one predating per-capability
+    // records takes the fresh entry so it gains them.
+    if (restoring && locked?.resolvedCapabilities !== undefined) nextEntries.push(locked);
+    else if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
     fetched = true;
   }
 
@@ -414,6 +429,20 @@ function isCapabilitySelectorDrift(diagnostic: Diagnostic): boolean {
   );
 }
 
+/** Digest mismatches between restored records and the lock records they must reproduce. */
+function restoreMismatches(locked: LockEntry, restored: CapabilityRecord[]): Diagnostic[] {
+  if (locked.resolvedCapabilities === undefined) return [];
+  const actual = new Map(
+    restored.map((record) => [record.name, record.lockRecord?.payloadDigest ?? "nothing"]),
+  );
+  return locked.resolvedCapabilities.flatMap((expected) => {
+    const digest = actual.get(expected.name) ?? "no such capability";
+    return digest === expected.payloadDigest
+      ? []
+      : [digestMismatchDiagnostic(expected.name, "restore", expected.payloadDigest, digest)];
+  });
+}
+
 function shouldFetch(
   mode: ResolveOptions["mode"],
   entry: CapabilityEntry,
@@ -432,6 +461,11 @@ function requiresRef(entry: CapabilityEntry): boolean {
   return entry.source.kind === "github" || entry.source.kind === "git";
 }
 
+/**
+ * Whether every locked snapshot directory exists, deciding only whether a restore is due.
+ * Whether a present snapshot still matches its lock is verified where snapshots are read
+ * (core `resolveScopeCapabilities`); a modified one is reported, never silently replaced.
+ */
 async function lockInstalled(lockEntry: LockEntry, capabilitiesDir: string): Promise<boolean> {
   if (lockEntry.capabilityNames.length === 0) return false;
   for (const name of lockEntry.capabilityNames) {

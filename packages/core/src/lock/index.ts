@@ -11,7 +11,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
-import type { CapabilityEntry } from "../types/model.js";
+import type { CapabilityEntry, Diagnostic } from "../types/model.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -124,6 +124,40 @@ export function retainLockedCapabilities(entry: LockEntry, names: readonly strin
     next.capabilityHash = entryCapabilityHash(records) ?? entry.capabilityHash;
   }
   return next;
+}
+
+/**
+ * Where a payload digest stopped matching its lock record: an installed snapshot that was
+ * modified after locking, or a locked restore whose source no longer yields the locked bytes.
+ */
+export type DigestMismatchSite = "snapshot" | "restore";
+
+/**
+ * The `acf.lock.digest-mismatch` error for capability `name` (install-integrity, Verify
+ * before emission and frozen restore). `actual` is the recomputed digest, or why none
+ * could be computed. The message names the capability and how to recover.
+ */
+export function digestMismatchDiagnostic(
+  name: string,
+  site: DigestMismatchSite,
+  expected: string,
+  actual: string,
+): Diagnostic {
+  const problem =
+    site === "snapshot"
+      ? "installed snapshot was modified after locking"
+      : "source no longer provides the locked content";
+  const recovery =
+    site === "snapshot"
+      ? "delete the snapshot directory to restore the locked content, or run `caplet update` to re-resolve"
+      : "run `caplet update` to accept the new content";
+  return {
+    severity: "error",
+    code: "acf.lock.digest-mismatch",
+    capability: { name },
+    message: `capability ${name}: ${problem} (expected ${expected}, found ${actual}); ${recovery}`,
+    data: { name, site, expected, actual },
+  };
 }
 
 /** The entry-level v1 hash for a set of records: the first record's by name. */
