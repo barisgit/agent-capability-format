@@ -1,9 +1,11 @@
 import "@caplet/adapters";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { layoutFor } from "@caplet/adapters/common";
 import {
   ACF_SYSTEM_OWNER,
   type AcfCapability,
+  type AcfOwnership,
   applyApplicability,
   type CapletConfig,
   type Diagnostic,
@@ -28,12 +30,15 @@ import {
   sourceId,
 } from "@caplet/installer";
 import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs.js";
+import { containmentViolation, type OutputBoundary } from "../apply/containment.js";
 import {
   detectDrift,
   hashOwnedRegions,
   type ManagedEntry,
+  ownershipKey,
   readSidecar,
   relativeSidecarPath,
+  type SidecarOwner,
   writeSidecar,
 } from "../apply/sidecar.js";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args.js";
@@ -51,9 +56,18 @@ export type EmittedDiff = {
   diff: FileDiff;
 };
 
-export type StaleSidecarEntry = { installRoot: string; path: string; capability: string };
+/** A sidecar entry the plan no longer wants, identified exactly as the sidecar stores it. */
+export type StaleSidecarEntry = {
+  installRoot: string;
+  path: string;
+  capability: string;
+  owns: AcfOwnership[];
+  owner: SidecarOwner;
+};
 
 export type EmitPlan = {
+  /** Directory relative target paths resolve against (the process cwd while planning). */
+  cwd: string;
   config: CapletConfig;
   scopes: ScopeRoot[];
   targets: TargetId[];
@@ -62,6 +76,7 @@ export type EmitPlan = {
   staleEntries: StaleSidecarEntry[];
 };
 
+/** Outcome of applying a plan; `diagnostics` holds only what apply itself found. */
 export type ApplySummary = { results: ApplyResult[]; diagnostics: Diagnostic[] };
 
 export async function fetchScopes(
@@ -242,6 +257,7 @@ export async function buildEmitPlan(
     ...sweep.deletes.filter((item) => fileDiffChanged(item.diff)),
   ];
   return {
+    cwd,
     config: configResult.config,
     scopes,
     targets,
@@ -273,6 +289,17 @@ type SweepResult = {
   rootContexts: Map<string, RootContext>;
 };
 
+/**
+ * Finds sidecar entries the plan no longer wants and plans their removal.
+ *
+ * An owned region is stale when no desired diff of the same capability owns it at the same path.
+ * Native roots belong to a selected target whose plan is complete, so any stale region there is
+ * removed, including a renamed skill's directory, a file dropped from a kept skill and a renamed
+ * MCP server key. The canonical root is shared with targets this run may not have planned, so an
+ * entry there is kept while its capability and facet still exist unless this run planned that
+ * facet into the canonical root. Regions another capability now owns are released without a
+ * delete, and a partly stale entry forces its path so the remaining regions are re-recorded.
+ */
 async function sweepStaleSidecarEntries(
   scopes: readonly ScopeRoot[],
   targets: readonly TargetId[],
@@ -282,23 +309,27 @@ async function sweepStaleSidecarEntries(
   resolvedNames: ReadonlyMap<string, ReadonlySet<string>>,
   resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
 ): Promise<SweepResult> {
-  const desiredKeys = new Set<string>();
-  const desiredPaths = new Set<string>();
+  const desiredOwns = new Set<string>();
+  const desiredOwnsAnyCapability = new Set<string>();
+  const plannedFacets = new Set<string>();
   for (const item of desired) {
     const key = diffPathKey(item);
-    desiredPaths.add(key);
-    desiredKeys.add(`${key}\u0000${item.capabilityName}`);
+    for (const own of item.diff.owns) {
+      desiredOwns.add(`${key}\u0000${item.capabilityName}\u0000${ownershipKey(own)}`);
+      desiredOwnsAnyCapability.add(`${key}\u0000${ownershipKey(own)}`);
+    }
+    const facet = item.diff.facet;
+    if (facet !== undefined) {
+      plannedFacets.add(
+        `${item.installRoot}\u0000${item.capabilityName}\u0000${facet.family}\u0000${facet.name}`,
+      );
+    }
   }
   const deletes: EmittedDiff[] = [];
   const forcedPaths = new Set<string>();
   const staleByRoot = new Map<string, Set<string>>();
   const staleEntries: StaleSidecarEntry[] = [];
   const rootContexts = new Map<string, RootContext>();
-  const addStale = (installRoot: string, entry: ManagedEntry): void => {
-    const bucket = staleByRoot.get(installRoot) ?? new Set<string>();
-    bucket.add(`${entry.capability}\u0000${entry.path}`);
-    staleByRoot.set(installRoot, bucket);
-  };
   for (const scopeRoot of scopes) {
     const names = resolvedNames.get(scopeRoot.scope) ?? new Set<string>();
     const candidates: Array<{ installRoot: string } & Omit<RootContext, "scopeRoot">> = [
@@ -314,65 +345,82 @@ async function sweepStaleSidecarEntries(
     }
     for (const candidate of candidates) {
       if (rootContexts.has(candidate.installRoot)) continue;
-      rootContexts.set(candidate.installRoot, {
+      const context: RootContext = {
         scopeRoot,
         targetId: candidate.targetId,
         destination: candidate.destination,
-      });
+      };
+      rootContexts.set(candidate.installRoot, context);
       const sidecar = await readSidecar(path.join(candidate.installRoot, ".acf-managed.json"));
       for (const entry of sidecar.managed) {
         if (entry.capability === ACF_SYSTEM_OWNER) continue;
         const pathKey = `${candidate.installRoot}\u0000${entry.path}`;
         const wholeFile = entry.owns.some((own) => own.kind === "file");
-        if (desiredKeys.has(`${pathKey}\u0000${entry.capability}`)) {
+        const absolutePath = path.resolve(candidate.installRoot, entry.path);
+        const stale = entry.owns.filter(
+          (own) =>
+            !desiredOwns.has(`${pathKey}\u0000${entry.capability}\u0000${ownershipKey(own)}`),
+        );
+        if (stale.length === 0) {
           // Entry is still desired. If the recorded hash no longer matches the
           // owned regions on disk (stale sidecar metadata), force-apply so the
           // sidecar heals even when the file bytes are already up to date.
-          const absolutePath = path.resolve(candidate.installRoot, entry.path);
           const current = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
           if (hashOwnedRegions(current, entry.owns) !== entry.hash) forcedPaths.add(pathKey);
           continue;
         }
-        if (desiredPaths.has(pathKey) && wholeFile) {
-          forcedPaths.add(pathKey);
-          addStale(candidate.installRoot, entry);
-          staleEntries.push({
-            installRoot: candidate.installRoot,
-            path: entry.path,
-            capability: entry.capability,
-          });
+        if (
+          candidate.destination === "canonical" &&
+          names.has(entry.capability) &&
+          facetStillExists(entry, resolvedFacets, scopeRoot) &&
+          !facetPlanned(entry, candidate.installRoot, plannedFacets)
+        ) {
           continue;
         }
-        if (names.has(entry.capability) && facetStillExists(entry, resolvedFacets, scopeRoot)) {
-          continue;
-        }
-        const absolutePath = path.resolve(candidate.installRoot, entry.path);
-        const before = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
-        const diff: FileDiff = {
-          path: absolutePath,
-          before,
-          after: null,
-          owns: entry.owns,
-        };
-        if (entry.facet !== undefined) diff.facet = entry.facet;
-        deletes.push({
-          scopeRoot,
-          targetId: candidate.targetId,
-          destination: candidate.destination,
-          installRoot: candidate.installRoot,
-          capabilityName: entry.capability,
-          diff,
-        });
-        addStale(candidate.installRoot, entry);
+        const bucket = staleByRoot.get(candidate.installRoot) ?? new Set<string>();
+        bucket.add(`${entry.capability}\u0000${entry.path}`);
+        staleByRoot.set(candidate.installRoot, bucket);
         staleEntries.push({
           installRoot: candidate.installRoot,
           path: entry.path,
           capability: entry.capability,
+          owns: entry.owns,
+          owner: sidecarOwner(context),
+        });
+        if (stale.length < entry.owns.length) forcedPaths.add(pathKey);
+        const orphaned = stale.filter(
+          (own) => !desiredOwnsAnyCapability.has(`${pathKey}\u0000${ownershipKey(own)}`),
+        );
+        if (orphaned.length < stale.length) forcedPaths.add(pathKey);
+        if (orphaned.length === 0) continue;
+        const diff: FileDiff = {
+          path: absolutePath,
+          before: wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath),
+          after: null,
+          owns: orphaned,
+        };
+        if (entry.facet !== undefined) diff.facet = entry.facet;
+        deletes.push({
+          ...context,
+          installRoot: candidate.installRoot,
+          capabilityName: entry.capability,
+          diff,
         });
       }
     }
   }
   return { deletes, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+function facetPlanned(
+  entry: ManagedEntry,
+  installRoot: string,
+  plannedFacets: ReadonlySet<string>,
+): boolean {
+  if (entry.facet === undefined) return false;
+  return plannedFacets.has(
+    `${installRoot}\u0000${entry.capability}\u0000${entry.facet.family}\u0000${entry.facet.name}`,
+  );
 }
 
 function capabilityFacetKeys(capability: AcfCapability): ReadonlySet<string> {
@@ -420,18 +468,101 @@ function isErrnoCode(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
+/**
+ * Applies a plan root by root. Before anything under an output root is written, every planned
+ * path there must stay inside the root's boundary (`outputBoundary`); a violation fails that
+ * root with `acf.apply.outside-root` and leaves it, including its sidecar, untouched while other
+ * roots still apply. Changes whose files moved on since planning are skipped by `applyDiffs`,
+ * and their stale sidecar entries are kept so the next plan proposes them again.
+ */
 export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
   const results: ApplyResult[] = [];
+  const diagnostics: Diagnostic[] = [];
+  const blockedRoots = new Set<string>();
+  for (const item of plan.diffs) {
+    if (blockedRoots.has(item.installRoot)) continue;
+    const violation = await containmentViolation(
+      resolveDiffPath(item.installRoot, item.diff.path),
+      outputBoundary(item, plan.cwd),
+    );
+    if (violation === null) continue;
+    blockedRoots.add(item.installRoot);
+    const label = item.destination === "canonical" ? "canonical skills" : item.targetId;
+    diagnostics.push({
+      severity: "error",
+      code: "acf.apply.outside-root",
+      message: `nothing applied for ${label} (${item.scopeRoot.scope} scope): ${violation}`,
+      path: item.diff.path,
+      targetId: item.targetId,
+      data: { installRoot: item.installRoot },
+    });
+  }
+  const skipped = new Set<string>();
   for (const group of groupByApplyTarget(plan.diffs)) {
+    if (blockedRoots.has(group.installRoot)) continue;
     const result = await applyDiffs(group.diffs, {
       installRoot: group.installRoot,
       capabilityName: group.capabilityName,
       sidecarPath: path.join(group.installRoot, ".acf-managed.json"),
+      owner: group.owner,
     });
     results.push(result);
+    diagnostics.push(...result.diagnostics);
+    for (const skippedPath of result.skipped) {
+      const relative = relativeSidecarPath(group.installRoot, skippedPath);
+      skipped.add(`${group.installRoot}\u0000${relative}\u0000${group.capabilityName}`);
+    }
   }
-  await removeStaleSidecarEntries(plan.staleEntries);
-  return { results, diagnostics: plan.diagnostics };
+  await removeStaleSidecarEntries(
+    plan.staleEntries.filter(
+      (entry) =>
+        !blockedRoots.has(entry.installRoot) &&
+        !skipped.has(`${entry.installRoot}\u0000${entry.path}\u0000${entry.capability}`),
+    ),
+  );
+  return { results, diagnostics };
+}
+
+/**
+ * The declared output boundary of a plan item's target and scope: the canonical skills root,
+ * or the target's install root plus its skills root and MCP file where those lie outside it
+ * (Claude's project `.mcp.json` sits beside `.claude/`).
+ */
+export function outputBoundary(
+  context: Pick<EmittedDiff, "scopeRoot" | "targetId" | "destination" | "installRoot">,
+  cwd: string,
+): OutputBoundary {
+  if (context.destination === "canonical") {
+    return { roots: [context.scopeRoot.agentsDir], files: [] };
+  }
+  const root = context.installRoot;
+  const roots = [root];
+  const skillsRoot = targetMap[context.targetId]?.skillInstallPaths?.[context.scopeRoot.scope];
+  if (skillsRoot !== undefined && skillsRoot !== null) {
+    const resolved = path.resolve(cwd, skillsRoot);
+    if (!isInsideOrEqual(resolved, root)) roots.push(resolved);
+  }
+  const mcpFile = path.resolve(
+    cwd,
+    layoutFor(context.targetId, root, context.scopeRoot.scope).mcpFile,
+  );
+  return { roots, files: isInsideOrEqual(mcpFile, root) ? [] : [mcpFile] };
+}
+
+function isInsideOrEqual(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  );
+}
+
+function sidecarOwner(context: Pick<RootContext, "targetId" | "destination">): SidecarOwner {
+  // Every output written today is loose files; the Claude plugin carrier arrives with task 5.3.
+  return {
+    target: context.destination === "canonical" ? "canonical" : context.targetId,
+    carrier: "loose",
+  };
 }
 
 async function removeStaleSidecarEntries(stale: readonly StaleSidecarEntry[]): Promise<void> {
@@ -445,14 +576,17 @@ async function removeStaleSidecarEntries(stale: readonly StaleSidecarEntry[]): P
     const sidecarPath = path.join(installRoot, ".acf-managed.json");
     const sidecar = await readSidecar(sidecarPath);
     const before = sidecar.managed.length;
-    sidecar.managed = sidecar.managed.filter(
-      (entry) =>
-        !removals.some(
-          (removal) => removal.path === entry.path && removal.capability === entry.capability,
-        ),
-    );
-    if (sidecar.managed.length !== before) await writeSidecar(sidecarPath, sidecar);
+    const removed = new Set(removals.map(staleIdentity));
+    sidecar.managed = sidecar.managed.filter((entry) => !removed.has(staleIdentity(entry)));
+    if (sidecar.managed.length !== before) {
+      await writeSidecar(sidecarPath, sidecar, removals[0]?.owner);
+    }
   }
+}
+
+function staleIdentity(entry: Pick<ManagedEntry, "path" | "capability" | "owns">): string {
+  const owns = entry.owns.map(ownershipKey).sort().join("|");
+  return `${entry.path}\u0000${entry.capability}\u0000${owns}`;
 }
 
 function isCanonicalSkillPath(filePath: string, scopeRoot: ScopeRoot): boolean {
@@ -566,7 +700,12 @@ function fileDiffChanged(diff: FileDiff): boolean {
   return before.length !== after.length || before.some((byte, index) => byte !== after[index]);
 }
 
-type ApplyGroup = { installRoot: string; capabilityName: string; diffs: FileDiff[] };
+type ApplyGroup = {
+  installRoot: string;
+  capabilityName: string;
+  owner: SidecarOwner;
+  diffs: FileDiff[];
+};
 
 function groupByApplyTarget(items: readonly EmittedDiff[]): ApplyGroup[] {
   const groups = new Map<string, ApplyGroup>();
@@ -575,6 +714,7 @@ function groupByApplyTarget(items: readonly EmittedDiff[]): ApplyGroup[] {
     const group = groups.get(key) ?? {
       installRoot: item.installRoot,
       capabilityName: item.capabilityName,
+      owner: sidecarOwner(item),
       diffs: [],
     };
     group.diffs.push(item.diff);

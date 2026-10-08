@@ -146,6 +146,8 @@ export const addCommand = defineCommand({
       const applied = await applyEmitPlan(plan);
       const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
       const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+      printDiagnostics(applied.diagnostics, context.args);
+      process.exitCode = exitCodeForDiagnostics(applied.diagnostics, context.args);
       out.log("");
       out.done(
         `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,

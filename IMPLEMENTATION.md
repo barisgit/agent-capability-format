@@ -855,10 +855,24 @@ export type AcfManagedSidecar = {
     owns: AcfOwnership[]
     capability: string       // capability name that produced this entry
     facet?: { family: FacetFamily; name: string }
+    target?: TargetId | "canonical" // root owner; filled in on the next write
+    carrier?: Carrier        // "loose" for every output caplet writes today
+    mode?: number            // POSIX permission bits of a whole-file entry
     hash: string             // sha256 of the rendered content for drift detection
   }>
 }
 ```
+
+Apply compares every file with the plan-time `before` content (or the
+plan-time hash of its owned regions) immediately before writing. A file that
+changed in between is skipped with an `acf.apply.drift` warning and keeps its
+sidecar entry. Entries whose path or region is no longer desired are swept on
+the next apply; canonical-root entries are kept while their capability and
+facet exist and the facet was not planned into that root. Before writing,
+each install root is checked against its output boundary (the root, a
+target's native skills root, and its MCP file); an escape through a symlinked
+parent fails that root with `acf.apply.outside-root`. `caplet remove` checks
+the same boundary for every root before changing anything.
 
 Adapters do not write the sidecar. Caplet writes it after applying diffs.
 

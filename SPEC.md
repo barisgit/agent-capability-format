@@ -2276,9 +2276,19 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   named region marker).
 - The emit driver MUST record ownership in a per-install-root sidecar
   named `.acf-managed.json` (canonical shape in `IMPLEMENTATION.md`
-  §4.2.2). The sidecar enables clean re-emit, removal of stale ACF
-  pointers, and drift detection without nuking user-authored content in
-  the same file.
+  §4.2.2). Each entry records the target, carrier, capability, facet,
+  path, owned regions, content hash and, for whole files, the file mode.
+  The sidecar enables clean re-emit, removal of stale ACF pointers, and
+  drift detection without nuking user-authored content in the same file.
+- When applying a plan, the emit driver MUST check that each file still
+  matches the state the plan was computed from. A file that changed in
+  between is left untouched, keeps its sidecar entry, and is reported as
+  drift. On each apply, ACF-owned paths and regions no longer in the
+  desired plan are removed, even when their capability and facet remain.
+- Every write and delete MUST resolve, after following existing parent
+  directories, inside the declared output root of its target and scope.
+  A symlinked parent that leads outside fails that target before any
+  write and names the offending path.
 - Adapters MUST preserve unowned content byte-for-byte in any file they
   patch. Reformatting outside owned regions is forbidden.
 - Adapters MUST emit the listed degradation diagnostics (`acf.adapter.*`,

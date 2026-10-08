@@ -2,16 +2,22 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock } from "@caplet/adapters/common";
-import type {
-  AcfManagedSidecar,
-  AcfOwnership,
-  Diagnostic,
-  FacetFamily,
-  FileContent,
+import {
+  type AcfManagedSidecar,
+  type AcfOwnership,
+  type Carrier,
+  type Diagnostic,
+  type FacetFamily,
+  type FileContent,
+  type SidecarTarget,
+  targetIds,
 } from "@caplet/core";
+import { containmentViolation, type OutputBoundary } from "./containment.js";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
+/** Target and carrier recorded on entries written for one output root. */
+export type SidecarOwner = { target: SidecarTarget; carrier: Carrier };
 export type DriftFs = {
   readText(filePath: string): string | null;
   readBytes?(filePath: string): Uint8Array | null;
@@ -34,7 +40,21 @@ export async function readSidecar(sidecarPath: string): Promise<AcfManagedSideca
   return parseSidecar(JSON.parse(raw) as unknown, sidecarPath);
 }
 
-export async function writeSidecar(sidecarPath: string, sidecar: AcfManagedSidecar): Promise<void> {
+/**
+ * Writes the sidecar in canonical order. With `owner`, entries from sidecars written before
+ * entries recorded their target and carrier are upgraded to that root's owner.
+ */
+export async function writeSidecar(
+  sidecarPath: string,
+  sidecar: AcfManagedSidecar,
+  owner?: SidecarOwner,
+): Promise<void> {
+  if (owner !== undefined) {
+    for (const entry of sidecar.managed) {
+      entry.target ??= owner.target;
+      entry.carrier ??= owner.carrier;
+    }
+  }
   await mkdir(path.dirname(sidecarPath), { recursive: true });
   await writeFile(sidecarPath, `${JSON.stringify(canonicalSidecar(sidecar), null, 2)}\n`, "utf8");
 }
@@ -71,6 +91,29 @@ export function detectDrift(sidecar: AcfManagedSidecar, fs: DriftFs): Diagnostic
   return diagnostics;
 }
 
+/**
+ * Paths `capabilityName` owns under `installRoot` that would leave `boundary` once existing parent
+ * directories are followed. Callers check this before `removeOwnedRegions` so a refused removal
+ * changes nothing.
+ */
+export async function ownedPathViolations(
+  sidecar: AcfManagedSidecar,
+  installRoot: string,
+  capabilityName: string,
+  boundary: OutputBoundary,
+): Promise<string[]> {
+  const violations: string[] = [];
+  const paths = new Set(
+    sidecar.managed.filter((entry) => entry.capability === capabilityName).map((e) => e.path),
+  );
+  for (const relativePath of paths) {
+    const violation = await containmentViolation(path.resolve(installRoot, relativePath), boundary);
+    if (violation !== null) violations.push(violation);
+  }
+  return violations;
+}
+
+/** Removes everything `capabilityName` owns under `installRoot` and drops its entries. */
 export async function removeOwnedRegions(
   sidecar: AcfManagedSidecar,
   installRoot: string,
@@ -168,6 +211,22 @@ function parseEntry(value: unknown, sidecarPath: string): ManagedEntry {
     const name = value.facet.name;
     if (isFacetFamily(family) && typeof name === "string") entry.facet = { family, name };
   }
+  if (value.target !== undefined) {
+    if (!isSidecarTarget(value.target)) throw new Error("invalid sidecar target");
+    entry.target = value.target;
+  }
+  if (value.carrier !== undefined) {
+    if (value.carrier !== "plugin" && value.carrier !== "loose") {
+      throw new Error("invalid sidecar carrier");
+    }
+    entry.carrier = value.carrier;
+  }
+  if (value.mode !== undefined) {
+    if (typeof value.mode !== "number" || !Number.isInteger(value.mode)) {
+      throw new Error("invalid sidecar mode");
+    }
+    entry.mode = value.mode;
+  }
   return entry;
 }
 
@@ -194,14 +253,17 @@ function canonicalSidecar(sidecar: AcfManagedSidecar): AcfManagedSidecar {
 }
 
 function canonicalEntry(entry: ManagedEntry): ManagedEntry {
-  const out: ManagedEntry = {
+  // Insertion order is the serialized order.
+  return {
     path: entry.path,
     owns: [...entry.owns].sort((a, b) => ownershipKey(a).localeCompare(ownershipKey(b))),
     capability: entry.capability,
+    ...(entry.facet === undefined ? {} : { facet: entry.facet }),
+    ...(entry.target === undefined ? {} : { target: entry.target }),
+    ...(entry.carrier === undefined ? {} : { carrier: entry.carrier }),
+    ...(entry.mode === undefined ? {} : { mode: entry.mode }),
     hash: entry.hash,
   };
-  if (entry.facet !== undefined) out.facet = entry.facet;
-  return out;
 }
 
 function sortEntries(entries: ManagedEntry[]): ManagedEntry[] {
@@ -212,7 +274,8 @@ function entryIdentity(entry: ManagedEntry): string {
   return `${entry.path}\0${entry.capability}\0${entry.facet?.family ?? ""}\0${entry.facet?.name ?? ""}\0${entry.owns.map(ownershipKey).sort().join("|")}`;
 }
 
-function ownershipKey(own: AcfOwnership): string {
+/** Stable identity of one owned region within a file, e.g. `json-pointer:/mcpServers/x`. */
+export function ownershipKey(own: AcfOwnership): string {
   switch (own.kind) {
     case "file":
       return "file";
@@ -288,6 +351,10 @@ function consumeOneLineBreak(text: string, index: number): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSidecarTarget(value: unknown): value is SidecarTarget {
+  return value === "canonical" || targetIds.some((id) => id === value);
 }
 
 function isFacetFamily(value: unknown): value is FacetFamily {
