@@ -1,4 +1,9 @@
-import { readSupportData, recoveryFor } from "../targets/support-diagnostics.js";
+import {
+  componentLabel,
+  exclusionRecovery,
+  readSupportData,
+  recoveryFor,
+} from "../targets/support-diagnostics.js";
 import type {
   AcfCapability,
   ComponentOutcome,
@@ -28,6 +33,10 @@ type OutcomeUpdate = Omit<ComponentOutcome, "capability" | "target">;
  * component to a worse outcome; the worst one wins and carries its source, consequence and
  * recovery. Descriptive drops accumulate in `dropped`. Diagnostics for other targets are
  * ignored, so callers may pass the diagnostics of one capability across targets.
+ *
+ * A blocked component blocks the whole capability on the target ({@link capabilityBlocked}),
+ * so every other component is reported blocked too, naming the refused components as its
+ * source and the recovery that unblocks them all.
  */
 export function componentOutcomes(input: {
   capability: AcfCapability;
@@ -66,7 +75,51 @@ export function componentOutcomes(input: {
     for (const change of supportChanges(diagnostic, components)) update(change);
     for (const change of legacyChanges(diagnostic, capability, components, target)) update(change);
   }
-  return [...outcomes.values()];
+  return blockedByRefusals([...outcomes.values()], capability.manifest.name, target);
+}
+
+/**
+ * Whether `diagnostics` hold a refusal for `target`. A refusal blocks the refused component's
+ * whole capability there (capability-model-layers, Writers honor the table or refuse): an apply
+ * writes, updates and removes nothing of it for that target until the user excludes the refused
+ * component, while other capabilities and other targets apply normally.
+ */
+export function capabilityBlocked(diagnostics: readonly Diagnostic[], target: TargetId): boolean {
+  return diagnostics.some(
+    (diagnostic) =>
+      diagnostic.code === "acf.support.refused" && (diagnostic.targetId ?? target) === target,
+  );
+}
+
+function blockedByRefusals(
+  outcomes: readonly ComponentOutcome[],
+  capability: string,
+  target: TargetId,
+): ComponentOutcome[] {
+  const refused = outcomes.filter((item) => item.outcome === "blocked");
+  if (refused.length === 0) return [...outcomes];
+  const excludable = refused.flatMap((item) =>
+    item.family === "package" ? [] : [{ family: item.family, component: item.component }],
+  );
+  const recovery =
+    excludable.length === refused.length
+      ? exclusionRecovery(excludable, target)
+      : recoveryFor({ family: "package", component: capability, target });
+  const source = refused.map(componentLabel).join(", ");
+  return outcomes.map((item) =>
+    item.outcome === "blocked"
+      ? item
+      : {
+          capability: item.capability,
+          target,
+          family: item.family,
+          component: item.component,
+          outcome: "blocked",
+          source,
+          consequence: `capability ${capability} is not installed for ${target}`,
+          recovery,
+        },
+  );
 }
 
 function supportChanges(diagnostic: Diagnostic, components: readonly Component[]): OutcomeUpdate[] {

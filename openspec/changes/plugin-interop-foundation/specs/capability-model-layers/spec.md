@@ -82,7 +82,7 @@ The target registry SHALL declare support per core field or value condition, per
 - **THEN** the registry self-check test fails
 
 ### Requirement: Writers honor the table or refuse
-A writer SHALL, for each core field present on a component, apply exactly the cell declared for its target and carrier. When the cell is a refusal, the writer SHALL omit that component for that target and emit an `error` diagnostic `acf.support.refused` that names the field, component, target, consequence and recovery (exclude the component for that target, or change the declaration). A refusal SHALL block `apply` for the affected target regardless of strict mode until the user excludes the component for that target.
+A writer SHALL, for each core field present on a component, apply exactly the cell declared for its target and carrier. When the cell is a refusal, the writer SHALL omit that component for that target and emit an `error` diagnostic `acf.support.refused` that names the field, component, target, consequence and recovery (exclude the component for that target, or change the declaration). A refusal SHALL block `apply` for that capability on the affected target regardless of strict mode until the user excludes the component for that target: apply writes, updates and deletes nothing of that capability for that target, applies other capabilities and other targets, and exits non-zero.
 
 #### Scenario: Manual-only skill to a target that cannot honor it
 - **WHEN** a skill with `invocation.model: false` is planned for OpenCode

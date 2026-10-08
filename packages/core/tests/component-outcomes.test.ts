@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AcfCapability,
   type ComponentOutcome,
+  capabilityBlocked,
   componentOmitted,
   componentOutcomes,
   type Diagnostic,
@@ -68,7 +69,6 @@ describe("component outcomes", () => {
   test("support diagnostics and reported translations set the outcome", () => {
     const subject = { capability: "tools", family: "skill", component: "review" } as const;
     const diagnostics = [
-      supportDiagnostic({ ...subject, target: "opencode" }, "skill.invocation.model=false"),
       supportDiagnostic({ ...subject, target: "opencode" }, "skill.argument-hint"),
       componentOmitted(
         { capability: "tools", family: "agent", component: "helper", target: "opencode" },
@@ -92,15 +92,44 @@ describe("component outcomes", () => {
       ],
     });
     expect(byComponent(outcomes)).toMatchObject({
-      "skill:review": "blocked",
+      "skill:review": "native",
       "agent:helper": "omitted",
       "mcp:docs": "translated",
       "instruction:always": "native",
     });
     const review = outcomes.find((item) => item.component === "review");
-    expect(review?.source).toBe("skill.invocation.model=false");
-    expect(review?.recovery).toBe("exclude: { skill: [review] } or except: [opencode]");
     expect(review?.dropped).toEqual(["skill.argument-hint"]);
+  });
+
+  test("a refused component blocks the rest of its capability on that target", () => {
+    const diagnostics = [
+      supportDiagnostic(
+        { capability: "tools", family: "skill", component: "review", target: "codex" },
+        "skill.invocation.user=false",
+      ),
+      supportDiagnostic(
+        { capability: "tools", family: "mcp", component: "docs", target: "codex" },
+        "mcp.transport=sse",
+      ),
+    ].filter((item): item is Diagnostic => item !== undefined);
+    const outcomes = componentOutcomes({ capability: capability(), target: "codex", diagnostics });
+
+    expect(new Set(outcomes.map((item) => item.outcome))).toEqual(new Set(["blocked"]));
+    expect(outcomes.find((item) => item.component === "review")?.source).toBe(
+      "skill.invocation.user=false",
+    );
+    expect(outcomes.find((item) => item.component === "helper")).toEqual({
+      capability: "tools",
+      target: "codex",
+      family: "agent",
+      component: "helper",
+      outcome: "blocked",
+      source: "skill review, MCP server docs",
+      consequence: "capability tools is not installed for codex",
+      recovery: "exclude: { skill: [review], mcp: [docs] } or except: [codex]",
+    });
+    expect(capabilityBlocked(diagnostics, "codex")).toBe(true);
+    expect(capabilityBlocked(diagnostics, "claude")).toBe(false);
   });
 
   test("a package refusal blocks every component", () => {

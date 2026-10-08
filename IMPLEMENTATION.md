@@ -2810,8 +2810,10 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - The plan opens with a compatibility report: per target, one line per
   component that is translated, changed in behavior, omitted or blocked
   (`review / pi - blocked: … Recovery: …`), a count of native components,
-  and one line of dropped descriptive fields. It also prints when a refusal
-  blocks the apply. `--json` carries the same records as `outcomes`.
+  and one line of dropped descriptive fields. A refusal blocks the rest of
+  its capability for that target, reported on one grouped line; apply
+  leaves that capability's output for the target untouched, applies
+  everything else and exits 2. `--json` carries the same records as `outcomes`.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
   exits 3 when the lockfile is stale. A plan that deletes files asks for

@@ -3,16 +3,6 @@
     "capability": "alpha-cap",
     "target": "codex",
     "family": "skill",
-    "component": "background",
-    "outcome": "blocked",
-    "source": "skill.invocation.user=false",
-    "consequence": "skill background is not installed for codex",
-    "recovery": "exclude: { skill: [background] } or except: [codex]"
-  },
-  {
-    "capability": "alpha-cap",
-    "target": "codex",
-    "family": "skill",
     "component": "review",
     "outcome": "native",
     "dropped": [
@@ -43,7 +33,47 @@
     "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
   },
   {
-    "capability": "alpha-cap",
+    "capability": "beta-cap",
+    "target": "codex",
+    "family": "skill",
+    "component": "background",
+    "outcome": "blocked",
+    "source": "skill.invocation.user=false",
+    "consequence": "skill background is not installed for codex",
+    "recovery": "exclude: { skill: [background] } or except: [codex]"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "codex",
+    "family": "agent",
+    "component": "beta-helper",
+    "outcome": "blocked",
+    "source": "skill background, MCP server events",
+    "consequence": "capability beta-cap is not installed for codex",
+    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "codex",
+    "family": "instruction",
+    "component": "always",
+    "outcome": "blocked",
+    "source": "skill background, MCP server events",
+    "consequence": "capability beta-cap is not installed for codex",
+    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "codex",
+    "family": "mcp",
+    "component": "beta-server",
+    "outcome": "blocked",
+    "source": "skill background, MCP server events",
+    "consequence": "capability beta-cap is not installed for codex",
+    "recovery": "exclude: { skill: [background], mcp: [events] } or except: [codex]"
+  },
+  {
+    "capability": "beta-cap",
     "target": "codex",
     "family": "mcp",
     "component": "events",
@@ -51,26 +81,5 @@
     "source": "mcp.transport=sse",
     "consequence": "MCP server events is not installed for codex",
     "recovery": "exclude: { mcp: [events] } or except: [codex]"
-  },
-  {
-    "capability": "beta-cap",
-    "target": "codex",
-    "family": "agent",
-    "component": "beta-helper",
-    "outcome": "native"
-  },
-  {
-    "capability": "beta-cap",
-    "target": "codex",
-    "family": "instruction",
-    "component": "always",
-    "outcome": "native"
-  },
-  {
-    "capability": "beta-cap",
-    "target": "codex",
-    "family": "mcp",
-    "component": "beta-server",
-    "outcome": "native"
   }
 ]

@@ -9,14 +9,18 @@ import {
   applyApplicability,
   type CapletConfig,
   type ComponentOutcome,
+  capabilityBlocked,
   componentOutcomes,
   type Diagnostic,
   type EmitOptions,
+  type ExecutableChange,
   type ExecutableComponent,
+  executableChanges,
   executableComponents,
   type FileDiff,
   readCapletConfig,
   resolveScopeCapabilities,
+  type Scope,
   type ScopeRoot,
   type TargetId,
   targetIds,
@@ -69,6 +73,9 @@ export type StaleSidecarEntry = {
   owner: SidecarOwner;
 };
 
+/** A capability a refusal blocks on one target in one scope (`capabilityBlocked`). */
+export type BlockedCapability = { scope: Scope; target: TargetId; capability: string };
+
 export type EmitPlan = {
   /** Directory relative target paths resolve against (the process cwd while planning). */
   cwd: string;
@@ -76,8 +83,14 @@ export type EmitPlan = {
   scopes: ScopeRoot[];
   targets: TargetId[];
   diagnostics: Diagnostic[];
+  /** Changes to apply; none belongs to a {@link blocked} capability on its target. */
   diffs: EmittedDiff[];
   staleEntries: StaleSidecarEntry[];
+  /**
+   * Capabilities refused on a target: their earlier output there is kept as it was, so a later
+   * apply after the user excludes the refused component starts from the last installed state.
+   */
+  blocked: BlockedCapability[];
   /**
    * Compatibility-report outcome of every planned component per target, independent of whether
    * its files changed. A capability planned in several scopes is reported once per target.
@@ -85,7 +98,8 @@ export type EmitPlan = {
   outcomes: ComponentOutcome[];
   /**
    * Executable components of every planned capability per scope and target, read while the
-   * planned snapshots (or previews) exist; compare with {@link installedExecutables}.
+   * planned snapshots (or previews) exist; compare with {@link installedExecutables} through
+   * {@link plannedExecutableChanges}.
    */
   executables: ExecutableComponent[];
 };
@@ -143,6 +157,9 @@ export async function buildEmitPlan(
   const targets = targetSelection(args, configResult.config);
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const desiredDiffs: EmittedDiff[] = [];
+  const blocked: BlockedCapability[] = [];
+  // `<install root>\0<capability>` pairs whose sidecar entries a blocked capability keeps.
+  const keptOutput = new Set<string>();
   const outcomes = new Map<string, ComponentOutcome>();
   const executables: ExecutableComponent[] = [];
   const canonicalDiffs = new Set<string>();
@@ -226,9 +243,12 @@ export async function buildEmitPlan(
       }
       diagnostics.push(...(await driftDiagnostics(installRoot)));
       for (const capability of resolved.capabilities) {
-        executables.push(...(await executableComponents(capability, targetId)));
+        const capabilityExecutables = await executableComponents(capability, targetId);
         const filtered = applyApplicability(capability, targetId);
-        if (filtered === null) continue;
+        if (filtered === null) {
+          executables.push(...capabilityExecutables);
+          continue;
+        }
         const adapter = targetMap[targetId]?.adapter;
         if (adapter === undefined) {
           diagnostics.push({
@@ -237,6 +257,7 @@ export async function buildEmitPlan(
             message: `adapter not registered for target ${targetId}`,
             targetId,
           });
+          executables.push(...capabilityExecutables);
           continue;
         }
         const input = {
@@ -258,6 +279,17 @@ export async function buildEmitPlan(
           const key = `${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
           if (!outcomes.has(key)) outcomes.set(key, outcome);
         }
+        if (capabilityBlocked([...validation, ...result.diagnostics], targetId)) {
+          const name = filtered.manifest.name;
+          blocked.push({ scope: scopeRoot.scope, target: targetId, capability: name });
+          keptOutput.add(`${installRoot}\u0000${name}`);
+          // The shared skills root is this target's output too.
+          if (canonicalSkillReaders.includes(targetId)) {
+            keptOutput.add(`${scopeRoot.agentsDir}\u0000${name}`);
+          }
+          continue;
+        }
+        executables.push(...capabilityExecutables);
         for (const diff of result.diffs) {
           const canonical = isCanonicalSkillPath(diff.path, scopeRoot);
           if (canonical) {
@@ -285,6 +317,7 @@ export async function buildEmitPlan(
     desiredDiffs,
     resolvedNames,
     resolvedFacets,
+    keptOutput,
   );
   const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics, {
     staleByRoot: sweep.staleByRoot,
@@ -304,6 +337,7 @@ export async function buildEmitPlan(
     diagnostics,
     diffs,
     staleEntries: sweep.staleEntries,
+    blocked,
     outcomes: [...outcomes.values()],
     executables,
   };
@@ -332,6 +366,24 @@ export async function installedExecutables(
     }
   }
   return executables;
+}
+
+/**
+ * Executable changes the plan makes: `installed` (from {@link installedExecutables}) against
+ * the planned inventory. A blocked capability changes nothing on its target, so its components
+ * there are left out of both sides.
+ */
+export function plannedExecutableChanges(
+  installed: readonly ExecutableComponent[],
+  plan: Pick<EmitPlan, "blocked" | "executables">,
+): ExecutableChange[] {
+  const blocked = new Set(
+    plan.blocked.map((item) => `${item.scope}\u0000${item.target}\u0000${item.capability}`),
+  );
+  const unblocked = installed.filter(
+    (item) => !blocked.has(`${item.scope}\u0000${item.target}\u0000${item.capability}`),
+  );
+  return executableChanges(unblocked, plan.executables);
 }
 
 function diffPathKey(item: EmittedDiff): string {
@@ -366,6 +418,8 @@ type SweepResult = {
  * entry there is kept while its capability and facet still exist unless this run planned that
  * facet into the canonical root. Regions another capability now owns are released without a
  * delete, and a partly stale entry forces its path so the remaining regions are re-recorded.
+ * Entries of a capability blocked on the root's target (`keptOutput`, keyed
+ * `<install root>\0<capability>`) are never stale: a refusal keeps the earlier install.
  */
 async function sweepStaleSidecarEntries(
   scopes: readonly ScopeRoot[],
@@ -375,6 +429,7 @@ async function sweepStaleSidecarEntries(
   desired: readonly EmittedDiff[],
   resolvedNames: ReadonlyMap<string, ReadonlySet<string>>,
   resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  keptOutput: ReadonlySet<string>,
 ): Promise<SweepResult> {
   const desiredOwns = new Set<string>();
   const desiredOwnsAnyCapability = new Set<string>();
@@ -436,6 +491,7 @@ async function sweepStaleSidecarEntries(
           if (hashOwnedRegions(current, entry.owns) !== entry.hash) forcedPaths.add(pathKey);
           continue;
         }
+        if (keptOutput.has(`${candidate.installRoot}\u0000${entry.capability}`)) continue;
         if (
           candidate.destination === "canonical" &&
           names.has(entry.capability) &&

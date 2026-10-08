@@ -1,9 +1,9 @@
-import { type Diagnostic, type ExecutableComponent, executableChanges } from "@caplet/core";
+import type { Diagnostic, ExecutableComponent } from "@caplet/core";
 import { readVerbose } from "./args.js";
 import { printJson, readJson } from "./json.js";
 import { blockingExitCode, exitCodeForDiagnostics, printDiagnostics, reporter } from "./output.js";
 import { buildPlanView, planToJson } from "./plan-view.js";
-import { applyEmitPlan, buildEmitPlan } from "./workflow.js";
+import { applyEmitPlan, buildEmitPlan, plannedExecutableChanges } from "./workflow.js";
 
 /** What `add` or `update` hands to {@link planAndApply} after resolving its sources. */
 export type PlanAndApplyInput = {
@@ -31,7 +31,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   const out = reporter(args);
   const plan = await buildEmitPlan(args);
   const diagnostics = [...input.diagnostics, ...plan.diagnostics];
-  const executables = executableChanges(input.installed, plan.executables);
+  const executables = plannedExecutableChanges(input.installed, plan);
   const view = buildPlanView(plan.diffs, { verbose: readVerbose(args) });
   const envelope = (applied: unknown) => ({
     ...input.payload,
@@ -40,7 +40,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     executables,
   });
   const blocking = blockingExitCode(diagnostics, args);
-  // Refusals left their components out of the plan; the rest still applies.
+  // Refused capabilities are already out of the plan for their targets; the rest applies.
   const planCode = exitCodeForDiagnostics(diagnostics, args);
   process.exitCode = planCode;
   if (blocking !== 0) {
@@ -55,7 +55,8 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   if (view.fileCount === 0) {
     if (json) printJson(command, planCode === 0, diagnostics, envelope(null));
     else {
-      out.done("Everything up to date");
+      if (plan.blocked.length > 0) out.warn("Nothing else to apply");
+      else out.done("Everything up to date");
       out.executables(executables);
     }
     return;
