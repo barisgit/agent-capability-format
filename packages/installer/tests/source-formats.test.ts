@@ -137,4 +137,20 @@ describe("foreign source formats", () => {
       expect.objectContaining({ name: "acme-docs", format: "agent-plugins" }),
     ]);
   });
+  test("changing rename on a locked entry refetches under the new name", async () => {
+    const first = await scopeWith(claudePlugin, "    rename: kit-one\n");
+    expect(first.records.map((item) => item.name)).toEqual(["kit-one"]);
+
+    const { scopeRoot } = first;
+    await writeText(
+      scopeRoot.manifestPath,
+      "acf: 1\ncapabilities:\n  - source: path:../pkg\n    rename: kit-two\n",
+    );
+    const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    expect(errors(second)).toEqual([]);
+    const lock = await readLockfile(scopeRoot.lockPath);
+    expect(lock?.entries[0]?.rename).toBe("kit-two");
+    expect(lock?.entries[0]?.resolvedCapabilities?.map((item) => item.name)).toEqual(["kit-two"]);
+    expect(await exists(path.join(scopeRoot.capabilitiesDir, "kit-two"))).toBe(true);
+  });
 });

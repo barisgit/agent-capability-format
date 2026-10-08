@@ -362,6 +362,12 @@ function matchSegment(pattern: string, candidate: string): boolean {
   return new RegExp(`${expression}$`).test(candidate);
 }
 
+function sameRename(left: CapabilityEntry["rename"], right: CapabilityEntry["rename"]): boolean {
+  if (typeof left !== "object" || typeof right !== "object") return left === right;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
+}
+
 function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {
   if (left === undefined || right === undefined) return left === right;
   return [...left].sort().join("\0") === [...right].sort().join("\0");
@@ -454,6 +460,8 @@ function shouldFetch(
   return (
     (entry.ref ?? null) !== (locked.ref ?? null) ||
     !sameStrings(entry.capabilities, locked.capabilities) ||
+    // A changed `rename:` names the snapshots differently, so the locked records no longer apply.
+    !sameRename(entry.rename, locked.rename) ||
     // A changed `format:` selects another reader, so the locked records no longer apply.
     (entry.format !== undefined &&
       (locked.resolvedCapabilities ?? []).some((record) => record.format !== entry.format))
