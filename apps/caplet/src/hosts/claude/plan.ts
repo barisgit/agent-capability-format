@@ -33,7 +33,11 @@ export type PlannedClaudePlugin = {
  * One command. `after` lists indexes of earlier steps in the same scope plan that must succeed
  * first; a failed or skipped prerequisite skips this step and nothing else.
  */
-export type PlannedClaudeStep = { command: ClaudeCommand; plugin?: string | undefined; after: number[] };
+export type PlannedClaudeStep = {
+  command: ClaudeCommand;
+  plugin?: string | undefined;
+  after: number[];
+};
 
 export type ClaudeScopePlan = {
   target: ClaudeScopeTarget;
@@ -70,6 +74,7 @@ export function planClaudeScope(
   const plugins: PlannedClaudePlugin[] = [];
   const desiredNames = new Set(desired.plugins.map((p) => p.name));
 
+  // The marketplace add, when present, is step 0; installs and updates wait on it.
   if (desired.plugins.length > 0) {
     steps.push({
       command: { op: "marketplace add", dir: desired.marketplaceDir, scope: claudeScope },
@@ -87,9 +92,19 @@ export function planClaudeScope(
         : current.version === plugin.version
           ? "unchanged"
           : "update";
-    plugins.push({ name: plugin.name, id, action, desiredVersion: plugin.version, observed: current });
+    plugins.push({
+      name: plugin.name,
+      id,
+      action,
+      desiredVersion: plugin.version,
+      observed: current,
+    });
     if (action === "install" || action === "update") {
-      steps.push({ command: { op: action, plugin: id, scope: claudeScope }, plugin: id, after: [0] });
+      steps.push({
+        command: { op: action, plugin: id, scope: claudeScope },
+        plugin: id,
+        after: [0],
+      });
     }
   }
   const uninstalls: number[] = [];

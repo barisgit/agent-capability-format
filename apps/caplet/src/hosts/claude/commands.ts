@@ -38,7 +38,12 @@ export function claudeArgs(command: ClaudeCommand): string[] {
 export const LIST_PLUGINS_ARGS: readonly string[] = ["plugin", "list", "--json"];
 
 /** Arguments of `claude plugin marketplace list --json`. */
-export const LIST_MARKETPLACES_ARGS: readonly string[] = ["plugin", "marketplace", "list", "--json"];
+export const LIST_MARKETPLACES_ARGS: readonly string[] = [
+  "plugin",
+  "marketplace",
+  "list",
+  "--json",
+];
 
 /** The command as a POSIX shell line a user can paste, for recovery hints. */
 export function formatClaudeCommand(command: ClaudeCommand): string {

@@ -23,7 +23,9 @@ export type ClaudeHostFailure =
   | { kind: "failed"; message: string }
   | { kind: "unreadable"; message: string };
 
-export type ClaudeHostResult<T> = { ok: true; value: T } | { ok: false; failure: ClaudeHostFailure };
+export type ClaudeHostResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; failure: ClaudeHostFailure };
 
 /**
  * Port to the Claude host's plugin system. Every state change goes through `run` with a typed
@@ -53,7 +55,8 @@ export function createClaudeHost(cli: ClaudeCli): ClaudeHost {
     listMarketplaces: () => list(LIST_MARKETPLACES_ARGS, parseMarketplaceList),
     async run(command) {
       const outcome = await cli(claudeArgs(command));
-      if (outcome.kind === "exited" && outcome.exitCode === 0) return { ok: true, value: undefined };
+      if (outcome.kind === "exited" && outcome.exitCode === 0)
+        return { ok: true, value: undefined };
       return failed(outcome);
     },
   };
@@ -78,7 +81,11 @@ function failed(outcome: ClaudeCliOutcome): { ok: false; failure: ClaudeHostFail
 
 /** Claude prints one `✘ ...` line on failure; prefer stderr, fall back to stdout. */
 function claudeMessage(outcome: { stdout: string; stderr: string }): string {
-  const lines = (stream: string) => stream.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = (stream: string) =>
+    stream
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
   const line = lines(outcome.stderr).at(-1) ?? lines(outcome.stdout).at(-1) ?? "no output";
   return line.replace(/^✘\s*/, "");
 }
@@ -97,5 +104,7 @@ const POLICY_BLOCK_PATTERNS: readonly RegExp[] = [
 
 /** Whether a failed command's output matches a known Claude policy-block message. */
 export function classifyClaudeFailure(output: string): "policy-blocked" | "failed" {
-  return POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(output)) ? "policy-blocked" : "failed";
+  return POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(output))
+    ? "policy-blocked"
+    : "failed";
 }

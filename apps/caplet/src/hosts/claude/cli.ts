@@ -45,7 +45,10 @@ export function execClaudeCli(options: ExecClaudeCliOptions): ClaudeCli {
       child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
         stderr += chunk;
       });
-      const timer = setTimeout(() => child.kill("SIGTERM"), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => child.kill("SIGTERM"),
+        options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      );
       // A spawn failure may be followed by `close`; the first settled outcome wins.
       child.on("error", (error: NodeJS.ErrnoException) => {
         clearTimeout(timer);

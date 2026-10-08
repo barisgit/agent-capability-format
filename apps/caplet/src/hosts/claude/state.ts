@@ -78,7 +78,8 @@ function parseArray(stdout: string, what: string): Record<string, unknown>[] {
   try {
     value = JSON.parse(stdout);
   } catch (error) {
-    throw new Error(`${what} did not print JSON: ${(error as Error).message}`);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${what} did not print JSON: ${reason}`);
   }
   if (!Array.isArray(value)) throw new Error(`${what} did not print a JSON array`);
   return value.map((entry, index) => {
