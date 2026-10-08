@@ -693,7 +693,12 @@ export type TargetDefinition<Id extends string> = {
   id: Id
   displayName: string
 
-  support: Partial<Record<FacetFamily, SupportLevel>>
+  // Family-level support for agents, commands, instructions and hooks only. Skills, MCP
+  // servers and package metadata are declared per field and carrier in
+  // targets/field-support.ts (fieldSupport, supportCell, targetCarriers), with native keys
+  // classified in targets/native-keys.ts (nativeKeyInfo) and checked by
+  // targets/self-check.ts (checkSupportRegistry).
+  support: Partial<Record<Exclude<FacetFamily, "skill" | "mcp">, SupportLevel>>
   installPaths: InstallPaths
   // Native skill install paths, when the target has target-specific skill
   // directories. Omitted = skills emit only to the canonical shared root.
@@ -903,12 +908,10 @@ export const targets = defineTargets([
     displayName: "Claude Code",
 
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "partial",
       hook: "full",
-      mcp: "full",
     },
 
     installPaths: {
@@ -961,12 +964,10 @@ export const targets = defineTargets([
     displayName: "Codex",
 
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "none",
       hook: "full",
-      mcp: "full",
     },
 
     installPaths: {
@@ -1018,12 +1019,10 @@ export const targets = defineTargets([
     id: "opencode",
     displayName: "OpenCode",
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "partial",
       hook: "partial",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.config/opencode`,
@@ -1070,12 +1069,10 @@ export const targets = defineTargets([
     id: "cursor",
     displayName: "Cursor",
     support: {
-      skill: "partial",
       agent: "partial",
       command: "partial",
       instruction: "partial",
       hook: "none",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.cursor`,
@@ -1118,12 +1115,10 @@ export const targets = defineTargets([
     id: "pi",
     displayName: "Pi",
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "full",
       hook: "full",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.pi/agent`,

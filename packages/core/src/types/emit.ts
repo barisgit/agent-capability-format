@@ -17,10 +17,15 @@ export type TargetMappings = {
   mcpInstallPath: InstallPaths;
 };
 export type TargetExtensionSchemas = Partial<Record<FacetFamily | "capability", ZodType<unknown>>>;
+/**
+ * Facet families gated by family-level `support`. Skills and MCP servers are gated per field
+ * and carrier by the support registry (`fieldSupport`, `supportCell` in core targets).
+ */
+export type FamilySupportFamily = Exclude<FacetFamily, "skill" | "mcp">;
 export type TargetDefinition<Id extends string = string> = {
   id: Id;
   displayName: string;
-  support: Partial<Record<FacetFamily, SupportLevel>>;
+  support: Partial<Record<FamilySupportFamily, SupportLevel>>;
   installPaths: InstallPaths;
   // Native per-target skills directory. SPEC §22.2: skills always emit to the
   // canonical ~/.agents/skills (project ./.agents/skills) root; when a target

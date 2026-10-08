@@ -10,7 +10,9 @@ import {
   defaultHookTimeoutMs,
   type EmitInput,
   type FacetFamily,
+  type FamilySupportFamily,
   type FileDiff,
+  familySupportFamilies,
   type HookEffect,
   type HookEntry,
   type HookRun,
@@ -50,7 +52,7 @@ export type AdapterLayout = {
 export type AdapterOptions = {
   cursorRulesOnly?: boolean | undefined;
   skipUnsupportedHooks?: boolean | undefined;
-  lossyPartialFamilies?: readonly FacetFamily[] | undefined;
+  lossyPartialFamilies?: readonly FamilySupportFamily[] | undefined;
 };
 
 export function layoutFor(targetId: TargetId, installRoot: string, scope: Scope): AdapterLayout {
@@ -389,10 +391,11 @@ function diagnoseSupport(
   cap: AcfCapability,
   targetId: TargetId,
   diagnostics: Diagnostic[],
-  lossyPartialFamilies: readonly FacetFamily[],
+  lossyPartialFamilies: readonly FamilySupportFamily[],
 ): void {
   const support = targetMap[targetId]?.support ?? {};
-  for (const family of ["skill", "agent", "command", "instruction", "hook", "mcp"] as const) {
+  // Skills and MCP have no family-level gate; field-level support cells govern them.
+  for (const family of familySupportFamilies) {
     if (!familyHasItems(cap, family)) continue;
     const level = support[family];
     if (level === "none") {
