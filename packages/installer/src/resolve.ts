@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
@@ -36,6 +36,10 @@ export type ResolveOptions = {
   scopeRoot: ScopeRoot;
   mode: "auto" | "never" | "force";
   sourceIds?: readonly string[] | undefined;
+  /**
+   * `false` previews resolution: neither the lock nor the installed snapshots change, and
+   * the result's `preview` holds the snapshots the resolution would install.
+   */
   updateLock?: boolean | undefined;
   prefetchedSources?: ReadonlyMap<string, PrefetchedSource> | undefined;
 };
@@ -49,6 +53,15 @@ export type ResolveResult = {
   capabilities: CapabilityRecord[];
   lockfile: CapabilitiesLock;
   diagnostics: Diagnostic[];
+  /** Present when `updateLock` was `false`; the caller must `dispose` it. */
+  preview?: ResolvePreview | undefined;
+};
+
+/** Snapshots a previewing resolution would install, matching the returned `lockfile`. */
+export type ResolvePreview = {
+  /** Temporary stand-in for `scopeRoot.capabilitiesDir`. */
+  capabilitiesDir: string;
+  dispose(): Promise<void>;
 };
 
 export type CapabilityRecord = {
@@ -76,12 +89,44 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
     };
   }
   await mkdir(opts.scopeRoot.agentsDir, { recursive: true });
+  const preview = opts.updateLock === false ? await createPreview(opts.scopeRoot) : undefined;
   const stagingDir = await mkdtemp(path.join(opts.scopeRoot.agentsDir, ".acf-staging-"));
   try {
-    return await resolveCapabilitiesStaged(opts, stagingDir, manifest, existingLock);
+    const scopeRoot =
+      preview === undefined
+        ? opts.scopeRoot
+        : { ...opts.scopeRoot, capabilitiesDir: preview.capabilitiesDir };
+    const result = await resolveCapabilitiesStaged(
+      { ...opts, scopeRoot },
+      stagingDir,
+      manifest,
+      existingLock,
+    );
+    return preview === undefined ? result : { ...result, preview };
+  } catch (error) {
+    await preview?.dispose();
+    throw error;
   } finally {
     await rm(stagingDir, { recursive: true, force: true });
   }
+}
+
+/** Copies the installed snapshots aside so a preview can change them freely. */
+async function createPreview(scopeRoot: ScopeRoot): Promise<ResolvePreview> {
+  const root = await mkdtemp(path.join(scopeRoot.agentsDir, ".acf-preview-"));
+  const capabilitiesDir = path.join(root, "capabilities");
+  try {
+    await cp(scopeRoot.capabilitiesDir, capabilitiesDir, { recursive: true, errorOnExist: true });
+  } catch (error) {
+    if (!isErrno(error, "ENOENT")) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  }
+  return {
+    capabilitiesDir,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
 }
 
 async function resolveCapabilitiesStaged(

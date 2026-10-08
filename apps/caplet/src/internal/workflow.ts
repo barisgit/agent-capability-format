@@ -101,7 +101,11 @@ export async function fetchScopes(
 
 export async function buildEmitPlan(
   args: Record<string, unknown>,
-  opts?: { locks?: ReadonlyMap<string, CapabilitiesLock> },
+  opts?: {
+    locks?: ReadonlyMap<string, CapabilitiesLock>;
+    /** Per-scope snapshot directories standing in for `capabilitiesDir` (previews). */
+    capabilitiesDirs?: ReadonlyMap<string, string>;
+  },
 ): Promise<EmitPlan> {
   const cwd = path.resolve(readCwd(args));
   process.chdir(cwd);
@@ -130,7 +134,11 @@ export async function buildEmitPlan(
       ),
     };
     diagnostics.push(...detectLockDrift(anchoredManifest, lock));
-    const resolved = await resolveScopeCapabilities(scopeRoot, { lock });
+    const capabilitiesDir = opts?.capabilitiesDirs?.get(scopeRoot.scope);
+    const resolved = await resolveScopeCapabilities(
+      capabilitiesDir === undefined ? scopeRoot : { ...scopeRoot, capabilitiesDir },
+      { lock },
+    );
     diagnostics.push(...resolved.diagnostics);
     if (lock !== null) {
       const manifestDir = path.dirname(scopeRoot.manifestPath);

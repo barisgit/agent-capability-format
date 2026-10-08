@@ -25,15 +25,31 @@ export const applyCommand = defineCommand({
               undefined,
               simulate ? { updateLock: false } : undefined,
             );
-      const locks = simulate
-        ? new Map(
-            fetched.scopes.flatMap((scopeRoot, index) => {
-              const result = fetched.results[index];
-              return result === undefined ? [] : ([[scopeRoot.scope, result.lockfile]] as const);
-            }),
-          )
-        : undefined;
-      const plan = await buildEmitPlan(context.args, locks === undefined ? undefined : { locks });
+      // A simulated apply plans against the previewed lock and snapshots, then discards them.
+      const previews = fetched.scopes.flatMap((scopeRoot, index) => {
+        const result = fetched.results[index];
+        return result?.preview === undefined
+          ? []
+          : [{ scopeRoot, result, preview: result.preview }];
+      });
+      let plan: Awaited<ReturnType<typeof buildEmitPlan>>;
+      try {
+        plan = await buildEmitPlan(
+          context.args,
+          simulate
+            ? {
+                locks: new Map(
+                  previews.map((item) => [item.scopeRoot.scope, item.result.lockfile]),
+                ),
+                capabilitiesDirs: new Map(
+                  previews.map((item) => [item.scopeRoot.scope, item.preview.capabilitiesDir]),
+                ),
+              }
+            : undefined,
+        );
+      } finally {
+        await Promise.all(previews.map((item) => item.preview.dispose()));
+      }
       const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
       if (!json) printDiagnostics(diagnostics, context.args);
       const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
