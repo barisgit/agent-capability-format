@@ -1,7 +1,8 @@
-import type { ComponentOutcome, Diagnostic, TargetId } from "@caplet/core";
+import type { ComponentOutcome, Diagnostic, ExecutableChange, TargetId } from "@caplet/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
 import { renderCompatibility } from "./compatibility.js";
+import { renderExecutableChanges } from "./executables.js";
 import type { PlanView } from "./plan-view.js";
 import { columns, glyphs } from "./render.js";
 
@@ -18,6 +19,11 @@ export type Reporter = {
   plan(view: PlanView): void;
   /** Behavior-first compatibility report; precedes the plan's file list. */
   compatibility(outcomes: readonly ComponentOutcome[], targets: readonly TargetId[]): void;
+  /**
+   * Executable components added, changed or removed; printed whenever non-empty, even with
+   * `--quiet`, because the report is how an install of executing code stays visible.
+   */
+  executables(changes: readonly ExecutableChange[]): void;
   failure(message: string): void;
   hint(message: string): void;
 };
@@ -100,6 +106,9 @@ export function reporter(args: Record<string, unknown>): Reporter {
     compatibility(outcomes, targets) {
       if (quiet) return;
       for (const line of renderCompatibility(outcomes, targets)) writeStdout(line);
+    },
+    executables(changes) {
+      for (const line of renderExecutableChanges(changes)) writeStdout(line);
     },
     failure(message) {
       writeStderr(`${colors.bold(colors.red(glyphs().fail))} ${sentenceCase(message)}`);

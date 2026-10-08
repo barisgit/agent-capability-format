@@ -2,15 +2,16 @@ import path from "node:path";
 import type { CapabilityEntry, ScopeRoot } from "@caplet/core";
 import { fetchCapability, inspectSource, type PrefetchedSource } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
+import { planAndApply } from "../internal/apply-flow.js";
 import {
   readCwd,
   readExplicitScope,
   readOptionalString,
-  readVerbose,
   readYes,
   validationError,
 } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
 import {
   addManifestEntry,
   anchorPathSource,
@@ -19,11 +20,10 @@ import {
   readManifestForMutation,
 } from "../internal/manifest.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
-import { buildPlanView } from "../internal/plan-view.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { chooseSourceCapabilities } from "../internal/source-selection.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { applyEmitPlan, buildEmitPlan, fetchScopes } from "../internal/workflow.js";
+import { fetchScopes, installedExecutables } from "../internal/workflow.js";
 
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },
@@ -83,9 +83,11 @@ export const addCommand = defineCommand({
         if (selected.length <= 3) return selected.join(", ");
         return `${selected.slice(0, 3).join(", ")} +${selected.length - 3} more`;
       }
+      const json = readJson(context.args);
       const inspection = await inspectForSelection(root, entry, {
         ...(parsedSource.selector === undefined ? {} : { requested: parsedSource.selector }),
-        interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+        // The picker would write to stdout, which carries only the envelope under --json.
+        interactive: !json && process.stdin.isTTY === true && process.stdout.isTTY === true,
         yes: readYes(context.args),
       });
       const out = reporter(context.args);
@@ -96,9 +98,18 @@ export const addCommand = defineCommand({
       }
       const inspectionCode = exitCodeForDiagnostics(inspection.inventory.diagnostics, context.args);
       if (inspectionCode !== 0) {
+        process.exitCode = inspectionCode;
+        if (json) {
+          printJson("add", false, inspection.inventory.diagnostics, {
+            added: null,
+            plan: null,
+            applied: null,
+            executables: [],
+          });
+          return;
+        }
         printDiagnostics(inspection.inventory.diagnostics, context.args);
         out.failure("Source inspection failed");
-        process.exitCode = inspectionCode;
         return;
       }
       if (
@@ -111,47 +122,50 @@ export const addCommand = defineCommand({
           .map((candidate) => candidate.selector);
       }
       await addManifestEntry(root, entry);
-      out.done(`Added ${entry.source.kind} source (${scope} scope)`);
-      out.details([
-        ["Manifest", root.manifestPath],
-        ["Source", parsedSource.source],
-        ["Capabilities", selectionSummary(inspection.selected)],
-        ...(entry.path === undefined ? [] : ([["Path", entry.path]] as Array<[string, string]>)),
-      ]);
+      const added = {
+        source: parsedSource.source,
+        scope,
+        manifest: root.manifestPath,
+        capabilities: inspection.selected,
+        ...(entry.path === undefined ? {} : { path: entry.path }),
+      };
+      if (!json) {
+        out.done(`Added ${entry.source.kind} source (${scope} scope)`);
+        out.details([
+          ["Manifest", root.manifestPath],
+          ["Source", parsedSource.source],
+          ["Capabilities", selectionSummary(inspection.selected)],
+          ...(entry.path === undefined ? [] : ([["Path", entry.path]] as Array<[string, string]>)),
+        ]);
+      }
       if (context.args.apply === false) {
-        printDiagnostics(inspection.inventory.diagnostics, context.args);
+        // Nothing is resolved or installed yet; the apply that installs it reports executables.
+        if (json) {
+          printJson("add", true, inspection.inventory.diagnostics, {
+            added,
+            plan: null,
+            applied: null,
+            executables: [],
+          });
+        } else {
+          printDiagnostics(inspection.inventory.diagnostics, context.args);
+        }
         return;
       }
       const scopedArgs = { ...context.args, scope };
+      const installed = await installedExecutables(scopedArgs);
       const fetched = await fetchScopes(scopedArgs, "auto", undefined, {
         prefetchedSources: new Map([
           [inspection.prefetched.fetched.sourceId, inspection.prefetched],
         ]),
       });
-      const plan = await buildEmitPlan(scopedArgs);
-      const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
-      printDiagnostics(diagnostics, context.args);
-      const code = exitCodeForDiagnostics(diagnostics, context.args);
-      if (code !== 0) {
-        process.exitCode = code;
-        return;
-      }
-      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
-      if (view.fileCount === 0) {
-        out.done("Everything up to date");
-        return;
-      }
-      out.log("");
-      out.plan(view);
-      const applied = await applyEmitPlan(plan);
-      const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
-      const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
-      printDiagnostics(applied.diagnostics, context.args);
-      process.exitCode = exitCodeForDiagnostics(applied.diagnostics, context.args);
-      out.log("");
-      out.done(
-        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
-      );
+      await planAndApply({
+        command: "add",
+        args: scopedArgs,
+        diagnostics: fetched.diagnostics,
+        installed,
+        payload: { added },
+      });
     });
   },
 });

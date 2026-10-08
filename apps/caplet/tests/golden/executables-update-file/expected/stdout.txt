@@ -1,0 +1,6 @@
+ok Updated 1 capabilities
+    Resolved  1 capability
+
+Executable changes
+  claude
+    + executable file bin/setup.sh  tools

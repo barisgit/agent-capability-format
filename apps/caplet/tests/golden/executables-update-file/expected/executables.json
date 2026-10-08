@@ -1,0 +1,11 @@
+[
+  {
+    "scope": "project",
+    "capability": "tools",
+    "target": "claude",
+    "kind": "file",
+    "name": "bin/setup.sh",
+    "detail": "bin/setup.sh",
+    "change": "changed"
+  }
+]

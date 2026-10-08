@@ -12,6 +12,8 @@ import {
   componentOutcomes,
   type Diagnostic,
   type EmitOptions,
+  type ExecutableComponent,
+  executableComponents,
   type FileDiff,
   readCapletConfig,
   resolveScopeCapabilities,
@@ -81,6 +83,11 @@ export type EmitPlan = {
    * its files changed. A capability planned in several scopes is reported once per target.
    */
   outcomes: ComponentOutcome[];
+  /**
+   * Executable components of every planned capability per scope and target, read while the
+   * planned snapshots (or previews) exist; compare with {@link installedExecutables}.
+   */
+  executables: ExecutableComponent[];
 };
 
 /** Outcome of applying a plan; `diagnostics` holds only what apply itself found. */
@@ -137,6 +144,7 @@ export async function buildEmitPlan(
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const desiredDiffs: EmittedDiff[] = [];
   const outcomes = new Map<string, ComponentOutcome>();
+  const executables: ExecutableComponent[] = [];
   const canonicalDiffs = new Set<string>();
   const resolvedNames = new Map<string, ReadonlySet<string>>();
   const resolvedFacets = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
@@ -213,6 +221,7 @@ export async function buildEmitPlan(
       }
       diagnostics.push(...(await driftDiagnostics(installRoot)));
       for (const capability of resolved.capabilities) {
+        executables.push(...(await executableComponents(capability, targetId)));
         const filtered = applyApplicability(capability, targetId);
         if (filtered === null) continue;
         const adapter = targetMap[targetId]?.adapter;
@@ -291,7 +300,33 @@ export async function buildEmitPlan(
     diffs,
     staleEntries: sweep.staleEntries,
     outcomes: [...outcomes.values()],
+    executables,
   };
+}
+
+/**
+ * Executable components of the snapshots installed in the selected scopes, for the targets a
+ * plan would select. Call it before a command fetches: resolution replaces snapshots in place,
+ * so this is the only point where the previously locked content is still readable. Snapshots
+ * that no longer match the lock are skipped, so their components count as added afterwards.
+ */
+export async function installedExecutables(
+  args: Record<string, unknown>,
+): Promise<ExecutableComponent[]> {
+  const cwd = path.resolve(readCwd(args));
+  const { config } = await readCapletConfig(cwd);
+  const targets = targetSelection(args, config);
+  const executables: ExecutableComponent[] = [];
+  for (const scopeRoot of await resolveScopeRoots(readScope(args), cwd)) {
+    const { capabilities } = await resolveScopeCapabilities(scopeRoot);
+    for (const targetId of targets) {
+      if (installRootFor(targetId, scopeRoot, config, cwd) === null) continue;
+      for (const capability of capabilities) {
+        executables.push(...(await executableComponents(capability, targetId)));
+      }
+    }
+  }
+  return executables;
 }
 
 function diffPathKey(item: EmittedDiff): string {

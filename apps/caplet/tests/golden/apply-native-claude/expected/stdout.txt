@@ -13,6 +13,11 @@ project  .
 
 + 5 create  ~ 0 update  - 0 delete
 
+Executable changes
+  claude
+    + MCP server alpha-server: node server.js  alpha-cap
+    + MCP server beta-server: node server.js   beta-cap
+
 warn 5 files
 targets
     project  (nothing managed yet)

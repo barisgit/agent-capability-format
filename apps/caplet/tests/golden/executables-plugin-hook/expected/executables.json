@@ -1,0 +1,11 @@
+[
+  {
+    "scope": "project",
+    "capability": "formatter",
+    "target": "claude",
+    "kind": "hook",
+    "name": "hooks",
+    "detail": "hooks/",
+    "change": "changed"
+  }
+]

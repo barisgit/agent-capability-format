@@ -1,3 +1,4 @@
+import { executableChanges } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
@@ -5,7 +6,13 @@ import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import { buildPlanView, planToJson, reachBlock, reachToJson } from "../internal/plan-view.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { applyEmitPlan, buildEmitPlan, collectReach, fetchScopes } from "../internal/workflow.js";
+import {
+  applyEmitPlan,
+  buildEmitPlan,
+  collectReach,
+  fetchScopes,
+  installedExecutables,
+} from "../internal/workflow.js";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
@@ -16,6 +23,7 @@ export const applyCommand = defineCommand({
       const dryRun = context.args["dry-run"] === true;
       const frozen = context.args.frozen === true;
       const simulate = dryRun && !frozen;
+      const installed = await installedExecutables(context.args);
       const fetched =
         dryRun && frozen
           ? { scopes: [], results: [], diagnostics: [] }
@@ -57,7 +65,8 @@ export const applyCommand = defineCommand({
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
       const reach = await collectReach(plan);
       const out = reporter(context.args);
-      const outcomes = { outcomes: plan.outcomes };
+      const executables = executableChanges(installed, plan.executables);
+      const outcomes = { outcomes: plan.outcomes, executables };
       if (code !== 0) {
         if (json) {
           printJson("apply", false, diagnostics, { plan: planToJson(view), ...outcomes });
@@ -83,6 +92,7 @@ export const applyCommand = defineCommand({
           } else {
             out.done(`Cleaned up ${stale} stale sidecar ${stale === 1 ? "entry" : "entries"}`);
           }
+          out.executables(executables);
           for (const line of reachBlock(
             reach,
             plan.scopes.map((scopeRoot) => scopeRoot.scope),
@@ -90,6 +100,7 @@ export const applyCommand = defineCommand({
             out.log(line);
         } else {
           out.done("Everything up to date");
+          out.executables(executables);
           for (const line of reachBlock(
             reach,
             plan.scopes.map((scopeRoot) => scopeRoot.scope),
@@ -101,6 +112,7 @@ export const applyCommand = defineCommand({
       if (!json) {
         out.compatibility(plan.outcomes, plan.targets);
         out.plan(view);
+        out.executables(executables);
       }
       if (dryRun) {
         if (json) {

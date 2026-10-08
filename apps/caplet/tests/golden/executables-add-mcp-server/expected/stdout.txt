@@ -1,0 +1,19 @@
+ok Added path source (project scope)
+    Manifest      <tmp>/project/.agents/capabilities.yml
+    Source        <tmp>/sources/tools
+    Capabilities  tools
+
+Plan: 2 changes
+
+project  .
+  claude  .claude
+    + .mcp.json          tools
+    + managed notices
+
++ 2 create  ~ 0 update  - 0 delete
+
+Executable changes
+  claude
+    + MCP server docs: node ${ACF_CAPABILITY_DIR}/server.js --stdio  tools
+
+ok Applied 2 files (2 writes, 0 deletes)

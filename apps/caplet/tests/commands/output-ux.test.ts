@@ -283,6 +283,9 @@ test("diff has a calm empty state when output is current", async () => {
 test("quiet suppresses the complete success presentation", async () => {
   const scope = await makeScope();
   try {
+    // Install first: a quiet run still lists executable components it adds.
+    const scopeArgs = ["--cwd", scope.cwd, "--scope", "project"];
+    expect((await runCaplet(scope, ["apply", ...scopeArgs])).exitCode).toBe(0);
     const result = await runCaplet(scope, [
       "update",
       "--no-apply",
