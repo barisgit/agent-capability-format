@@ -1,19 +1,58 @@
 {
   "name": "@caplet/adapters",
   "version": "0.1.0",
-  "private": true,
+  "description": "Target adapters that emit Agent Capability Format capabilities into Claude Code, Codex, Cursor, OpenCode, and Pi.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barisgit/agent-capability-format.git",
+    "directory": "packages/adapters"
+  },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./common": "./src/common/index.ts",
-    "./claude": "./src/claude/index.ts",
-    "./codex": "./src/codex/index.ts",
-    "./cursor": "./src/cursor/index.ts",
-    "./opencode": "./src/opencode/index.ts",
-    "./pi": "./src/pi/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "default": "./dist/common/index.js"
+    },
+    "./claude": {
+      "types": "./dist/claude/index.d.ts",
+      "default": "./dist/claude/index.js"
+    },
+    "./codex": {
+      "types": "./dist/codex/index.d.ts",
+      "default": "./dist/codex/index.js"
+    },
+    "./cursor": {
+      "types": "./dist/cursor/index.d.ts",
+      "default": "./dist/cursor/index.js"
+    },
+    "./opencode": {
+      "types": "./dist/opencode/index.d.ts",
+      "default": "./dist/opencode/index.js"
+    },
+    "./pi": {
+      "types": "./dist/pi/index.d.ts",
+      "default": "./dist/pi/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "echo 'no build for @caplet/adapters'",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for @caplet/adapters'",
     "test": "bun test"

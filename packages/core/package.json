@@ -1,24 +1,78 @@
 {
   "name": "@caplet/core",
   "version": "0.1.0",
-  "private": true,
+  "description": "Agent Capability Format (ACF) reader, validator, resolver, schemas, and diagnostics.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barisgit/agent-capability-format.git",
+    "directory": "packages/core"
+  },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./diagnostics": "./src/diagnostics/index.ts",
-    "./emit": "./src/emit/index.ts",
-    "./hash": "./src/hash/index.ts",
-    "./reader": "./src/reader/index.ts",
-    "./resolver": "./src/resolver/index.ts",
-    "./schemas": "./src/schemas/index.ts",
-    "./targets": "./src/targets/index.ts",
-    "./types": "./src/types/index.ts",
-    "./validator": "./src/validator/index.ts",
-    "./applicability": "./src/applicability/index.ts",
-    "./assets": "./src/assets/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./diagnostics": {
+      "types": "./dist/diagnostics/index.d.ts",
+      "default": "./dist/diagnostics/index.js"
+    },
+    "./emit": {
+      "types": "./dist/emit/index.d.ts",
+      "default": "./dist/emit/index.js"
+    },
+    "./hash": {
+      "types": "./dist/hash/index.d.ts",
+      "default": "./dist/hash/index.js"
+    },
+    "./reader": {
+      "types": "./dist/reader/index.d.ts",
+      "default": "./dist/reader/index.js"
+    },
+    "./resolver": {
+      "types": "./dist/resolver/index.d.ts",
+      "default": "./dist/resolver/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas/index.d.ts",
+      "default": "./dist/schemas/index.js"
+    },
+    "./targets": {
+      "types": "./dist/targets/index.d.ts",
+      "default": "./dist/targets/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/types/index.js"
+    },
+    "./validator": {
+      "types": "./dist/validator/index.d.ts",
+      "default": "./dist/validator/index.js"
+    },
+    "./applicability": {
+      "types": "./dist/applicability/index.d.ts",
+      "default": "./dist/applicability/index.js"
+    },
+    "./assets": {
+      "types": "./dist/assets/index.d.ts",
+      "default": "./dist/assets/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "echo 'no build for @caplet/core'",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for @caplet/core'",
     "test": "bun test"

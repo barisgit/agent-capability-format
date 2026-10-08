@@ -1,22 +1,43 @@
 {
   "name": "@caplet/cli",
   "version": "0.1.0",
-  "private": true,
+  "description": "caplet: install agent capabilities and sync them into your AI tools.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barisgit/agent-capability-format.git",
+    "directory": "apps/caplet"
+  },
   "type": "module",
   "bin": {
-    "caplet": "./src/bin.ts"
+    "caplet": "./dist/bin.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "echo 'no build for caplet'",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for caplet'",
     "test": "bun test",
     "start": "bun src/bin.ts",
     "caplet": "bun src/bin.ts",
-    "link": "bun link"
+    "link": "bun run build && bun link"
   },
   "dependencies": {
     "@caplet/adapters": "workspace:*",

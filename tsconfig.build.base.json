@@ -1,0 +1,18 @@
+// Publish build shared by every package: emits Node-compatible ESM + .d.ts into the
+// package's dist/. NodeNext enforces explicit .js extensions on relative imports,
+// node-only types reject Bun globals in shipped code, and workspace dependencies
+// resolve through their published exports (dist/), so turbo builds them first.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "paths": {},
+    "noEmit": false,
+    "declaration": true,
+    "rootDir": "${configDir}/src",
+    "outDir": "${configDir}/dist"
+  },
+  "include": ["${configDir}/src/**/*.ts"]
+}

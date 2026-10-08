@@ -1,13 +1,34 @@
 {
   "name": "@caplet/runtime-taxonomy",
   "version": "0.1.0",
-  "private": true,
+  "description": "Runtime taxonomy vocabularies (operations, events, permissions) for the Agent Capability Format.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barisgit/agent-capability-format.git",
+    "directory": "packages/runtime-taxonomy"
+  },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "echo 'no build for @caplet/runtime-taxonomy'",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for @caplet/runtime-taxonomy'",
     "test": "bun test"

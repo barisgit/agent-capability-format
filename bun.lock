@@ -18,7 +18,7 @@
       "name": "@caplet/cli",
       "version": "0.1.0",
       "bin": {
-        "caplet": "./src/bin.ts",
+        "caplet": "./dist/bin.js",
       },
       "dependencies": {
         "@caplet/adapters": "workspace:*",

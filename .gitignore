@@ -11,3 +11,8 @@ coverage/
 .worktrees/
 evidence/video/*.mov
 # Small rendered artifacts (.cast/.gif/.mp4) ARE committed; large raw screen recordings are not.
+
+# Copied from the root LICENSE by each package prepack script.
+apps/*/LICENSE
+packages/*/LICENSE
+.packs/

@@ -13,9 +13,10 @@
     "test": "turbo run test --force",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ci": "bun run lint && turbo run check-types test build --force",
+    "ci": "bun run lint && tsc --noEmit -p scripts && turbo run check-types test build --force",
     "caplet": "bun run --silent --cwd apps/caplet caplet",
-    "caplet:link": "bun run --filter @caplet/cli link"
+    "caplet:link": "bun run --filter @caplet/cli link",
+    "smoke:packages": "turbo run build && bun scripts/packages.ts pack .packs && bun scripts/packages.ts smoke .packs"
   },
   "engines": {
     "bun": ">=1.3.0"

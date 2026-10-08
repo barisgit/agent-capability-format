@@ -17,6 +17,18 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // Package exports point at compiled dist/ for publishing. In the workspace, these
+    // paths send type checks and Bun (which honors tsconfig paths at runtime) to source,
+    // so tests and `bun src/bin.ts` need no build. tsconfig.build.base.json clears them.
+    "paths": {
+      "@caplet/adapters": ["./packages/adapters/src/index.ts"],
+      "@caplet/adapters/*": ["./packages/adapters/src/*/index.ts"],
+      "@caplet/core": ["./packages/core/src/index.ts"],
+      "@caplet/core/*": ["./packages/core/src/*/index.ts"],
+      "@caplet/installer": ["./packages/installer/src/index.ts"],
+      "@caplet/runtime-taxonomy": ["./packages/runtime-taxonomy/src/index.ts"],
+      "@caplet/sdk": ["./packages/sdk/src/index.ts"]
+    }
   }
 }
