@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isForeignFormat, readForeignPackage } from "../formats/index.js";
 import { computePayloadDigest } from "../hash/payload-digest.js";
 import {
   type CapabilitiesLock,
@@ -94,7 +95,8 @@ export async function readRepositoryCapabilities(
 
 /**
  * Reads every installed capability snapshot of `root`. Capabilities with a lock record
- * carry their `source` provenance so format readers can reopen the preserved package.
+ * carry their `source` provenance; an Agent Plugins or Claude plugin snapshot is read by
+ * the format reader its record names, under the locked (possibly renamed) name.
  */
 export async function resolveScopeCapabilities(
   root: ScopeRoot,
@@ -107,11 +109,24 @@ export async function resolveScopeCapabilities(
   for (const entry of await readdir(root.capabilitiesDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const dir = path.join(root.capabilitiesDir, entry.name);
-    const record = lock === null ? undefined : findLockedCapability(lock, entry.name)?.capability;
+    const locked = lock === null ? undefined : findLockedCapability(lock, entry.name);
+    const record = locked?.capability;
     // A snapshot counts as installed only while it still matches its lock record.
     const mismatch = record === undefined ? undefined : await verifySnapshot(dir, record);
     if (mismatch !== undefined) {
       diagnostics.push(mismatch);
+      continue;
+    }
+    if (record !== undefined && isForeignFormat(record.format)) {
+      const read = await readForeignPackage(record.format, dir, {
+        scope: root.scope,
+        origin: { kind: "local", directory: dir },
+        rename: record.name,
+        revision: locked?.entry.resolvedSha ?? null,
+        sourcePath: record.path,
+      });
+      if (read.capability === undefined) diagnostics.push(...read.diagnostics);
+      else capabilities.push(read.capability);
       continue;
     }
     const discovery = await discoverRepository(dir);

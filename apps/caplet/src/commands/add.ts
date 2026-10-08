@@ -68,7 +68,11 @@ export const addCommand = defineCommand({
           shallow: manifest.defaults?.fetch?.shallow,
           blobless: manifest.defaults?.fetch?.blobless,
         });
-        const inventory = await inspectSource(fetched.root);
+        const inventory = await inspectSource(fetched.root, {
+          format: entry.format,
+          rename: entry.rename,
+          revision: fetched.commit,
+        });
         if (inventory.diagnostics.some((item) => item.severity === "error")) {
           return { inventory, prefetched: { fetched, inventory }, selected: [] };
         }

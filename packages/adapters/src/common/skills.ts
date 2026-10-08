@@ -11,7 +11,7 @@ import {
   type SkillFacet,
   type TargetDefinition,
 } from "@caplet/core";
-import { type AssetPayload, readAssets } from "./assets.js";
+import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { renderMarkdownFile } from "./text.js";
 
@@ -169,14 +169,11 @@ async function readSkillAssets(
       "name" in asset.facet && asset.facet.family === "skill" && asset.facet.name === skill.name
     );
   });
-  return await readAssets(cap, assets, fs, (assetPath) => relativeSkillAssetPath(skill, assetPath));
-}
-
-function relativeSkillAssetPath(skill: SkillFacet, assetPath: string): string | null {
-  const prefix = `skills/${skill.name}/`;
-  if (!assetPath.startsWith(prefix)) return assetPath;
-  const relativePath = assetPath.slice(prefix.length);
-  return relativePath.length > 0 ? relativePath : assetPath;
+  // Relative to the skill's own directory, which foreign packages may place outside
+  // `skills/<name>/` (a Claude plugin's manifest `skills` paths).
+  return await readAssets(cap, assets, fs, (assetPath) =>
+    relativeAssetPathFromBase(cap, skill.dir, assetPath),
+  );
 }
 
 async function pushTextDiff(

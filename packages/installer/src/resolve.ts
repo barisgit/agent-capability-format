@@ -453,7 +453,10 @@ function shouldFetch(
   if (locked === undefined) return true;
   return (
     (entry.ref ?? null) !== (locked.ref ?? null) ||
-    !sameStrings(entry.capabilities, locked.capabilities)
+    !sameStrings(entry.capabilities, locked.capabilities) ||
+    // A changed `format:` selects another reader, so the locked records no longer apply.
+    (entry.format !== undefined &&
+      (locked.resolvedCapabilities ?? []).some((record) => record.format !== entry.format))
   );
 }
 
@@ -518,7 +521,13 @@ async function materializeFetched(
   lockEntry: LockEntry | null;
   diagnostics: Diagnostic[];
 }> {
-  const inventory = inspectedInventory ?? (await inspectSource(fetched.root));
+  const inventory =
+    inspectedInventory ??
+    (await inspectSource(fetched.root, {
+      format: entry.format,
+      rename: entry.rename,
+      revision: fetched.commit,
+    }));
   const diagnostics = [...inventory.diagnostics];
   const records: CapabilityRecord[] = [];
   const selected = selectCapabilities(entry, fetched.root, inventory);
@@ -551,7 +560,10 @@ async function materializeFetched(
       contentHash: digests.capabilityHash,
       lockRecord: {
         name,
-        format: candidate.synthesized ? "skills" : "acf",
+        format: candidate.format,
+        ...(candidate.formatVersion === undefined
+          ? {}
+          : { formatVersion: candidate.formatVersion }),
         path: selectedSourcePath(entry, candidate),
         ...digests,
       },

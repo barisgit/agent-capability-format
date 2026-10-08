@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
 import {
+  type CapabilitiesLock,
+  computePayloadDigest,
   deduplicateCapabilities,
   discoverCapabilityRoots,
   readRepositoryCapabilities,
@@ -81,5 +83,57 @@ test("project shadows user and same-scope collision is diagnosed", async () => {
   } finally {
     await cleanup(userDir);
     await cleanup(projectDir);
+  }
+});
+
+test("foreign snapshots are read with the reader their lock record names", async () => {
+  const dir = await tempDir("acf-resolver-foreign-");
+  try {
+    const scope = scopeRoot("project", dir);
+    const snapshot = path.join(scope.capabilitiesDir, "review-kit");
+    await writeText(
+      path.join(snapshot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "review-kit", version: "v3" }),
+    );
+    await writeText(
+      path.join(snapshot, "skills", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review code\n---\n",
+    );
+    const payloadDigest = await computePayloadDigest(snapshot);
+    const lock: CapabilitiesLock = {
+      acf: 1,
+      entries: [
+        {
+          capabilityHash: payloadDigest,
+          capabilityNames: ["review-kit"],
+          source: "path:../plugin",
+          sourceId: "path:/plugin",
+          resolvedSha: "abc123",
+          resolvedCapabilities: [
+            {
+              name: "review-kit",
+              format: "claude-plugin",
+              path: "plugins/review",
+              payloadDigest,
+              capabilityHash: payloadDigest,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { capabilities, diagnostics } = await resolveScopeCapabilities(scope, { lock });
+    expect(diagnostics).toEqual([]);
+    expect(capabilities.map((cap) => [cap.manifest.name, cap.manifest.version])).toEqual([
+      ["review-kit", "0.0.0-unversioned+abc123"],
+    ]);
+    expect(capabilities[0]?.skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(capabilities[0]?.source).toEqual({
+      format: "claude-plugin",
+      path: "plugins/review",
+      snapshotRoot: snapshot,
+    });
+  } finally {
+    await cleanup(dir);
   }
 });
