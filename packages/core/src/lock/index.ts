@@ -38,8 +38,10 @@ export type LockEntry = {
   capabilityNames: string[];
   capabilities?: string[] | undefined;
   selectorsByCapability?: Record<string, string> | undefined;
+  except?: CapabilityEntry["except"] | undefined;
   exclude?: CapabilityEntry["exclude"] | undefined;
   include?: CapabilityEntry["include"] | undefined;
+  only?: CapabilityEntry["only"] | undefined;
   ref?: string | undefined;
   rename?: CapabilityEntry["rename"] | undefined;
   resolvedAt?: string | undefined;
@@ -173,8 +175,10 @@ function canonicalizeEntry(entry: LockEntry): LockEntry {
   if (entry.selectorsByCapability !== undefined) {
     ordered.selectorsByCapability = sortStringRecord(entry.selectorsByCapability);
   }
+  if (entry.except !== undefined) ordered.except = [...entry.except].sort();
   if (entry.exclude !== undefined) ordered.exclude = sortSelector(entry.exclude);
   if (entry.include !== undefined) ordered.include = sortSelector(entry.include);
+  if (entry.only !== undefined) ordered.only = [...entry.only].sort();
   if (entry.ref !== undefined) ordered.ref = entry.ref;
   if (entry.rename !== undefined) ordered.rename = sortRename(entry.rename);
   if (entry.resolvedAt !== undefined) ordered.resolvedAt = entry.resolvedAt;
@@ -261,8 +265,10 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   if (isCapabilitySelectorMap(value.selectorsByCapability)) {
     entry.selectorsByCapability = value.selectorsByCapability;
   }
+  if (isStringArray(value.except)) entry.except = value.except;
   if (isSelector(value.exclude)) entry.exclude = value.exclude;
   if (isSelector(value.include)) entry.include = value.include;
+  if (isStringArray(value.only)) entry.only = value.only;
   if (typeof value.ref === "string") entry.ref = value.ref;
   if (isRename(value.rename)) entry.rename = value.rename;
   if (typeof value.resolvedAt === "string") entry.resolvedAt = value.resolvedAt;

@@ -21,9 +21,9 @@ import type {
   ScopeRoot,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
-import { selectComponents } from "./selection.js";
+import { applyEntrySelection } from "./selection.js";
 
-export { type FacetSelection, selectComponents } from "./selection.js";
+export { applyEntrySelection, type EntrySelection } from "./selection.js";
 
 export type ResolveScopeOptions = {
   /**
@@ -113,7 +113,7 @@ export async function resolveScopeCapabilities(
   // A lock entry mirrors its capabilities.yml include/exclude, so selection follows the lock.
   const select = (capability: AcfCapability, entry: LockEntry | undefined): AcfCapability => {
     if (entry === undefined) return capability;
-    const selected = selectComponents(capability, entry);
+    const selected = applyEntrySelection(capability, entry);
     diagnostics.push(...selected.diagnostics);
     return selected.capability;
   };

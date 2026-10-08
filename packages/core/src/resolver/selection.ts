@@ -1,3 +1,4 @@
+import { computeSet } from "../applicability/index.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -6,13 +7,20 @@ import type {
   HookFile,
   McpFile,
   NativeRemainderKind,
+  TargetId,
 } from "../types/index.js";
 import { selectorKeys } from "../types/index.js";
 
-/** A `capabilities.yml` entry's facet selection, as its lock entry mirrors it. */
-export type FacetSelection = {
+/**
+ * What a `capabilities.yml` entry installs of a resolved capability, as its lock entry
+ * mirrors it: facet selection (`include`, `exclude`) and entry-level applicability (`only`,
+ * `except`).
+ */
+export type EntrySelection = {
   include?: FacetSelector | undefined;
   exclude?: FacetSelector | undefined;
+  only?: TargetId[] | undefined;
+  except?: TargetId[] | undefined;
 };
 
 const families = Object.keys(selectorKeys) as FacetFamily[];
@@ -26,8 +34,10 @@ const remainderFamily: Partial<Record<NativeRemainderKind, FacetFamily>> = {
 };
 
 /**
- * Applies a `capabilities.yml` entry's `include` then `exclude` (SPEC.md §17.5, §20.5) to a
- * resolved capability, native or foreign. `include` keeps only matching names in the families
+ * Applies a `capabilities.yml` entry's selection to a resolved capability, native or foreign.
+ * Entry `only`/`except` narrow the capability's targets by intersection with its own
+ * applicability (SPEC.md §6.4). Then `include`, then `exclude` (SPEC.md §17.5, §20.5) select
+ * components: `include` keeps only matching names in the families
  * it lists (an absent family keeps everything); `exclude` removes matching names. Names match
  * hook entry and MCP server names too, `*` and `?` glob within one name, and a foreign
  * package's native agents, commands, hooks and MCP servers are selected like facets. Returns
@@ -37,10 +47,11 @@ const remainderFamily: Partial<Record<NativeRemainderKind, FacetFamily>> = {
  * `acf.selection.remainder-references` (lossy) when exclusion removes something from a
  * package whose preserved native components may still reference it.
  */
-export function selectComponents(
-  capability: AcfCapability,
-  selection: FacetSelection,
+export function applyEntrySelection(
+  resolved: AcfCapability,
+  selection: EntrySelection,
 ): { capability: AcfCapability; diagnostics: Diagnostic[] } {
+  const capability = narrowTargets(resolved, selection);
   if (isEmpty(selection.include) && isEmpty(selection.exclude))
     return { capability, diagnostics: [] };
   const matchers = {
@@ -83,6 +94,15 @@ export function selectComponents(
     });
   }
   return { capability: selected, diagnostics };
+}
+
+function narrowTargets(capability: AcfCapability, entry: EntrySelection): AcfCapability {
+  if (entry.only === undefined && entry.except === undefined) return capability;
+  const entryTargets = computeSet(entry);
+  const manifest = { ...capability.manifest };
+  delete manifest.except;
+  manifest.only = computeSet(capability.manifest).filter((id) => entryTargets.includes(id));
+  return { ...capability, manifest };
 }
 
 type SelectorMatcher = {

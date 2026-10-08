@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { readClaudePluginPackage, selectComponents } from "../src";
+import { applicableTargets, applyEntrySelection, readClaudePluginPackage } from "../src";
 import { baseManifest, cleanup, makeCapability, readTempCapability, tempDir } from "./helpers";
 
 const dirs: string[] = [];
@@ -30,7 +30,7 @@ async function nativeCapability() {
 test("exclude removes matching components of each family, globs included", async () => {
   const cap = await nativeCapability();
 
-  const { capability, diagnostics } = selectComponents(cap, {
+  const { capability, diagnostics } = applyEntrySelection(cap, {
     exclude: { skills: ["draft-*"], agents: ["helper"], hooks: ["greet"], mcp: ["search"] },
   });
 
@@ -45,7 +45,7 @@ test("exclude removes matching components of each family, globs included", async
 test("include keeps only matching names in the families it lists", async () => {
   const cap = await nativeCapability();
 
-  const { capability } = selectComponents(cap, {
+  const { capability } = applyEntrySelection(cap, {
     include: { skills: ["review", "draft-?"] },
     exclude: { skills: ["draft-b"] },
   });
@@ -58,7 +58,9 @@ test("include keeps only matching names in the families it lists", async () => {
 test("a selector that matches nothing is reported", async () => {
   const cap = await nativeCapability();
 
-  const { capability, diagnostics } = selectComponents(cap, { exclude: { skills: ["backgroud"] } });
+  const { capability, diagnostics } = applyEntrySelection(cap, {
+    exclude: { skills: ["backgroud"] },
+  });
 
   expect(capability.skills).toHaveLength(3);
   expect(diagnostics.map((diagnostic) => [diagnostic.severity, diagnostic.code])).toEqual([
@@ -85,7 +87,7 @@ test("selection reaches a foreign package's native remainder and warns about ref
   });
   if (read.capability === undefined) throw new Error("plugin did not load");
 
-  const { capability, diagnostics } = selectComponents(read.capability, {
+  const { capability, diagnostics } = applyEntrySelection(read.capability, {
     exclude: { skills: ["draft"], agents: ["writer"] },
   });
 
@@ -96,4 +98,20 @@ test("selection reaches a foreign package's native remainder and warns about ref
   expect(diagnostics.map((diagnostic) => [diagnostic.severity, diagnostic.code])).toEqual([
     ["lossy", "acf.selection.remainder-references"],
   ]);
+});
+
+test("entry only/except intersect with the capability's own applicability", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": `${baseManifest}except: [cursor]\n`,
+    "skills/review/SKILL.md": skill("review"),
+  });
+  dirs.push(dir);
+
+  const { capability } = applyEntrySelection(cap, { except: ["codex"] });
+
+  const targets = applicableTargets(capability, {});
+  expect(targets).not.toContain("codex");
+  expect(targets).not.toContain("cursor");
+  expect(targets).toContain("claude");
+  expect(applicableTargets(cap, {})).toContain("codex");
 });

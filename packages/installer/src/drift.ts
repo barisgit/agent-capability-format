@@ -1,4 +1,4 @@
-import type { CapabilitiesYml, CapabilityEntry, Diagnostic } from "@caplet/core";
+import type { CapabilitiesYml, CapabilityEntry, Diagnostic, EntrySelection } from "@caplet/core";
 import type { CapabilitiesLock } from "./lockfile.js";
 import { entrySourceId, sourceId } from "./lockfile.js";
 
@@ -54,11 +54,11 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
       diagnostics.push({
         severity: "error",
         code: "acf.lock.drift",
-        message: `capabilities.yml include/exclude differs from lock for ${id}`,
+        message: `capabilities.yml include, exclude, only or except differs from lock for ${id}`,
         data: {
           sourceId: id,
-          ymlSelection: { include: entry.include ?? null, exclude: entry.exclude ?? null },
-          lockSelection: { include: lockEntry.include ?? null, exclude: lockEntry.exclude ?? null },
+          ymlSelection: selectionData(entry),
+          lockSelection: selectionData(lockEntry),
         },
       });
     }
@@ -66,15 +66,23 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
   return diagnostics;
 }
 
-/** Whether two entries select the same facets: same families, same names in any order. */
-export function sameSelection(
-  left: Pick<CapabilityEntry, "include" | "exclude">,
-  right: Pick<CapabilityEntry, "include" | "exclude">,
-): boolean {
+/** Whether two entries select the same components and targets, ignoring list order. */
+export function sameSelection(left: EntrySelection, right: EntrySelection): boolean {
   return (
     selectorKey(left.include) === selectorKey(right.include) &&
-    selectorKey(left.exclude) === selectorKey(right.exclude)
+    selectorKey(left.exclude) === selectorKey(right.exclude) &&
+    sameStrings(left.only, right.only) &&
+    sameStrings(left.except, right.except)
   );
+}
+
+function selectionData(selection: EntrySelection): Record<keyof EntrySelection, unknown> {
+  return {
+    include: selection.include ?? null,
+    exclude: selection.exclude ?? null,
+    only: selection.only ?? null,
+    except: selection.except ?? null,
+  };
 }
 
 function selectorKey(selector: CapabilityEntry["include"]): string {

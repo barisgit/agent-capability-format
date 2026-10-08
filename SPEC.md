@@ -1980,6 +1980,7 @@ entries:
 | `entries[].capabilities` | list | no | Normalized collection selectors from `capabilities.yml`. |
 | `entries[].selectorsByCapability` | mapping | no | Final capability name to exact inventory selector, used for selector-safe removal. |
 | `entries[].include` / `exclude` / `rename` | mapping | no | Mirrors `capabilities.yml`.                          |
+| `entries[].only` / `except` | list | no | Mirrors `capabilities.yml`.                                    |
 
 ### 19.5 Hash computation
 
