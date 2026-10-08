@@ -193,7 +193,7 @@ sidecar remains the authority used for drift detection and safe cleanup.
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
-implementation (`caplet` 0.2.0, private Bun workspace, not yet published to
+implementation (`caplet` 0.1.0, private Bun workspace, not yet published to
 npm). It supports bare skill imports, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).

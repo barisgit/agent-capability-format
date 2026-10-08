@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import packageJson from "../../package.json" with { type: "json" };
 import { cleanup, fetchProject, makeScope, runCaplet } from "../helpers";
 
 function parseEnvelope(stdout: string): Record<string, unknown> {
@@ -22,7 +23,7 @@ test("caplet apply --dry-run --json prints a single JSON envelope on stdout", as
     ]);
     expect(result.exitCode).toBe(0);
     const envelope = parseEnvelope(result.stdout);
-    expect(envelope.caplet).toBe("0.2.0");
+    expect(envelope.caplet).toBe(packageJson.version);
     expect(envelope.command).toBe("apply");
     expect(envelope.ok).toBe(true);
     expect(Array.isArray(envelope.diagnostics)).toBe(true);

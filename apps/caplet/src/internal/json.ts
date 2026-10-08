@@ -1,6 +1,8 @@
 import type { Diagnostic } from "@acf/core";
+import packageJson from "../../package.json" with { type: "json" };
 
-export const CAPLET_VERSION = "0.2.0";
+/** The caplet release version; package.json is the single source of truth. */
+export const CAPLET_VERSION: string = packageJson.version;
 
 export function readJson(args: Record<string, unknown>): boolean {
   return args.json === true;

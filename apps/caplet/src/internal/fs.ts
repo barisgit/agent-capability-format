@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ReadOnlyFs } from "@acf/core";
 
@@ -40,10 +40,6 @@ export function diskReadOnlyFs(): ReadOnlyFs {
       }
     },
   };
-}
-
-export async function ensureAgentsDir(agentsDir: string): Promise<void> {
-  await mkdir(path.join(agentsDir, "capabilities"), { recursive: true });
 }
 
 export async function exists(filePath: string): Promise<boolean> {

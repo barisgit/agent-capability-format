@@ -1,6 +1,5 @@
 import "@acf/adapters";
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
   ACF_SYSTEM_OWNER,
@@ -80,7 +79,6 @@ export async function fetchScopes(
   const results: ResolveResult[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const scopeRoot of scopes) {
-    await mkdir(scopeRoot.agentsDir, { recursive: true });
     const sourceIds =
       capabilityName === undefined
         ? undefined

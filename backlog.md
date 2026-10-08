@@ -100,7 +100,7 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 **Implementation**:
 
 - Bundle to single-file executable per platform (bun build --compile) OR publish as npm package with bun/node dual runtime — decide: npm package first (npx caplet onramp mirrors npx skills), compiled binaries later
-- `npx caplet` / `bunx caplet` must work; version from package.json (kill the hardcoded CAPLET_VERSION duplicate)
+- `npx caplet` / `bunx caplet` must work. The unscoped npm name `caplet` is taken (2.0.0, 2022), and the `@acf` scope belongs to someone else, so publish under another scope or name
 - CI: publish workflow on tag, provenance enabled
 - README quickstart rewritten around npx onramp
 
@@ -172,7 +172,5 @@ Single dim line on TTY when a newer published version exists (npm registry check
 
 ## Tech Debt
 
-- `CAPLET_VERSION` hardcoded in `internal/json.ts` duplicating package.json (fold into B1)
 - Loose-skill backups in `/tmp/skills-migration-backup/` — delete after a week of stable use
 - `explain-canvas` skill: `tool/node_modules` excluded from migration; document install step in its SKILL.md or vendor a lockfile
-- Untracked `.agents/capabilities.lock` at repo root — decide: commit or gitignore

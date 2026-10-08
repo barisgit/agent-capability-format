@@ -54,10 +54,21 @@ export type CapabilityRecord = {
 };
 
 export async function resolveCapabilities(opts: ResolveOptions): Promise<ResolveResult> {
+  const manifest = await readCapabilitiesYml(opts.scopeRoot.manifestPath);
+  const existingLock = await readLockfile(opts.scopeRoot.lockPath);
+  // A scope that declares nothing and was never locked has nothing to reconcile.
+  // Leave it untouched so running caplet does not create an empty lock or directory.
+  if (manifest.value.capabilities.length === 0 && existingLock === null) {
+    return {
+      capabilities: [],
+      lockfile: { acf: 1, entries: [] },
+      diagnostics: manifest.diagnostics,
+    };
+  }
   await mkdir(opts.scopeRoot.agentsDir, { recursive: true });
   const stagingDir = await mkdtemp(path.join(opts.scopeRoot.agentsDir, ".acf-staging-"));
   try {
-    return await resolveCapabilitiesStaged(opts, stagingDir);
+    return await resolveCapabilitiesStaged(opts, stagingDir, manifest, existingLock);
   } finally {
     await rm(stagingDir, { recursive: true, force: true });
   }
@@ -66,12 +77,11 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
 async function resolveCapabilitiesStaged(
   opts: ResolveOptions,
   stagingDir: string,
+  manifest: Awaited<ReturnType<typeof readCapabilitiesYml>>,
+  existingLock: Awaited<ReturnType<typeof readLockfile>>,
 ): Promise<ResolveResult> {
-  const diagnostics: Diagnostic[] = [];
-  const manifest = await readCapabilitiesYml(opts.scopeRoot.manifestPath);
-  diagnostics.push(...manifest.diagnostics);
+  const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
-  const existingLock = await readLockfile(opts.scopeRoot.lockPath);
   const usableLock = existingLock !== null && lockVersion(existingLock) === 1 ? existingLock : null;
   diagnostics.push(...driftDiagnosticsForMode(yml, existingLock, opts.mode));
 
