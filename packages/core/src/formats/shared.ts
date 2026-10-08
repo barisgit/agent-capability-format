@@ -12,6 +12,7 @@ import type {
   SafetyClass,
 } from "../types/index.js";
 
+/** True for a plain JSON object (not null, not an array). */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -21,6 +22,7 @@ export function placeholder(name: string): string {
   return `$${"{"}${name}}`;
 }
 
+/** Canonical placeholders for the installed capability directory and its data directory. */
 export const CAPABILITY_DIR = placeholder("ACF_CAPABILITY_DIR");
 export const DATA_DIR = placeholder("ACF_DATA_DIR");
 
@@ -29,10 +31,12 @@ const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
+/** True when `value` is an ACF slug. */
 export function isSlug(value: string): boolean {
   return SLUG.test(value);
 }
 
+/** True when `value` is a SemVer 2.0.0 version. */
 export function isSemVer(value: string): boolean {
   return SEMVER.test(value);
 }
@@ -62,6 +66,7 @@ export async function readJson(
   }
 }
 
+/** True when `file` is a regular file (links are not followed). */
 export async function isFile(file: string): Promise<boolean> {
   try {
     return (await lstat(file)).isFile();
@@ -70,6 +75,7 @@ export async function isFile(file: string): Promise<boolean> {
   }
 }
 
+/** True when `dir` is a directory (links are not followed). */
 export async function isDirectory(dir: string): Promise<boolean> {
   try {
     return (await lstat(dir)).isDirectory();
@@ -92,6 +98,7 @@ export async function filesUnder(root: string, dir: string): Promise<string[]> {
   return out.sort();
 }
 
+/** `file` relative to `root` with POSIX separators; `.` for the root itself. */
 export function posixRelative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/") || ".";
 }
@@ -276,6 +283,7 @@ export function contained(root: string, relative: string): string | undefined {
   return back.startsWith("..") || path.isAbsolute(back) ? undefined : resolved;
 }
 
+/** The warning for a Claude manifest component path that escapes the plugin directory. */
 export function outsidePackage(root: string, key: string, relative: string): Diagnostic {
   return {
     severity: "warn",

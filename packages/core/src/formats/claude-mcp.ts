@@ -19,6 +19,10 @@ import {
 
 type Declared = { raw: unknown; file: string; manifestKey: boolean };
 
+/**
+ * Projects the plugin's MCP servers into `McpFile`, pushing pending servers and bundles to
+ * `remainder` and skipped servers to `diagnostics`; undefined when the plugin declares none.
+ */
 export async function readClaudeMcp(
   root: string,
   manifest: Record<string, unknown>,

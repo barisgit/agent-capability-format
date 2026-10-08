@@ -15,6 +15,11 @@ import {
   urlProblem,
 } from "./shared.js";
 
+/**
+ * How one foreign server maps into core: a canonical `server`, a whole-server native
+ * `remainder` (pending meaning; `executable` when it launches a local process), or an
+ * `invalid` server the reader skips with a warning.
+ */
 export type ServerProjection =
   | { kind: "server"; server: McpServer }
   | { kind: "remainder"; reason: string; executable: boolean }
