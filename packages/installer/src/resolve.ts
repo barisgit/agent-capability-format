@@ -3,8 +3,10 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
-  computeContentHash,
+  computeCapabilityDigests,
   type Diagnostic,
+  entryCapabilityHash,
+  type LockedCapability,
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
@@ -54,7 +56,10 @@ export type CapabilityRecord = {
   selector: string;
   root: string;
   commit: string | null;
+  /** v1 `capabilityHash` of the snapshot at `root`. */
   contentHash: string;
+  /** Per-capability lock record; absent for capabilities locked before records existed. */
+  lockRecord?: LockedCapability | undefined;
 };
 
 export async function resolveCapabilities(opts: ResolveOptions): Promise<ResolveResult> {
@@ -408,14 +413,18 @@ function recordsFromLock(
   lockEntry: LockEntry,
   capabilitiesDir: string,
 ): CapabilityRecord[] {
-  return lockEntry.capabilityNames.map((name) => ({
-    entry,
-    name,
-    selector: lockEntry.selectorsByCapability?.[name] ?? name,
-    root: capabilityPath(capabilitiesDir, name),
-    commit: lockEntry.resolvedSha ?? null,
-    contentHash: lockEntry.capabilityHash,
-  }));
+  return lockEntry.capabilityNames.map((name) => {
+    const lockRecord = lockEntry.resolvedCapabilities?.find((record) => record.name === name);
+    return {
+      entry,
+      name,
+      selector: lockEntry.selectorsByCapability?.[name] ?? name,
+      root: capabilityPath(capabilitiesDir, name),
+      commit: lockEntry.resolvedSha ?? null,
+      contentHash: lockRecord?.capabilityHash ?? lockEntry.capabilityHash,
+      lockRecord,
+    };
+  });
 }
 
 async function materializeFetched(
@@ -446,14 +455,20 @@ async function materializeFetched(
     } else {
       await copyRegularTree(candidate.root, destination);
     }
-    const contentHash = await computeContentHash(destination);
+    const digests = await computeCapabilityDigests(destination);
     records.push({
       entry,
       name,
       selector: candidate.selector,
       root: destination,
       commit: fetched.commit,
-      contentHash,
+      contentHash: digests.capabilityHash,
+      lockRecord: {
+        name,
+        format: candidate.synthesized ? "skills" : "acf",
+        path: selectedSourcePath(entry, candidate),
+        ...digests,
+      },
     });
   }
 
@@ -468,9 +483,11 @@ function lockEntryFor(
   records: CapabilityRecord[],
   synthesized: boolean,
 ): LockEntry {
-  const first = records[0];
+  const lockRecords = records.flatMap((record) =>
+    record.lockRecord === undefined ? [] : [record.lockRecord],
+  );
   const lockEntry: LockEntry = {
-    capabilityHash: first?.contentHash ?? emptyTreeHash(),
+    capabilityHash: entryCapabilityHash(lockRecords) ?? emptyTreeHash(),
     capabilityNames: records.map((record) => record.name).sort(),
     selectorsByCapability: Object.fromEntries(
       records.map((record) => [record.name, record.selector]),
@@ -484,6 +501,7 @@ function lockEntryFor(
   if (entry.ref !== undefined) lockEntry.ref = entry.ref;
   if (entry.rename !== undefined) lockEntry.rename = entry.rename;
   if (synthesized) lockEntry.synthesized = true;
+  lockEntry.resolvedCapabilities = lockRecords;
   lockEntry.resolvedAt = new Date().toISOString();
   if (fetched.commit !== null) lockEntry.resolvedSha = fetched.commit;
   return lockEntry;
@@ -538,6 +556,12 @@ async function copyRegularTree(source: string, destination: string): Promise<voi
       return stat.isDirectory() || stat.isFile();
     },
   });
+}
+
+/** Package root of `candidate` relative to the source root (before `path:`), POSIX. */
+function selectedSourcePath(entry: CapabilityEntry, candidate: SourceCapabilityCandidate): string {
+  const entryPath = path.posix.normalize((entry.path ?? ".").replaceAll("\\", "/"));
+  return path.posix.join(entryPath, candidate.sourcePath);
 }
 
 function finalCapabilityName(entry: CapabilityEntry, manifestName: string): string {

@@ -28,6 +28,10 @@
       "types": "./dist/hash/index.d.ts",
       "default": "./dist/hash/index.js"
     },
+    "./lock": {
+      "types": "./dist/lock/index.d.ts",
+      "default": "./dist/lock/index.js"
+    },
     "./reader": {
       "types": "./dist/reader/index.d.ts",
       "default": "./dist/reader/index.js"

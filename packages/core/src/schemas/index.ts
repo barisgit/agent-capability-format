@@ -306,19 +306,6 @@ export const capabilitiesYmlSchema = z.strictObject({
     .optional(),
 });
 
-export const capabilitiesLockSchema = z.object({
-  acf: z.literal(1),
-  entries: z.array(
-    z.object({
-      sourceId: z.string(),
-      commit: z.string(),
-      contentHash: z.string().regex(/^sha256-[a-f0-9]{64}$/),
-      installedAt: z.string(),
-      capabilityName: slugSchema,
-    }),
-  ),
-});
-
 const skillsEmitOptionsSchema = z.object({
   native: z.boolean().optional(),
   canonical: z.boolean().optional(),

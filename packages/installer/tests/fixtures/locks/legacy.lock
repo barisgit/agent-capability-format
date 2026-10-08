@@ -1,0 +1,43 @@
+{
+  "acf": 1,
+  "entries": [
+    {
+      "capabilityHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "capabilityNames": [
+        "alpha"
+      ],
+      "include": {
+        "skill": [
+          "a",
+          "b"
+        ]
+      },
+      "ref": "v1",
+      "resolvedAt": "2026-05-28T00:00:00.000Z",
+      "resolvedSha": "aaaa",
+      "source": "github:a/repo",
+      "sourceId": "github:a/repo"
+    },
+    {
+      "capabilityHash": "sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "capabilityNames": [
+        "skill",
+        "zeta"
+      ],
+      "capabilities": [
+        "a",
+        "z/**"
+      ],
+      "selectorsByCapability": {
+        "skill": "group/skill",
+        "zeta": "z/zeta"
+      },
+      "ref": "main",
+      "resolvedAt": "2026-05-28T00:00:00.000Z",
+      "resolvedSha": "bbbb",
+      "synthesized": true,
+      "source": "github:z/repo",
+      "sourceId": "github:z/repo"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { scopeRoot } from "@caplet/core";
+import { readLockfile, scopeRoot } from "@caplet/core";
 import { removeManifestEntry } from "../../src/internal/manifest";
 import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
@@ -229,6 +229,33 @@ test("caplet remove narrows an install-all entry to surviving capabilities", asy
     const lock = JSON.parse(await readText(path.join(scope.agentsDir, "capabilities.lock")));
     expect(lock.entries[0].capabilityNames).toEqual(["beta-cap"]);
     expect(lock.entries[0].capabilities).toEqual(["beta-cap"]);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet remove narrows per-capability lock records with the names", async () => {
+  const scope = await makeScope();
+  try {
+    const root = scopeRoot("project", scope.agentsDir);
+    const collection = path.join(scope.sourceRoot, "collection");
+    for (const name of ["alpha-cap", "beta-cap"]) {
+      await writeText(
+        path.join(collection, "acf", name, "acf.yml"),
+        `acf: 1\nname: ${name}\nversion: 1.0.0\n`,
+      );
+    }
+    await Bun.write(root.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${collection}\n`);
+    const fetched = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    expect(fetched.exitCode).toBe(0);
+    const before = (await readLockfile(root.lockPath))?.entries[0]?.resolvedCapabilities ?? [];
+    const beta = before.find((record) => record.name === "beta-cap");
+
+    await removeManifestEntry(root, "alpha-cap");
+
+    const entry = (await readLockfile(root.lockPath))?.entries[0];
+    expect(entry?.resolvedCapabilities).toEqual(beta === undefined ? [] : [beta]);
+    expect(entry?.capabilityHash).toBe(beta?.capabilityHash);
   } finally {
     await cleanup(scope);
   }

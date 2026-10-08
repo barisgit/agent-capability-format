@@ -4,6 +4,7 @@ export * from "./caplet-config/index.js";
 export * from "./diagnostics/index.js";
 export * from "./emit/index.js";
 export * from "./hash/index.js";
+export * from "./lock/index.js";
 export * from "./reader/index.js";
 export * from "./resolver/index.js";
 export * from "./schemas/index.js";

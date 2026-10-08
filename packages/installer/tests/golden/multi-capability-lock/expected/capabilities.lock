@@ -1,0 +1,35 @@
+{
+  "acf": 1,
+  "entries": [
+    {
+      "capabilityHash": "sha256-02cc8fd024d1632da3604cc574403ebb0ab08f3025e2a3be3988206731bf24cb",
+      "capabilityNames": [
+        "alpha",
+        "beta"
+      ],
+      "selectorsByCapability": {
+        "alpha": "alpha",
+        "beta": "beta"
+      },
+      "resolvedAt": "<RESOLVED_AT>",
+      "resolvedCapabilities": [
+        {
+          "capabilityHash": "sha256-02cc8fd024d1632da3604cc574403ebb0ab08f3025e2a3be3988206731bf24cb",
+          "format": "acf",
+          "name": "alpha",
+          "path": "acf/alpha",
+          "payloadDigest": "acf-tree-2:sha256:11445ad7536e457f5413c9c74118ddf534a436b691740bd021f23d9f144831d9"
+        },
+        {
+          "capabilityHash": "sha256-df86dee9beab7a957974648a50bd604dcbdb4a2fd13aae9ed2edc9f038220633",
+          "format": "acf",
+          "name": "beta",
+          "path": "acf/beta",
+          "payloadDigest": "acf-tree-2:sha256:2d7e9d521c0a6a231f26e309e1959946703cabc6d3e5cf54bb3d9cbe3ab5e15c"
+        }
+      ],
+      "source": "path:<SOURCE>",
+      "sourceId": "path:<SOURCE>"
+    }
+  ]
+}
