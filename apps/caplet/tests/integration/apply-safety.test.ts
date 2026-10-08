@@ -6,6 +6,7 @@ import { applyEmitPlan, buildEmitPlan } from "../../src/internal/workflow";
 import {
   applyProject,
   cleanup,
+  forceCanonicalSkills,
   makeScope,
   readText,
   runCaplet,
@@ -18,6 +19,7 @@ const saved = { cwd: process.cwd(), home: process.env.HOME };
 
 beforeEach(async () => {
   scope = await makeScope();
+  await forceCanonicalSkills(scope);
   // In-process plans resolve scopes through os.homedir(); never touch the real home.
   process.env.HOME = scope.home;
 });

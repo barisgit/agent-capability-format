@@ -200,6 +200,11 @@ export async function buildEmitPlan(
       ),
     );
     diagnostics.push(...(await driftDiagnostics(scopeRoot.agentsDir)));
+    const canonicalSkillReaders = targets.filter(
+      (targetId) =>
+        targetMap[targetId]?.discoversCanonicalSkills === true &&
+        installRootFor(targetId, scopeRoot, configResult.config, cwd) !== null,
+    );
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, configResult.config, cwd);
       if (installRoot === null) {
@@ -229,7 +234,7 @@ export async function buildEmitPlan(
           capability: filtered,
           scope: scopeRoot.scope,
           installRoot,
-          options: emitOptionsForTarget(targetId, configResult.config),
+          options: emitOptionsForTarget(targetId, configResult.config, canonicalSkillReaders),
         };
         const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
         diagnostics.push(...validation);
@@ -673,8 +678,12 @@ export function installRootFor(
   return path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
 }
 
-function emitOptionsForTarget(targetId: TargetId, config: CapletConfig): EmitOptions {
-  const options: EmitOptions = {};
+function emitOptionsForTarget(
+  targetId: TargetId,
+  config: CapletConfig,
+  canonicalSkillReaders: readonly TargetId[],
+): EmitOptions {
+  const options: EmitOptions = { canonicalSkillReaders };
   const skills = config.targets?.[targetId]?.skills;
   if (skills !== undefined) options.skills = skills;
   return options;

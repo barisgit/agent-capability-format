@@ -65,6 +65,13 @@ export type EmitOptions = {
   cleanBeforeEmit?: boolean | undefined;
   dryRun?: boolean | undefined;
   skills?: SkillsEmitOptions | undefined;
+  /**
+   * Selected targets, for the emitted scope, that discover the shared `.agents/skills` root.
+   * Skill writers render the shared copy so it satisfies every one of them and skip it when one
+   * refuses the skill (capability-model-layers, Shared discovery roots). When absent, the
+   * writer assumes it is the only reader (or none, for a target that does not discover it).
+   */
+  canonicalSkillReaders?: readonly TargetId[] | undefined;
 };
 /**
  * What a writer produced for one capability and target. `outcomes` lists components whose

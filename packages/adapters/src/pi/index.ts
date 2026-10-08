@@ -1,39 +1,12 @@
-import {
-  type Diagnostic,
-  type EmitResult,
-  type ReadOnlyFs,
-  registerAdapter,
-  type TargetAdapter,
-  targetMap,
-} from "@caplet/core";
-import { emitStandardAdapter, layoutFor } from "../common/emitter.js";
-import { emitSkills } from "../common/skills.js";
+import { type ReadOnlyFs, registerAdapter, type TargetAdapter, targetMap } from "@caplet/core";
+import { emitTarget } from "../common/target.js";
 
-const piTarget = targetMap.pi;
-if (piTarget === undefined) throw new Error("missing target definition for pi");
+const target = targetMap.pi;
+if (target === undefined) throw new Error("missing target definition for pi");
 
 export const piAdapter: TargetAdapter<"pi"> = {
   id: "pi",
-  async emit(input, fs: ReadOnlyFs): Promise<EmitResult> {
-    const diagnostics: Diagnostic[] = [];
-    const diffs = [
-      ...(await emitSkills(
-        input.capability,
-        input.scope,
-        fs,
-        piTarget,
-        input.options.skills,
-        diagnostics,
-      )),
-      ...(await emitStandardAdapter(
-        input,
-        fs,
-        layoutFor("pi", input.installRoot, input.scope),
-        diagnostics,
-      )),
-    ];
-    return { diffs, diagnostics };
-  },
+  emit: (input, fs: ReadOnlyFs) => emitTarget(input, fs, target),
 };
 
 registerAdapter("pi", piAdapter);

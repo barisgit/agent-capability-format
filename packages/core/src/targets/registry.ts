@@ -138,6 +138,7 @@ export const targets = defineTargets([
   defineTarget({
     id: "cursor",
     displayName: "Cursor",
+    discoversCanonicalSkills: true,
     support: {
       agent: "partial",
       command: "partial",

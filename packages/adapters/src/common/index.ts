@@ -4,5 +4,7 @@ export * from "./emitter.js";
 export * from "./json-merge.js";
 export * from "./markers.js";
 export * from "./placeholders.js";
+export * from "./skill-serializer.js";
 export * from "./skills.js";
+export * from "./target.js";
 export * from "./text.js";
