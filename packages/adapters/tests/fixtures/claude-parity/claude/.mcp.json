@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "search": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/search",
+      "args": [
+        "--data",
+        "${CLAUDE_PLUGIN_DATA}"
+      ]
+    }
+  }
+}

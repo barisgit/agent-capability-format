@@ -1,0 +1,5 @@
+servers:
+  - name: search
+    transport: stdio
+    command: ${ACF_CAPABILITY_DIR}/bin/search
+    args: ["--data", "${ACF_DATA_DIR}"]

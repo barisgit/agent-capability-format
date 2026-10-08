@@ -1,0 +1,16 @@
+acf: 1
+name: notes-kit
+version: 1.0.0
+description: Take notes
+authors:
+  - name: Ada Lovelace
+    email: ada@example.com
+license: MIT
+keywords: [notes]
+targets:
+  claude:
+    package:
+      version: "2024.10"
+    native:
+      displayName: Notes Kit
+      dependencies: [helper]

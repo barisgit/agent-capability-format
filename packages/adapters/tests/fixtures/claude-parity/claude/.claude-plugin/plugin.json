@@ -1,0 +1,17 @@
+{
+  "name": "notes",
+  "version": "2024.10",
+  "description": "Take notes",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "notes"
+  ],
+  "displayName": "Notes Kit",
+  "dependencies": [
+    "helper"
+  ]
+}

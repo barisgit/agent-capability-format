@@ -188,3 +188,30 @@ test("a Claude plugin with remainder is refused on loose Claude files", async ()
   });
   await assertGoldenTree(pluginTree(result, golden.input), golden.expected);
 });
+
+test("a renamed Claude plugin and native ACF authoring the same content write the same plugin", async () => {
+  const fixtures = path.join(testsDir, "fixtures", "claude-parity");
+  const trees: GoldenTree[] = [];
+  for (const [input, format, rename] of [
+    [path.join(fixtures, "claude"), "claude-plugin", "notes-kit"],
+    [path.join(fixtures, "acf"), "acf", undefined],
+  ] as const) {
+    const capability = await readInput(input, format, rename);
+    const result = await emit(claudeAdapter, capability, INSTALL_ROOT, await inputFs(input));
+    const dir = result.plugins?.[0]?.dir;
+    if (dir === undefined) throw new Error(`${format} wrote no plugin`);
+    trees.push(treeFromFileDiffs(result.diffs, dir));
+  }
+  const [foreign, native] = trees;
+  // The version digest covers the generated package, so equal trees give equal versions too.
+  expect(foreign).toEqual(native);
+  expect([...(native?.keys() ?? [])].sort()).toEqual([
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "agents/reviewer.md",
+    "bin/search",
+    "output-styles/terse.md",
+    "skills/jot/SKILL.md",
+    "skills/jot/template.md",
+  ]);
+});
