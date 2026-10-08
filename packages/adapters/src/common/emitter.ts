@@ -18,7 +18,6 @@ import {
   type HookRun,
   hookEffectMatrix,
   type InstructionFacet,
-  type McpServer,
   type ReadOnlyFs,
   type Scope,
   type TargetId,
@@ -29,6 +28,7 @@ import { pushLossy } from "./diagnostics.js";
 import { makeFileDiff } from "./diff.js";
 import { jsonPointerEscape, mergeJson, readJsonObject } from "./json-merge.js";
 import { replaceMarkedBlock } from "./markers.js";
+import { mcpPathFor } from "./mcp.js";
 import {
   type PlaceholderValues,
   substitutePlaceholders,
@@ -98,7 +98,6 @@ export async function emitStandardAdapter(
   );
   if (!options.skipUnsupportedHooks)
     diffs.push(...(await emitHooks(input, fs, layout, diagnostics)));
-  diffs.push(...(await emitMcp(input, fs, layout, diagnostics)));
   return diffs.sort((a, b) => a.path.localeCompare(b.path));
 }
 
@@ -295,28 +294,6 @@ export async function emitHooks(
   }
   if (owns.length > 0) diffs.push(makeFileDiff(settingsFile, beforeSettings, settings, owns));
   return diffs;
-}
-
-export async function emitMcp(
-  input: EmitInput,
-  fs: ReadOnlyFs,
-  layout: AdapterLayout,
-  diagnostics: Diagnostic[],
-): Promise<FileDiff[]> {
-  const mcp = input.capability.mcp;
-  if (mcp === undefined || mcp.servers.length === 0) return [];
-  const before = await fs.readText(layout.mcpFile);
-  let after = before;
-  const owns: AcfOwnership[] = [];
-  for (const server of [...mcp.servers].sort((a, b) => a.name.localeCompare(b.name))) {
-    const emitted = emitMcpServer(server, input.capability, diagnostics, layout.targetId);
-    if (emitted === null) continue;
-    const pointer = `/mcpServers/${jsonPointerEscape(server.name)}`;
-    after = mergeJson(after, pointer, emitted);
-    owns.push({ kind: "json-pointer", pointer });
-  }
-  if (owns.length === 0) return [];
-  return [makeFileDiff(layout.mcpFile, before, after, owns)];
 }
 
 async function instructionFileDiff(
@@ -603,56 +580,6 @@ function readHookEntries(text: string | null, eventName: string): unknown[] {
   if (!isRecord(hooks)) return [];
   const entries = hooks[eventName];
   return Array.isArray(entries) ? entries : [];
-}
-
-function emitMcpServer(
-  server: McpServer,
-  cap: AcfCapability,
-  diagnostics: Diagnostic[],
-  targetId: TargetId,
-): Record<string, unknown> | null {
-  if (!isTransportSupported(server.transport)) {
-    pushLossy(diagnostics, {
-      code: "acf.adapter.mcp-unsupported",
-      message: `${targetId} does not support MCP transport ${server.transport}`,
-      targetId,
-      family: "mcp",
-      data: { server: server.name, transport: server.transport },
-    });
-    return null;
-  }
-  const placeholders: PlaceholderValues = {
-    capabilityDir: cap.root,
-    hookDir: cap.mcp === undefined ? cap.root : path.dirname(cap.mcp.path),
-  };
-  if (server.transport === "stdio") {
-    const out: Record<string, unknown> = {
-      transport: "stdio",
-      command: substitutePlaceholders(server.command, placeholders),
-    };
-    const args = substituteStringArray(server.args, placeholders);
-    if (args !== undefined) out.args = args;
-    const env = substituteStringRecord(server.env, placeholders);
-    if (env !== undefined) out.env = env;
-    return out;
-  }
-  const out: Record<string, unknown> = {
-    transport: server.transport,
-    url: substitutePlaceholders(server.url, placeholders),
-  };
-  const headers = substituteStringRecord(server.headers, placeholders);
-  if (headers !== undefined) out.headers = headers;
-  return out;
-}
-
-function isTransportSupported(transport: McpServer["transport"]): boolean {
-  return transport === "stdio" || transport === "http" || transport === "sse";
-}
-
-function mcpPathFor(targetId: TargetId, installRoot: string, scope: Scope): string {
-  if (targetId === "claude" && scope === "project")
-    return path.join(path.dirname(installRoot), ".mcp.json");
-  return path.join(installRoot, "mcp.json");
 }
 
 function canonicalHookTypesInOrder(): CanonicalHookType[] {

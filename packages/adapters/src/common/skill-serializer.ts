@@ -11,26 +11,21 @@
 import {
   type AcfCapability,
   type Carrier,
-  type ComponentOutcome,
-  type Diagnostic,
-  extraDropped,
-  extrasDialects,
   nativeExtras,
   nativeKeyInfo,
   type SkillFacet,
   type SupportSubject,
   stringifyYml,
   supportCell,
-  supportDiagnostic,
   type TargetId,
-  translatedOutcome,
 } from "@caplet/core";
+import { type ComponentReport, considerField, reportForeignExtras } from "./support-report.js";
 
 /** Relative path of the Codex skill metadata file (`agents/openai.yaml`). */
 export const CODEX_SKILL_METADATA = "agents/openai.yaml";
 
 /** A skill rendered for one target and carrier. */
-export type NativeSkill = {
+export type NativeSkill = ComponentReport & {
   /** SKILL.md frontmatter in the target's spelling and emission order. */
   frontmatter: Record<string, unknown>;
   /** Generated files of the skill directory besides SKILL.md, keyed by relative POSIX path. */
@@ -40,11 +35,6 @@ export type NativeSkill = {
    * rendering shared by several targets must carry identical extras for each of them.
    */
   extras: Record<string, unknown>;
-  diagnostics: Diagnostic[];
-  /** Outcomes the writer knows positively (translated cells); others derive from diagnostics. */
-  outcomes: ComponentOutcome[];
-  /** True when a support cell or a restricting foreign extra refuses the skill for the target. */
-  refused: boolean;
 };
 
 const SKILL_FILE = "SKILL.md";
@@ -103,16 +93,8 @@ export function renderNativeSkill(
   };
   const metadata: Record<string, unknown> = {};
 
-  const consider = (field: string): boolean => {
-    const diagnostic = supportDiagnostic(subject, field);
-    if (diagnostic !== undefined) {
-      result.diagnostics.push(diagnostic);
-      if (diagnostic.code === "acf.support.refused") result.refused = true;
-    }
-    const translated = translatedOutcome(subject, field);
-    if (translated !== undefined) result.outcomes.push(translated);
-    return supportCell(field, target, carrier)?.kind === "native";
-  };
+  const consider = (field: string): boolean =>
+    considerField(result, subject, field)?.kind === "native";
 
   for (const key of sameKeyFields) {
     const value = skill.frontmatter[key];
@@ -142,14 +124,7 @@ export function renderNativeSkill(
       result.extras[`${SKILL_FILE}#${key}`] = value;
     }
   }
-  for (const dialect of extrasDialects(skill.frontmatter.targets)) {
-    if (dialect === target) continue;
-    for (const key of Object.keys(nativeExtras(skill.frontmatter.targets, dialect))) {
-      const diagnostic = extraDropped(subject, { owner: dialect, key });
-      result.diagnostics.push(diagnostic);
-      if (diagnostic.code === "acf.support.refused") result.refused = true;
-    }
-  }
+  reportForeignExtras(result, subject, skill.frontmatter.targets);
 
   if (Object.keys(metadata).length > 0) result.files[CODEX_SKILL_METADATA] = stringifyYml(metadata);
   return result;

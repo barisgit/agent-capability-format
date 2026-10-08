@@ -1,6 +1,11 @@
 import { chmod, mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { extractMarkedBlock, mergeJson, replaceMarkedBlock } from "@caplet/adapters/common";
+import {
+  extractMarkedBlock,
+  markerSyntaxOf,
+  mergeJson,
+  replaceMarkedBlock,
+} from "@caplet/adapters/common";
 import type {
   AcfManagedSidecar,
   AcfOwnership,
@@ -221,7 +226,7 @@ function applyJsonPointer(currentText: string, pointer: string, afterText: strin
 function applyMarker(currentText: string, name: string, afterText: string | null): string {
   if (afterText === null) return currentText;
   const body = extractMarkedBlock(afterText, name) ?? afterText;
-  return replaceMarkedBlock(currentText, name, body);
+  return replaceMarkedBlock(currentText, name, body, markerSyntaxOf(afterText, name));
 }
 
 async function pruneEmptyDirs(dir: string, boundary: string): Promise<void> {

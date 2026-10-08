@@ -5,7 +5,6 @@ export type AdapterLossyCode =
   | "acf.adapter.effect-degraded"
   | "acf.adapter.hook-event-unsupported"
   | "acf.adapter.trigger-unsupported"
-  | "acf.adapter.mcp-unsupported"
   | "acf.adapter.scope-unsupported"
   | "acf.assets.unsupported";
 

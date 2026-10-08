@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { extractMarkedBlock } from "@caplet/adapters/common";
+import { extractMarkedBlock, removeMarkedBlock } from "@caplet/adapters/common";
 import {
   type AcfManagedSidecar,
   type AcfOwnership,
@@ -323,17 +323,6 @@ function groupByPath(entries: ManagedEntry[]): Map<string, ManagedEntry[]> {
   return grouped;
 }
 
-function removeMarkedBlock(text: string, name: string): string {
-  const begin = `<!-- acf:begin ${name} -->`;
-  const end = `<!-- acf:end ${name} -->`;
-  const start = text.indexOf(begin);
-  if (start === -1) return text;
-  const finish = text.indexOf(end, start + begin.length);
-  if (finish === -1) return text;
-  const removeEnd = consumeOneLineBreak(text, finish + end.length);
-  return `${text.slice(0, start)}${text.slice(removeEnd)}`;
-}
-
 async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf8");
@@ -341,12 +330,6 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
     if (isErrno(error, "ENOENT")) return null;
     throw error;
   }
-}
-
-function consumeOneLineBreak(text: string, index: number): number {
-  if (text[index] === "\r" && text[index + 1] === "\n") return index + 2;
-  if (text[index] === "\n") return index + 1;
-  return index;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

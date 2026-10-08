@@ -35,8 +35,10 @@ for (const [id, adapter] of Object.entries(adapters)) {
           const sharedJson =
             diff.path.endsWith("settings.json") ||
             diff.path.endsWith("mcp.json") ||
-            diff.path.endsWith(".mcp.json");
-          const markedText = own.kind === "marker" && diff.path.endsWith("CLAUDE.md");
+            diff.path.endsWith("opencode.json");
+          const markedText =
+            own.kind === "marker" &&
+            (diff.path.endsWith("CLAUDE.md") || diff.path.endsWith("config.toml"));
           expect(sharedJson || markedText).toBe(true);
         }
       }

@@ -3,7 +3,6 @@ import path from "node:path";
 import {
   type AcfCapability,
   applicableTargets,
-  type ComponentOutcome,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
@@ -19,10 +18,8 @@ import {
 import { type AssetPayload, readAssets } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
+import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
-
-/** Where emitted skills go: `diagnostics` and `outcomes` collect the support decisions. */
-export type SkillEmitReport = { diagnostics: Diagnostic[]; outcomes: ComponentOutcome[] };
 
 /** One skill directory to write: its root and the rendering (or verbatim primary bytes). */
 type SkillCopy = { root: string; rendering: NativeSkill | "verbatim" };
@@ -38,7 +35,7 @@ export async function emitSkills(
   input: EmitInput,
   fs: ReadOnlyFs,
   target: TargetDefinition,
-  report: SkillEmitReport,
+  report: EmitReport,
 ): Promise<FileDiff[]> {
   const cap = input.capability;
   const diffs: FileDiff[] = [];
@@ -62,7 +59,7 @@ function renderedCopies(
   input: EmitInput,
   target: TargetDefinition,
   skill: SkillFacet,
-  report: SkillEmitReport,
+  report: EmitReport,
 ): SkillCopy[] {
   const own = renderNativeSkill(input.capability, skill, target.id);
   report.diagnostics.push(...own.diagnostics);
