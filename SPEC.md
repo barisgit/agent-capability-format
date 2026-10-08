@@ -2001,7 +2001,34 @@ with no line-ending normalization.
 reproducibility guarantees; the lockfile records only `source` and
 optional `capabilityNames` for `path:` entries.
 
-### 19.6 Drift handling
+### 19.6 Payload digest
+
+`payloadDigest` is an integrity digest of the same materialized tree as
+`capabilityHash`. Unlike the v1 hash it frames every length and includes
+the executable bit, so it changes when only a file mode changes and cannot
+confuse where a path ends and its content begins. The algorithm is
+normative:
+
+1. Enumerate every regular file under the materialized capability root as
+   in §19.5 steps 1–2. Symlinks and special files MUST be rejected. Two
+   paths that are equal after NFC normalization MUST be rejected.
+2. Sort the files by the bytes of their UTF-8 NFC relative paths.
+3. Initialize a SHA-256 hash. For each file in sorted order, update the
+   hash with this frame:
+   - the entry kind, one byte: `0x01` for a regular file (the only kind a
+     snapshot contains; other values are reserved);
+   - the path length in bytes as an unsigned 64-bit big-endian integer,
+     then the UTF-8 bytes of the NFC relative path;
+   - the executable bit, one byte: `0x01` when the owner execute
+     permission (`0o100`) is set, else `0x00`;
+   - the content length in bytes as an unsigned 64-bit big-endian
+     integer, then the exact file bytes.
+4. The value is `acf-tree-2:sha256:<lowercase-hex>` of the final digest.
+
+Timestamps, ownership, extended attributes and permission bits other than
+the owner execute bit MUST NOT be included.
+
+### 19.7 Drift handling
 
 When `capabilities.yml` and `capabilities.lock` disagree:
 
