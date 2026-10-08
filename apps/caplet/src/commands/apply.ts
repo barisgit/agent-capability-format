@@ -1,4 +1,5 @@
 import { type ArgsDef, defineCommand } from "citty";
+import { reportEmptyPlan, sweepStaleEntries } from "../internal/apply-flow.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
@@ -85,12 +86,11 @@ export const applyCommand = defineCommand({
       }
       process.exitCode = planCode;
       if (view.fileCount === 0) {
-        const stale = plan.staleEntries.length;
-        if (stale > 0 && !dryRun) await applyEmitPlan(plan);
+        const applied = await sweepStaleEntries(plan, dryRun);
         if (json) {
           printJson("apply", planCode === 0, diagnostics, {
             plan: planToJson(view),
-            applied: stale > 0 && !dryRun ? { files: 0, writes: 0, deletes: 0 } : null,
+            applied,
             ...outcomes,
             ...reachToJson(reach),
           });
@@ -98,11 +98,7 @@ export const applyCommand = defineCommand({
         }
         // Blocked capabilities are the one thing left to do, so their report stays visible.
         if (plan.blocked.length > 0) out.compatibility(plan.outcomes, plan.targets);
-        const entries = `${stale} stale sidecar ${stale === 1 ? "entry" : "entries"}`;
-        if (stale > 0 && dryRun) out.pending(`${entries} to clean up`);
-        else if (stale > 0) out.done(`Cleaned up ${entries}`);
-        else if (plan.blocked.length > 0) out.warn("Nothing else to apply");
-        else out.done("Everything up to date");
+        reportEmptyPlan(out, plan, dryRun);
         out.executables(executables);
         for (const line of reachBlock(
           reach,
