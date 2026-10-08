@@ -1,5 +1,4 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import path from "node:path";
 import type { ReadOnlyFs } from "@caplet/core";
 
 export function diskReadOnlyFs(): ReadOnlyFs {
