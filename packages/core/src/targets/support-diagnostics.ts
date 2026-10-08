@@ -1,0 +1,274 @@
+import type {
+  Carrier,
+  ComponentOutcome,
+  ComponentOutcomeKind,
+  Diagnostic,
+  FacetFamily,
+  InteropFamily,
+  OutcomeFamily,
+  SupportCell,
+  TargetId,
+} from "../types/index.js";
+import { carriersOf, findFieldSupport, supportCell } from "./field-support.js";
+import { nativeKeyInfo } from "./native-keys.js";
+
+/** The component a support decision is about, on one target and carrier. */
+export type SupportSubject = {
+  capability: string;
+  target: TargetId;
+  /** Defaults to the target's default carrier. */
+  carrier?: Carrier | undefined;
+  family: OutcomeFamily;
+  component: string;
+};
+
+/**
+ * Structured payload of every diagnostic built here (`diagnostic.data`). `componentOutcomes`
+ * reads it to place the component in the compatibility report: `outcome` sets the component's
+ * outcome (for the whole package when `blocks` is `package`), `dropped` records a field or
+ * extra lost without changing behavior.
+ */
+export type SupportDiagnosticData = {
+  family: OutcomeFamily;
+  component: string;
+  outcome?: Exclude<ComponentOutcomeKind, "native" | "translated"> | undefined;
+  blocks?: "component" | "package" | undefined;
+  source?: string | undefined;
+  consequence?: string | undefined;
+  recovery?: string | undefined;
+  dropped?: string | undefined;
+};
+
+/**
+ * Diagnostic for applying `field` to the subject: `acf.support.refused` (error) for a refused
+ * cell, `acf.support.degraded` with the cell's severity and loss for a degraded cell, and
+ * undefined for native, translated or absent cells. Throws for an unknown field id.
+ */
+export function supportDiagnostic(subject: SupportSubject, field: string): Diagnostic | undefined {
+  const cell = cellFor(subject, field);
+  if (cell?.kind === "refused") {
+    return refusal(subject, field, `${subject.target} cannot honor ${field}: ${cell.reason}`);
+  }
+  if (cell?.kind !== "degraded") return undefined;
+  const label = componentLabel(subject);
+  const changesBehavior = findFieldSupport(field)?.class === "granting";
+  return diagnostic(subject, {
+    severity: cell.severity,
+    code: "acf.support.degraded",
+    message: `${subject.target}: ${cell.loss} (${field} on ${label})`,
+    data: changesBehavior
+      ? {
+          outcome: "changed-behavior",
+          source: field,
+          consequence: cell.loss,
+          recovery: recoveryFor(subject),
+        }
+      : { dropped: field },
+  });
+}
+
+/**
+ * The `translated` outcome for applying `field` to the subject when its cell is a translation,
+ * else undefined. Writers return it in `EmitResult.outcomes`.
+ */
+export function translatedOutcome(
+  subject: SupportSubject,
+  field: string,
+): ComponentOutcome | undefined {
+  const cell = cellFor(subject, field);
+  if (cell?.kind !== "translated") return undefined;
+  return {
+    capability: subject.capability,
+    target: subject.target,
+    family: subject.family,
+    component: subject.component,
+    outcome: "translated",
+    source: field,
+    consequence: cell.rule,
+  };
+}
+
+/**
+ * `acf.support.component-omitted` (lossy): the target has no carrier for the component type,
+ * so the writer skips it. Use `packageRefused` instead when the component is restricting.
+ */
+export function componentOmitted(subject: SupportSubject, reason: string): Diagnostic {
+  const label = componentLabel(subject);
+  return diagnostic(subject, {
+    severity: "lossy",
+    code: "acf.support.component-omitted",
+    message: `${label} is omitted for ${subject.target}: ${reason}`,
+    data: {
+      outcome: "omitted",
+      source: subject.family,
+      consequence: `${label} is not installed for ${subject.target}`,
+      recovery: recoveryFor(subject),
+    },
+  });
+}
+
+/**
+ * `acf.support.refused` (error) for a restricting component the target cannot carry: the
+ * whole package is refused for that target (capability-model-layers, Component omission).
+ */
+export function packageRefused(subject: SupportSubject, reason: string): Diagnostic {
+  const label = componentLabel(subject);
+  const recovery = recoveryFor(subject);
+  return diagnostic(subject, {
+    severity: "error",
+    code: "acf.support.refused",
+    message: `capability ${subject.capability} is blocked for ${subject.target}: ${label} ${reason}. Recovery: ${recovery}`,
+    data: {
+      outcome: "blocked",
+      blocks: "package",
+      source: label,
+      consequence: `capability ${subject.capability} is not installed for ${subject.target}`,
+      recovery,
+    },
+  });
+}
+
+/**
+ * Diagnostic for an inline extra of `extra.owner` that is not emitted to `subject.target`:
+ * `acf.extras.dropped` (lossy), or `acf.support.refused` when the registry classifies the key
+ * as restricting and the target carries no core equivalent (capability-model-layers, Dropping
+ * extras elsewhere). Unknown keys count as `unclassified`.
+ */
+export function extraDropped(
+  subject: SupportSubject & { family: InteropFamily },
+  extra: { owner: TargetId; key: string },
+): Diagnostic {
+  const info = nativeKeyInfo(extra.owner, subject.family, extra.key);
+  const source = `targets.${extra.owner}.native.${extra.key}`;
+  const keyClass = info?.class ?? "unclassified";
+  if (keyClass === "restricting" && !carriesCoreEquivalent(subject, info?.generatedFrom)) {
+    return refusal(
+      subject,
+      source,
+      `${subject.target} has no equivalent for the restricting ${extra.owner} key ${extra.key}`,
+    );
+  }
+  const label = componentLabel(subject);
+  const changesBehavior = keyClass === "functional" || keyClass === "granting";
+  return diagnostic(subject, {
+    severity: "lossy",
+    code: "acf.extras.dropped",
+    message: `${subject.target} drops the ${keyClass} ${extra.owner} key ${extra.key} from ${label}`,
+    data: changesBehavior
+      ? {
+          outcome: "changed-behavior",
+          source,
+          consequence: `${label} runs without ${extra.key} on ${subject.target}`,
+          recovery: recoveryFor(subject),
+          dropped: source,
+        }
+      : { dropped: source },
+  });
+}
+
+/** `acf.extras.dropped` (lossy) for a capability's `native/<owner>/` tree on another target. */
+export function nativeTreeDropped(
+  subject: { capability: string; target: TargetId },
+  owner: TargetId,
+): Diagnostic {
+  const tree = `native/${owner}/`;
+  return diagnostic(
+    { ...subject, family: "package", component: subject.capability },
+    {
+      severity: "lossy",
+      code: "acf.extras.dropped",
+      message: `${subject.target} drops ${tree} from capability ${subject.capability}`,
+      data: { dropped: tree },
+    },
+  );
+}
+
+/**
+ * `acf.core.pending` (info) when `key` is a native key of `subject.target` whose meaning is a
+ * pending core field; undefined for any other key.
+ */
+export function corePending(
+  subject: SupportSubject & { family: InteropFamily },
+  key: string,
+): Diagnostic | undefined {
+  const pending = nativeKeyInfo(subject.target, subject.family, key)?.pending;
+  if (pending === undefined) return undefined;
+  return diagnostic(subject, {
+    severity: "info",
+    code: "acf.core.pending",
+    message: `${subject.target} key ${key} on ${componentLabel(subject)} carries a pending core meaning; future core field ${pending.coreField}`,
+    data: { source: `targets.${subject.target}.native.${key}` },
+  });
+}
+
+/** The support payload of a diagnostic built by this module, or undefined for any other. */
+export function readSupportData(
+  diagnostic: Diagnostic | undefined,
+): SupportDiagnosticData | undefined {
+  const data = diagnostic?.data;
+  if (data === undefined || typeof data.component !== "string") return undefined;
+  if (typeof data.family !== "string") return undefined;
+  return data as SupportDiagnosticData;
+}
+
+function cellFor(subject: SupportSubject, field: string): SupportCell | undefined {
+  return supportCell(field, subject.target, subject.carrier ?? carriersOf(subject.target).default);
+}
+
+function carriesCoreEquivalent(subject: SupportSubject, field: string | undefined): boolean {
+  if (field === undefined || findFieldSupport(field) === undefined) return false;
+  const kind = cellFor(subject, field)?.kind;
+  return kind === "native" || kind === "translated";
+}
+
+function refusal(subject: SupportSubject, source: string, reason: string): Diagnostic {
+  const label = componentLabel(subject);
+  const recovery = recoveryFor(subject);
+  const consequence = `${label} is not installed for ${subject.target}`;
+  return diagnostic(subject, {
+    severity: "error",
+    code: "acf.support.refused",
+    message: `${label} is blocked for ${subject.target} by ${source}: ${reason}. Recovery: ${recovery}`,
+    data: { outcome: "blocked", blocks: "component", source, consequence, recovery },
+  });
+}
+
+function diagnostic(
+  subject: SupportSubject,
+  input: {
+    severity: Diagnostic["severity"];
+    code: string;
+    message: string;
+    data: Omit<SupportDiagnosticData, "family" | "component">;
+  },
+): Diagnostic {
+  const result: Diagnostic = {
+    severity: input.severity,
+    code: input.code,
+    message: input.message,
+    targetId: subject.target,
+    capability: { name: subject.capability },
+    data: { family: subject.family, component: subject.component, ...input.data },
+  };
+  if (subject.family !== "package") result.family = subject.family;
+  return result;
+}
+
+function componentLabel(subject: SupportSubject): string {
+  return subject.family === "package"
+    ? `capability ${subject.component}`
+    : `${subject.family} ${subject.component}`;
+}
+
+/**
+ * The recovery a user applies to accept the loss: exclude the component for the target, or
+ * restrict it to other targets (capability-model-layers, Writers honor the table or refuse).
+ */
+export function recoveryFor(subject: {
+  family: OutcomeFamily;
+  component: string;
+  target: TargetId;
+}): string {
+  if (subject.family === "package") return `except: [${subject.target}]`;
+  return `exclude: { ${subject.family satisfies FacetFamily}: [${subject.component}] } or except: [${subject.target}]`;
+}

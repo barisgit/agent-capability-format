@@ -1,8 +1,9 @@
 export * from "./managed-notices.js";
+export * from "./outcomes.js";
 
 import { applicableTargets } from "../applicability/index.js";
 import { resolveScopeCapabilities } from "../resolver/index.js";
-import { targetIds, targetMap } from "../targets/index.js";
+import { familySupportFamilies, targetIds, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -130,7 +131,8 @@ export function applyApplicability(
   );
   const hooks = filterHooks(capability, targetId);
   const mcp = filterMcp(capability, targetId);
-  for (const family of ["skill", "agent", "command", "instruction", "hook", "mcp"] as const) {
+  // Skills and MCP have no family-level gate; writers consult field-level support cells.
+  for (const family of familySupportFamilies) {
     if (
       familyHasItems(family, {
         ...capability,

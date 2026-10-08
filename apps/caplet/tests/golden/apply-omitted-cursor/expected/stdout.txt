@@ -1,0 +1,19 @@
+Compatibility
+  alpha-helper (alpha-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agent: [alpha-helper] } or except: [cursor]
+  beta-helper (beta-cap) / cursor - omitted: cursor does not natively support agent; facet is not emitted (agent). Recovery: exclude: { agent: [beta-helper] } or except: [cursor]
+  always (alpha-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instruction: [always] } or except: [cursor]
+  always (beta-cap) / cursor - omitted: cursor only emits file_context instructions as Cursor rules (activation: always). Recovery: exclude: { instruction: [always] } or except: [cursor]
+  cursor - native: 2 MCP servers
+
+Plan: 2 changes
+
+project  .
+  cursor  .cursor
+    + mcp.json           alpha-cap, beta-cap
+    + managed notices
+
++ 2 create  ~ 0 update  - 0 delete
+
+warn 2 files
+targets
+    project  (nothing managed yet)

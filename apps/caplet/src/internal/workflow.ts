@@ -8,6 +8,8 @@ import {
   type AcfOwnership,
   applyApplicability,
   type CapletConfig,
+  type ComponentOutcome,
+  componentOutcomes,
   type Diagnostic,
   type EmitOptions,
   type FileDiff,
@@ -74,6 +76,11 @@ export type EmitPlan = {
   diagnostics: Diagnostic[];
   diffs: EmittedDiff[];
   staleEntries: StaleSidecarEntry[];
+  /**
+   * Compatibility-report outcome of every planned component per target, independent of whether
+   * its files changed. A capability planned in several scopes is reported once per target.
+   */
+  outcomes: ComponentOutcome[];
 };
 
 /** Outcome of applying a plan; `diagnostics` holds only what apply itself found. */
@@ -129,6 +136,7 @@ export async function buildEmitPlan(
   const targets = targetSelection(args, configResult.config);
   const diagnostics: Diagnostic[] = [...configResult.diagnostics];
   const desiredDiffs: EmittedDiff[] = [];
+  const outcomes = new Map<string, ComponentOutcome>();
   const canonicalDiffs = new Set<string>();
   const resolvedNames = new Map<string, ReadonlySet<string>>();
   const resolvedFacets = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
@@ -223,9 +231,19 @@ export async function buildEmitPlan(
           installRoot,
           options: emitOptionsForTarget(targetId, configResult.config),
         };
-        if (adapter.validate !== undefined) diagnostics.push(...(await adapter.validate(input)));
+        const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
+        diagnostics.push(...validation);
         const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
+        for (const outcome of componentOutcomes({
+          capability: filtered,
+          target: targetId,
+          diagnostics: [...filtered.diagnostics, ...validation, ...result.diagnostics],
+          reported: result.outcomes,
+        })) {
+          const key = `${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
+          if (!outcomes.has(key)) outcomes.set(key, outcome);
+        }
         for (const diff of result.diffs) {
           const canonical = isCanonicalSkillPath(diff.path, scopeRoot);
           if (canonical) {
@@ -272,6 +290,7 @@ export async function buildEmitPlan(
     diagnostics,
     diffs,
     staleEntries: sweep.staleEntries,
+    outcomes: [...outcomes.values()],
   };
 }
 

@@ -3,7 +3,8 @@ import path from "node:path";
 import type {
   CanonicalHookType,
   CanonicalTriggerName,
-  FacetFamily,
+  FamilySupportFamily,
+  SupportLevel,
   TargetAdapter,
   TargetDefinition,
   TargetId,
@@ -63,12 +64,10 @@ export const targets = defineTargets([
     id: "claude",
     displayName: "Claude Code",
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "partial",
       hook: "full",
-      mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".claude"), project: path.join(".", ".claude") },
     skillInstallPaths: {
@@ -103,12 +102,10 @@ export const targets = defineTargets([
     displayName: "Codex",
     discoversCanonicalSkills: true,
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "partial",
       hook: "full",
-      mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".codex"), project: path.join(".", ".codex") },
     skillInstallPaths: {
@@ -142,12 +139,10 @@ export const targets = defineTargets([
     id: "cursor",
     displayName: "Cursor",
     support: {
-      skill: "partial",
       agent: "partial",
       command: "partial",
       instruction: "partial",
       hook: "none",
-      mcp: "full",
     },
     installPaths: { user: path.join(HOME, ".cursor"), project: path.join(".", ".cursor") },
     mappings: {
@@ -178,12 +173,10 @@ export const targets = defineTargets([
     displayName: "OpenCode",
     discoversCanonicalSkills: true,
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "partial",
       hook: "partial",
-      mcp: "full",
     },
     installPaths: {
       user: path.join(HOME, ".config", "opencode"),
@@ -221,12 +214,10 @@ export const targets = defineTargets([
     displayName: "Pi",
     discoversCanonicalSkills: true,
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "full",
       hook: "full",
-      mcp: "full",
     },
     installPaths: {
       user: path.join(HOME, ".pi", "agent"),
@@ -268,8 +259,16 @@ export const targetMap: Readonly<Record<TargetId, TargetDefinition<TargetId>>> =
 export const targetExtensionSchemas = Object.fromEntries(
   targets.map((target) => [target.id, target.extensions]),
 );
-export const targetSupportMatrix: Readonly<Record<TargetId, Partial<Record<FacetFamily, string>>>> =
-  Object.fromEntries(targets.map((target) => [target.id, target.support]));
+/** Families whose support is still declared per target rather than per field (see `fieldSupport`). */
+export const familySupportFamilies: readonly FamilySupportFamily[] = [
+  "agent",
+  "command",
+  "instruction",
+  "hook",
+];
+export const targetSupportMatrix: Readonly<
+  Record<TargetId, Partial<Record<FamilySupportFamily, SupportLevel>>>
+> = Object.fromEntries(targets.map((target) => [target.id, target.support]));
 export const targetHookEventMap = Object.fromEntries(
   targets.map((target) => [target.id, target.mappings.hookEvents]),
 );

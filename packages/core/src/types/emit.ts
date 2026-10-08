@@ -18,10 +18,15 @@ export type TargetMappings = {
   mcpInstallPath: InstallPaths;
 };
 export type TargetExtensionSchemas = Partial<Record<FacetFamily | "capability", ZodType<unknown>>>;
+/**
+ * Facet families gated by family-level `support`. Skills and MCP servers are gated per field
+ * and carrier by the support registry (`fieldSupport`, `supportCell` in core targets).
+ */
+export type FamilySupportFamily = Exclude<FacetFamily, "skill" | "mcp">;
 export type TargetDefinition<Id extends string = string> = {
   id: Id;
   displayName: string;
-  support: Partial<Record<FacetFamily, SupportLevel>>;
+  support: Partial<Record<FamilySupportFamily, SupportLevel>>;
   installPaths: InstallPaths;
   // Native per-target skills directory. SPEC §22.2: skills always emit to the
   // canonical ~/.agents/skills (project ./.agents/skills) root; when a target
@@ -61,7 +66,49 @@ export type EmitOptions = {
   dryRun?: boolean | undefined;
   skills?: SkillsEmitOptions | undefined;
 };
-export type EmitResult = { diffs: FileDiff[]; diagnostics: Diagnostic[] };
+/**
+ * What a writer produced for one capability and target. `outcomes` lists components whose
+ * outcome a writer knows positively (for example `translated`); the plan derives every other
+ * component's outcome from `diagnostics` (see `componentOutcomes`). Writers that predate the
+ * field-level registry leave it absent.
+ */
+export type EmitResult = {
+  diffs: FileDiff[];
+  diagnostics: Diagnostic[];
+  outcomes?: ComponentOutcome[] | undefined;
+};
+
+/**
+ * How one component reaches one target, from best to worst (capability-model-layers,
+ * Behavior-first compatibility report).
+ */
+export type ComponentOutcomeKind =
+  | "native"
+  | "translated"
+  | "changed-behavior"
+  | "omitted"
+  | "blocked";
+
+/** Component families of the compatibility report; `package` covers manifest-level data. */
+export type OutcomeFamily = FacetFamily | "package";
+
+/**
+ * The compatibility-report record for one component of one capability on one target.
+ * A non-native outcome names its `source` (core field id, native key or component type),
+ * the `consequence` for the user and, except for faithful translations, a `recovery`.
+ * `dropped` lists descriptive fields and extras the target loses without changing behavior.
+ */
+export type ComponentOutcome = {
+  capability: string;
+  target: TargetId;
+  family: OutcomeFamily;
+  component: string;
+  outcome: ComponentOutcomeKind;
+  source?: string | undefined;
+  consequence?: string | undefined;
+  recovery?: string | undefined;
+  dropped?: string[] | undefined;
+};
 export type FileContent = string | Uint8Array;
 export type FileDiff = {
   path: string;

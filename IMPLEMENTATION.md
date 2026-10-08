@@ -693,7 +693,12 @@ export type TargetDefinition<Id extends string> = {
   id: Id
   displayName: string
 
-  support: Partial<Record<FacetFamily, SupportLevel>>
+  // Family-level support for agents, commands, instructions and hooks only. Skills, MCP
+  // servers and package metadata are declared per field and carrier in
+  // targets/field-support.ts (fieldSupport, supportCell, targetCarriers), with native keys
+  // classified in targets/native-keys.ts (nativeKeyInfo) and checked by
+  // targets/self-check.ts (checkSupportRegistry).
+  support: Partial<Record<Exclude<FacetFamily, "skill" | "mcp">, SupportLevel>>
   installPaths: InstallPaths
   // Native skill install paths, when the target has target-specific skill
   // directories. Omitted = skills emit only to the canonical shared root.
@@ -764,6 +769,11 @@ export type EmitOptions = {
 export type EmitResult = {
   diffs: FileDiff[]
   diagnostics: Diagnostic[]
+  /** Components whose outcome the writer knows positively (e.g. `translated`).
+   *  Caplet derives every other component's outcome from `diagnostics` with
+   *  `componentOutcomes`; support diagnostics come from the helpers in
+   *  `targets/support-diagnostics.ts`, which read the registry cells. */
+  outcomes?: ComponentOutcome[]
 }
 
 /** Read-only filesystem port. Caplet implements it over real fs; tests use
@@ -917,12 +927,10 @@ export const targets = defineTargets([
     displayName: "Claude Code",
 
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "partial",
       hook: "full",
-      mcp: "full",
     },
 
     installPaths: {
@@ -975,12 +983,10 @@ export const targets = defineTargets([
     displayName: "Codex",
 
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "none",
       hook: "full",
-      mcp: "full",
     },
 
     installPaths: {
@@ -1032,12 +1038,10 @@ export const targets = defineTargets([
     id: "opencode",
     displayName: "OpenCode",
     support: {
-      skill: "full",
       agent: "full",
       command: "partial",
       instruction: "partial",
       hook: "partial",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.config/opencode`,
@@ -1084,12 +1088,10 @@ export const targets = defineTargets([
     id: "cursor",
     displayName: "Cursor",
     support: {
-      skill: "partial",
       agent: "partial",
       command: "partial",
       instruction: "partial",
       hook: "none",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.cursor`,
@@ -1132,12 +1134,10 @@ export const targets = defineTargets([
     id: "pi",
     displayName: "Pi",
     support: {
-      skill: "full",
       agent: "full",
       command: "full",
       instruction: "full",
       hook: "full",
-      mcp: "full",
     },
     installPaths: {
       user:    `${HOME}/.pi/agent`,
@@ -2808,6 +2808,11 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - `caplet apply [--scope …] [--target …] [--dry-run] [--offline] [--frozen]`
   resolves declared sources and reconciles native artifacts. Dry-run refreshes
   lock state in memory without writing it.
+- The plan opens with a compatibility report: per target, one line per
+  component that is translated, changed in behavior, omitted or blocked
+  (`review / pi - blocked: … Recovery: …`), a count of native components,
+  and one line of dropped descriptive fields. It also prints when a refusal
+  blocks the apply. `--json` carries the same records as `outcomes`.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
   exits 3 when the lockfile is stale. A plan that deletes files asks for

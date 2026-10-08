@@ -60,6 +60,11 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.emit.managed-notice-reserved-path",
   "acf.emit.managed-notice-destination-collision",
   "acf.cli.partial-implementation",
+  "acf.support.refused",
+  "acf.support.degraded",
+  "acf.support.component-omitted",
+  "acf.extras.dropped",
+  "acf.core.pending",
 ] as const;
 
 export type AcfDiagnosticCode = (typeof ACF_DIAGNOSTIC_CODES)[number];

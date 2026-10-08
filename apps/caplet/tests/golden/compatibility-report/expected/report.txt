@@ -1,0 +1,11 @@
+Compatibility
+  claude - native: 1 skill, 1 agent, 1 MCP server
+  helper / opencode - changed behavior: agent helper runs without permissionMode on opencode (targets.claude.native.permissionMode). Recovery: exclude: { agent: [helper] } or except: [opencode]
+  docs / opencode - translated: written as type: local with a command array (mcp.transport=stdio)
+  opencode - native: 1 skill
+  opencode - dropped: skill.argument-hint (review)
+  review / pi - blocked: skill review is not installed for pi (skill.invocation.user=false). Recovery: exclude: { skill: [review] } or except: [pi]
+  helper / pi - omitted: agent helper is not installed for pi (agent). Recovery: exclude: { agent: [helper] } or except: [pi]
+  pi - native: 1 MCP server
+  pi - dropped: skill.argument-hint (review), native/claude/ (tools)
+

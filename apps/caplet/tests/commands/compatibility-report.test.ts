@@ -1,0 +1,167 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import path from "node:path";
+import type { ComponentOutcome } from "@caplet/core";
+import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
+import { renderCompatibility } from "../../src/internal/compatibility.js";
+import { stripAnsi } from "../../src/internal/render.js";
+import { cleanup, makeScope, runCaplet, type TestScope } from "../helpers.js";
+
+const testsDir = path.resolve(import.meta.dir, "..");
+
+/**
+ * Outcomes no current writer produces end to end (translated, blocked, changed behavior,
+ * descriptive drops). Group-4 writers add apply goldens for them; until then the renderer is
+ * pinned with constructed data.
+ */
+const constructed: ComponentOutcome[] = [
+  {
+    capability: "tools",
+    target: "claude",
+    family: "skill",
+    component: "review",
+    outcome: "native",
+  },
+  { capability: "tools", target: "claude", family: "mcp", component: "docs", outcome: "native" },
+  {
+    capability: "tools",
+    target: "claude",
+    family: "agent",
+    component: "helper",
+    outcome: "native",
+  },
+  {
+    capability: "tools",
+    target: "opencode",
+    family: "mcp",
+    component: "docs",
+    outcome: "translated",
+    source: "mcp.transport=stdio",
+    consequence: "written as type: local with a command array",
+  },
+  {
+    capability: "tools",
+    target: "opencode",
+    family: "skill",
+    component: "review",
+    outcome: "native",
+    dropped: ["skill.argument-hint"],
+  },
+  {
+    capability: "tools",
+    target: "opencode",
+    family: "agent",
+    component: "helper",
+    outcome: "changed-behavior",
+    source: "targets.claude.native.permissionMode",
+    consequence: "agent helper runs without permissionMode on opencode",
+    recovery: "exclude: { agent: [helper] } or except: [opencode]",
+  },
+  {
+    capability: "tools",
+    target: "pi",
+    family: "skill",
+    component: "review",
+    outcome: "blocked",
+    source: "skill.invocation.user=false",
+    consequence: "skill review is not installed for pi",
+    recovery: "exclude: { skill: [review] } or except: [pi]",
+    dropped: ["skill.argument-hint"],
+  },
+  {
+    capability: "tools",
+    target: "pi",
+    family: "agent",
+    component: "helper",
+    outcome: "omitted",
+    source: "agent",
+    consequence: "agent helper is not installed for pi",
+    recovery: "exclude: { agent: [helper] } or except: [pi]",
+  },
+  { capability: "tools", target: "pi", family: "mcp", component: "docs", outcome: "native" },
+  {
+    capability: "tools",
+    target: "pi",
+    family: "package",
+    component: "tools",
+    outcome: "native",
+    dropped: ["native/claude/"],
+  },
+];
+
+function plain(lines: readonly string[]): string {
+  return `${lines.map(stripAnsi).join("\n")}\n`;
+}
+
+describe("behavior-first compatibility report", () => {
+  test("renders every outcome kind per target", async () => {
+    const report = plain(renderCompatibility(constructed, ["claude", "opencode", "pi"]));
+    await assertGoldenTree(
+      treeFromFiles({ "report.txt": report }),
+      goldenCase(testsDir, "compatibility-report").expected,
+    );
+  });
+
+  test("a refused skill reads as a block with its recovery", () => {
+    const report = plain(renderCompatibility(constructed, ["pi"]));
+    expect(report).toContain(
+      "review / pi - blocked: skill review is not installed for pi (skill.invocation.user=false). Recovery: exclude: { skill: [review] } or except: [pi]",
+    );
+  });
+
+  test("names the capability when the report spans several", () => {
+    const other = constructed.map((item) => ({ ...item, capability: "other" }));
+    const report = plain(renderCompatibility([...constructed, ...other], ["pi"]));
+    expect(report).toContain("review (tools) / pi - blocked:");
+    expect(report).toContain("review (other) / pi - blocked:");
+  });
+});
+
+describe("caplet apply --dry-run compatibility report", () => {
+  let scope: TestScope;
+  beforeEach(async () => {
+    scope = await makeScope();
+  });
+  afterEach(async () => {
+    await cleanup(scope);
+  });
+
+  async function dryRun(target: string): Promise<{ stdout: string; outcomes: string }> {
+    const args = [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      target,
+    ];
+    const human = await runCaplet(scope, args);
+    expect(human.exitCode).toBe(0);
+    const json = await runCaplet(scope, [...args, "--json"]);
+    expect(json.exitCode).toBe(0);
+    const parsed = JSON.parse(json.stdout) as { outcomes: unknown };
+    return {
+      stdout: human.stdout.replaceAll(scope.dir, "<tmp>"),
+      outcomes: `${JSON.stringify(parsed.outcomes, null, 2)}\n`,
+    };
+  }
+
+  test("native components on Claude, before the file list", async () => {
+    const result = await dryRun("claude");
+    expect(result.stdout.indexOf("claude - native:")).toBeLessThan(result.stdout.indexOf("Plan:"));
+    await assertGoldenTree(
+      treeFromFiles({ "stdout.txt": result.stdout, "outcomes.json": result.outcomes }),
+      goldenCase(testsDir, "apply-native-claude").expected,
+    );
+  });
+
+  test("components Cursor cannot carry are listed as omitted", async () => {
+    const result = await dryRun("cursor");
+    expect(result.stdout).toContain(" / cursor - omitted: ");
+    await assertGoldenTree(
+      treeFromFiles({ "stdout.txt": result.stdout, "outcomes.json": result.outcomes }),
+      goldenCase(testsDir, "apply-omitted-cursor").expected,
+    );
+  });
+});

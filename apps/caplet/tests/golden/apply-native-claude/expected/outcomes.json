@@ -1,0 +1,44 @@
+[
+  {
+    "capability": "alpha-cap",
+    "target": "claude",
+    "family": "agent",
+    "component": "alpha-helper",
+    "outcome": "native"
+  },
+  {
+    "capability": "alpha-cap",
+    "target": "claude",
+    "family": "instruction",
+    "component": "always",
+    "outcome": "native"
+  },
+  {
+    "capability": "alpha-cap",
+    "target": "claude",
+    "family": "mcp",
+    "component": "alpha-server",
+    "outcome": "native"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "claude",
+    "family": "agent",
+    "component": "beta-helper",
+    "outcome": "native"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "claude",
+    "family": "instruction",
+    "component": "always",
+    "outcome": "native"
+  },
+  {
+    "capability": "beta-cap",
+    "target": "claude",
+    "family": "mcp",
+    "component": "beta-server",
+    "outcome": "native"
+  }
+]

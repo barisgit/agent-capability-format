@@ -56,12 +56,17 @@ export const applyCommand = defineCommand({
       const code = frozenStale ? 3 : exitCodeForDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
       const reach = await collectReach(plan);
+      const out = reporter(context.args);
+      const outcomes = { outcomes: plan.outcomes };
       if (code !== 0) {
-        if (json) printJson("apply", false, diagnostics, { plan: planToJson(view) });
+        if (json) {
+          printJson("apply", false, diagnostics, { plan: planToJson(view), ...outcomes });
+        } else {
+          out.compatibility(plan.outcomes, plan.targets);
+        }
         process.exitCode = code;
         return;
       }
-      const out = reporter(context.args);
       if (view.fileCount === 0) {
         const stale = plan.staleEntries.length;
         if (stale > 0 && !dryRun) await applyEmitPlan(plan);
@@ -69,6 +74,7 @@ export const applyCommand = defineCommand({
           printJson("apply", true, diagnostics, {
             plan: planToJson(view),
             applied: stale > 0 && !dryRun ? { files: 0, writes: 0, deletes: 0 } : null,
+            ...outcomes,
             ...reachToJson(reach),
           });
         } else if (stale > 0) {
@@ -92,12 +98,16 @@ export const applyCommand = defineCommand({
         }
         return;
       }
-      if (!json) out.plan(view);
+      if (!json) {
+        out.compatibility(plan.outcomes, plan.targets);
+        out.plan(view);
+      }
       if (dryRun) {
         if (json) {
           printJson("apply", true, diagnostics, {
             plan: planToJson(view),
             applied: null,
+            ...outcomes,
             ...reachToJson(reach),
           });
         } else {
@@ -131,6 +141,7 @@ export const applyCommand = defineCommand({
         printJson("apply", applyCode === 0, [...diagnostics, ...applied.diagnostics], {
           plan: planToJson(view),
           applied: { files: view.fileCount, writes: written, deletes: deleted },
+          ...outcomes,
           ...reachToJson(appliedReach),
         });
         return;

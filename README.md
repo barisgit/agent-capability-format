@@ -180,7 +180,9 @@ The reference CLI `caplet` (`caplet --help` is authoritative):
 | Inspect | `caplet doctor`             | Check git, `.agents/` access, targets, and lockfiles.                        |
 | Setup   | `caplet completion <shell>` | Print bash, zsh, or fish completions.                                        |
 
-Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
+The plan starts with a compatibility report listing, per target, each
+component that is translated, changed in behavior, omitted or blocked, with a
+recovery action. Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 
@@ -224,6 +226,11 @@ to npm in lockstep versions:
 | `packages/installer` | `@caplet/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
 | `packages/sdk` | `@caplet/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
 | `packages/runtime-taxonomy` | `@caplet/runtime-taxonomy` | Stub for the future sibling registry spec. |
+
+`packages/golden` (`@caplet/golden`) is private and never published: it is the
+golden-tree test harness. A case lives at `tests/golden/<case>/` with `input/`
+and `expected/` trees, compared by path, bytes and executable bit; run the
+tests with `UPDATE_GOLDEN=1` to rewrite `expected/`.
 
 CI linters and browser validators import `@caplet/core` only. Caplet and
 direct consumers import `@caplet/sdk` for the ergonomic API.
