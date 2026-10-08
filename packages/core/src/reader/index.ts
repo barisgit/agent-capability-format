@@ -14,6 +14,8 @@ import {
   mcpFileSchema,
   skillFrontmatterSchema,
 } from "../schemas/index.js";
+import { nativeKeyInfo } from "../targets/native-keys.js";
+import { targetIds } from "../targets/registry.js";
 import type {
   AcfCapability,
   AgentFacet,
@@ -80,13 +82,6 @@ const coreSkillKeys: ReadonlySet<string> = new Set([
   "argument-hint",
 ]);
 const frontmatterKeys = {
-  skill: new Set([
-    ...coreSkillKeys,
-    // Common agent-skills ecosystem fields (accepted without a diagnostic)
-    "version",
-    "allowed-tools",
-    "disable-model-invocation",
-  ]),
   agent: new Set(["name", "description", "mode", "model", "assets", "only", "except", "targets"]),
   command: new Set([
     "name",
@@ -239,10 +234,10 @@ export async function readSkills(
     // extra; an authored skill reports unknown keys.
     const mapped = imported ? mapBareSkill(parsed.frontmatter, coreSkillKeys) : undefined;
     if (mapped === undefined) {
-      const pathsRejected = rejectCorePaths(parsed.frontmatter, primary, diagnostics);
+      const reported = rejectNativeSkillKeys(parsed.frontmatter, primary, diagnostics);
       pushUnknownFields(
         parsed.frontmatter,
-        pathsRejected ? skillKeysWithPaths : frontmatterKeys.skill,
+        new Set([...coreSkillKeys, ...reported]),
         diagnostics,
         primary,
       );
@@ -284,29 +279,61 @@ export async function readSkills(
   return facets.sort(byName);
 }
 
-const skillKeysWithPaths = new Set([...frontmatterKeys.skill, "paths"]);
-
 /**
- * Path-scoped activation is not a core skill field (canonical-skills, Path-scoped activation
- * stays per target): a native ACF skill authors it per target. Returns true when it pushed the
- * error.
+ * Reports the top-level keys of an authored skill that are a target's native skill keys rather
+ * than core fields, and returns them so they are not reported again as unknown. A key a writer
+ * generates from a core field (`disable-model-invocation`) names that field. Any other key
+ * names its `targets.<t>.native` spelling for every target that knows it: an error when
+ * dropping it would change behavior, a warning for a descriptive key. Path-scoped activation
+ * keeps its own code (canonical-skills, Path-scoped activation stays per target). A key no
+ * target knows is left to the unknown-field report.
  */
-function rejectCorePaths(
+function rejectNativeSkillKeys(
   frontmatter: Record<string, unknown>,
   file: string,
   diagnostics: Diagnostic[],
-): boolean {
-  if (!("paths" in frontmatter)) return false;
-  diagnostics.push({
-    severity: "error",
-    code: "acf.skill.paths-not-core",
-    message:
-      "paths is not a core skill field: glob dialects and activation scope differ between tools. " +
-      "Declare it per target as targets.claude.native.paths or targets.cursor.native.paths",
-    path: file,
-    family: "skill",
-  });
-  return true;
+): string[] {
+  const reported: string[] = [];
+  for (const key of Object.keys(frontmatter)) {
+    if (coreSkillKeys.has(key)) continue;
+    const known = targetIds.flatMap((target) => nativeKeyInfo(target, "skill", key) ?? []);
+    if (known.length === 0) continue;
+    reported.push(key);
+    const perTarget = known.map((info) => `targets.${info.target}.native.${key}`);
+    const coreField = known.find((info) => info.generatedFrom !== undefined)?.generatedFrom;
+    const base = { path: file, family: "skill" as const, data: { field: key } };
+    if (key === "paths") {
+      diagnostics.push({
+        ...base,
+        severity: "error",
+        code: "acf.skill.paths-not-core",
+        message:
+          "paths is not a core skill field: glob dialects and activation scope differ between " +
+          `tools. Declare it per target as ${perTarget.join(" or ")}`,
+      });
+    } else if (coreField !== undefined) {
+      diagnostics.push({
+        ...base,
+        severity: "error",
+        code: "acf.skill.native-key-not-core",
+        message: `${key} is a native skill key, not an ACF field; write its core equivalent ${coreFieldSpelling(coreField)}`,
+      });
+    } else {
+      diagnostics.push({
+        ...base,
+        severity: known.every((info) => info.class === "descriptive") ? "warn" : "error",
+        code: "acf.skill.native-key-not-core",
+        message: `${key} is a native skill key, not an ACF field; declare it per target as ${perTarget.join(" or ")}`,
+      });
+    }
+  }
+  return reported;
+}
+
+/** A registry field id such as `skill.invocation.model=false` as frontmatter: `invocation.model: false`. */
+function coreFieldSpelling(field: string): string {
+  const [fieldPath = field, value] = field.replace(/^skill\./, "").split("=");
+  return value === undefined ? fieldPath : `${fieldPath}: ${value}`;
 }
 
 export async function readAgents(root: string, diagnostics: Diagnostic[]): Promise<AgentFacet[]> {

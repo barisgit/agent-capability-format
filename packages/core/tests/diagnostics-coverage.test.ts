@@ -28,6 +28,7 @@ const coveredByFixtures = new Set([
   "acf.mcp.url.credential-in-url",
   "acf.mcp.placeholder.unsupported",
   "acf.skill.paths-not-core",
+  "acf.skill.native-key-not-core",
   "acf.core.pending",
   "acf.extras.conflict",
   "acf.extras.unclassified",

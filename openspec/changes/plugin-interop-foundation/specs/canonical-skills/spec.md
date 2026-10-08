@@ -15,6 +15,10 @@ SKILL.md frontmatter in ACF SHALL accept these core fields in addition to SPEC.m
 - **WHEN** a native ACF SKILL.md declares top-level `paths: ["src/**"]`
 - **THEN** validation fails with an error that names `targets.claude.native.paths` and `targets.cursor.native.paths` as the authoring forms
 
+#### Scenario: Native skill keys are not core fields
+- **WHEN** a native ACF SKILL.md declares top-level `disable-model-invocation: true` and `allowed-tools: Read`
+- **THEN** validation fails with an error naming `invocation.model: false` as the core equivalent of the first and the `targets.<t>.native.allowed-tools` forms for Claude, Codex and Pi for the second; a descriptive native key such as `when_to_use` only warns with its `targets.claude.native` form
+
 ### Requirement: Path-scoped activation stays per target
 Path-scoped automatic activation (Claude `paths`, Cursor `paths` and its legacy `globs`) SHALL NOT be a core field in this change, because neither the glob dialects nor the scope of "working with matching files" are documented as equivalent between the two tools. It SHALL be authored and imported as a per-target extra classified `restricting` for each tool that documents it, emitted verbatim only to that tool, and SHALL refuse the skill for every other target (Dropping extras elsewhere). Writers SHALL NOT translate one tool's glob list into another tool's field.
 
