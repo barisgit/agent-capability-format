@@ -14,6 +14,7 @@ import type {
   Manifest,
   McpFile,
   NativeRemainderComponent,
+  PackageAuthor,
   SkillFacet,
 } from "../types/index.js";
 import { projectAgentPluginsServer } from "./mcp.js";
@@ -24,11 +25,10 @@ import {
   invalidManifest,
 } from "./package.js";
 import {
-  authorEntry,
-  type ForeignAuthor,
   isDirectory,
   isFile,
   isRecord,
+  packageAuthor,
   packageIdentity,
   readJson,
   remainderComponent,
@@ -172,11 +172,7 @@ function projectManifest(
 
   const packageValues: Record<string, unknown> = {};
   if (identity.foreignVersion !== undefined) packageValues.version = identity.foreignVersion;
-  if (raw.author !== undefined) {
-    const author = authorEntry(raw.author as ForeignAuthor);
-    manifest.authors = [author.entry];
-    if (!author.roundTrips) packageValues.author = raw.author;
-  }
+  if (raw.author !== undefined) manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
 
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {

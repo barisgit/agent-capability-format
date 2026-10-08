@@ -64,7 +64,7 @@ describe("Agent Plugins 1.0 reader", () => {
       name: "docs-kit",
       version: "1.2.0",
       description: "Docs helpers",
-      authors: ["Ada <ada@example.com>"],
+      authors: [{ name: "Ada", email: "ada@example.com" }],
       license: "MIT",
       keywords: ["docs"],
     });

@@ -9,6 +9,7 @@ import type {
   CapabilityEntry,
   Diagnostic,
   NativeRemainderComponent,
+  PackageAuthor,
   SafetyClass,
 } from "../types/index.js";
 
@@ -206,26 +207,16 @@ function suggestSlug(name: string): string {
   return slug.length > 0 ? slug : "capability";
 }
 
-/** A structured foreign author (`{name, email?, url?}`). */
-export type ForeignAuthor = { name: string; email?: string | undefined; url?: string | undefined };
-
 /**
- * The `authors` entry for a foreign author and whether it round-trips: `Name <email>` when
- * decoding that string gives back the same name and email (canonical-package-metadata,
- * Legacy author strings), otherwise the name alone and `roundTrips: false`.
+ * The structured `authors` entry for a validated foreign author: its `name`, `email` and `url`.
+ * Keys outside those three are not part of `PackageAuthor`; a reader that allows them keeps
+ * the whole foreign author as a package value of its dialect.
  */
-export function authorEntry(author: ForeignAuthor): { entry: string; roundTrips: boolean } {
-  const encoded = author.email === undefined ? author.name : `${author.name} <${author.email}>`;
-  const decoded = decodeAuthor(encoded);
-  const roundTrips =
-    author.url === undefined && decoded.name === author.name && decoded.email === author.email;
-  return roundTrips ? { entry: encoded, roundTrips } : { entry: author.name, roundTrips };
-}
-
-function decodeAuthor(value: string): { name: string; email?: string } {
-  const match = /^(.*[^ ]) <([^<>]+)>$/.exec(value);
-  if (match?.[1] === undefined || match[2] === undefined) return { name: value };
-  return { name: match[1], email: match[2] };
+export function packageAuthor(author: PackageAuthor): PackageAuthor {
+  const entry: PackageAuthor = { name: author.name };
+  if (author.email !== undefined) entry.email = author.email;
+  if (author.url !== undefined) entry.url = author.url;
+  return entry;
 }
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);

@@ -53,7 +53,7 @@ export function nativeExtras(
 /**
  * Returns `targets` with `values` merged into `targets.<dialect>.package`. Readers use it
  * to record foreign manifest values the core field cannot represent exactly (a non-SemVer
- * `version`, an `author` that does not round-trip through `authors`).
+ * `version`, a Claude `author` with keys `PackageAuthor` has no field for).
  */
 export function withPackageValues(
   targets: TargetExtensions | undefined,

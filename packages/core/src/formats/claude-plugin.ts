@@ -13,6 +13,7 @@ import type {
   Manifest,
   McpFile,
   NativeRemainderComponent,
+  PackageAuthor,
   SafetyClass,
   SkillFacet,
 } from "../types/index.js";
@@ -24,16 +25,15 @@ import {
   invalidManifest,
 } from "./package.js";
 import {
-  authorEntry,
   CLAUDE_MANIFEST,
   componentPaths,
   contained,
-  type ForeignAuthor,
   filesUnder,
   isDirectory,
   isFile,
   isRecord,
   outsidePackage,
+  packageAuthor,
   packageIdentity,
   readJson,
   remainderComponent,
@@ -131,10 +131,9 @@ function projectManifest(
   const values: Record<string, unknown> = {};
   if (identity.foreignVersion !== undefined) values.version = identity.foreignVersion;
   if (isRecord(raw.author)) {
-    const author = authorEntry(raw.author as ForeignAuthor);
-    manifest.authors = [author.entry];
-    if (!author.roundTrips || Object.keys(raw.author).some((key) => !AUTHOR_KEYS.has(key)))
-      values.author = raw.author;
+    manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
+    // Claude allows author keys PackageAuthor has no field for; keep the whole author then.
+    if (Object.keys(raw.author).some((key) => !AUTHOR_KEYS.has(key))) values.author = raw.author;
   }
   const targets = withPackageValues(undefined, "claude", values);
   if (Object.keys(targets).length > 0) manifest.targets = targets;

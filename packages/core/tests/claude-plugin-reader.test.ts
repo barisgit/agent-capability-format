@@ -73,8 +73,7 @@ describe("Claude plugin reader", () => {
       version: "1.0.0",
       description: "Code review helpers",
       homepage: "https://example.com",
-      authors: ["Ada"],
-      targets: { claude: { package: { author: { name: "Ada", url: "https://ada.example" } } } },
+      authors: [{ name: "Ada", url: "https://ada.example" }],
     });
 
     expect(capability?.skills.map((item) => item.name)).toEqual(["review", "triage"]);
@@ -159,6 +158,15 @@ describe("Claude plugin reader", () => {
     expect(packageValues(capability?.manifest ?? {}, "claude")).toEqual({
       version: "v2",
     });
+  });
+
+  test("an author with keys beyond name, email and url is also kept as a Claude package value", async () => {
+    const author = { name: "Ada", email: "ada@example.com", team: "docs" };
+    const { capability } = await read({
+      ".claude-plugin/plugin.json": JSON.stringify({ name: "loose", author }),
+    });
+    expect(capability?.manifest.authors).toEqual([{ name: "Ada", email: "ada@example.com" }]);
+    expect(packageValues(capability?.manifest ?? {}, "claude")).toEqual({ author });
   });
 
   test("a malformed manifest fails without synthesizing from skills", async () => {
