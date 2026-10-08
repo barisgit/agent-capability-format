@@ -1,8 +1,9 @@
 /**
  * Consistency check over the field-level support registry and the native key inventory
  * (capability-model-layers: Safety classes, Native key classification, Negative fixtures for
- * data-only restrictions). A unit test runs it on the shipped registry; later tasks extend it
- * (4.5 checks that negative fixtures exist, 4.7 that preserved data has an authoring form).
+ * data-only restrictions). A unit test runs it on the shipped registry, and the caplet negative
+ * fixture suite runs it with the fixture ids; 4.7 extends it to check that preserved data has
+ * an authoring form.
  */
 import type { FieldSupport, NativeKeyInfo, SafetyClass } from "../types/interop.js";
 import { targetCarriers } from "./field-support.js";
@@ -22,12 +23,18 @@ export type SupportRegistryCheckOptions = {
    * Package fields are exempt: they only have a destination in the Claude plugin manifest.
    */
   requireComplete?: boolean;
+  /**
+   * Ids of the negative fixtures that exist. When given, a `negativeFixture` that names none of
+   * them is a problem; the fixtures live with the plan they exercise, outside this package.
+   */
+  negativeFixtures?: ReadonlySet<string>;
 };
 
 /**
  * Returns one human-readable problem per violation; an empty list means the registry is
  * consistent. Fails when a restricting or functional cell is degraded, a refusing
- * restricting cell lacks a `negativeFixture`, a skill or MCP field lacks a cell, a native key
+ * restricting cell lacks a `negativeFixture` (or names one missing from
+ * `options.negativeFixtures`), a skill or MCP field lacks a cell, a native key
  * lacks a safety class or is listed twice, or a key's `generatedFrom` or `pending` names a
  * field that does not exist (or, for `generatedFrom`, has no usable cell on the key's target).
  */
@@ -36,10 +43,13 @@ export function checkSupportRegistry(
   keys: readonly NativeKeyInfo[],
   options: SupportRegistryCheckOptions = {},
 ): string[] {
-  return [...checkFields(fields, options.requireComplete ?? true), ...checkKeys(fields, keys)];
+  return [...checkFields(fields, options), ...checkKeys(fields, keys)];
 }
 
-function checkFields(fields: readonly FieldSupport[], requireComplete: boolean): string[] {
+function checkFields(
+  fields: readonly FieldSupport[],
+  { requireComplete = true, negativeFixtures }: SupportRegistryCheckOptions,
+): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
   for (const entry of fields) {
@@ -65,6 +75,10 @@ function checkFields(fields: readonly FieldSupport[], requireComplete: boolean):
         }
         if (entry.class === "restricting" && cell.kind === "refused" && !cell.negativeFixture) {
           problems.push(`${where} is refused without a negativeFixture`);
+        }
+        const fixture = cell.kind === "refused" ? cell.negativeFixture : undefined;
+        if (fixture && negativeFixtures !== undefined && !negativeFixtures.has(fixture)) {
+          problems.push(`${where} names negativeFixture ${fixture}, which does not exist`);
         }
       }
     }

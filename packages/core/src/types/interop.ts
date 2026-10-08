@@ -63,7 +63,10 @@ export type SupportCell =
       kind: "refused";
       reason: string;
       evidence?: CellEvidence | undefined;
-      /** Test fixture id proving nothing is written (required for restricting fields). */
+      /**
+       * Id of the negative fixture proving nothing is written (required for restricting fields);
+       * the fixtures are in apps/caplet/tests/negative-fixtures.test.ts.
+       */
       negativeFixture?: string | undefined;
     };
 

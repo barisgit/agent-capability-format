@@ -264,6 +264,17 @@ test("self-check fails on unclassified keys and dangling generatedFrom or pendin
   ]);
 });
 
-// Task 4.5 adds the negative fixtures. It replaces this todo with an assertion that every
-// `negativeFixture` id in `fieldSupport` names an existing fixture directory.
-test.todo("every negativeFixture id names an existing negative fixture", () => {});
+// The shipped ids are checked against the fixtures themselves in
+// apps/caplet/tests/negative-fixtures.test.ts.
+test("self-check fails when a negativeFixture names no existing fixture", () => {
+  const fields = withCell(
+    { family: "skill", field: "skill.x", class: "restricting", cells: {} },
+    { pi: { loose: { kind: "refused", reason: "no switch", negativeFixture: "skill-x-pi" } } },
+  );
+  const check = (ids: string[]) =>
+    checkSupportRegistry(fields, [], { requireComplete: false, negativeFixtures: new Set(ids) });
+  expect(check(["skill-x-pi"])).toEqual([]);
+  expect(check([])).toEqual([
+    "skill.x (restricting) on pi/loose names negativeFixture skill-x-pi, which does not exist",
+  ]);
+});
