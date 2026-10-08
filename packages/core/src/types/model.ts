@@ -246,6 +246,15 @@ export const acfPathPlaceholders = [
   ACF_PACKAGE_DIR_PLACEHOLDER,
   ACF_HOOK_DIR_PLACEHOLDER,
 ] as const;
+/** The capability root; also `acfPathPlaceholders[0]`. */
+export const acfCapabilityDirPlaceholder = ACF_CAPABILITY_DIR_PLACEHOLDER;
+/**
+ * Persistent, writable directory per capability and install scope that survives updates
+ * (canonical-mcp, Data directory placeholder). Valid in stdio MCP `command`, `args`, `env` and
+ * `cwd`; writers map it to `${CLAUDE_PLUGIN_DATA}` in Claude plugins and to
+ * `<install-root>/.acf/data/<capability>/` for loose carriers.
+ */
+export const acfDataDirPlaceholder = `${PLACEHOLDER_OPEN}{ACF_DATA_DIR}`;
 
 export type Diagnostic = {
   severity: "error" | "warn" | "info" | "lossy";

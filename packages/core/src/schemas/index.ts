@@ -41,6 +41,10 @@ export const skillFrontmatterSchema = withOnlyExcept({
   name: slugSchema,
   description: z.string().min(1),
   invocation: z.object({ user: z.boolean().optional(), model: z.boolean().optional() }).optional(),
+  license: z.string().optional(),
+  compatibility: z.string().max(500).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  "argument-hint": z.string().optional(),
   ...frontmatterBase,
 });
 
@@ -195,6 +199,7 @@ export const mcpServerSchema = mcpServerBaseSchema
       command: z.string().min(1).optional(),
       args: z.array(z.string()).optional(),
       env: z.record(z.string(), z.string()).optional(),
+      cwd: z.string().min(1).optional(),
       url: z.string().url().optional(),
       headers: z.record(z.string(), z.string()).optional(),
     }),

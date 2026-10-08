@@ -71,11 +71,12 @@ const frontmatterKeys = {
     "only",
     "except",
     "targets",
-    // Common agent-skills ecosystem fields (accepted, passed through)
-    "version",
     "license",
+    "compatibility",
     "metadata",
     "argument-hint",
+    // Common agent-skills ecosystem fields (accepted without a diagnostic)
+    "version",
     "allowed-tools",
     "disable-model-invocation",
   ]),
@@ -225,7 +226,13 @@ export async function readSkills(
       continue;
     }
     const parsed = await parseMarkdown(primary);
-    pushUnknownFields(parsed.frontmatter, frontmatterKeys.skill, diagnostics, primary);
+    const pathsRejected = !imported && rejectCorePaths(parsed.frontmatter, primary, diagnostics);
+    pushUnknownFields(
+      parsed.frontmatter,
+      pathsRejected ? skillKeysWithPaths : frontmatterKeys.skill,
+      diagnostics,
+      primary,
+    );
     const missingDescription =
       imported &&
       (typeof parsed.frontmatter.description !== "string" ||
@@ -259,6 +266,31 @@ export async function readSkills(
     facets.push(facet);
   }
   return facets.sort(byName);
+}
+
+const skillKeysWithPaths = new Set([...frontmatterKeys.skill, "paths"]);
+
+/**
+ * Path-scoped activation is not a core skill field (canonical-skills, Path-scoped activation
+ * stays per target): a native ACF skill authors it per target. Returns true when it pushed the
+ * error.
+ */
+function rejectCorePaths(
+  frontmatter: Record<string, unknown>,
+  file: string,
+  diagnostics: Diagnostic[],
+): boolean {
+  if (!("paths" in frontmatter)) return false;
+  diagnostics.push({
+    severity: "error",
+    code: "acf.skill.paths-not-core",
+    message:
+      "paths is not a core skill field: glob dialects and activation scope differ between tools. " +
+      "Declare it per target as targets.claude.native.paths or targets.cursor.native.paths",
+    path: file,
+    family: "skill",
+  });
+  return true;
 }
 
 export async function readAgents(root: string, diagnostics: Diagnostic[]): Promise<AgentFacet[]> {

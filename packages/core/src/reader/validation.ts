@@ -17,10 +17,12 @@ import type {
 } from "../types/index.js";
 import { hookEffectMatrix, hookMatchRequired } from "../types/index.js";
 import { counts } from "./helpers.js";
+import { validateMcpServerValues } from "./mcp-rules.js";
 
 export function validateCapability(cap: AcfCapability): void {
   validateUniqueFacetNames(cap);
   validateHookFile(cap);
+  validateMcpServers(cap);
   validateOnlyExceptTargets(cap);
   validateTargetExtensions(cap);
   validateActivationConstraints(cap);
@@ -63,6 +65,12 @@ function validateHookFile(cap: AcfCapability): void {
         });
       }
     }
+  }
+}
+
+function validateMcpServers(cap: AcfCapability): void {
+  for (const server of cap.mcp?.servers ?? []) {
+    validateMcpServerValues(server, cap.mcp?.path, cap.diagnostics);
   }
 }
 
