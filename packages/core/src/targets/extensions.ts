@@ -3,12 +3,17 @@ import { hookEntrySchema, mcpServerSchema } from "../schemas/index.js";
 
 const stringArray = z.array(z.string());
 const unknownRecord = z.record(z.string(), z.unknown());
+/** Native keys in the target's own spelling (capability-model-layers, Inline native extras). */
+const native = unknownRecord.optional();
 
 const capabilityExtension = z
   .object({
     pluginAuthor: z.string().optional(),
     appId: z.string().optional(),
     scope: z.enum(["user", "project"]).optional(),
+    native,
+    // Per-target package values; validated in the target's own domain by the reader.
+    package: unknownRecord.optional(),
   })
   .strict();
 
@@ -18,6 +23,7 @@ const skillExtension = z
     modelInvocable: z.boolean().optional(),
     disableModelInvocation: z.boolean().optional(),
     path: z.string().optional(),
+    native,
   })
   .strict();
 
@@ -63,6 +69,7 @@ const mcpExtension = z
     servers: z.array(mcpServerSchema).optional(),
     scope: z.enum(["user", "project"]).optional(),
     localDev: z.boolean().optional(),
+    native,
   })
   .strict();
 

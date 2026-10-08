@@ -42,6 +42,7 @@ import {
   validateNameMatch,
   validateSingularFolders,
 } from "./helpers.js";
+import { readNativeFiles } from "./native-files.js";
 import { validateCapability } from "./validation.js";
 
 export { parseMarkdown } from "./helpers.js";
@@ -113,13 +114,14 @@ export async function readCapability(
   await validateSingularFolders(absRoot, diagnostics);
   const manifest = (await readManifest(absRoot, diagnostics)) ?? fallbackManifest(absRoot);
   const capabilityMarkdown = await readAcfMd(absRoot, diagnostics);
-  const [skills, agents, commands, instructions, hooks, mcp] = await Promise.all([
+  const [skills, agents, commands, instructions, hooks, mcp, nativeFiles] = await Promise.all([
     readSkills(absRoot, diagnostics, imported),
     readAgents(absRoot, diagnostics),
     readCommands(absRoot, diagnostics),
     readInstructions(absRoot, diagnostics),
     readHooks(absRoot, diagnostics),
     readMcp(absRoot, diagnostics),
+    readNativeFiles(absRoot, diagnostics),
   ]);
   const capability: AcfCapability = {
     root: absRoot,
@@ -137,6 +139,7 @@ export async function readCapability(
   };
   if (imported) capability.synthesized = true;
   if (capabilityMarkdown !== undefined) capability.capabilityMarkdown = capabilityMarkdown;
+  if (nativeFiles.length > 0) capability.nativeFiles = nativeFiles;
   capability.assets = await collectReferencedAssets(capability);
   if (imported) {
     const implicit = await collectImportedSkillAssets(capability.skills);

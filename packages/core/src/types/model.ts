@@ -7,7 +7,12 @@ import {
   provisionalOperations,
 } from "@caplet/runtime-taxonomy";
 import type { LockEntry } from "../lock/index.js";
-import type { CapabilitySource, NativeRemainderComponent, SourceFormat } from "./interop.js";
+import type {
+  CapabilitySource,
+  NativeFileExtra,
+  NativeRemainderComponent,
+  SourceFormat,
+} from "./interop.js";
 
 export {
   canonicalHookTypes,
@@ -287,6 +292,8 @@ export type AcfCapability = {
   source?: CapabilitySource | undefined;
   /** Foreign components the reader preserved but did not project (empty or absent for native ACF). */
   remainder?: NativeRemainderComponent[] | undefined;
+  /** Files under `native/<target>/`, sorted by target then path; absent when there are none. */
+  nativeFiles?: NativeFileExtra[] | undefined;
 };
 
 export type SourceSpec =

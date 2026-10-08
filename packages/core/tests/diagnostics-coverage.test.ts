@@ -28,6 +28,13 @@ const coveredByFixtures = new Set([
   "acf.mcp.url.credential-in-url",
   "acf.mcp.placeholder.unsupported",
   "acf.skill.paths-not-core",
+  "acf.core.pending",
+  "acf.extras.conflict",
+  "acf.extras.unclassified",
+  "acf.extras.package-value-invalid",
+  "acf.native.unknown-target",
+  "acf.native.unsupported-entry",
+  "acf.native.collision",
   "acf.path.absolute",
   "acf.path.traversal",
   "acf.assets.missing",
@@ -71,7 +78,6 @@ const exportedOnly = new Set([
   "acf.support.degraded",
   "acf.support.component-omitted",
   "acf.extras.dropped",
-  "acf.core.pending",
 ]);
 
 test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {

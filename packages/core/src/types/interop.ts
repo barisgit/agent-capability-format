@@ -96,6 +96,20 @@ export type NativeKeyInfo = {
   pending?: { coreField: string } | undefined;
 };
 
+/**
+ * One file under a capability's `native/<target>/` tree (capability-model-layers, File-level
+ * native extras). A plugin-carrier writer of `target` copies it byte- and mode-exact from
+ * `<capability root>/native/<target>/<path>` to `<path>` inside the generated package; every
+ * other writer drops the tree with `acf.extras.dropped`. Read through `nativeFiles` and
+ * `nativeFileTargets` in the extras module.
+ */
+export type NativeFileExtra = {
+  target: TargetId;
+  /** POSIX path relative to `native/<target>/`, which is also its path inside the package. */
+  path: string;
+  executable: boolean;
+};
+
 /** Provenance of a capability read through a format reader. */
 export type CapabilitySource = {
   format: SourceFormat;
