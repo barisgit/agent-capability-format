@@ -4,7 +4,21 @@
  * generated output (capability-model-layers, File-level native extras); the writer uses the same
  * list so both agree on what is generated.
  */
+import path from "node:path";
 import type { TargetId } from "../types/model.js";
+
+/**
+ * The caplet-owned local marketplace of one install scope: `<install-root>/.acf/marketplace/`,
+ * listing each generated plugin by the relative source `./plugins/<name>`.
+ */
+export function pluginMarketplaceDir(installRoot: string): string {
+  return path.join(installRoot, ".acf", "marketplace");
+}
+
+/** The directory of generated plugin `name` inside the scope's marketplace. */
+export function pluginPackageDir(installRoot: string, name: string): string {
+  return path.join(pluginMarketplaceDir(installRoot), "plugins", name);
+}
 
 /** What a capability contributes to one target's plugin: emitted skill names and any server. */
 export type PluginContents = { skills: readonly string[]; mcp: boolean };

@@ -1,6 +1,7 @@
 import type { CanonicalTriggerName } from "@caplet/runtime-taxonomy";
 import { canonicalTriggerNames } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
+import { carriersOf } from "../targets/field-support.js";
 import { sourceFormats } from "../types/interop.js";
 
 export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
@@ -334,6 +335,23 @@ const skillsEmitOptionsSchema = z.object({
   canonical: z.boolean().optional(),
 });
 
+/** Rejects `targets.<id>.carrier` values the target does not offer (claude-plugin-output). */
+function refineTargetCarriers(
+  targets: Record<string, { carrier?: "plugin" | "loose" | undefined }>,
+  ctx: z.RefinementCtx,
+): void {
+  for (const [id, options] of Object.entries(targets)) {
+    const carrier = options.carrier;
+    const { available } = carriersOf(id);
+    if (carrier === undefined || available.includes(carrier)) continue;
+    ctx.addIssue({
+      code: "custom",
+      path: [id, "carrier"],
+      message: `targets.${id}.carrier: ${carrier} is not available for ${id}; only ${available.join(", ")} ${available.length === 1 ? "is" : "are"} available`,
+    });
+  }
+}
+
 export const capletConfigSchema = z.object({
   emit: z
     .object({
@@ -350,8 +368,10 @@ export const capletConfigSchema = z.object({
         out: z.object({ user: z.string().optional(), project: z.string().optional() }).optional(),
         disabled: z.boolean().optional(),
         skills: skillsEmitOptionsSchema.optional(),
+        carrier: z.enum(["plugin", "loose"]).optional(),
       }),
     )
+    .superRefine(refineTargetCarriers)
     .optional(),
   auth: z
     .object({

@@ -72,6 +72,13 @@ export type EmitOptions = {
    * writer assumes it is the only reader (or none, for a target that does not discover it).
    */
   canonicalSkillReaders?: readonly TargetId[] | undefined;
+  /**
+   * The carrier configured for the target. Absent means the target's default (`carriersOf`).
+   * A writer may still use another carrier the target offers when the capability is not
+   * eligible for this one (Claude keeps capabilities with agents, commands, hooks or
+   * instructions loose); `EmitResult.plugins` tells which carrier it used.
+   */
+  carrier?: Carrier | undefined;
 };
 /**
  * What a writer produced for one capability and target. `outcomes` lists components whose
@@ -83,6 +90,28 @@ export type EmitResult = {
   diffs: FileDiff[];
   diagnostics: Diagnostic[];
   outcomes?: ComponentOutcome[] | undefined;
+  /**
+   * Plugin packages the writer generated with the plugin carrier; absent or empty when it wrote
+   * loose files. Every diff of a result with a plugin lies inside that plugin's `dir`.
+   */
+  plugins?: EmittedPlugin[] | undefined;
+};
+
+/**
+ * One plugin package a plugin-carrier writer generated, as the marketplace and host registration
+ * steps need it (claude-plugin-output). `dir` is `pluginPackageDir(installRoot, name)`, listed in
+ * the scope's marketplace at `pluginMarketplaceDir(installRoot)` by the relative source
+ * `./plugins/<name>`.
+ */
+export type EmittedPlugin = {
+  target: TargetId;
+  scope: Scope;
+  /** Plugin name: the capability slug. */
+  name: string;
+  /** Generated version, `<base>+acf.<12 hex>` (or `<base>.acf.<12 hex>` when `<base>` has `+`). */
+  version: string;
+  /** Absolute package directory. */
+  dir: string;
 };
 
 /**
@@ -187,6 +216,8 @@ export type CapletConfig = {
             out?: { user?: string | undefined; project?: string | undefined } | undefined;
             disabled?: boolean | undefined;
             skills?: SkillsEmitOptions | undefined;
+            /** Carrier for this target; validated against `carriersOf` when the config loads. */
+            carrier?: Carrier | undefined;
           }
         >
       >
