@@ -28,6 +28,7 @@ const coveredByFixtures = new Set([
   "acf.mcp.url.credential-in-url",
   "acf.mcp.placeholder.unsupported",
   "acf.skill.paths-not-core",
+  "acf.skill.native-key-not-core",
   "acf.core.pending",
   "acf.extras.conflict",
   "acf.extras.unclassified",
@@ -89,6 +90,8 @@ const exportedOnly = new Set([
   "acf.emit.transformed-remainder",
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
+  // Built by the Codex MCP writer; adapters/tests/native-mcp.test.ts covers it.
+  "acf.mcp.config-conflict",
 ]);
 
 test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {

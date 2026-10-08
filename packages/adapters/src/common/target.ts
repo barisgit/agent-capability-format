@@ -7,6 +7,7 @@ import {
   nativeFileTargets,
   nativeTreeDropped,
   type ReadOnlyFs,
+  remainderSupport,
   type TargetDefinition,
 } from "@caplet/core";
 import { type AdapterOptions, emitStandardAdapter, layoutFor } from "./emitter.js";
@@ -16,9 +17,11 @@ import type { EmitReport } from "./support-report.js";
 
 /**
  * Emits one capability for one loose target: skills, then agents, commands, instructions and
- * hooks, then MCP servers. Writers report support decisions as diagnostics and translated
- * components in `outcomes`. Loose files have no package manifest and no package directory, so
- * every package-level native key and every `native/<target>/` tree is reported dropped.
+ * hooks, then MCP servers. A foreign package's native remainder is not written; it is omitted
+ * or refuses the package (`remainderSupport`). Loose files have no package manifest and no
+ * package directory, so every package-level native key and every `native/<target>/` tree is
+ * reported dropped. Writers report support decisions as diagnostics and translated components
+ * in `outcomes`.
  */
 export async function emitTarget(
   input: EmitInput,
@@ -26,7 +29,11 @@ export async function emitTarget(
   target: TargetDefinition,
   options: AdapterOptions = {},
 ): Promise<EmitResult> {
-  const report: EmitReport = { diagnostics: [], outcomes: [] };
+  // A refusal here blocks the whole capability: the caller drops every diff below.
+  const report: EmitReport = {
+    diagnostics: remainderSupport(input.capability, target.id),
+    outcomes: [],
+  };
   const diffs = [
     ...(await emitSkills(input, fs, target, report)),
     ...(await emitStandardAdapter(

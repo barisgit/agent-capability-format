@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
   applyProject,
@@ -10,13 +11,15 @@ import {
   writeText,
 } from "../helpers";
 
-test("a refused skill is left out for one target while the rest applies and apply exits non-zero", async () => {
+/** A user-invocable-false skill, which Claude carries natively and Codex refuses. */
+const manualOnlySkill = (extra = "") =>
+  `---\nname: background\ndescription: House conventions\ninvocation:\n  user: false\n${extra}---\nConventions.\n`;
+
+test("a refusal blocks its capability for that target until the component is excluded", async () => {
   const scope = await makeScope();
   try {
     const alpha = path.join(scope.sourceRoot, "alpha");
-    const manualOnly = (except: string) =>
-      `---\nname: background\ndescription: House conventions\ninvocation:\n  user: false\n${except}---\nConventions.\n`;
-    await writeText(path.join(alpha, "skills", "background", "SKILL.md"), manualOnly(""));
+    await writeText(path.join(alpha, "skills", "background", "SKILL.md"), manualOnlySkill());
     await writeText(
       path.join(alpha, "skills", "review", "SKILL.md"),
       "---\nname: review\ndescription: Review a change\n---\nReview.\n",
@@ -26,27 +29,104 @@ test("a refused skill is left out for one target while the rest applies and appl
       "emit:\n  defaultTargets: [claude, codex]\n",
     );
     const args = ["apply", "--cwd", scope.cwd, "--scope", "project"];
-
     const exists = (...parts: string[]) => Bun.file(path.join(scope.cwd, ...parts)).exists();
+
+    const preview = await runCaplet(scope, [...args, "--dry-run", "--json"]);
+
+    expect(preview.exitCode).toBe(2);
+    expect((JSON.parse(preview.stdout) as { ok: boolean }).ok).toBe(false);
 
     const refused = await runCaplet(scope, args);
 
     expect(refused.exitCode).toBe(2);
-    expect(refused.stdout).toContain("background (alpha-cap) / codex - blocked:");
     expect(refused.stderr).toContain("acf.support.refused");
+    expect(refused.stdout).toContain(
+      "background (alpha-cap) / codex - blocked: skill background is not installed for codex",
+    );
+    expect(refused.stdout).toContain(
+      "review, alpha-helper, always, alpha-server (alpha-cap) / codex - blocked: capability alpha-cap is not installed for codex (skill background). Recovery: exclude: { skill: [background] } or except: [codex]",
+    );
     expect(await exists(".claude", "skills", "background", "SKILL.md")).toBe(true);
     expect(await exists(".claude", "skills", "review", "SKILL.md")).toBe(true);
-    expect(await exists(".agents", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".claude", "agents", "alpha-helper.md")).toBe(true);
+    expect(await exists(".agents", "skills", "review")).toBe(false);
     expect(await exists(".agents", "skills", "background")).toBe(false);
+    expect(await exists(".codex", "agents", "alpha-helper.md")).toBe(false);
+    expect(await exists(".codex", "agents", "beta-helper.md")).toBe(true);
+    const config = await readText(path.join(scope.cwd, ".codex", "config.toml"));
+    expect(config).toContain("beta-server");
+    expect(config).not.toContain("alpha-server");
 
     await writeText(
       path.join(alpha, "skills", "background", "SKILL.md"),
-      manualOnly("except: [codex]\n"),
+      manualOnlySkill("except: [codex]\n"),
     );
     const recovered = await runCaplet(scope, [...args, "--mode", "force"]);
 
     expect(recovered.exitCode).toBe(0);
     expect(recovered.stdout).not.toContain("blocked");
+    expect(await exists(".agents", "skills", "review", "SKILL.md")).toBe(true);
+    expect(await exists(".agents", "skills", "background")).toBe(false);
+    expect(await exists(".codex", "agents", "alpha-helper.md")).toBe(true);
+    expect(await readText(path.join(scope.cwd, ".codex", "config.toml"))).toContain("alpha-server");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("a capability that gains a refused skill keeps its earlier output for that target", async () => {
+  const scope = await makeScope();
+  try {
+    const alpha = path.join(scope.sourceRoot, "alpha");
+    const skill = (name: string, body: string) =>
+      writeText(
+        path.join(alpha, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: ${name} skill\n---\n${body}\n`,
+      );
+    await skill("review", "Review.");
+    await skill("old", "Old.");
+    await writeText(
+      path.join(scope.agentsDir, "caplet.yml"),
+      "emit:\n  defaultTargets: [claude, codex]\n",
+    );
+    const args = ["apply", "--cwd", scope.cwd, "--scope", "project"];
+    const file = (...parts: string[]) => path.join(scope.cwd, ...parts);
+    const exists = (...parts: string[]) => Bun.file(file(...parts)).exists();
+    expect((await runCaplet(scope, args)).exitCode).toBe(0);
+    const codexFiles = [
+      [".agents", "skills", "review", "SKILL.md"],
+      [".agents", "skills", "old", "SKILL.md"],
+      [".codex", "agents", "alpha-helper.md"],
+      [".codex", "config.toml"],
+      [".codex", ".acf-managed.json"],
+      [".agents", ".acf-managed.json"],
+    ];
+    const before = await Promise.all(codexFiles.map((parts) => readText(file(...parts))));
+
+    await writeText(path.join(alpha, "skills", "background", "SKILL.md"), manualOnlySkill());
+    await skill("review", "Review carefully.");
+    await rm(path.join(alpha, "skills", "old"), { recursive: true });
+    await writeText(
+      path.join(alpha, "agents", "alpha-helper.md"),
+      "---\nname: alpha-helper\ndescription: Helper alpha-cap\n---\nChanged help.\n",
+    );
+    const blocked = await runCaplet(scope, [...args, "--mode", "force", "--yes"]);
+
+    expect(blocked.exitCode).toBe(2);
+    expect(blocked.stderr).toContain("acf.support.refused");
+    expect(await Promise.all(codexFiles.map((parts) => readText(file(...parts))))).toEqual(before);
+    expect(await readText(file(".claude", "skills", "review", "SKILL.md"))).toContain(
+      "Review carefully.",
+    );
+    expect(await exists(".claude", "skills", "background", "SKILL.md")).toBe(true);
+    expect(await exists(".claude", "skills", "old")).toBe(false);
+
+    const again = await runCaplet(scope, args);
+
+    expect(again.exitCode).toBe(2);
+    expect(again.stdout).toContain("Compatibility");
+    expect(again.stdout).toContain("background (alpha-cap) / codex - blocked:");
+    expect(again.stdout).not.toContain("Everything up to date");
   } finally {
     await cleanup(scope);
   }

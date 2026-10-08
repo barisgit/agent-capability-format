@@ -13,6 +13,7 @@ import {
   acfPathPlaceholders,
   type Carrier,
   componentOmitted,
+  type Diagnostic,
   type EmitInput,
   type FileDiff,
   type McpServer,
@@ -26,7 +27,7 @@ import {
 } from "@caplet/core";
 import { makeFileDiff } from "./diff.js";
 import { jsonPointerEscape, mergeJson } from "./json-merge.js";
-import { replaceMarkedBlock } from "./markers.js";
+import { removeMarkedBlock, replaceMarkedBlock } from "./markers.js";
 import { substitutePlaceholders } from "./placeholders.js";
 import {
   type ComponentReport,
@@ -35,7 +36,7 @@ import {
   emptyReport,
   reportForeignExtras,
 } from "./support-report.js";
-import { renderTomlTable } from "./toml.js";
+import { renderTomlTable, tomlDefinesTable } from "./toml.js";
 
 // Built from parts so the source holds no `${...}` string literal (biome noTemplateCurlyInString).
 const PLACEHOLDER_OPEN = "$";
@@ -187,6 +188,12 @@ export async function emitMcp(
     usesDataDir ||= rendered.usesDataDir;
     if (target === "codex") {
       const name = `mcp_servers.${server.name}`;
+      // A second [mcp_servers.<name>] table, or one inside an inline mcp_servers value, makes
+      // config.toml invalid; the user's own definition wins and the server is not written.
+      if (tomlDefinesTable(removeMarkedBlock(after, name), ["mcp_servers", server.name])) {
+        report.diagnostics.push(configConflict(file, server.name, target));
+        continue;
+      }
       const table = renderTomlTable(["mcp_servers", server.name], rendered.entry);
       after = replaceMarkedBlock(after, name, table, "hash");
       owns.push({ kind: "marker", name });
@@ -203,6 +210,22 @@ export async function emitMcp(
     diffs.push(makeFileDiff(keep, await fs.readText(keep), "", [{ kind: "file" }]));
   }
   return diffs;
+}
+
+/**
+ * `acf.mcp.config-conflict` (error): the host config already defines server `name` outside
+ * caplet's ownership, so writing caplet's entry would clash with the user's.
+ */
+function configConflict(file: string, name: string, target: TargetId): Diagnostic {
+  return {
+    severity: "error",
+    code: "acf.mcp.config-conflict",
+    message: `${file} already defines MCP server ${name} outside caplet's markers; rename or remove that definition, or exclude the server for ${target}`,
+    targetId: target,
+    family: "mcp",
+    path: file,
+    data: { server: name },
+  };
 }
 
 /** The capability's persistent data directory on loose carriers (`${ACF_DATA_DIR}`). */

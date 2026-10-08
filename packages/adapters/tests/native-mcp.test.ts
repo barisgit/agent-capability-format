@@ -198,3 +198,34 @@ test("remote servers use each target's header key", async () => {
     expect(serverEntry(target, config, "remote")).toEqual(entry);
   }
 });
+
+test("a Codex server the user already defines outside caplet's markers is a conflict, not a write", async () => {
+  const userConfigs = [
+    '[mcp_servers.tools]\ncommand = "mine"\n',
+    '[mcp_servers."tools".env]\nLOG = "debug"\n',
+    '[mcp_servers]\ntools.command = "mine"\n',
+    'mcp_servers.tools = { command = "mine" }\n',
+    'mcp_servers = { other = { command = "x" } }\n',
+  ];
+  for (const user of userConfigs) {
+    const { result, config } = await emitServers("codex", [stdio], {
+      "/project/.codex/config.toml": user,
+    });
+    expect(config).toBeUndefined();
+    const [conflict] = withCode(result, "acf.mcp.config-conflict");
+    expect(conflict?.severity).toBe("error");
+    expect(conflict?.data?.server).toBe("tools");
+    expect(conflict?.message).toContain("/project/.codex/config.toml");
+  }
+});
+
+test("a Codex server's own marked table, or another user server, is no conflict", async () => {
+  const owned =
+    '[mcp_servers.mine]\ncommand = "mine"\n\n# acf:begin mcp_servers.tools\n[mcp_servers.tools]\ncommand = "old"\n# acf:end mcp_servers.tools\n';
+  const { result, config } = await emitServers("codex", [stdio], {
+    "/project/.codex/config.toml": owned,
+  });
+  expect(withCode(result, "acf.mcp.config-conflict")).toEqual([]);
+  expect(serverEntry("codex", config, "tools")?.command).toBe(`${CAP_ROOT}/bin/server`);
+  expect(serverEntry("codex", config, "mine")?.command).toBe("mine");
+});

@@ -1,11 +1,12 @@
 Compatibility
-  background (alpha-cap) / codex - blocked: skill background is not installed for codex (skill.invocation.user=false). Recovery: exclude: { skill: [background] } or except: [codex]
-  events (alpha-cap) / codex - blocked: MCP server events is not installed for codex (mcp.transport=sse). Recovery: exclude: { mcp: [events] } or except: [codex]
+  background (beta-cap) / codex - blocked: skill background is not installed for codex (skill.invocation.user=false). Recovery: exclude: { skill: [background] } or except: [codex]
+  events (beta-cap) / codex - blocked: MCP server events is not installed for codex (mcp.transport=sse). Recovery: exclude: { mcp: [events] } or except: [codex]
+  beta-helper, always, beta-server (beta-cap) / codex - blocked: capability beta-cap is not installed for codex (skill background, MCP server events). Recovery: exclude: { skill: [background], mcp: [events] } or except: [codex]
   alpha-server (alpha-cap) / codex - translated: ${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory (mcp.command=${ACF_CAPABILITY_DIR})
-  codex - native: 1 skill, 2 agents, 2 instructions, 1 MCP server
+  codex - native: 1 skill, 1 agent, 1 instruction
   codex - dropped: targets.claude.native.when_to_use (review (alpha-cap))
 
-Plan: 9 changes
+Plan: 7 changes
 
 project  .
   canonical  .agents
@@ -13,23 +14,20 @@ project  .
     + managed notices         2 files  alpha-cap
   codex  .codex
     + .acf/instructions/alpha-cap/always.md    alpha-cap
-    + .acf/instructions/beta-cap/always.md     beta-cap
     + agents/alpha-helper.md                   alpha-cap
-    + agents/beta-helper.md                    beta-cap
-    + config.toml                              alpha-cap, beta-cap
+    + config.toml                              alpha-cap
     + managed notices
 
   SCOPE    TARGET     CREATE  UPDATE  DELETE
   project  canonical       3       -       -
-  project  codex           6       -       -
+  project  codex           4       -       -
 
-+ 9 create  ~ 0 update  - 0 delete
++ 7 create  ~ 0 update  - 0 delete
 
 Executable changes
   codex
     + MCP server alpha-server: ${ACF_CAPABILITY_DIR}/bin/server  alpha-cap
-    + MCP server beta-server: node server.js                     beta-cap
 
-warn 9 files
+warn 7 files
 targets
     project  (nothing managed yet)

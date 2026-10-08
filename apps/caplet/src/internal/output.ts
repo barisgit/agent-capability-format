@@ -10,6 +10,8 @@ export type Reporter = {
   log(message: string): void;
   error(message: string): void;
   done(message: string): void;
+  /** Like {@link Reporter.done}, for an outcome that still needs the user's attention. */
+  warn(message: string): void;
   details(entries: ReadonlyArray<readonly [label: string, value: string | number]>): void;
   section(title: string): void;
   pending(message: string): void;
@@ -39,6 +41,9 @@ export function reporter(args: Record<string, unknown>): Reporter {
     },
     done(message) {
       if (!quiet) writeStdout(`${label(glyphs().ok, colors.green)} ${message}`);
+    },
+    warn(message) {
+      if (!quiet) writeStdout(`${label(glyphs().warn, colors.yellow)} ${message}`);
     },
     details(entries) {
       if (quiet || entries.length === 0) return;
@@ -164,9 +169,9 @@ export function printDiagnostics(
 
 /**
  * The exit code of plan diagnostics that stop a command before it writes anything. A refusal
- * (`acf.support.refused`) does not count: its writer already left the refused component out
- * for that target, so the rest of the plan applies and the command exits non-zero afterwards
- * through {@link exitCodeForDiagnostics}.
+ * (`acf.support.refused`) does not count: the plan already holds no change for the refused
+ * component's capability on that target (`EmitPlan.blocked`), so the rest of the plan applies
+ * and the command exits non-zero afterwards through {@link exitCodeForDiagnostics}.
  */
 export function blockingExitCode(
   diagnostics: readonly Diagnostic[],

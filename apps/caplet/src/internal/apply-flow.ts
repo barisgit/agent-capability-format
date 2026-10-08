@@ -1,9 +1,20 @@
-import { type Diagnostic, type ExecutableComponent, executableChanges } from "@caplet/core";
+import type { Diagnostic, ExecutableComponent } from "@caplet/core";
 import { readVerbose } from "./args.js";
 import { printJson, readJson } from "./json.js";
-import { blockingExitCode, exitCodeForDiagnostics, printDiagnostics, reporter } from "./output.js";
+import {
+  blockingExitCode,
+  exitCodeForDiagnostics,
+  printDiagnostics,
+  type Reporter,
+  reporter,
+} from "./output.js";
 import { buildPlanView, planToJson } from "./plan-view.js";
-import { applyEmitPlan, buildEmitPlan } from "./workflow.js";
+import {
+  applyEmitPlan,
+  buildEmitPlan,
+  type EmitPlan,
+  plannedExecutableChanges,
+} from "./workflow.js";
 
 /** What `add` or `update` hands to {@link planAndApply} after resolving its sources. */
 export type PlanAndApplyInput = {
@@ -31,7 +42,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   const out = reporter(args);
   const plan = await buildEmitPlan(args);
   const diagnostics = [...input.diagnostics, ...plan.diagnostics];
-  const executables = executableChanges(input.installed, plan.executables);
+  const executables = plannedExecutableChanges(input.installed, plan);
   const view = buildPlanView(plan.diffs, { verbose: readVerbose(args) });
   const envelope = (applied: unknown) => ({
     ...input.payload,
@@ -40,7 +51,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     executables,
   });
   const blocking = blockingExitCode(diagnostics, args);
-  // Refusals left their components out of the plan; the rest still applies.
+  // Refused capabilities are already out of the plan for their targets; the rest applies.
   const planCode = exitCodeForDiagnostics(diagnostics, args);
   process.exitCode = planCode;
   if (blocking !== 0) {
@@ -53,9 +64,10 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     input.announce?.();
   }
   if (view.fileCount === 0) {
-    if (json) printJson(command, planCode === 0, diagnostics, envelope(null));
+    const applied = await sweepStaleEntries(plan, false);
+    if (json) printJson(command, planCode === 0, diagnostics, envelope(applied));
     else {
-      out.done("Everything up to date");
+      reportEmptyPlan(out, plan, false);
       out.executables(executables);
     }
     return;
@@ -84,4 +96,31 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   out.done(
     `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
   );
+}
+
+/** The `applied` field of a `--json` envelope for a plan that wrote no file. */
+export type EmptyPlanApplied = { files: 0; writes: 0; deletes: 0 } | null;
+
+/**
+ * Settles a plan with no file to write, the same way for `apply`, `add` and `update`: removes the
+ * stale sidecar entries the plan carries (unless `dryRun`) and returns the `--json` `applied`
+ * value, zero counts when entries were removed and otherwise null.
+ */
+export async function sweepStaleEntries(
+  plan: EmitPlan,
+  dryRun: boolean,
+): Promise<EmptyPlanApplied> {
+  if (plan.staleEntries.length === 0 || dryRun) return null;
+  await applyEmitPlan(plan);
+  return { files: 0, writes: 0, deletes: 0 };
+}
+
+/** Prints the status line of a plan with no file to write, after {@link sweepStaleEntries}. */
+export function reportEmptyPlan(out: Reporter, plan: EmitPlan, dryRun: boolean): void {
+  const stale = plan.staleEntries.length;
+  const entries = `${stale} stale sidecar ${stale === 1 ? "entry" : "entries"}`;
+  if (stale > 0 && dryRun) out.pending(`${entries} to clean up`);
+  else if (stale > 0) out.done(`Cleaned up ${entries}`);
+  else if (plan.blocked.length > 0) out.warn("Nothing else to apply");
+  else out.done("Everything up to date");
 }

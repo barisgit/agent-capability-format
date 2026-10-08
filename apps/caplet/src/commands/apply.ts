@@ -1,5 +1,5 @@
-import { executableChanges } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
+import { reportEmptyPlan, sweepStaleEntries } from "../internal/apply-flow.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
@@ -17,6 +17,7 @@ import {
   collectReach,
   fetchScopes,
   installedExecutables,
+  plannedExecutableChanges,
 } from "../internal/workflow.js";
 
 export const applyCommand = defineCommand({
@@ -67,12 +68,12 @@ export const applyCommand = defineCommand({
       if (!json) printDiagnostics(diagnostics, context.args);
       const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
       const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, context.args);
-      // Refusals left their components out of the plan; the rest still applies.
+      // Refused capabilities are already out of the plan for their targets; the rest applies.
       const planCode = exitCodeForDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
       const reach = await collectReach(plan);
       const out = reporter(context.args);
-      const executables = executableChanges(installed, plan.executables);
+      const executables = plannedExecutableChanges(installed, plan);
       const outcomes = { outcomes: plan.outcomes, executables };
       if (blocking !== 0) {
         if (json) {
@@ -85,36 +86,25 @@ export const applyCommand = defineCommand({
       }
       process.exitCode = planCode;
       if (view.fileCount === 0) {
-        const stale = plan.staleEntries.length;
-        if (stale > 0 && !dryRun) await applyEmitPlan(plan);
+        const applied = await sweepStaleEntries(plan, dryRun);
         if (json) {
           printJson("apply", planCode === 0, diagnostics, {
             plan: planToJson(view),
-            applied: stale > 0 && !dryRun ? { files: 0, writes: 0, deletes: 0 } : null,
+            applied,
             ...outcomes,
             ...reachToJson(reach),
           });
-        } else if (stale > 0) {
-          if (dryRun) {
-            out.pending(`${stale} stale sidecar ${stale === 1 ? "entry" : "entries"} to clean up`);
-          } else {
-            out.done(`Cleaned up ${stale} stale sidecar ${stale === 1 ? "entry" : "entries"}`);
-          }
-          out.executables(executables);
-          for (const line of reachBlock(
-            reach,
-            plan.scopes.map((scopeRoot) => scopeRoot.scope),
-          ))
-            out.log(line);
-        } else {
-          out.done("Everything up to date");
-          out.executables(executables);
-          for (const line of reachBlock(
-            reach,
-            plan.scopes.map((scopeRoot) => scopeRoot.scope),
-          ))
-            out.log(line);
+          return;
         }
+        // Blocked capabilities are the one thing left to do, so their report stays visible.
+        if (plan.blocked.length > 0) out.compatibility(plan.outcomes, plan.targets);
+        reportEmptyPlan(out, plan, dryRun);
+        out.executables(executables);
+        for (const line of reachBlock(
+          reach,
+          plan.scopes.map((scopeRoot) => scopeRoot.scope),
+        ))
+          out.log(line);
         return;
       }
       if (!json) {

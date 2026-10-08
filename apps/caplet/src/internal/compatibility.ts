@@ -22,7 +22,9 @@ const familyOrder: readonly OutcomeFamily[] = [
  * order, one line per non-native component (worst first) naming component, target, outcome,
  * consequence, source and recovery; then one line counting native components; then one line
  * grouping dropped descriptive fields and extras. Returns no lines when there are no outcomes.
- * Components are named bare, or `name (capability)` when the report spans several capabilities.
+ * Components of one capability that share outcome, source, consequence and recovery, such as
+ * the components a refusal blocks with it, share one line. Components are named bare, or
+ * `name (capability)` when the report spans several capabilities.
  */
 export function renderCompatibility(
   outcomes: readonly ComponentOutcome[],
@@ -33,8 +35,20 @@ export function renderCompatibility(
   for (const target of targets) {
     const own = outcomes.filter((item) => item.target === target);
     if (own.length === 0) continue;
+    const groups = new Map<string, ComponentOutcome[]>();
     for (const item of [...own].filter((entry) => entry.outcome !== "native").sort(worstFirst)) {
-      lines.push(`  ${outcomeLine(item, qualify)}`);
+      const key = [item.capability, item.outcome, item.source, item.consequence, item.recovery]
+        .map((part) => part ?? "")
+        .join("\u0000");
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    // Within an outcome, single components come before the lines that share it among several,
+    // so a refusal's own line precedes the line of the components it blocks with it.
+    const ordered = [...groups.values()].sort(
+      (a, b) => outcomeRank(b[0]) - outcomeRank(a[0]) || a.length - b.length,
+    );
+    for (const [first, ...rest] of ordered) {
+      if (first !== undefined) lines.push(`  ${outcomeLine(first, rest, qualify)}`);
     }
     const native = own.filter((item) => item.outcome === "native" && item.family !== "package");
     if (native.length > 0) {
@@ -49,11 +63,18 @@ export function renderCompatibility(
   return lines.length === 0 ? [] : [colors.bold("Compatibility"), ...lines, ""];
 }
 
-function outcomeLine(item: ComponentOutcome, qualify: boolean): string {
+/** The report line of `item`, also naming the components in `rest` that share it. */
+function outcomeLine(
+  item: ComponentOutcome,
+  rest: readonly ComponentOutcome[],
+  qualify: boolean,
+): string {
   const kind = colorKind(item.outcome);
   const source = item.source === undefined ? "" : ` (${item.source})`;
   const recovery = item.recovery === undefined ? "" : `. Recovery: ${item.recovery}`;
-  return `${label(item, qualify)} / ${item.target} - ${kind}: ${item.consequence ?? ""}${source}${recovery}`;
+  const names = [item, ...rest].map((entry) => entry.component).join(", ");
+  const subject = qualify && item.family !== "package" ? `${names} (${item.capability})` : names;
+  return `${subject} / ${item.target} - ${kind}: ${item.consequence ?? ""}${source}${recovery}`;
 }
 
 function colorKind(kind: ComponentOutcome["outcome"]): string {
@@ -80,9 +101,13 @@ function familyCounts(items: readonly ComponentOutcome[]): string {
     .join(", ");
 }
 
+function outcomeRank(item: ComponentOutcome | undefined): number {
+  return item === undefined ? -1 : componentOutcomeKinds.indexOf(item.outcome);
+}
+
 function worstFirst(a: ComponentOutcome, b: ComponentOutcome): number {
   return (
-    componentOutcomeKinds.indexOf(b.outcome) - componentOutcomeKinds.indexOf(a.outcome) ||
+    outcomeRank(b) - outcomeRank(a) ||
     familyOrder.indexOf(a.family) - familyOrder.indexOf(b.family) ||
     a.component.localeCompare(b.component) ||
     a.capability.localeCompare(b.capability)

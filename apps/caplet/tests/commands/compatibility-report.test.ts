@@ -162,8 +162,9 @@ describe("caplet apply --dry-run compatibility report", () => {
   test("translated, blocked and dropped components on Codex", async () => {
     const capabilityDir = ["$", "{ACF_CAPABILITY_DIR}"].join("");
     const alpha = path.join(scope.sourceRoot, "alpha");
+    const beta = path.join(scope.sourceRoot, "beta");
     await writeText(
-      path.join(alpha, "skills", "background", "SKILL.md"),
+      path.join(beta, "skills", "background", "SKILL.md"),
       "---\nname: background\ndescription: House conventions\ninvocation:\n  user: false\n---\nConventions.\n",
     );
     await writeText(
@@ -172,7 +173,11 @@ describe("caplet apply --dry-run compatibility report", () => {
     );
     await writeText(
       path.join(alpha, "mcp", "mcp.yml"),
-      `servers:\n  - name: alpha-server\n    transport: stdio\n    command: "${capabilityDir}/bin/server"\n  - name: events\n    transport: sse\n    url: https://mcp.example.com/events\n`,
+      `servers:\n  - name: alpha-server\n    transport: stdio\n    command: "${capabilityDir}/bin/server"\n`,
+    );
+    await writeText(
+      path.join(beta, "mcp", "mcp.yml"),
+      "servers:\n  - name: beta-server\n    transport: stdio\n    command: node\n  - name: events\n    transport: sse\n    url: https://mcp.example.com/events\n",
     );
     const result = await dryRun("codex", 2);
     for (const outcome of ["translated", "blocked", "dropped"])

@@ -274,7 +274,8 @@ export const outcomeFamilyNouns: Readonly<Record<OutcomeFamily, readonly [string
   mcp: ["MCP server", "MCP servers"],
 };
 
-function componentLabel(subject: SupportSubject): string {
+/** A component named by its family noun, such as `skill review` or `capability tools`. */
+export function componentLabel(subject: Pick<SupportSubject, "family" | "component">): string {
   return subject.family === "package"
     ? `capability ${subject.component}`
     : `${outcomeFamilyNouns[subject.family][0]} ${subject.component}`;
@@ -290,5 +291,24 @@ export function recoveryFor(subject: {
   target: TargetId;
 }): string {
   if (subject.family === "package") return `except: [${subject.target}]`;
-  return `exclude: { ${subject.family satisfies FacetFamily}: [${subject.component}] } or except: [${subject.target}]`;
+  return exclusionRecovery(
+    [{ family: subject.family, component: subject.component }],
+    subject.target,
+  );
+}
+
+/**
+ * The recovery that excludes every one of `components` for the target at once, or restricts
+ * the capability to other targets. Families keep their first-seen order.
+ */
+export function exclusionRecovery(
+  components: readonly { family: FacetFamily; component: string }[],
+  target: TargetId,
+): string {
+  const byFamily = new Map<FacetFamily, string[]>();
+  for (const { family, component } of components) {
+    byFamily.set(family, [...(byFamily.get(family) ?? []), component]);
+  }
+  const lists = [...byFamily].map(([family, names]) => `${family}: [${names.join(", ")}]`);
+  return `exclude: { ${lists.join(", ")} } or except: [${target}]`;
 }

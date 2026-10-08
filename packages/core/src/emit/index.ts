@@ -20,6 +20,7 @@ import type {
   TargetDefinition,
   TargetId,
 } from "../types/index.js";
+import { capabilityBlocked } from "./outcomes.js";
 
 export type {
   AcfManagedSidecar,
@@ -32,6 +33,11 @@ export type {
   FileDiff,
 } from "../types/index.js";
 
+/**
+ * Plans every capability of the requested scopes for each requested target. A capability a
+ * refusal blocks on a target contributes its diagnostics but no diffs there
+ * ({@link capabilityBlocked}).
+ */
 export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport> {
   const report: EmitReport = { perScopeTarget: {} };
   const requestedTargets = req.targets.length > 0 ? req.targets : [...targetIds];
@@ -97,10 +103,12 @@ export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport
           installRoot,
           options: { canonicalSkillReaders, ...req.options },
         };
-        if (adapter.validate !== undefined) diagnostics.push(...(await adapter.validate(input)));
+        const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
         const result = await adapter.emit(input, fs);
-        diffs.push(...result.diffs);
-        diagnostics.push(...result.diagnostics);
+        diagnostics.push(...validation, ...result.diagnostics);
+        if (!capabilityBlocked([...validation, ...result.diagnostics], targetId)) {
+          diffs.push(...result.diffs);
+        }
       }
       report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
         diffs: diffs.sort((a, b) => a.path.localeCompare(b.path)),
