@@ -15,6 +15,16 @@ Skills replacement. It is a source format plus adapter model that emits
 native artifacts and reports diagnostics whenever semantics do not map
 cleanly.
 
+## Install
+
+The `caplet` CLI needs Node.js 20 or later (and `git` for remote sources):
+
+```bash
+npm install --global @caplet/cli
+caplet init
+caplet add github:owner/repo
+```
+
 ## Terminology in one minute
 
 - **Capability** — the bag with an `acf.yml` manifest. The unit of
@@ -193,8 +203,8 @@ sidecar remains the authority used for drift detection and safe cleanup.
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
-implementation (`caplet` 0.1.0, private Bun workspace, not yet published to
-npm). It supports bare skill imports, source capability selection, and
+implementation (`caplet` 0.1.0, packaged for npm as `@caplet/*` but not yet
+published). It supports bare skill imports, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).
 `RESULTS.md` and `IMPLEMENTER-AUDIT.md` are historical reports, not current
@@ -203,16 +213,17 @@ recorded result.
 
 ## Packages
 
-The reference implementation ships as one app plus five libraries:
+The reference implementation ships as one app plus five libraries, published
+to npm in lockstep versions:
 
-| Package | Role |
-| --- | --- |
-| `apps/caplet` | CLI binary. Only place `Bun.*` is allowed. |
-| `packages/core` | Pure SPEC logic: types, schemas, reader, validator, applicability, hash, diagnostics, emission orchestrator. No network, no git, no logger, browser-safe modulo a filesystem port. |
-| `packages/adapters` | Per-target emit functions (claude, codex, cursor, opencode, pi). Shared file utilities live under `src/common/`. |
-| `packages/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
-| `packages/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
-| `packages/runtime-taxonomy` | Stub for the future sibling registry spec. |
+| Directory | npm package | Role |
+| --- | --- | --- |
+| `apps/caplet` | `@caplet/cli` | CLI binary `caplet`. |
+| `packages/core` | `@caplet/core` | Pure SPEC logic: types, schemas, reader, validator, applicability, hash, diagnostics, emission orchestrator. No network, no git, no logger, browser-safe modulo a filesystem port. |
+| `packages/adapters` | `@caplet/adapters` | Per-target emit functions (claude, codex, cursor, opencode, pi). Shared file utilities live under `src/common/`. |
+| `packages/installer` | `@caplet/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
+| `packages/sdk` | `@caplet/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
+| `packages/runtime-taxonomy` | `@caplet/runtime-taxonomy` | Stub for the future sibling registry spec. |
 
 CI linters and browser validators import `@caplet/core` only. Caplet and
 direct consumers import `@caplet/sdk` for the ergonomic API.
@@ -296,6 +307,25 @@ may later become a sibling specification.
 - top-level `tools/` facet family;
 - a generic hook runner binary (default wire protocol only);
 - watch-mode for `path:` sources.
+
+## Development and releases
+
+Development runs from source under Bun: `bun install`, then `bun run ci`
+(lint, types, tests, build) and `bun run caplet <args>`. `bun run
+caplet:link` builds the CLI and links `caplet` globally. Every package
+builds Node-compatible ESM and `.d.ts` into `dist/`, which is all a tarball
+ships besides `package.json`, `README.md`, and `LICENSE`.
+
+`bun run smoke:packages` packs the six tarballs and installs them with npm
+under Node to exercise the CLI and library imports; CI does the same on
+Node 20. To release, bump every package to the same version, commit, and push
+a `vX.Y.Z` tag: `.github/workflows/release.yml` checks the tag against the
+package versions, reruns CI, publishes in dependency order with the
+`NPM_TOKEN` secret, and creates a GitHub release (pre-release for 0.x).
+
+## License
+
+[Apache-2.0](./LICENSE)
 
 ## See also
 

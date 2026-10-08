@@ -93,18 +93,21 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 
 **Priority**: High (blocks all external adoption)
 **Estimate**: 2-3 days
-**Status**: Planned
+**Status**: In progress. Packaging is done: `@caplet/*` 0.1.0 tarballs build
+for Node ≥ 20, and CI plus a tag-driven release workflow exist. Remaining: create
+the `caplet` npm org, add the `NPM_TOKEN` secret, push the first tag, and check
+the acceptance below on clean machines.
 
-**Problem**: caplet is a private bun workspace app; nobody can run it.
+**Problem**: caplet is not on npm yet; nobody outside the repo can run it.
 
 **Implementation**:
 
-- Bundle to single-file executable per platform (bun build --compile) OR publish as npm package with bun/node dual runtime — decide: npm package first (npx caplet onramp mirrors npx skills), compiled binaries later
-- `npx caplet` / `bunx caplet` must work. The unscoped npm name `caplet` is taken (2.0.0, 2022), and the `@acf` scope belongs to someone else, so publish under another scope or name
-- CI: publish workflow on tag, provenance enabled
-- README quickstart rewritten around npx onramp
+- npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
+- The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
+- npm provenance stays off while the repository is private; enable `--provenance` in `release.yml` once it is public
+- README quickstart rewritten around the npx onramp
 
-**Acceptance**: `npx caplet@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)
+**Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)
 
 ### Spec B2: Registry-Style Docs & Onboarding Surface
 

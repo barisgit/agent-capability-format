@@ -78,8 +78,8 @@ The CLI is an implementation, not part of the spec. Hot-path runtime helpers
 evaluated separately. Additional apps (docs site, web playground, MCP server
 exposing caplet) are explicitly deferred until there is a concrete user.
 
-`apps/caplet` is the only place where `Bun.*` APIs MAY appear in this
-repo (for CLI ergonomics). Everything else stays on `node:*`.
+Shipped source, `apps/caplet` included, uses `node:*` APIs only so the
+published packages run on Node ≥ 20 without Bun. Tests may use `Bun.*`.
 
 ### packages/core
 
@@ -193,10 +193,10 @@ produced inconsistent and lower-quality results.
 | Runtime / PM | Bun ≥ 1.3 |
 | Monorepo | Turborepo (`turbo.json` at root); workspaces in root `package.json` |
 | Language | TypeScript 5+ strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` |
-| Module resolution | `"Bundler"` |
+| Module resolution | `"Bundler"` for source and tests; `"NodeNext"` for the publish build |
 | Typecheck | `tsgo --noEmit` (10× faster than tsc; production-ready) |
-| Build (dev) | SWC per package, `types: "./src/index.ts"`, no `.d.ts` |
-| Build (publish) | `tsup src/index.ts --format esm --dts --clean` + `publishConfig` override |
+| Build (dev) | None: `tsconfig.base.json` `paths` map `@caplet/*` to source, and Bun honors them at runtime |
+| Build (publish) | `tsc -p tsconfig.build.json` per package → ESM + `.d.ts` in `dist/`; `exports` point only at `dist/` |
 | Schema validation | Zod v4 |
 | CLI framework | `citty` |
 | Test runner | `bun test` |
@@ -209,7 +209,7 @@ produced inconsistent and lower-quality results.
 | Logger | `consola` in `apps/caplet` only; libraries return `Diagnostic[]` |
 | Process spawn | `node:child_process` in `apps/caplet` and `@caplet/installer`; never in core/adapters/sdk |
 | Git for fetch | shell out to `git` binary via `node:child_process`; no `isomorphic-git` |
-| Engines | root: `"bun": ">=1.3.0"`; library packages also `"node": ">=20"` |
+| Engines | root: `"bun": ">=1.3.0"`; every published package `"node": ">=20"` |
 
 Guiding principles:
 
@@ -218,9 +218,9 @@ Guiding principles:
 - **Simplicity through delegation.** Prefer well-scoped packages over
   hand-rolled cleverness. No hand-rolled argv parser, no hand-rolled YAML
   parser, no hand-rolled glob.
-- **Libraries runtime-agnostic.** Only `apps/caplet` may use `Bun.*` APIs.
-  Core, adapters, installer, sdk default to `node:*`. Bun implements the
-  Node API, so this loses nothing on Bun; it keeps libraries portable.
+- **Shipped code runtime-agnostic.** No package source uses `Bun.*`; the
+  publish build type-checks against Node types only, so a Bun global fails
+  `bun run build`. Bun implements the Node API, so this loses nothing on Bun.
 
 Reference implementations using this exact stack live in sibling repos
 (`../sessionloom`, `../context-overflow`) and can be skimmed for working
@@ -237,7 +237,8 @@ Canonical root `package.json` scripts:
     "test": "turbo run test --force",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ci": "bun run lint && turbo run check-types test build --force"
+    "ci": "bun run lint && tsc --noEmit -p scripts && turbo run check-types test build --force",
+    "smoke:packages": "turbo run build && bun scripts/packages.ts pack .packs && bun scripts/packages.ts smoke .packs"
   }
 }
 ```
