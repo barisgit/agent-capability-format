@@ -46,9 +46,30 @@ export function nativeExtras(
   return section(targets, dialect, "native");
 }
 
-/** Per-target package values (`targets.<target>.package`) declared on a manifest. */
-export function packageValues(manifest: Pick<Manifest, "targets">, target: TargetId): NativeExtras {
-  return section(manifest.targets, target, "package");
+/**
+ * Returns `targets` with `values` merged into `targets.<dialect>.package`. Readers use it
+ * to record foreign manifest values the core field cannot represent exactly (a non-SemVer
+ * `version`, an `author` that does not round-trip through `authors`).
+ */
+export function withPackageValues(
+  targets: TargetExtensions | undefined,
+  dialect: ExtrasDialect,
+  values: NativeExtras,
+): TargetExtensions {
+  if (Object.keys(values).length === 0) return { ...(targets ?? {}) };
+  const entry = isRecord(targets?.[dialect]) ? (targets?.[dialect] as Record<string, unknown>) : {};
+  return {
+    ...(targets ?? {}),
+    [dialect]: { ...entry, package: { ...section(targets, dialect, "package"), ...values } },
+  };
+}
+
+/** Package values (`targets.<dialect>.package`) declared on a manifest. */
+export function packageValues(
+  manifest: Pick<Manifest, "targets">,
+  dialect: ExtrasDialect,
+): NativeExtras {
+  return section(manifest.targets, dialect, "package");
 }
 
 /**
