@@ -9,6 +9,7 @@ import {
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
   type ReadOnlyFs,
+  remainderRefuses,
   renderArtifactNotice,
   type Scope,
   type SkillFacet,
@@ -108,7 +109,8 @@ function sharedRootReaders(input: EmitInput, target: TargetDefinition): TargetId
 
 /**
  * The one rendering of `skill` for the shared root that every reader accepts, or null when
- * there is none: a reader excludes or refuses the skill, the readers' own extras differ (an
+ * there is none: a reader excludes or refuses the skill or the whole package, the readers' own
+ * extras differ (an
  * extra in a shared file counts as emitted to every reader), or two renderings disagree on a
  * key. Core translations of different readers are merged, since each states the same meaning.
  */
@@ -119,6 +121,7 @@ function sharedRendering(
 ): NativeSkill | null {
   const applicable = applicableTargets(cap, skill.frontmatter);
   if (!readers.every((reader) => applicable.includes(reader))) return null;
+  if (readers.some((reader) => remainderRefuses(cap, reader))) return null;
   const renderings = readers.map((reader) => renderNativeSkill(cap, skill, reader));
   if (renderings.some((rendering) => rendering.refused)) return null;
   const extras = new Set(renderings.map((rendering) => stableJson(rendering.extras)));
