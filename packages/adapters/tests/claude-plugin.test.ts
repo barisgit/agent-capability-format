@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
 import { pluginPackageDir } from "@caplet/core";
-import { claudeAdapter } from "../src";
+import { claudeAdapter, codexAdapter } from "../src";
 import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
 
 const INSTALL_ROOT = path.join(PROJECT, ".claude");
@@ -31,5 +31,24 @@ test("an ACF capability with a skill and a server becomes one Claude plugin", as
     ".mcp.json",
     "server.js",
     "skills/review/SKILL.md",
+  ]);
+});
+
+test("a loose target reports package-level Claude keys and native/claude/ files as dropped", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "review", description: "Review" })],
+  });
+  capability.manifest = {
+    ...capability.manifest,
+    targets: { claude: { native: { dependencies: ["helper-plugin"] } } },
+  };
+  capability.nativeFiles = [
+    { target: "claude", path: "output-styles/terse.md", executable: false },
+  ];
+  const result = await emitModel(codexAdapter, capability, path.join(PROJECT, ".codex"));
+  const dropped = result.diagnostics.filter((d) => d.code === "acf.extras.dropped");
+  expect(dropped.map((d) => d.message)).toEqual([
+    expect.stringContaining("dependencies"),
+    expect.stringContaining("native/claude/"),
   ]);
 });
