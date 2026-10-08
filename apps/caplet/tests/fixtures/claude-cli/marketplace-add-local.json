@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "marketplace",
+    "add",
+    "<PROJECT>/.claude/.acf/marketplace",
+    "--scope",
+    "local"
+  ],
+  "exitCode": 0,
+  "stdout": "Adding marketplace...\n✔ Marketplace 'acf-project-spike' already on disk — declared in local settings\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. --scope local after the same directory was added at project scope: exit 0, already on disk; writes the record to <PROJECT>/.claude/settings.local.json."
+}

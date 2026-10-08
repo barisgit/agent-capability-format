@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "uninstall",
+    "local1@acf-project-spike",
+    "--scope",
+    "local"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully uninstalled plugin: local1 (scope: local)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Plugin installed at local scope."
+}
