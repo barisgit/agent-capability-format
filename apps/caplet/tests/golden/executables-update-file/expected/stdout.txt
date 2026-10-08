@@ -1,4 +1,4 @@
-ok Updated 1 capabilities
+ok Updated 1 capability
     Resolved  1 capability
 
 Executable changes

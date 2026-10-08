@@ -28,7 +28,11 @@ export const updateCommand = defineCommand({
       );
       const out = reporter(context.args);
       const announce = () => {
-        out.done(name === undefined ? `Updated ${count} capabilities` : `Updated ${name}`);
+        out.done(
+          name === undefined
+            ? `Updated ${count} ${count === 1 ? "capability" : "capabilities"}`
+            : `Updated ${name}`,
+        );
       };
       if (context.args.apply === false) {
         // Nothing is planned, so the report compares the snapshots the update just installed.

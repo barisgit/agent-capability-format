@@ -116,6 +116,7 @@ describe("executable change report", () => {
     const human = await runCaplet(scope, scoped(scope, ["update"]));
     expect(human.exitCode).toBe(0);
     expect(human.stdout).not.toContain("Executable changes");
+    expect(human.stdout).toContain("ok Updated 1 capability\n");
     const json = await runCaplet(scope, scoped(scope, ["update", "--json"]));
     await assertGoldenTree(
       treeFromFiles({
