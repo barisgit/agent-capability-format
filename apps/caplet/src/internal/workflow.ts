@@ -130,7 +130,7 @@ export async function buildEmitPlan(
       ),
     };
     diagnostics.push(...detectLockDrift(anchoredManifest, lock));
-    const resolved = await resolveScopeCapabilities(scopeRoot);
+    const resolved = await resolveScopeCapabilities(scopeRoot, { lock });
     diagnostics.push(...resolved.diagnostics);
     if (lock !== null) {
       const manifestDir = path.dirname(scopeRoot.manifestPath);

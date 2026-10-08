@@ -1,15 +1,25 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { type CapabilitiesLock, findLockedCapability, readLockfile } from "../lock/index.js";
 import { readCapability } from "../reader/index.js";
 import type {
   AcfCapability,
   CapabilityOrigin,
+  CapabilitySource,
   Diagnostic,
   Scope,
   ScopeRoot,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
+
+export type ResolveScopeOptions = {
+  /**
+   * Lock describing the installed snapshots; read from `root.lockPath` when omitted. Pass
+   * the in-memory lock when snapshots were just materialized without writing the lock.
+   */
+  lock?: CapabilitiesLock | null | undefined;
+};
 
 export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[]; legacy: boolean };
 
@@ -75,12 +85,18 @@ export async function readRepositoryCapabilities(
   return { capabilities: capabilities.sort(byCapabilityName), diagnostics };
 }
 
+/**
+ * Reads every installed capability snapshot of `root`. Capabilities with a lock record
+ * carry their `source` provenance so format readers can reopen the preserved package.
+ */
 export async function resolveScopeCapabilities(
   root: ScopeRoot,
+  options: ResolveScopeOptions = {},
 ): Promise<{ capabilities: AcfCapability[]; diagnostics: Diagnostic[] }> {
   const diagnostics: Diagnostic[] = [];
   const capabilities: AcfCapability[] = [];
   if (!(await exists(root.capabilitiesDir))) return { capabilities, diagnostics };
+  const lock = options.lock === undefined ? await readLockfile(root.lockPath) : options.lock;
   for (const entry of await readdir(root.capabilitiesDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const dir = path.join(root.capabilitiesDir, entry.name);
@@ -89,11 +105,41 @@ export async function resolveScopeCapabilities(
     for (const capRoot of discovery.roots) {
       const cap = await readCapability(capRoot, root.scope, { kind: "local", directory: capRoot });
       cap.diagnostics.push(...discovery.diagnostics);
+      const source = capRoot === dir ? await lockedSource(lock, entry.name, dir) : undefined;
+      if (source !== undefined) cap.source = source;
       capabilities.push(cap);
     }
   }
   diagnostics.push(...sameScopeCollisionDiagnostics(capabilities));
   return { capabilities: capabilities.sort(byCapabilityName), diagnostics };
+}
+
+/**
+ * Provenance of the installed snapshot `dir` from its lock record. A bare skill keeps its
+ * original package as the only directory under `skills/` beside the synthesized
+ * `acf.yml`, so that directory is its snapshot root.
+ */
+async function lockedSource(
+  lock: CapabilitiesLock | null,
+  name: string,
+  dir: string,
+): Promise<CapabilitySource | undefined> {
+  const record = lock === null ? undefined : findLockedCapability(lock, name)?.capability;
+  if (record === undefined) return undefined;
+  const snapshotRoot = record.format === "skills" ? await skillPackageRoot(dir) : dir;
+  const source: CapabilitySource = { format: record.format, path: record.path, snapshotRoot };
+  if (record.formatVersion !== undefined) source.formatVersion = record.formatVersion;
+  return source;
+}
+
+async function skillPackageRoot(dir: string): Promise<string> {
+  const skillsDir = path.join(dir, "skills");
+  const skills = (await readdir(skillsDir, { withFileTypes: true })).filter((entry) =>
+    entry.isDirectory(),
+  );
+  return skills.length === 1 && skills[0] !== undefined
+    ? path.join(skillsDir, skills[0].name)
+    : dir;
 }
 
 export function deduplicateCapabilities(

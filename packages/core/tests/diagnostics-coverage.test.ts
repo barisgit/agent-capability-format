@@ -55,6 +55,7 @@ const exportedOnly = new Set([
   "acf.lock.drift",
   "acf.lock.missing-entry",
   "acf.lock.unsupported-version",
+  "acf.source.snapshot-rejected",
   "acf.emit.drift",
   "acf.emit.managed-notice-reserved-path",
   "acf.emit.managed-notice-destination-collision",

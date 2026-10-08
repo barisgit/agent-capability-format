@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
@@ -29,6 +29,7 @@ import {
   sourceString,
   writeLockfile,
 } from "./lockfile.js";
+import { copySnapshot, SnapshotRejectedError } from "./snapshot.js";
 
 export type ResolveOptions = {
   scope: "user" | "project";
@@ -450,10 +451,16 @@ async function materializeFetched(
   for (const candidate of selected.candidates) {
     const name = finalCapabilityName(entry, candidate.name);
     const destination = capabilityPath(stagingDir, name);
-    if (candidate.synthesized) {
-      await materializeImportedSkill(candidate, destination, fetched.commit);
-    } else {
-      await copyRegularTree(candidate.root, destination);
+    try {
+      if (candidate.synthesized) {
+        await materializeImportedSkill(candidate, destination, fetched.commit);
+      } else {
+        await copySnapshot(candidate.root, destination);
+      }
+    } catch (error) {
+      if (!(error instanceof SnapshotRejectedError)) throw error;
+      diagnostics.push(snapshotRejectedDiagnostic(name, error));
+      return { ok: false, records: [], lockEntry: null, diagnostics };
     }
     const digests = await computeCapabilityDigests(destination);
     records.push({
@@ -513,8 +520,11 @@ async function materializeImportedSkill(
   revision: string | null,
 ): Promise<void> {
   await rm(destination, { recursive: true, force: true });
-  await mkdir(path.join(destination, "skills", candidate.name), { recursive: true });
-  await copyPortableSkillTree(candidate.root, path.join(destination, "skills", candidate.name));
+  // Leave out notices caplet itself emitted, so a target directory read back as a source
+  // does not carry them into the snapshot.
+  await copySnapshot(candidate.root, path.join(destination, "skills", candidate.name), {
+    exclude: (relativePath) => path.posix.basename(relativePath) === "ACF-MANAGED.md",
+  });
   const version = `0.0.0-unmanifested+${revision ?? "local"}`;
   await writeFile(
     path.join(destination, "acf.yml"),
@@ -528,36 +538,6 @@ async function materializeImportedSkill(
   );
 }
 
-async function copyPortableSkillTree(source: string, destination: string): Promise<void> {
-  await cp(source, destination, {
-    recursive: true,
-    dereference: false,
-    filter: async (candidate) => {
-      const relative = path.relative(source, candidate);
-      const segments = relative.split(path.sep).filter(Boolean);
-      if (segments.some((segment) => segment.startsWith(".") || segment === "node_modules")) {
-        return false;
-      }
-      if (path.basename(candidate) === "ACF-MANAGED.md") return false;
-      const stat = await lstat(candidate);
-      return stat.isDirectory() || stat.isFile();
-    },
-  });
-}
-
-async function copyRegularTree(source: string, destination: string): Promise<void> {
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(path.dirname(destination), { recursive: true });
-  await cp(source, destination, {
-    recursive: true,
-    dereference: false,
-    filter: async (candidate) => {
-      const stat = await lstat(candidate);
-      return stat.isDirectory() || stat.isFile();
-    },
-  });
-}
-
 /** Package root of `candidate` relative to the source root (before `path:`), POSIX. */
 function selectedSourcePath(entry: CapabilityEntry, candidate: SourceCapabilityCandidate): string {
   const entryPath = path.posix.normalize((entry.path ?? ".").replaceAll("\\", "/"));
@@ -568,6 +548,15 @@ function finalCapabilityName(entry: CapabilityEntry, manifestName: string): stri
   if (typeof entry.rename === "string") return entry.rename;
   if (entry.rename !== undefined) return entry.rename[manifestName] ?? manifestName;
   return manifestName;
+}
+
+function snapshotRejectedDiagnostic(name: string, error: SnapshotRejectedError): Diagnostic {
+  return {
+    severity: "error",
+    code: "acf.source.snapshot-rejected",
+    message: `capability ${name}: ${error.message}`,
+    data: { name, path: error.relativePath, reason: error.reason },
+  };
 }
 
 function refRequiredDiagnostic(entry: CapabilityEntry, id: string): Diagnostic {

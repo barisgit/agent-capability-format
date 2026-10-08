@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { access, cp, readFile, rm, symlink } from "node:fs/promises";
+import { access, cp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeContentHash } from "@caplet/core/hash";
@@ -268,7 +268,7 @@ test("capability paths cannot escape their source root", async () => {
   ).rejects.toThrow("capability path escapes source root");
 });
 
-test("bare skills resolve as independent synthesized snapshots with portable assets", async () => {
+test("bare skills resolve as independent synthesized snapshots of their skill directory", async () => {
   const dir = await tempDir("acf-installer-bare-skills-");
   try {
     const repo = path.join(dir, "repo");
@@ -280,7 +280,6 @@ test("bare skills resolve as independent synthesized snapshots with portable ass
     await writeText(path.join(repo, "skills", "pdf", ".cache", "hidden.md"), "hidden\n");
     await writeText(path.join(repo, "skills", "pdf", "node_modules", "pkg", "index.js"), "bad\n");
     await writeText(path.join(repo, "skills", "pdf", "ACF-MANAGED.md"), "managed\n");
-    await symlink("declared.txt", path.join(repo, "skills", "pdf", "linked.txt"));
     await writeText(
       path.join(repo, "skills", "docs", "SKILL.md"),
       "---\nname: docs\ndescription: Docs\n---\nDocs.\n",
@@ -301,15 +300,15 @@ test("bare skills resolve as independent synthesized snapshots with portable ass
     expect(await Bun.file(path.join(pdf, "skills", "pdf", "references", "guide.md")).exists()).toBe(
       true,
     );
+    // Snapshots are complete (source-format-readers, Preserved source snapshot).
     expect(await Bun.file(path.join(pdf, "skills", "pdf", ".cache", "hidden.md")).exists()).toBe(
-      false,
+      true,
     );
     expect(
       await Bun.file(path.join(pdf, "skills", "pdf", "node_modules", "pkg", "index.js")).exists(),
-    ).toBe(false);
+    ).toBe(true);
     expect(await Bun.file(path.join(pdf, "skills", "pdf", "ACF-MANAGED.md")).exists()).toBe(false);
     expect(await Bun.file(path.join(pdf, "skills", "docs", "SKILL.md")).exists()).toBe(false);
-    expect(await Bun.file(path.join(pdf, "skills", "pdf", "linked.txt")).exists()).toBe(false);
     expect(await Bun.file(path.join(pdf, "skills", "pdf", "SKILL.md")).text()).toBe(skillBytes);
     expect(await Bun.file(path.join(pdf, "acf.yml")).text()).toContain(
       "version: 0.0.0-unmanifested+local",
