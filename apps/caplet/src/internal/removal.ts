@@ -24,11 +24,11 @@ import {
   type BlockedCapability,
   type EmittedDiff,
   fileDiffChanged,
-  installRootFor,
   outputBoundary,
   plannedRemoval,
   type RootContext,
   type StaleSidecarEntry,
+  scopeOutputRoots,
   sidecarOwner,
 } from "./workflow.js";
 
@@ -36,9 +36,9 @@ import {
 export type RemovalRoot = { installRoot: string; context: RootContext; boundary: OutputBoundary };
 
 /**
- * The roots of `scopeRoot` that hold caplet output for `targets`: the canonical skills root and
- * each target's install root, each once and only where a sidecar already exists, so a removal
- * never creates one for a target caplet never wrote.
+ * The roots of `scopeRoot` that hold caplet output for `targets` ({@link scopeOutputRoots}),
+ * each once and only where a sidecar already exists, so a removal never creates one for a target
+ * caplet never wrote.
  */
 export function removalRoots(input: {
   scopeRoot: ScopeRoot;
@@ -47,20 +47,8 @@ export function removalRoots(input: {
   cwd: string;
 }): RemovalRoot[] {
   const { scopeRoot, targets, config, cwd } = input;
-  const candidates: Array<{ installRoot: string; context: RootContext }> = [
-    {
-      installRoot: scopeRoot.agentsDir,
-      context: { scopeRoot, targetId: targets[0] ?? "claude", destination: "canonical" },
-    },
-  ];
-  for (const targetId of targets) {
-    const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
-    if (installRoot !== null) {
-      candidates.push({ installRoot, context: { scopeRoot, targetId, destination: "native" } });
-    }
-  }
   const roots: RemovalRoot[] = [];
-  for (const candidate of candidates) {
+  for (const candidate of scopeOutputRoots(scopeRoot, targets, config, cwd)) {
     if (roots.some((root) => root.installRoot === candidate.installRoot)) continue;
     if (!existsSync(path.join(candidate.installRoot, SIDECAR_FILENAME))) continue;
     const boundary = outputBoundary(
