@@ -1,7 +1,13 @@
 import path from "node:path";
 import type { Diagnostic, Scope } from "@caplet/core";
-import { type ClaudeCommand, type ClaudeScope, formatClaudeCommand } from "./commands.js";
-import type { ClaudeHost, ClaudeHostFailure, ClaudeHostResult } from "./host.js";
+import {
+  type ClaudeCommand,
+  type ClaudeScope,
+  formatClaudeCommand,
+  LIST_MARKETPLACES_ARGS,
+  LIST_PLUGINS_ARGS,
+} from "./commands.js";
+import type { ClaudeHost, ClaudeHostFailure } from "./host.js";
 import {
   type ClaudePluginAction,
   type ClaudeScopePlan,
@@ -77,14 +83,17 @@ export type ClaudeScopeReport = {
 
 export type ClaudeHostReport = { scopes: ClaudeScopeReport[]; diagnostics: Diagnostic[] };
 
+/** A host state read; a failure names the list command that failed. */
+export type ClaudeStateRead =
+  | { ok: true; value: ObservedClaudeState }
+  | { ok: false; failure: ClaudeHostFailure; command: string };
+
 /** Reads `claude plugin list --json`, then `claude plugin marketplace list --json`. */
-export async function readClaudeHostState(
-  host: ClaudeHost,
-): Promise<ClaudeHostResult<ObservedClaudeState>> {
+export async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
   const plugins = await host.listPlugins();
-  if (!plugins.ok) return plugins;
+  if (!plugins.ok) return { ...plugins, command: listCommand(LIST_PLUGINS_ARGS) };
   const marketplaces = await host.listMarketplaces();
-  if (!marketplaces.ok) return marketplaces;
+  if (!marketplaces.ok) return { ...marketplaces, command: listCommand(LIST_MARKETPLACES_ARGS) };
   return {
     ok: true,
     value: {
@@ -113,7 +122,7 @@ export async function reconcileClaudeHost(
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
   const before = await readClaudeHostState(host);
-  if (!before.ok) return notRun(desired, before.failure, host.projectDir);
+  if (!before.ok) return notRun(desired, before, host.projectDir);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
   const results: StepResult[][] = [];
@@ -128,7 +137,9 @@ export async function reconcileClaudeHost(
     ? await host.listPlugins()
     : { ok: true as const, value: before.value.plugins };
   const diagnostics: Diagnostic[] = [];
-  if (!after.ok) diagnostics.push(stateUnreadable(after.failure));
+  if (!after.ok) {
+    diagnostics.push(stateReadFailure(listCommand(LIST_PLUGINS_ARGS), after.failure, true));
+  }
   const scopes = plans.map((plan, index) =>
     scopeReport(
       plan,
@@ -152,7 +163,7 @@ export async function previewClaudeHost(
 ): Promise<ClaudeHostReport> {
   const state = await readClaudeHostState(host);
   if (!state.ok) {
-    const report = notRun(desired, state.failure, host.projectDir);
+    const report = notRun(desired, state, host.projectDir);
     return state.failure.kind === "unavailable" ? { ...report, diagnostics: [] } : report;
   }
   const diagnostics: Diagnostic[] = [];
@@ -331,9 +342,10 @@ function failureState(failure: ClaudeHostFailure): ClaudeHostState {
  */
 function notRun(
   desired: readonly DesiredClaudeScope[],
-  failure: ClaudeHostFailure,
+  read: { failure: ClaudeHostFailure; command: string },
   projectDir: string,
 ): ClaudeHostReport {
+  const { failure } = read;
   const state = failureState(failure);
   const ignored: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
@@ -345,7 +357,9 @@ function notRun(
       ignored,
     ),
   );
-  if (failure.kind !== "unavailable") return { scopes, diagnostics: [stateUnreadable(failure)] };
+  if (failure.kind !== "unavailable") {
+    return { scopes, diagnostics: [stateReadFailure(read.command, failure, false)] };
+  }
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
   if (commands.length === 0) return { scopes, diagnostics: [] };
   return {
@@ -393,12 +407,33 @@ function changesPlugins(command: ClaudeCommand): boolean {
   return command.op !== "marketplace add" && command.op !== "marketplace update";
 }
 
-function stateUnreadable(failure: ClaudeHostFailure): Diagnostic {
+function listCommand(args: readonly string[]): string {
+  return ["claude", ...args].join(" ");
+}
+
+/**
+ * A list command that failed, or printed output caplet cannot parse (`unreadable`, a warning).
+ * `ran`: the state was read after commands ran, so registration may have changed.
+ */
+function stateReadFailure(command: string, failure: ClaudeHostFailure, ran: boolean): Diagnostic {
+  const changed = ran
+    ? "the Claude commands ran, but their result is unknown"
+    : "Claude registration was not changed";
+  if (failure.kind === "unreadable") {
+    return {
+      severity: "warn",
+      code: "acf.claude.state-unreadable",
+      targetId: "claude",
+      message: `Could not read Claude plugin state (${failure.message}); ${changed}. Run \`${command}\` to inspect it, then re-run \`caplet apply\`.`,
+      data: { command },
+    };
+  }
   return {
-    severity: "warn",
-    code: "acf.claude.state-unreadable",
+    severity: "error",
+    code: "acf.claude.command-failed",
     targetId: "claude",
-    message: `Could not read Claude plugin state (${failure.message}); Claude registration was not changed. Run \`claude plugin list --json\` to inspect it, then re-run \`caplet apply\`.`,
+    message: `\`${command}\` failed: ${failure.message}; ${changed}. Fix the cause and re-run \`caplet apply\`.`,
+    data: { command, skipped: [] },
   };
 }
 

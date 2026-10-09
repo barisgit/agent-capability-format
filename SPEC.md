@@ -2957,8 +2957,9 @@ state:
 - `blocked by host policy` — a command failed with a Claude policy message
   (`acf.claude.policy-blocked`, warning); caplet does not fall back to
   loose output.
-- `unknown` — Claude's state could not be read
-  (`acf.claude.state-unreadable`), or Claude still lists another version
+- `unknown` — Claude's state could not be read (a list command failed,
+  `acf.claude.command-failed`, or printed output caplet cannot parse,
+  `acf.claude.state-unreadable`), or Claude still lists another version
   than caplet generated: after its commands succeeded, or in a dry run or
   status before apply updates it (`acf.claude.version-mismatch`), or after
   its update or install failed (the `acf.claude.command-failed` error

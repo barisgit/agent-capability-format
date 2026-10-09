@@ -322,6 +322,61 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(diagnostic?.message).toContain("claude plugin install probe@acf-user --scope user");
   });
 
+  test("a failed state read is a command failure that changes nothing", async () => {
+    // Synthetic: no transcript of a failing list command exists.
+    const cli: ClaudeCli = async () => ({
+      kind: "exited",
+      exitCode: 1,
+      stdout: "",
+      stderr: "✘ Failed to read installed plugins: EACCES\n",
+    });
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(report.scopes[0]?.plugins[0]?.state).toBe("unknown");
+    expect(report.scopes[0]?.commands.map((c) => c.status)).toEqual(["not run", "not run"]);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.command-failed", "error"],
+    ]);
+    expect(report.diagnostics[0]?.message).toContain("claude plugin list --json");
+    expect(report.diagnostics[0]?.message).toContain("Failed to read installed plugins: EACCES");
+  });
+
+  test("a failed state read after the commands ran is a command failure", async () => {
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+      "install-user",
+    ]);
+    let lists = 0;
+    const cli: ClaudeCli = async (args) =>
+      args.join(" ") === "plugin list --json" && ++lists === 2
+        ? { kind: "exited", exitCode: 1, stdout: "", stderr: "✘ EACCES\n" }
+        : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.stateRead).toBe(false);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.command-failed", "error"],
+    ]);
+  });
+
+  test("state Claude prints but caplet cannot parse is unreadable, a warning", async () => {
+    const cli: ClaudeCli = async () => ({ kind: "exited", exitCode: 0, stdout: "{}", stderr: "" });
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.state-unreadable", "warn"],
+    ]);
+  });
+
   test("a policy block is reported as blocked by host policy", async () => {
     // Synthetic: no policy-block transcript exists (it needs root-owned managed settings), so this
     // runner wraps the fake and answers the install with a message template from the binary.
