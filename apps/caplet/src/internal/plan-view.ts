@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER } from "@caplet/core";
 import { colors } from "consola/utils";
+import { diffAction } from "../apply/apply-diffs.js";
 import { columns } from "./render.js";
 import type { EmittedDiff, FootprintEntry, Reach } from "./workflow.js";
 
@@ -62,7 +63,7 @@ export function buildPlanView(
     scope: item.scopeRoot.scope,
     target: item.destination === "canonical" ? "canonical" : item.targetId,
     destination: item.destination,
-    action: item.diff.after === null ? "delete" : item.diff.before === null ? "create" : "update",
+    action: diffAction(item.diff),
     path: item.diff.path,
     capabilities: item.capabilityName === ACF_SYSTEM_OWNER ? [] : [item.capabilityName],
     notice: item.diff.managementNotice !== undefined,

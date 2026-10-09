@@ -76,6 +76,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.emit.managed-notice-destination-collision",
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
+  "acf.claude.skills-option-ignored",
   "acf.cli.partial-implementation",
   "acf.support.refused",
   "acf.support.degraded",

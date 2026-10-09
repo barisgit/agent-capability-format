@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { cleanup, makeScope, runCaplet, writeText } from "../helpers";
+import { applyProject, cleanup, makeScope, runCaplet, writeText } from "../helpers";
 
 test("fetch presents a clear command header and result summary", async () => {
   const scope = await makeScope();
@@ -152,6 +153,63 @@ test("apply connects the change plan to an applied summary", async () => {
   }
 });
 
+test("removing a capability's regions from shared files reads as an update", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    await writeFile(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, "alpha")}\n`,
+      "utf8",
+    );
+
+    const result = await runCaplet(scope, [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    // .mcp.json and CLAUDE.md keep alpha-cap's content; only beta-cap's own file is deleted.
+    expect(result.stdout).toMatch(/~ \.mcp\.json\s+beta-cap/);
+    expect(result.stdout).toMatch(/~ CLAUDE\.md\s+beta-cap/);
+    expect(result.stdout).toMatch(/- agents\/beta-helper\.md\s+beta-cap/);
+    expect(result.stdout).toContain("~ 3 update  - 1 delete");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("apply and update report a capability's warning once", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(
+      path.join(scope.sourceRoot, "alpha", "skills", "probe", "SKILL.md"),
+      "---\nname: probe\ndescription: Probe skill.\nwhen_to_use: Always.\n---\nBody.\n",
+    );
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+
+    const applied = await runCaplet(scope, ["apply", ...args]);
+    expect(applied.exitCode).toBe(0);
+    const shown = applied.stdout + applied.stderr;
+    expect(shown.split("acf.skill.native-key-not-core")).toHaveLength(2);
+    expect(shown).toContain("1 problem (1 warning)");
+
+    const updated = await runCaplet(scope, ["update", "alpha-cap", "--json", ...args]);
+    const json = JSON.parse(updated.stdout) as { diagnostics: Array<{ code: string }> };
+    expect(
+      json.diagnostics.filter((item) => item.code === "acf.skill.native-key-not-core"),
+    ).toHaveLength(1);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("add confirms the source and manifest it changed", async () => {
   const scope = await makeScope();
   try {
@@ -229,7 +287,7 @@ test("remove reports both manifest removal and managed cleanup", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("ok Removed alpha-cap (project scope)");
-    expect(result.stdout).toMatch(/Managed {2}\d+ managed regions cleaned/);
+    expect(result.stdout).toMatch(/Managed {2}\d+ managed files cleaned/);
   } finally {
     await cleanup(scope);
   }

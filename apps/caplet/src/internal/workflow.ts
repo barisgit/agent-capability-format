@@ -53,10 +53,11 @@ import {
   ownershipKey,
   readSidecar,
   relativeSidecarPath,
+  removeOwnedRegionsFromText,
   type SidecarOwner,
   writeSidecar,
 } from "../apply/sidecar.js";
-import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args.js";
+import { type FetchMode, readCwd, readScope, validationError } from "./args.js";
 import {
   type ClaudeGate,
   type ClaudeReport,
@@ -74,6 +75,7 @@ import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices, rootNoticeDiffFromSidecar } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
 import { withholdConflictingMcpServers } from "./mcp-conflicts.js";
+import { displayPath } from "./plan-view.js";
 import { resolveScopeRoots } from "./scopes.js";
 
 export type EmittedDiff = {
@@ -240,11 +242,6 @@ export async function buildEmitPlan(
       { lock },
     );
     diagnostics.push(...resolved.diagnostics);
-    // A capability's own validation errors gate the plan like any other error (SPEC.md §14.2);
-    // its warnings and info stay on the capability for check and show.
-    for (const capability of resolved.capabilities) {
-      diagnostics.push(...capability.diagnostics.filter((item) => item.severity === "error"));
-    }
     if (lock !== null) {
       const manifestDir = path.dirname(scopeRoot.manifestPath);
       const manifestSources = new Set(
@@ -267,6 +264,17 @@ export async function buildEmitPlan(
         (capability) =>
           selected.has(capability.manifest.name) || !lockedNames.has(capability.manifest.name),
       );
+    }
+    // Each planned capability's own diagnostics reach the plan (SPEC.md §14.2): its errors gate
+    // apply and its warnings are shown. Discovery diagnostics are the same objects on the scope
+    // and on every capability it found, so each object is reported once.
+    const reported = new Set(diagnostics);
+    for (const capability of resolved.capabilities) {
+      for (const item of capability.diagnostics) {
+        if (reported.has(item)) continue;
+        reported.add(item);
+        diagnostics.push(item);
+      }
     }
     resolvedNames.set(
       scopeRoot.scope,
@@ -406,16 +414,18 @@ export async function buildEmitPlan(
     blocked,
   });
   desiredDiffs.push(...claude.diffs);
-  const sweep = await sweepStaleSidecarEntries(
+  const sweep = await sweepStaleSidecarEntries({
     scopes,
     targets,
-    configResult.config,
+    config: configResult.config,
     cwd,
-    desiredDiffs,
+    desired: desiredDiffs,
     resolvedNames,
     resolvedFacets,
     keptOutput,
-  );
+    claudeRoots: claude.roots,
+  });
+  diagnostics.push(...sweep.diagnostics);
   const desiredWithNotices = await addManagementNotices(desiredDiffs, fs, diagnostics, {
     staleByRoot: sweep.staleByRoot,
     rootContexts: sweep.rootContexts,
@@ -528,8 +538,24 @@ export type RootContext = {
   destination: "canonical" | "native";
 };
 
+type SweepInput = {
+  scopes: readonly ScopeRoot[];
+  targets: readonly TargetId[];
+  config: CapletConfig;
+  cwd: string;
+  desired: readonly EmittedDiff[];
+  resolvedNames: ReadonlyMap<string, ReadonlySet<string>>;
+  resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>;
+  /** `<install root>\0<capability>` pairs a blocked capability keeps. */
+  keptOutput: ReadonlySet<string>;
+  /** Claude install roots of the plan, which decide whether a removal is a migration. */
+  claudeRoots: readonly ClaudeRootPlan[];
+};
+
 type SweepResult = {
   deletes: EmittedDiff[];
+  /** `acf.apply.drift` for each removal kept because the user changed its owned regions. */
+  diagnostics: Diagnostic[];
   forcedPaths: ReadonlySet<string>;
   staleByRoot: Map<string, Set<string>>;
   staleEntries: StaleSidecarEntry[];
@@ -548,17 +574,16 @@ type SweepResult = {
  * delete, and a partly stale entry forces its path so the remaining regions are re-recorded.
  * Entries of a capability blocked on the root's target (`keptOutput`, keyed
  * `<install root>\0<capability>`) are never stale: a refusal keeps the earlier install.
+ *
+ * A removal whose owned regions no longer hash to the sidecar's record was edited by the user, so
+ * it is not planned: the file and its entry stay and `acf.apply.drift` says why, on every plan
+ * until the user deletes or restores the content. The exception is the retirement of loose
+ * Claude output for a capability that became a plugin (a `registered` gate), which keeps the
+ * removal flagged `drifted` for the migration to release.
  */
-async function sweepStaleSidecarEntries(
-  scopes: readonly ScopeRoot[],
-  targets: readonly TargetId[],
-  config: CapletConfig,
-  cwd: string,
-  desired: readonly EmittedDiff[],
-  resolvedNames: ReadonlyMap<string, ReadonlySet<string>>,
-  resolvedFacets: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
-  keptOutput: ReadonlySet<string>,
-): Promise<SweepResult> {
+async function sweepStaleSidecarEntries(input: SweepInput): Promise<SweepResult> {
+  const { scopes, targets, config, cwd, desired, resolvedNames, resolvedFacets, keptOutput } =
+    input;
   const desiredOwns = new Set<string>();
   const desiredOwnsAnyCapability = new Set<string>();
   const plannedFacets = new Set<string>();
@@ -576,6 +601,7 @@ async function sweepStaleSidecarEntries(
     }
   }
   const deletes: EmittedDiff[] = [];
+  const diagnostics: Diagnostic[] = [];
   const forcedPaths = new Set<string>();
   const staleByRoot = new Map<string, Set<string>>();
   const staleEntries: StaleSidecarEntry[] = [];
@@ -628,6 +654,24 @@ async function sweepStaleSidecarEntries(
         ) {
           continue;
         }
+        const orphaned = stale.filter(
+          (own) => !desiredOwnsAnyCapability.has(`${pathKey}\u0000${ownershipKey(own)}`),
+        );
+        let removal: EmittedDiff | undefined;
+        if (orphaned.length > 0) {
+          const planned = plannedRemoval({
+            entry,
+            owns: orphaned,
+            installRoot: candidate.installRoot,
+            context,
+            claudeRoots: input.claudeRoots,
+          });
+          if ("kept" in planned) {
+            diagnostics.push(planned.kept);
+            continue;
+          }
+          removal = planned.removal;
+        }
         const bucket = staleByRoot.get(candidate.installRoot) ?? new Set<string>();
         bucket.add(`${entry.capability}\u0000${entry.path}`);
         staleByRoot.set(candidate.installRoot, bucket);
@@ -639,30 +683,81 @@ async function sweepStaleSidecarEntries(
           owner: sidecarOwner({ ...context, carrier: entry.carrier ?? "loose" }),
         });
         if (stale.length < entry.owns.length) forcedPaths.add(pathKey);
-        const orphaned = stale.filter(
-          (own) => !desiredOwnsAnyCapability.has(`${pathKey}\u0000${ownershipKey(own)}`),
-        );
         if (orphaned.length < stale.length) forcedPaths.add(pathKey);
-        if (orphaned.length === 0) continue;
-        const diff: FileDiff = {
-          path: absolutePath,
-          before: wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath),
-          after: null,
-          owns: orphaned,
-        };
-        if (entry.facet !== undefined) diff.facet = entry.facet;
-        deletes.push({
-          ...context,
-          installRoot: candidate.installRoot,
-          capabilityName: entry.capability,
-          carrier: entry.carrier ?? "loose",
-          diff,
-          drifted: ownedRegionsDrifted(diff.before, entry),
-        });
+        if (removal !== undefined) deletes.push(removal);
       }
     }
   }
-  return { deletes, forcedPaths, staleByRoot, staleEntries, rootContexts };
+  return { deletes, diagnostics, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+/**
+ * Plans removing `owns`, regions of sidecar `entry` under `installRoot`, with the plan-time disk
+ * content as its precondition. When the user edited those regions since caplet wrote them, the
+ * removal is not planned and `kept` carries the `acf.apply.drift` warning instead; retiring loose
+ * Claude output for a capability that became a plugin (a `registered` gate) is still planned,
+ * flagged `drifted`, for the migration to release.
+ */
+export function plannedRemoval(input: {
+  entry: ManagedEntry;
+  owns: AcfOwnership[];
+  installRoot: string;
+  context: RootContext;
+  claudeRoots: readonly ClaudeRootPlan[];
+}): { removal: EmittedDiff } | { kept: Diagnostic } {
+  const { entry, owns, installRoot } = input;
+  const absolutePath = path.resolve(installRoot, entry.path);
+  const before = owns.some((own) => own.kind === "file")
+    ? readBytesOrNull(absolutePath)
+    : readTextOrNull(absolutePath);
+  const diff: FileDiff = { path: absolutePath, before, after: null, owns };
+  if (entry.facet !== undefined) diff.facet = entry.facet;
+  const removal: EmittedDiff = {
+    ...input.context,
+    installRoot,
+    capabilityName: entry.capability,
+    carrier: entry.carrier ?? "loose",
+    diff,
+    drifted: removalChanges(before, owns) && ownedRegionsDrifted(before, entry),
+  };
+  if (removal.drifted && claudeGate(removal, input.claudeRoots)?.kind !== "registered") {
+    return { kept: keptDriftedDiagnostic(removal) };
+  }
+  return { removal };
+}
+
+/**
+ * Whether removing `owns` from `current` changes the file: false when the file or every owned
+ * region is already gone, so there is nothing of the user's to keep.
+ */
+function removalChanges(current: FileDiff["before"], owns: readonly AcfOwnership[]): boolean {
+  if (current === null) return false;
+  if (owns.some((own) => own.kind === "file")) return true;
+  if (typeof current !== "string") return true;
+  try {
+    return removeOwnedRegionsFromText(current, owns) !== current;
+  } catch {
+    // The file no longer parses as the structure the owned regions point into.
+    return true;
+  }
+}
+
+/** The `acf.apply.drift` warning for a removal the sweep keeps because the user edited it. */
+function keptDriftedDiagnostic(item: EmittedDiff): Diagnostic {
+  const file = item.diff.path;
+  const regions = item.diff.owns.flatMap((own) =>
+    own.kind === "json-pointer" ? [own.pointer] : own.kind === "marker" ? [own.name] : [],
+  );
+  const what =
+    regions.length === 0 ? displayPath(file) : `${regions.join(", ")} in ${displayPath(file)}`;
+  return {
+    severity: "warn",
+    code: "acf.apply.drift",
+    message: `kept ${what}: ${item.capabilityName} no longer writes it, but it was edited after caplet wrote it. ${regions.length === 0 ? "Delete the file" : "Remove it"} to finish the removal`,
+    path: file,
+    capability: { name: item.capabilityName },
+    ...(item.destination === "native" ? { targetId: item.targetId } : {}),
+  };
 }
 
 /** Whether the regions `entry` owns in `current` no longer hash to what the sidecar recorded. */
@@ -743,7 +838,13 @@ function isErrnoCode(error: unknown, code: string): boolean {
  * them), then the gated changes whose host state allows them. A held-back change keeps its sidecar
  * entry, so the next apply retries it, and the root's inventory is rebuilt from the sidecar.
  */
-export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
+/** The parts of a plan `applyEmitPlan` carries out; `caplet remove` builds them without emitting. */
+export type ApplicablePlan = Pick<
+  EmitPlan,
+  "cwd" | "diffs" | "claude" | "migration" | "staleEntries"
+>;
+
+export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary> {
   const results: ApplyResult[] = [];
   const diagnostics: Diagnostic[] = [];
   const blockedRoots = new Set<string>();
@@ -878,7 +979,8 @@ function isInsideOrEqual(candidate: string, root: string): boolean {
   );
 }
 
-function sidecarOwner(
+/** The sidecar owner of a plan item: its target, or `canonical`, and its carrier. */
+export function sidecarOwner(
   context: Pick<EmittedDiff, "targetId" | "destination" | "carrier">,
 ): SidecarOwner {
   return {
@@ -942,10 +1044,31 @@ export function capabilitySummary(
   };
 }
 
+/**
+ * The targets named by `-t/--target`, which may repeat and take comma-separated ids, in the
+ * order given and without duplicates; `undefined` when the flag is absent. An unknown id is a
+ * usage error (exit 2).
+ */
+export function requestedTargets(args: Record<string, unknown>): TargetId[] | undefined {
+  const raw = args.target;
+  const values = (Array.isArray(raw) ? raw : [raw])
+    .filter((value): value is string => typeof value === "string")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (values.length === 0) return undefined;
+  const out: TargetId[] = [];
+  for (const value of values) {
+    const id = targetIds.find((candidate) => candidate === value);
+    if (id === undefined) throw validationError(`unknown target: ${value}`);
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/** The targets a command plans for: the requested ones, else the configured defaults, minus disabled targets. */
 export function targetSelection(args: Record<string, unknown>, config: CapletConfig): TargetId[] {
-  const requested = readOptionalString(args, "target");
-  const values =
-    requested === undefined ? (config.emit?.defaultTargets ?? [...targetIds]) : [requested];
+  const values = requestedTargets(args) ?? config.emit?.defaultTargets ?? [...targetIds];
   const out: TargetId[] = [];
   for (const value of values) {
     if (!targetIds.includes(value)) throw validationError(`unknown target: ${value}`);
@@ -1018,7 +1141,7 @@ async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {
   });
 }
 
-function fileDiffChanged(diff: FileDiff): boolean {
+export function fileDiffChanged(diff: FileDiff): boolean {
   if (diff.beforeMode !== diff.afterMode) {
     const hasMode = diff.beforeMode !== undefined || diff.afterMode !== undefined;
     if (hasMode) return true;

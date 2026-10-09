@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hookEntrySchema, mcpServerSchema } from "../schemas/index.js";
+import { hookEntrySchema } from "../schemas/index.js";
 
 const stringArray = z.array(z.string());
 const unknownRecord = z.record(z.string(), z.unknown());
@@ -64,14 +64,11 @@ const hookExtension = z
   })
   .strict();
 
-const mcpExtension = z
-  .object({
-    servers: z.array(mcpServerSchema).optional(),
-    scope: z.enum(["user", "project"]).optional(),
-    localDev: z.boolean().optional(),
-    native,
-  })
-  .strict();
+/**
+ * A server's `targets.<target>`: only inline native extras. Install scope comes from the
+ * capability entry, and loopback `http://` URLs are allowed by the canonical URL rule.
+ */
+const mcpExtension = z.object({ native }).strict();
 
 export const commonTargetExtensionSchemas = {
   capability: capabilityExtension,

@@ -1667,7 +1667,7 @@ targets:
 | `headers`     | mapping     | no       | `http`/`sse` only. HTTP request headers.                           |
 | `only`        | list        | no       | Entry-level applicability (§6).                                    |
 | `except`      | list        | no       | Entry-level applicability (§6).                                    |
-| `targets`     | mapping     | no       | Entry-level target extension data.                                 |
+| `targets`     | mapping     | no       | Entry-level target extension data: `native` extras only (§7.5).    |
 
 ### 13a.4 Transport rules
 
@@ -1724,7 +1724,12 @@ expansion in canonical MCP fields. The placeholders above are the only
 `${...}` references a canonical MCP `command`, `args`, `env`, `cwd`,
 `url`, or `headers` value may hold; any other, such as `${API_KEY}`, is a
 pending host reference (§13a.4.2) and an error
-(`acf.mcp.placeholder.pending`), so no host expands it after emission. A
+(`acf.mcp.placeholder.pending`), so no host expands it after emission. The
+same holds for the other reference syntaxes a writer target expands in the
+config caplet writes: `{env:NAME}` and `{file:PATH}` (OpenCode, anywhere in
+`opencode.json`) and `$env:NAME` (pi-mcp-adapter). A reader keeps a server
+whose source value holds such text whole as native remainder, because the
+text is literal only to its source host. A
 server whose meaning depends on a host
 environment reference, `${user_config.*}`, `headersHelper`, or OAuth has no
 canonical form in `acf: 1`: a reader keeps such a server whole as native
@@ -1758,7 +1763,15 @@ carriers unless a cell names the plugin carrier. Pi refers to the
 | `command`, `args`, `env`, `url`, literal `headers` | N                                          | N (`http_headers`)       | N        | T `environment` for `env`    | N        |
 | `cwd`                                         | R                                               | N                        | R        | N                            | N        |
 | `${ACF_CAPABILITY_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_ROOT}` (plugin), absolute (loose); R in `cwd` | T absolute | T absolute | T absolute             | T absolute |
+| `${ACF_CAPABILITY_DIR}` in `url`, `headers`   | R                                               | R                        | R        | R                            | R        |
 | `${ACF_DATA_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose); R in `cwd` | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
+
+The `${ACF_CAPABILITY_DIR}` rows apply to each path placeholder:
+`${ACF_PACKAGE_DIR}` translates the same way, and `${ACF_HOOK_DIR}` becomes
+`${CLAUDE_PLUGIN_ROOT}/<directory of the MCP file>` in a Claude plugin and
+that directory's absolute path on loose carriers. A `${ACF_CAPABILITY_DIR}`
+row follows the row of its field: where `cwd` is refused, so is every
+placeholder in it.
 
 The Claude `cwd` refusal is verified (Claude 2.1.97): Claude ignores the
 key and a POSIX `cd` wrapper would change the executed command and fail on
@@ -1769,7 +1782,9 @@ behavior is unknown and refused.
 
 `targets.<target>.servers` allows native-only MCP server entries that
 have no canonical equivalent. Native entries reuse the canonical entry
-shape and are validated by the target's MCP extension schema.
+shape and get the same checks as canonical servers (§13a.3, §13a.4),
+including their own `targets` extension data; an unknown `<target>` is
+an error (§7.3).
 
 A server name MUST be unique among the servers caplet writes to one native
 MCP file. When two capabilities declare the same name, or a user-defined
@@ -1813,9 +1828,6 @@ servers:
     url: https://mcp.example.com/search
     headers:
       Authorization: "Bearer placeholder"
-    targets:
-      claude:
-        scope: project
 ```
 
 ## 14. Diagnostics, lossiness, and emission
@@ -2818,6 +2830,9 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   between is left untouched, keeps its sidecar entry, and is reported as
   drift. On each apply, ACF-owned paths and regions no longer in the
   desired plan are removed, even when their capability and facet remain.
+  One whose owned content no longer matches the recorded hash was edited
+  by the user: it is kept with its sidecar entry and reported as drift
+  until the user deletes or restores it.
 - Every write and delete MUST resolve, after following existing parent
   directories, inside the declared output root of its target and scope.
   A symlinked parent that leads outside fails that target before any

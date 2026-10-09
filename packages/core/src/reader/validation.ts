@@ -15,6 +15,8 @@ import type {
   FacetFamily,
   HookEntry,
   HookMatch,
+  McpFile,
+  McpServer,
   TargetExtensions,
 } from "../types/index.js";
 import { hookEffectMatrix, hookMatchRequired } from "../types/index.js";
@@ -74,9 +76,30 @@ function validateHookFile(cap: AcfCapability): void {
 }
 
 function validateMcpServers(cap: AcfCapability): void {
-  for (const server of cap.mcp?.servers ?? []) {
+  for (const id of Object.keys(cap.mcp?.targets ?? {})) {
+    if (isTargetId(id)) continue;
+    cap.diagnostics.push({
+      severity: "error",
+      code: "acf.target.unknown-id",
+      message: `unknown target id: ${id}`,
+      path: cap.mcp?.path,
+      targetId: id,
+    });
+  }
+  for (const server of allMcpServers(cap.mcp)) {
     validateMcpServerValues(server, cap.mcp?.path, cap.diagnostics);
   }
+}
+
+/**
+ * Canonical servers plus the native-only ones under family-level `targets.<target>.servers`
+ * (SPEC.md §13a.5), which reuse the canonical shape and so get the same checks.
+ */
+function allMcpServers(mcp: McpFile | undefined): McpServer[] {
+  return [
+    ...(mcp?.servers ?? []),
+    ...Object.values(mcp?.targets ?? {}).flatMap((block) => block?.servers ?? []),
+  ];
 }
 
 function validateMatch(
@@ -200,7 +223,7 @@ function validateTargetExtensions(cap: AcfCapability): void {
   for (const entry of Object.values(cap.hooks?.buckets ?? {}).flatMap((value) => value ?? [])) {
     checks.push({ family: "hook", targets: entry.targets, path: cap.hooks?.path });
   }
-  for (const server of cap.mcp?.servers ?? []) {
+  for (const server of allMcpServers(cap.mcp)) {
     checks.push({ family: "mcp", targets: server.targets, path: cap.mcp?.path });
   }
   // Only format readers and the bare-skill import write the agent-plugins dialect (design,

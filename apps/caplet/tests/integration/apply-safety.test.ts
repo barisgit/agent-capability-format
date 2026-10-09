@@ -115,6 +115,58 @@ test("a planned delete of a file edited before apply keeps the file and its owne
   expect(await sidecarPaths(path.join(scope.cwd, ".claude"))).toContain("agents/beta-helper.md");
 });
 
+test("deselecting a capability keeps an output file the user edited and reports drift", async () => {
+  expect((await applyProject(scope)).exitCode).toBe(0);
+  const claudeRoot = path.join(scope.cwd, ".claude");
+  const betaAgent = path.join(claudeRoot, "agents", "beta-helper.md");
+  await writeText(betaAgent, "user edit\n");
+  await writeFile(
+    path.join(scope.agentsDir, "capabilities.yml"),
+    `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, "alpha")}\n`,
+    "utf8",
+  );
+
+  const result = await runCaplet(scope, [
+    "apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+    "--target",
+    "claude",
+    "--json",
+  ]);
+
+  expect(result.exitCode).toBe(0);
+  expect(await readText(betaAgent)).toBe("user edit\n");
+  const json = JSON.parse(result.stdout) as {
+    diagnostics: Array<{ code: string; path?: string; severity: string }>;
+    plan: { changes: Array<{ path: string }> };
+  };
+  expect(json.diagnostics.filter((item) => item.code === "acf.apply.drift")).toEqual([
+    expect.objectContaining({ severity: "warn", path: betaAgent }),
+  ]);
+  expect(json.plan.changes.map((change) => change.path)).not.toContain(betaAgent);
+  expect(await sidecarPaths(claudeRoot)).toContain("agents/beta-helper.md");
+  expect(await readText(path.join(scope.cwd, ".mcp.json"))).not.toContain("beta-server");
+
+  // Once the user deletes the edited file, the next apply forgets it without a warning.
+  await rm(betaAgent);
+  const settled = await runCaplet(scope, [
+    "apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+    "--target",
+    "claude",
+    "--json",
+  ]);
+  const after = JSON.parse(settled.stdout) as { diagnostics: Array<{ code: string }> };
+  expect(after.diagnostics.map((item) => item.code)).not.toContain("acf.apply.drift");
+  expect(await sidecarPaths(claudeRoot)).not.toContain("agents/beta-helper.md");
+});
+
 test("renaming a skill removes the old directories and sidecar entries", async () => {
   await writeSkill("old-skill", { "reference.md": "ref\n" });
   expect((await applyProject(scope)).exitCode).toBe(0);

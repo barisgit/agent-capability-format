@@ -9,11 +9,11 @@ project  .
     + .acf/marketplace/plugins/review/.claude-plugin/plugin.json    review
     + .acf/marketplace/plugins/review/.mcp.json                     review
     + .acf/marketplace/plugins/review/skills/review/SKILL.md        review
-    - .mcp.json                                                     review
+    ~ .mcp.json                                                     review
     - skills/review/ACF-MANAGED.md                                  review
     ~ managed notices
 
-+ 4 create  ~ 1 update  - 2 delete
++ 4 create  ~ 2 update  - 1 delete
 
 ok Applied 7 files (6 writes, 1 delete)
 

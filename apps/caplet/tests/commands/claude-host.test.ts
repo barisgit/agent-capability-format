@@ -260,6 +260,50 @@ test("without the CLI a deselected plugin keeps its files and the warning lists 
   expect(warning?.message).toContain("claude plugin marketplace remove acf-user");
 });
 
+test("remove uninstalls the plugin and removes the marketplace before deleting files", async () => {
+  const scope = await reviewScope("user");
+  const version = await applyWithoutCli(scope);
+  const host = await userHost(scope, [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+    "uninstall-user",
+    "marketplace-remove",
+    "list-json-empty",
+  ]);
+
+  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"], host.env);
+
+  expect(result.exitCode).toBe(0);
+  expect(await host.calls()).toEqual([
+    ...READ,
+    `claude plugin uninstall ${NAME}@acf-user --scope user`,
+    "claude plugin marketplace remove acf-user",
+    "claude plugin list --json",
+  ]);
+  const json = JSON.parse(result.stdout) as ApplyJson;
+  expect(json.diagnostics).toEqual([]);
+  expect(existsSync(claudeMarketplaceDir(scope, "user"))).toBe(false);
+  const sidecar = JSON.parse(await readText(path.join(scope.home, ".claude", ".acf-managed.json")));
+  expect(sidecar.marketplace).toBeUndefined();
+  expect(sidecar.managed.map((entry: { capability: string }) => entry.capability)).not.toContain(
+    NAME,
+  );
+});
+
+test("without the CLI remove keeps the plugin files and the warning lists the uninstall", async () => {
+  const scope = await reviewScope("user");
+  await applyWithoutCli(scope);
+
+  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(existsSync(pluginDir(scope))).toBe(true);
+  const json = JSON.parse(result.stdout) as ApplyJson;
+  const warning = json.diagnostics.find((d) => d.code === "acf.claude.cli-unavailable");
+  expect(warning?.message).toContain(`claude plugin uninstall ${NAME}@acf-user --scope user`);
+  expect(warning?.message).toContain("claude plugin marketplace remove acf-user");
+});
+
 test("a plugin the user disabled is updated and stays disabled", async () => {
   const scope = await reviewScope("user");
   const version = await applyWithoutCli(scope);

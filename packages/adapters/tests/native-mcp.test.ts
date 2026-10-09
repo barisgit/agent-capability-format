@@ -240,3 +240,44 @@ test("a Codex server's own marked table, or another user server, is no conflict"
   expect(serverEntry("codex", config, "tools")?.command).toBe(`${CAP_ROOT}/bin/server`);
   expect(serverEntry("codex", config, "mine")?.command).toBe("mine");
 });
+
+// Every path placeholder of SPEC.md §13.6.3, not only the capability directory.
+const PATH_PLACEHOLDERS = [CAPABILITY_DIR, `${DOLLAR}{ACF_PACKAGE_DIR}`, `${DOLLAR}{ACF_HOOK_DIR}`];
+
+test("every path placeholder in url or headers refuses the server on every target", async () => {
+  for (const placeholder of PATH_PLACEHOLDERS) {
+    const servers: McpServer[] = [
+      { name: "in-url", transport: "http", url: `https://example.com/${placeholder}` },
+      {
+        name: "in-header",
+        transport: "http",
+        url: "https://example.com/mcp",
+        headers: { "X-Root": placeholder },
+      },
+    ];
+    for (const target of Object.keys(writers)) {
+      const { result, config } = await emitServers(target, servers);
+      expect(config).toBeUndefined();
+      expect(withCode(result, "acf.support.refused").map((d) => d.data?.source)).toEqual([
+        `mcp.headers=${placeholder}`,
+        `mcp.url=${placeholder}`,
+      ]);
+    }
+  }
+});
+
+test("a command under any path placeholder is translated, not a bare command", async () => {
+  for (const placeholder of PATH_PLACEHOLDERS) {
+    const server: McpServer = {
+      name: "tools",
+      transport: "stdio",
+      command: `${placeholder}/bin/server`,
+      args: [placeholder],
+    };
+    const { result } = await emitServers("codex", [server]);
+    const sources = result.outcomes?.map((outcome) => outcome.source);
+    expect(sources).toContain(`mcp.command=${placeholder}`);
+    expect(sources).toContain(`mcp.args=${placeholder}`);
+    expect(sources).not.toContain("mcp.command=bare");
+  }
+});

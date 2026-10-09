@@ -111,7 +111,7 @@ test("apply --dry-run previews deletes for changed selectors without touching th
     expect(dry.exitCode).toBe(0);
     expect(dry.stderr).not.toContain("acf.lock.drift");
     expect(dry.stdout).toContain("beta-");
-    expect(dry.stdout).toContain("3 delete");
+    expect(dry.stdout).toContain("~ 3 update  - 1 delete");
 
     const lockAfter = await readText(lockPath);
     expect(lockAfter).toBe(lockBefore);

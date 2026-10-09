@@ -27,7 +27,11 @@ export const claudeAdapter: TargetAdapter<"claude"> = {
   emit: async (input, fs: ReadOnlyFs) => {
     const configured = input.options.carrier ?? carriersOf("claude").default;
     if (capabilityCarrier(input.capability, "claude", configured) === "plugin") {
-      return await emitClaudePlugin(input, fs);
+      const result = await emitClaudePlugin(input, fs);
+      const ignored = ignoredSkillsOption(input);
+      return ignored === undefined
+        ? result
+        : { ...result, diagnostics: [...result.diagnostics, ignored] };
     }
     if (configured === "plugin") {
       const result = await emitTarget(input, fs, target);
@@ -57,6 +61,25 @@ function legacyCarrier(capability: AcfCapability, families: readonly string[]): 
     targetId: "claude",
     capability: { name: capability.manifest.name },
     data: { families },
+  };
+}
+
+/**
+ * `targets.claude.skills` places loose skill files; a plugin carries its skills inside the package,
+ * so asking for the shared `.agents/skills` copy or no native copy has no effect there.
+ */
+function ignoredSkillsOption(input: EmitInput): Diagnostic | undefined {
+  const skills = input.options.skills;
+  if (input.capability.skills.length === 0) return undefined;
+  if (skills?.canonical !== true && skills?.native !== false) return undefined;
+  return {
+    severity: "warn",
+    code: "acf.claude.skills-option-ignored",
+    message:
+      "Claude plugins carry their skills inside the package, so targets.claude.skills has no effect on them; set targets.claude.carrier: loose to place skill files",
+    targetId: "claude",
+    capability: { name: input.capability.manifest.name },
+    data: { skills },
   };
 }
 

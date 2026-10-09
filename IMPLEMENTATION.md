@@ -28,7 +28,7 @@ agent-capability-format/
   apps/
     caplet/               # reference CLI binary
   packages/
-    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission orchestrator, per-target extension schemas, canonical EmitOptions
+    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission helpers (applicability, outcomes, executables), per-target extension schemas, canonical EmitOptions
     adapters/             # per-target emit functions + shared file utilities
     installer/            # git + network fetch (capabilities.yml resolution, lockfile writes)
     sdk/                  # convenience helpers for direct consumers; re-exports core + adapters + installer
@@ -719,14 +719,17 @@ export const acfPathPlaceholders = [
 
 Substitution is performed when the adapter materializes a hook `run.command`,
 hook `run.args[i]`, hook `run.env[k]`, MCP `command`, MCP `args[i]`, MCP
-`env[k]`, MCP `cwd`, MCP `url`, and MCP `headers[k]`. No other interpolation
-is performed by ACF, and validation rejects any other `${...}` reference in
-those MCP values (`acf.mcp.placeholder.pending`) because hosts such as Claude
-would expand it. Loose carriers substitute absolute paths. The Claude plugin
-carrier writes `${CLAUDE_PLUGIN_ROOT}` for `${ACF_CAPABILITY_DIR}` and
-`${ACF_PACKAGE_DIR}`, and `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`,
-where `<dir>` is the directory of the MCP file inside the capability (hooks
-keep a capability loose for Claude).
+`env[k]`, and MCP `cwd`; a path placeholder in MCP `url` or `headers[k]`
+refuses the server on every target. No other interpolation is performed by
+ACF, and validation rejects any other reference a writer target would expand
+in those MCP values (`acf.mcp.placeholder.pending`): `${...}` (Claude,
+Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode), and
+`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths. The
+Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
+`${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
+`${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
+directory of the MCP file inside the capability (hooks keep a capability
+loose for Claude).
 
 `acfDataDirPlaceholder` (`${ACF_DATA_DIR}`) is MCP-only: a persistent,
 writable directory per capability and install scope that survives updates.
@@ -982,8 +985,12 @@ Apply compares every file with the plan-time `before` content (or the
 plan-time hash of its owned regions) immediately before writing. A file that
 changed in between is skipped with an `acf.apply.drift` warning and keeps its
 sidecar entry. Entries whose path or region is no longer desired are swept on
-the next apply; canonical-root entries are kept while their capability and
-facet exist and the facet was not planned into that root. Before writing,
+the next apply, except one whose owned content no longer hashes to the
+recorded `hash`: the user edited it, so the plan keeps the file and the
+entry and reports `acf.apply.drift` until the content is deleted or
+restored (retired loose Claude output is released instead, §4.9).
+Canonical-root entries are kept while their capability and facet exist and
+the facet was not planned into that root. Before writing,
 each install root is checked against its output boundary (the root, a
 target's native skills root, and its MCP file); an escape through a symlinked
 parent fails that root with `acf.apply.outside-root`. `caplet remove` checks
@@ -1371,7 +1378,9 @@ caplet then marks the capability blocked for that target in `EmitPlan.blocked`
 nothing of it there. Other capabilities and targets apply, and the command
 exits 2 (`blockingExitCode` in `apps/caplet/src/internal/output.ts`). Any
 error other than a refusal, including a resolved capability's own validation
-errors, stops apply, add, and update before writing.
+errors, stops apply, add, and update before writing. The plan carries every
+diagnostic of each planned capability, so these commands also show its
+warnings and lossy notes, each once.
 
 ### 4.7 Native extras
 
@@ -2549,7 +2558,10 @@ discovers `.agents/skills` (Codex, Cursor, OpenCode, Pi), so a scope gets a
 shared copy only when a selected target reads it. `native` defaults to
 `false` for those targets unless the shared copy falls back (§4.8); Claude
 Code defaults to its native skills directory. Explicit values override both
-defaults.
+defaults. They place loose skill files only: a capability Claude receives as a
+plugin carries its skills inside the package, so `canonical: true` or
+`native: false` under `targets.claude` has no effect on it and raises
+`acf.claude.skills-option-ignored` (warn).
 
 `targets.<id>.carrier` picks the carrier (SPEC §22.8). Only `claude` offers
 `plugin` (its default) and `loose`; naming `plugin` for any other target is a
@@ -2761,7 +2773,7 @@ acf.lock.unsupported-version
 
 # Apply
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
-acf.apply.drift                              # owned content changed since planning; skipped (warn)
+acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
 
 # Source formats and snapshots
@@ -2800,12 +2812,13 @@ acf.mcp.cwd.invalid                          # cwd base or traversal (error)
 acf.mcp.url.insecure                         # non-https URL off localhost (error)
 acf.mcp.url.credential-in-url                # userinfo in url (error)
 acf.mcp.placeholder.unsupported              # ${ACF_DATA_DIR} in url or headers (error)
-acf.mcp.placeholder.pending                  # non-ACF ${...} reference in an MCP value (error)
+acf.mcp.placeholder.pending                  # host reference (${...}, {env:...}, $env:...) in an MCP value (error)
 acf.mcp.config-conflict                      # server name claimed twice or user-defined (error)
 
 # Claude carrier and host
 acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
 acf.claude.plugin-file-ignored               # Claude config in a native ACF root left out of its plugin (info)
+acf.claude.skills-option-ignored             # targets.claude.skills cannot place a plugin's skills (warn)
 acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
 acf.claude.state-unreadable                  # plugin list unreadable (warn)
 acf.claude.command-failed                    # claude plugin command failed (error)
@@ -2842,87 +2855,31 @@ applicability filtering and per-capability adapter calls. Adapters return
 `FileDiff[]`. Caplet collects, optionally shows (`apply --dry-run`), and
 applies them via a writer that updates `.acf-managed.json`.
 
-```ts
-export type EmitRequest = {
-  scopes: ScopeRoot[]                  // from resolver §7.1, filtered by --scope
-  targets: TargetId[]                  // from caplet config or --target
-  options: EmitOptions
-}
+Caplet owns the orchestration (`buildEmitPlan` in
+`apps/caplet/src/internal/workflow.ts`); core exports the pieces, not an
+orchestrator. For each scope root it:
 
-export type EmitReport = {
-  perScopeTarget: Record<string, EmitResult>   // key = `${scope}:${target}`
-}
-
-export async function emit(
-  req: EmitRequest,
-  fs: ReadOnlyFs,
-): Promise<EmitReport> {
-  const report: EmitReport = { perScopeTarget: {} }
-
-  for (const scopeRoot of req.scopes) {
-    const capabilities = await resolveScopeCapabilities(scopeRoot)
-
-    for (const targetId of req.targets) {
-      const target = targetMap[targetId]
-      const installRoot = resolveInstallRoot(target, scopeRoot.scope)
-      if (installRoot === null) {
-        report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          diffs: [],
-          diagnostics: [{
-            severity: "lossy",
-            code: "acf.adapter.scope-unsupported",
-            message: `${targetId} does not support scope=${scopeRoot.scope}`,
-          }],
-        }
-        continue
-      }
-
-      const allDiffs: FileDiff[] = []
-      const allDiags: Diagnostic[] = []
-
-      for (const cap of capabilities) {
-        const filtered = applyApplicability(cap, targetId)
-        if (filtered === null) continue   // capability fully excluded
-        const result = await target.adapter.emit(
-          {
-            capability: filtered,
-            scope: scopeRoot.scope,
-            installRoot,
-            options: req.options,
-          },
-          fs,
-        )
-        allDiffs.push(...result.diffs)
-        allDiags.push(...result.diagnostics)
-      }
-
-      report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-        diffs: allDiffs,
-        diagnostics: allDiags,
-      }
-    }
-  }
-
-  return report
-}
-
-function resolveInstallRoot(target: TargetDefinition<TargetId>, scope: Scope): string | null {
-  // caplet.yml override beats adapter default.
-  const override = getCapletOverride(target.id, scope)
-  if (override) return override
-  return target.installPaths[scope]
-}
-```
+1. resolves the scope's capabilities (`resolveScopeCapabilities`) and adds
+   every capability's own `error` diagnostics to the plan, so a capability
+   that fails validation blocks apply (SPEC.md §14.2);
+2. for each target, reports `acf.adapter.scope-unsupported` when the target
+   has no install root for the scope, otherwise filters each capability with
+   `applyApplicability` and withholds conflicting MCP server names;
+3. calls the target adapter's `validate` and `emit` per capability; a
+   capability whose diagnostics block it on that target
+   (`capabilityBlocked`) contributes diagnostics but no diffs, and its
+   previous output is kept.
 
 `applyApplicability(cap, targetId)`:
 
 1. checks capability `only`/`except` against `targetId`; returns `null` if excluded,
-2. drops each facet not applicable to `targetId` via §10 cascade,
-3. validates each remaining facet's `targets.<target>` payload against the
-   target's extension schema,
-4. emits `lossy` diagnostics for unsupported facet families based on the
+2. drops each facet not applicable to `targetId` via the SPEC.md §6.4 cascade,
+3. emits `lossy` diagnostics for unsupported facet families based on the
    support matrix,
-5. returns the filtered capability.
+4. returns the filtered capability.
+
+The reader, not this step, validates `targets.<target>` payloads against the
+target's extension schema.
 
 ### 12.1 Diff application
 
@@ -3182,7 +3139,8 @@ flag reference. Running `caplet` with no command runs `status`.
 
 Global flags: `-s/--scope`, `-C/--cwd`, `-q/--quiet`, `-v/--verbose`,
 `-y/--yes`, `--json`, `--strict`, `-V/--version`, `-h/--help`. Commands that
-accept `-t/--target` may repeat it. Unknown commands and flags exit 2 with a
+accept `-t/--target` select exactly the targets it names; it may repeat and
+takes comma-separated ids, and an unknown id exits 2. Unknown commands and flags exit 2 with a
 did-you-mean hint when one is close.
 
 Stubs that exit 0 without doing anything are forbidden — the first audit
@@ -3210,8 +3168,16 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`
   select all.
-- `caplet remove <name> [--scope …]` updates `capabilities.yml` and removes
-  sidecar-owned output. For an entry selecting several capabilities, it retains
+- `caplet remove <name>... [--scope …] [--target …]` updates `capabilities.yml`
+  and removes the sidecar-owned output of the named capabilities; an unknown
+  name exits 2 before anything changes. It cleans only roots whose sidecar
+  exists and applies like an apply that deselected those capabilities
+  (`apps/caplet/src/internal/removal.ts`): an output the user edited stays and
+  is reported as drift, other capabilities' pending changes stay pending, and
+  the Claude host step uninstalls their plugins and updates or retires the
+  marketplace before the plugin files go. Without the `claude` CLI the plugin
+  files stay and `acf.claude.cli-unavailable` lists the commands; the next
+  apply retries. For an entry selecting several capabilities, it retains
   sibling selectors and removes the source entry only when none remain. A legacy
   lock without exact selector mappings must be refreshed with
   `caplet update --no-apply` before ambiguous collection narrowing.
@@ -3232,8 +3198,11 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   everything else and exits 2. `--json` carries the same records as `outcomes`.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
-  exits 3 without fetching or writing when the lockfile is stale. A plan that deletes files asks for
-  confirmation on a TTY unless `--yes` or `--json` is set.
+  exits 3 without fetching or writing when the lockfile is stale. A plan
+  that deletes files asks for confirmation on a TTY unless `--yes` or
+  `--json` is set. Removing a capability's regions from a shared file (a
+  JSON key, a marker block) is an update; only removing a whole owned file
+  is a delete.
 
 ### 14.3 Inspection commands
 
