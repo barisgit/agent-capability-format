@@ -63,7 +63,8 @@ async function isSymlink(entry: string): Promise<boolean> {
   }
 }
 
-function isStrictlyInside(candidate: string, root: string): boolean {
+/** Whether `candidate` lies below `root`; `root` itself does not count. */
+export function isStrictlyInside(candidate: string, root: string): boolean {
   const relative = path.relative(root, candidate);
   return (
     relative !== "" &&

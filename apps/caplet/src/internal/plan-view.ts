@@ -3,6 +3,7 @@ import path from "node:path";
 import { ACF_SYSTEM_OWNER } from "@caplet/core";
 import { colors } from "consola/utils";
 import { diffAction } from "../apply/apply-diffs.js";
+import { isStrictlyInside } from "../apply/containment.js";
 import { columns } from "./render.js";
 import type { EmittedDiff, FootprintEntry, Reach } from "./workflow.js";
 
@@ -130,7 +131,9 @@ export function buildPlanView(
   });
   for (const bucket of sortedDestinations) {
     const rows: PlanRow[] = [];
-    for (const group of groupRows(bucket.files, options.verbose === true, bucket.installRoot)) {
+    const scopeRoot = bucket.scope === "user" ? os.homedir() : path.dirname(bucket.agentsDir);
+    const roots = { installRoot: bucket.installRoot, scopeRoot };
+    for (const group of groupRows(bucket.files, options.verbose === true, roots)) {
       rows.push(group);
     }
     const noticeActions = [...bucket.notices.entries()].sort(([a], [b]) => a.localeCompare(b));
@@ -145,7 +148,7 @@ export function buildPlanView(
     }
     const scope = scopes.get(bucket.scope) ?? {
       scope: bucket.scope,
-      root: displayPath(bucket.scope === "user" ? os.homedir() : path.dirname(bucket.agentsDir)),
+      root: displayPath(scopeRoot),
       destinations: [],
     };
     scope.destinations.push({
@@ -183,7 +186,8 @@ export function buildPlanView(
   return { scopes: orderedScopes, totals, fileCount: changes.length, changes };
 }
 
-function groupRows(files: PlanChange[], verbose: boolean, installRoot: string): PlanRow[] {
+function groupRows(files: PlanChange[], verbose: boolean, roots: RowRoots): PlanRow[] {
+  const { installRoot } = roots;
   type Group = { action: PlanAction; items: PlanChange[] };
   const groups = new Map<string, Group>();
   for (const file of files) {
@@ -205,7 +209,7 @@ function groupRows(files: PlanChange[], verbose: boolean, installRoot: string): 
       const common = commonDirectory(group.items.map((item) => item.path));
       rows.push({
         action: group.action,
-        path: relativeToRoot(common, installRoot, true),
+        path: relativeToRoot(common, roots, true),
         fileCount: group.items.length,
         capabilities,
         notice: false,
@@ -215,7 +219,7 @@ function groupRows(files: PlanChange[], verbose: boolean, installRoot: string): 
     for (const item of group.items) {
       rows.push({
         action: item.action,
-        path: relativeToRoot(item.path, installRoot, false),
+        path: relativeToRoot(item.path, roots, false),
         fileCount: 1,
         capabilities: [...item.capabilities].sort(),
         notice: false,
@@ -237,10 +241,19 @@ function commonDirectory(paths: readonly string[]): string {
   return shared.join(path.sep);
 }
 
-function relativeToRoot(filePath: string, installRoot: string, directory: boolean): string {
-  const relative = path.relative(installRoot, filePath);
+/** The roots a plan row's path is shown against: its destination's install root and its scope root. */
+type RowRoots = { installRoot: string; scopeRoot: string };
+
+/**
+ * A row's path relative to the install root its destination heading shows. A file elsewhere in the
+ * scope root, such as a project's `opencode.json` or `.mcp.json` beside `.opencode/` or `.claude/`,
+ * keeps its `../` so it does not read as a file inside the install root.
+ */
+function relativeToRoot(filePath: string, roots: RowRoots, directory: boolean): string {
   const value =
-    relative.length > 0 && !relative.startsWith("..") ? relative : displayPath(filePath);
+    isStrictlyInside(filePath, roots.installRoot) || isStrictlyInside(filePath, roots.scopeRoot)
+      ? path.relative(roots.installRoot, filePath)
+      : displayPath(filePath);
   return directory ? `${value}${path.sep}` : value;
 }
 

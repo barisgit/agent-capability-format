@@ -5,11 +5,11 @@ Plan: 7 changes
 
 project  .
   claude  .claude
+    ~ ../.mcp.json                                                  review
     + .acf/marketplace/.claude-plugin/marketplace.json
     + .acf/marketplace/plugins/review/.claude-plugin/plugin.json    review
     + .acf/marketplace/plugins/review/.mcp.json                     review
     + .acf/marketplace/plugins/review/skills/review/SKILL.md        review
-    ~ .mcp.json                                                     review
     - skills/review/ACF-MANAGED.md                                  review
     ~ managed notices
 

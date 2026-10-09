@@ -127,6 +127,21 @@ test("diagnostics keep a leading target id or file name as written", async () =>
   }
 });
 
+test("a plan shows a file written outside its install root by its real path", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "opencode"];
+    const result = await runCaplet(scope, ["apply", "-n", ...args]);
+
+    expect(result.stdout).toMatch(/\+ \.\.\/opencode\.json/);
+    await runCaplet(scope, ["apply", ...args]);
+    expect(await Bun.file(path.join(scope.cwd, "opencode.json")).exists()).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("emit dry-run uses the same change language without writing", async () => {
   const scope = await makeScope();
   try {
@@ -196,7 +211,7 @@ test("removing a capability's regions from shared files reads as an update", asy
 
     expect(result.exitCode).toBe(0);
     // .mcp.json and CLAUDE.md keep alpha-cap's content; only beta-cap's own file is deleted.
-    expect(result.stdout).toMatch(/~ \.mcp\.json\s+beta-cap/);
+    expect(result.stdout).toMatch(/~ \.\.\/\.mcp\.json\s+beta-cap/);
     expect(result.stdout).toMatch(/~ CLAUDE\.md\s+beta-cap/);
     expect(result.stdout).toMatch(/- agents\/beta-helper\.md\s+beta-cap/);
     expect(result.stdout).toContain("~ 3 update  - 1 delete");

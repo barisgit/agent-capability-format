@@ -5,7 +5,7 @@ Plan: 5 changes
 
 project  .
   claude  .claude
-    + .mcp.json                 alpha-cap, beta-cap
+    + ../.mcp.json              alpha-cap, beta-cap
     + CLAUDE.md                 alpha-cap, beta-cap
     + agents/alpha-helper.md    alpha-cap
     + agents/beta-helper.md     beta-cap
