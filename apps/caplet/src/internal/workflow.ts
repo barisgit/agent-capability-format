@@ -243,6 +243,11 @@ export async function buildEmitPlan(
       { lock },
     );
     diagnostics.push(...resolved.diagnostics);
+    // A capability's own validation errors gate the plan like any other error (SPEC.md §14.2);
+    // its warnings and info stay on the capability for check and show.
+    for (const capability of resolved.capabilities) {
+      diagnostics.push(...capability.diagnostics.filter((item) => item.severity === "error"));
+    }
     if (lock !== null) {
       const manifestDir = path.dirname(scopeRoot.manifestPath);
       const manifestSources = new Set(

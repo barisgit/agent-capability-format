@@ -1358,7 +1358,8 @@ caplet then marks the capability blocked for that target in `EmitPlan.blocked`
 (`apps/caplet/src/internal/workflow.ts`) and writes, updates, and removes
 nothing of it there. Other capabilities and targets apply, and the command
 exits 2 (`blockingExitCode` in `apps/caplet/src/internal/output.ts`). Any
-error other than a refusal stops apply, add, and update before writing.
+error other than a refusal, including a resolved capability's own validation
+errors, stops apply, add, and update before writing.
 
 ### 4.7 Native extras
 
