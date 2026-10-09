@@ -2862,7 +2862,11 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   declared output root of its target and scope; the root's sidecar and
   `ACF-MANAGED.md` included. A symlinked parent or file that leads
   outside, or dangles, fails that target before any write and names the
-  offending path.
+  offending path. A host file the driver only merges owned regions into
+  (`settings.json`, `CLAUDE.md`, `.mcp.json`, `config.toml`, ...) is
+  the user's: an existing link at that file itself, such as one into a
+  dotfiles checkout, is written through wherever it points; its parent
+  directories are still checked.
 - Adapters MUST preserve unowned content byte-for-byte in any file they
   patch. Reformatting outside owned regions is forbidden.
 - Adapters MUST emit the listed degradation diagnostics (`acf.adapter.*`,

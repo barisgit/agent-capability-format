@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyEmitPlan, buildEmitPlan } from "../../src/internal/workflow";
 import {
@@ -290,6 +290,37 @@ test("an owned file replaced by a symlink leaving the root fails Claude without 
   expect(json.diagnostics).toContainEqual(
     expect.objectContaining({ code: "acf.apply.outside-root", path: skill }),
   );
+});
+
+test("a merged host file linked into a dotfiles checkout is updated through the link", async () => {
+  expect((await applyProject(scope)).exitCode).toBe(0);
+  const mcpFile = path.join(scope.cwd, ".mcp.json");
+  const dotfile = path.join(scope.dir, "dotfiles", "mcp.json");
+  await mkdir(path.dirname(dotfile), { recursive: true });
+  await rename(mcpFile, dotfile);
+  await symlink(dotfile, mcpFile);
+  await writeText(
+    path.join(scope.sourceRoot, "alpha", "mcp", "mcp.yml"),
+    "servers:\n  - name: alpha-server\n    transport: stdio\n    command: node\n    args: [changed.js]\n",
+  );
+
+  expect(await reapply()).toBe(0);
+  expect((await lstat(mcpFile)).isSymbolicLink()).toBe(true);
+  expect(await readText(dotfile)).toContain("changed.js");
+
+  const removed = await runCaplet(scope, [
+    "remove",
+    "alpha-cap",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+  ]);
+
+  expect(removed.exitCode).toBe(0);
+  expect((await lstat(mcpFile)).isSymbolicLink()).toBe(true);
+  expect(await readText(dotfile)).not.toContain("alpha-server");
+  expect(await readText(dotfile)).toContain("beta-server");
 });
 
 test("a sidecar replaced by a symlink leaving the root fails that root without writing through it", async () => {

@@ -1,5 +1,6 @@
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
+import type { AcfOwnership } from "@caplet/core";
 
 /**
  * Where one target may write for one scope: whole directory trees (`roots`) and single files
@@ -8,32 +9,53 @@ import path from "node:path";
 export type OutputBoundary = { roots: readonly string[]; files: readonly string[] };
 
 /**
+ * How caplet owns a file: `file` when it owns the whole file (generated skill and plugin files,
+ * `ACF-MANAGED.md`, the sidecar), `regions` when it only merges owned regions into a host file
+ * the user owns (`settings.json`, `CLAUDE.md`, `.mcp.json`, `config.toml`, ...).
+ */
+export type FileOwnership = "file" | "regions";
+
+/** The ownership of a file caplet owns through `owns`; only owned regions make it `regions`. */
+export function fileOwnership(owns: readonly AcfOwnership[]): FileOwnership {
+  return owns.length > 0 && owns.every((own) => own.kind !== "file") ? "regions" : "file";
+}
+
+/**
  * Returns why writing or deleting `filePath` would leave `boundary`, or `null` when it stays
- * inside. The path is followed through every existing symbolic link, the file itself included,
- * because writing and changing the mode of a link follow it: a parent or file link that points
- * outside its root is a violation, and so is a dangling one, which a write would create wherever
- * it points. The root itself may be a link (a dotfiles checkout, for example) and is compared by
- * its resolved location; a declared file (`boundary.files`) must resolve to its own location.
+ * inside. Existing parent directories are followed through symbolic links, because writing below
+ * a link follows it: a parent that leads outside its root is a violation. The root itself may be
+ * a link (a dotfiles checkout, for example) and is compared by its resolved location.
+ *
+ * A link at the file itself is followed for a whole file, so it must resolve inside the root (a
+ * declared file, `boundary.files`, to its own location). For a region-merged file the link is the
+ * user's own setup, such as `settings.json` linked into a dotfiles checkout, and caplet writes
+ * through it wherever it points. A dangling link anywhere in the path is a violation either way,
+ * since a write would create a file wherever it points.
  */
 export async function containmentViolation(
   filePath: string,
   boundary: OutputBoundary,
+  ownership: FileOwnership,
 ): Promise<string | null> {
   const absolute = path.resolve(filePath);
   const resolved = await resolveExistingPrefix(absolute);
-  if (resolved === null) return `${filePath} has a dangling symbolic link in its path`;
-  for (const file of boundary.files) {
-    if (path.resolve(file) !== absolute) continue;
-    const location = await resolveExistingPrefix(path.dirname(absolute));
-    if (location !== null && path.join(location, path.basename(absolute)) === resolved) return null;
+  const parent = await resolveExistingPrefix(path.dirname(absolute));
+  if (resolved === null || parent === null) {
+    return `${filePath} has a dangling symbolic link in its path`;
+  }
+  // The file's own location: its parents followed, the file itself not.
+  const location = path.join(parent, path.basename(absolute));
+  const checked = ownership === "regions" ? location : resolved;
+  if (boundary.files.some((file) => path.resolve(file) === absolute) && checked === location) {
+    return null;
   }
   for (const root of boundary.roots) {
     const resolvedRoot = await resolveExistingPrefix(path.resolve(root));
-    if (resolvedRoot !== null && isStrictlyInside(resolved, resolvedRoot)) return null;
+    if (resolvedRoot !== null && isStrictlyInside(checked, resolvedRoot)) return null;
   }
-  return resolved === absolute
+  return checked === absolute
     ? `${filePath} is outside the output root`
-    : `${filePath} resolves outside the output root (to ${resolved})`;
+    : `${filePath} resolves outside the output root (to ${checked})`;
 }
 
 /**

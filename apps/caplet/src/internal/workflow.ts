@@ -51,7 +51,12 @@ import {
   contentEquals,
   resolveDiffPath,
 } from "../apply/apply-diffs.js";
-import { containmentViolation, type OutputBoundary } from "../apply/containment.js";
+import {
+  containmentViolation,
+  type FileOwnership,
+  fileOwnership,
+  type OutputBoundary,
+} from "../apply/containment.js";
 import {
   detectDrift,
   hashOwnedRegions,
@@ -1011,7 +1016,12 @@ async function outsideRootFailures(
   plan: ApplicablePlan,
   diagnostics: Diagnostic[],
 ): Promise<Set<string>> {
-  type Check = { installRoot: string; path: string; boundary: OutputBoundary };
+  type Check = {
+    installRoot: string;
+    path: string;
+    boundary: OutputBoundary;
+    ownership: FileOwnership;
+  };
   const owners = new Map<string, { label: string; targetId?: TargetId }>();
   const checks: Check[] = [];
   for (const item of plan.diffs) {
@@ -1026,6 +1036,7 @@ async function outsideRootFailures(
       installRoot: item.installRoot,
       path: resolveDiffPath(item.installRoot, item.diff.path),
       boundary: outputBoundary(item, plan.cwd),
+      ownership: fileOwnership(item.diff.owns),
     });
   }
   for (const root of plan.claude) {
@@ -1047,13 +1058,18 @@ async function outsideRootFailures(
   for (const installRoot of owners.keys()) {
     const boundary = { roots: [installRoot], files: [] };
     for (const file of [SIDECAR_FILENAME, MANAGEMENT_NOTICE_FILENAME]) {
-      checks.push({ installRoot, path: path.join(installRoot, file), boundary });
+      checks.push({
+        installRoot,
+        path: path.join(installRoot, file),
+        boundary,
+        ownership: "file",
+      });
     }
   }
   const blocked = new Set<string>();
   for (const check of checks) {
     if (blocked.has(check.installRoot)) continue;
-    const violation = await containmentViolation(check.path, check.boundary);
+    const violation = await containmentViolation(check.path, check.boundary, check.ownership);
     if (violation === null) continue;
     blocked.add(check.installRoot);
     const owner = owners.get(check.installRoot);

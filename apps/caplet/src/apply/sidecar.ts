@@ -12,7 +12,7 @@ import {
   type SidecarTarget,
   targetIds,
 } from "@caplet/core";
-import { containmentViolation, type OutputBoundary } from "./containment.js";
+import { containmentViolation, fileOwnership, type OutputBoundary } from "./containment.js";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
 /** The sidecar's file name directly under each output root it describes. */
@@ -106,11 +106,13 @@ export async function ownedPathViolations(
   boundary: OutputBoundary,
 ): Promise<string[]> {
   const violations: string[] = [];
-  const paths = new Set(
-    sidecar.managed.filter((entry) => entry.capability === capabilityName).map((e) => e.path),
-  );
-  for (const relativePath of paths) {
-    const violation = await containmentViolation(path.resolve(installRoot, relativePath), boundary);
+  const selected = sidecar.managed.filter((entry) => entry.capability === capabilityName);
+  for (const [relativePath, entries] of groupByPath(selected)) {
+    const violation = await containmentViolation(
+      path.resolve(installRoot, relativePath),
+      boundary,
+      fileOwnership(entries.flatMap((entry) => entry.owns)),
+    );
     if (violation !== null) violations.push(violation);
   }
   return violations;

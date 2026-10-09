@@ -1000,7 +1000,10 @@ the facet was not planned into that root. Before writing,
 each install root is checked against its output boundary (the root, a
 target's native skills root, and its MCP file), and so are the root's sidecar
 and `ACF-MANAGED.md`; an escape through a symlinked parent or a symlinked file
-fails that root with `acf.apply.outside-root`. `caplet remove` checks
+fails that root with `acf.apply.outside-root`. A link at a file caplet only
+merges regions into (every sidecar entry for it owns regions, none the whole
+file) is the user's and is written through (`containmentViolation` in
+`apps/caplet/src/apply/containment.ts`). `caplet remove` checks
 the same boundary for every root before changing anything.
 
 Adapters do not write the sidecar. Caplet writes it after applying diffs.
