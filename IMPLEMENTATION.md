@@ -3158,7 +3158,9 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
   exits 3 when the lockfile is stale. A plan that deletes files asks for
-  confirmation on a TTY unless `--yes` or `--json` is set.
+  confirmation on a TTY unless `--yes` or `--json` is set. Removing a
+  capability's regions from a shared file (a JSON key, a marker block) is
+  an update; only removing a whole owned file is a delete.
 
 ### 14.3 Inspection commands
 

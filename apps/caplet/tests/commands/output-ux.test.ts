@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { cleanup, makeScope, runCaplet, writeText } from "../helpers";
+import { applyProject, cleanup, makeScope, runCaplet, writeText } from "../helpers";
 
 test("fetch presents a clear command header and result summary", async () => {
   const scope = await makeScope();
@@ -147,6 +148,38 @@ test("apply connects the change plan to an applied summary", async () => {
     expect(result.stdout).toContain("Plan: 5 changes");
     expect(result.stdout).toContain("ok Applied 5 files (5 writes, 0 deletes)");
     expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("removing a capability's regions from shared files reads as an update", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    await writeFile(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, "alpha")}\n`,
+      "utf8",
+    );
+
+    const result = await runCaplet(scope, [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    // .mcp.json and CLAUDE.md keep alpha-cap's content; only beta-cap's own file is deleted.
+    expect(result.stdout).toMatch(/~ \.mcp\.json\s+beta-cap/);
+    expect(result.stdout).toMatch(/~ CLAUDE\.md\s+beta-cap/);
+    expect(result.stdout).toMatch(/- agents\/beta-helper\.md\s+beta-cap/);
+    expect(result.stdout).toContain("~ 3 update  - 1 delete");
   } finally {
     await cleanup(scope);
   }

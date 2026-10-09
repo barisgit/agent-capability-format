@@ -140,7 +140,7 @@ async function matchesPlan(diff: FileDiff, absolutePath: string): Promise<boolea
 }
 
 function driftDiagnostic(diff: FileDiff, absolutePath: string, capability: string): Diagnostic {
-  const action = diff.after === null ? "delete" : "update";
+  const action = diffAction(diff) === "delete" ? "delete" : "update";
   return {
     severity: "warn",
     code: "acf.apply.drift",
@@ -148,6 +148,17 @@ function driftDiagnostic(diff: FileDiff, absolutePath: string, capability: strin
     path: absolutePath,
     capability: { name: capability },
   };
+}
+
+/**
+ * What applying `diff` does to its file. Removing owned regions rewrites the file around them, so
+ * only a whole-file removal is a delete; a diff with no prior content creates the file.
+ */
+export function diffAction(
+  diff: Pick<FileDiff, "before" | "after" | "owns">,
+): "create" | "update" | "delete" {
+  if (diff.after === null) return isWholeFile(diff.owns) ? "delete" : "update";
+  return diff.before === null ? "create" : "update";
 }
 
 function isWholeFile(owns: readonly AcfOwnership[]): boolean {
