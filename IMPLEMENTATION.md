@@ -1765,7 +1765,7 @@ export const hookFileSchema = z.object({
   stop: z.array(hookEntrySchema).optional(),
   pre_compact: z.array(hookEntrySchema).optional(),
   targets: z
-    .record(z.string(), z.object({ hooks: z.record(z.string(), z.array(hookEntrySchema)).optional() }))
+    .record(z.string(), z.strictObject({ hooks: z.record(z.string(), z.array(hookEntrySchema)).optional() }))
     .optional(),
 })
 
@@ -1795,7 +1795,7 @@ export const mcpServerSchema = z.union([mcpStdioSchema, mcpHttpSchema])
 export const mcpFileSchema = z.object({
   servers: z.array(mcpServerSchema),
   targets: z
-    .record(z.string(), z.object({ servers: z.array(mcpServerSchema).optional() }))
+    .record(z.string(), z.strictObject({ servers: z.array(mcpServerSchema).optional() }))
     .optional(),
 })
 ```

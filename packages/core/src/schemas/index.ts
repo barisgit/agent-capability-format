@@ -197,10 +197,11 @@ export const hookFileSchema = z.object({
   post_tool: z.array(hookEntrySchema).optional(),
   stop: z.array(hookEntrySchema).optional(),
   pre_compact: z.array(hookEntrySchema).optional(),
+  // Strict, so an unknown key in a target block is reported (SPEC.md §7.3).
   targets: z
     .record(
       z.string(),
-      z.object({ hooks: z.record(z.string(), z.array(hookEntrySchema)).optional() }),
+      z.strictObject({ hooks: z.record(z.string(), z.array(hookEntrySchema)).optional() }),
     )
     .optional(),
 });
@@ -245,8 +246,9 @@ export const mcpServerSchema = mcpServerBaseSchema
 
 export const mcpFileSchema = z.object({
   servers: z.array(mcpServerSchema).default([]),
+  // Strict, so an unknown key in a target block is reported (SPEC.md §7.3).
   targets: z
-    .record(z.string(), z.object({ servers: z.array(mcpServerSchema).optional() }))
+    .record(z.string(), z.strictObject({ servers: z.array(mcpServerSchema).optional() }))
     .optional(),
 });
 

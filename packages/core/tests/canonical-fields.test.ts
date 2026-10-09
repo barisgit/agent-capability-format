@@ -346,3 +346,9 @@ test("a server may not reuse a name its target already receives", async () => {
     (cap) => expect(errors(cap)).toEqual(["acf.target.unknown-id"]),
   );
 });
+
+test("an unknown key in a family-level target block is reported", async () => {
+  await withCapability({ "mcp/mcp.yml": "targets:\n  codex:\n    server: []\n" }, (cap) =>
+    expect(errors(cap)).toEqual(["acf.target.extension.unknown-field"]),
+  );
+});

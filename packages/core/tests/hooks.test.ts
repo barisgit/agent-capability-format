@@ -29,3 +29,15 @@ test("duplicate hook family files are diagnosed", async () => {
     await cleanup(dir);
   }
 });
+
+test("an unknown key in a family-level target block is reported", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": baseManifest,
+    "hooks/hooks.yml": "targets:\n  claude:\n    hook: {}\n",
+  });
+  try {
+    expect(codes(cap)).toEqual(["acf.target.extension.unknown-field"]);
+  } finally {
+    await cleanup(dir);
+  }
+});

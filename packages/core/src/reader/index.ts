@@ -369,7 +369,11 @@ export async function readHooks(
   if (file === undefined) return undefined;
   const parsed = hookFileSchema.safeParse(await parseYamlFile(file, diagnostics));
   if (!parsed.success) {
-    pushZodIssues(diagnostics, parsed.error, file, { family: "hook" });
+    // Only the family-level target blocks reject unknown keys.
+    pushZodIssues(diagnostics, parsed.error, file, {
+      family: "hook",
+      unknownKeyCode: "acf.target.extension.unknown-field",
+    });
     return undefined;
   }
   const data = parsed.data;
@@ -401,7 +405,11 @@ export async function readMcp(
   if (file === undefined) return undefined;
   const parsed = mcpFileSchema.safeParse(await parseYamlFile(file, diagnostics));
   if (!parsed.success) {
-    pushZodIssues(diagnostics, parsed.error, file, { family: "mcp" });
+    // Only the family-level target blocks reject unknown keys.
+    pushZodIssues(diagnostics, parsed.error, file, {
+      family: "mcp",
+      unknownKeyCode: "acf.target.extension.unknown-field",
+    });
     return undefined;
   }
   const targets = parsed.data.targets as Record<string, { servers?: McpServer[] }> | undefined;
