@@ -734,8 +734,10 @@ refuses the server on every target. No other interpolation is performed by
 ACF, and validation rejects any other reference a writer target would expand
 in those MCP values (`acf.mcp.placeholder.pending`): `${...}` (Claude,
 Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode), and
-`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths. The
-Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
+`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths, also
+in a project's `.codex/config.toml`, because Codex resolves no relative MCP
+path against the config file (`plugin-interop-foundation` design.md D27.2).
+The Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
 `${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
 `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
 directory of the MCP file inside the capability (hooks keep a capability
