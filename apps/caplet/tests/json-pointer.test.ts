@@ -28,3 +28,10 @@ test("deleting a property that shares a line with a neighbor keeps the neighbor"
 test("deleting a property on its own line removes the whole line", () => {
   expect(deleteJsonPointerText('{\n  "a": 1,\n  "b": 2\n}\n', "/a")).toBe('{\n  "b": 2\n}\n');
 });
+
+test("deleting the last member keeps the closing bracket on its own line", () => {
+  expect(deleteJsonPointerText('{\n  "s": {\n    "b": 1,\n    "a": 2\n  }\n}\n', "/s/a")).toBe(
+    '{\n  "s": {\n    "b": 1\n  }\n}\n',
+  );
+  expect(deleteJsonPointerText('{"b":1,"a":2}', "/a")).toBe('{"b":1}');
+});

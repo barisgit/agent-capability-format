@@ -117,7 +117,7 @@ function removeMember(
 
   const previous = previousNonWhitespace(text, start, container.start);
   if (previous !== null && text[previous] === ",") {
-    return replaceRange(text, previous, consumeOneLineBreak(text, valueEnd), "");
+    return replaceRange(text, previous, valueEnd, "");
   }
 
   const close = findContainerClose(
