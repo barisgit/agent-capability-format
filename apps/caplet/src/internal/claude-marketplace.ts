@@ -6,6 +6,7 @@
 import path from "node:path";
 import {
   ACF_SYSTEM_OWNER,
+  CLAUDE_PLUGIN_MANIFEST,
   type ClaudeMarketplaceRecord,
   pluginMarketplaceDir,
   pluginPackageDir,
@@ -183,7 +184,7 @@ function ownsMarketplaceFile(
 
 /** The `version` an existing generated plugin declares, or undefined when there is none. */
 async function installedPluginVersion(dir: string): Promise<string | undefined> {
-  const text = await readTextIfExists(path.join(dir, ".claude-plugin", "plugin.json"));
+  const text = await readTextIfExists(path.join(dir, CLAUDE_PLUGIN_MANIFEST));
   if (text === null) return undefined;
   try {
     const parsed: unknown = JSON.parse(text);
