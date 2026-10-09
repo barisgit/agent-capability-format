@@ -14,8 +14,6 @@ import {
   type Diagnostic,
   type EmitInput,
   type EmitResult,
-  extraDropped,
-  extrasDialects,
   type FileContent,
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
@@ -23,8 +21,6 @@ import {
   type NativeRemainderComponent,
   nativeExtras,
   nativeFiles,
-  nativeFileTargets,
-  nativeTreeDropped,
   payloadDigestOfEntries,
   pluginPackageDir,
   type ReadOnlyFs,
@@ -37,7 +33,7 @@ import { type McpPlaceholderValues, renderNativeMcpServer } from "../common/mcp.
 import { isRecord } from "../common/records.js";
 import { renderNativeSkill } from "../common/skill-serializer.js";
 import { readSkillAssets } from "../common/skills.js";
-import type { EmitReport } from "../common/support-report.js";
+import { type EmitReport, reportPackageDrops } from "../common/support-report.js";
 import { renderMarkdownFile } from "../common/text.js";
 import { listTree, type TreeFile } from "../common/tree.js";
 import { CLAUDE_MANIFEST_PATH, pluginManifest, pluginVersion } from "./manifest.js";
@@ -293,7 +289,7 @@ async function generatedPackage(
   report: EmitReport,
 ): Promise<BuiltPackage> {
   const name = capability.manifest.name;
-  const subject: SupportSubject = {
+  const subject: SupportSubject & { family: "package" } = {
     capability: name,
     target: "claude",
     carrier: "plugin",
@@ -315,16 +311,7 @@ async function generatedPackage(
     if (bytes !== null)
       files.set(extra.path, { content: bytes, mode: (await fs.readMode(source)) ?? 0o644 });
   }
-  for (const owner of nativeFileTargets(capability))
-    if (owner !== "claude")
-      report.diagnostics.push(nativeTreeDropped({ capability: name, target: "claude" }, owner));
-  for (const dialect of extrasDialects(capability.manifest.targets)) {
-    if (dialect === "claude") continue;
-    for (const [key, value] of Object.entries(nativeExtras(capability.manifest.targets, dialect)))
-      report.diagnostics.push(
-        extraDropped({ ...subject, family: "package" }, { owner: dialect, key, value }),
-      );
-  }
+  reportPackageDrops(report, capability, subject);
 
   await addSkills(capability, fs, files, report);
   const mcp = await mcpConfig(capability, fs, rawManifest, report);
