@@ -1448,7 +1448,11 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   `bin/` entries for the change report and `--json` `executables`. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
-  component in a foreign Claude plugin, so both report alike. A stdio server's
+  component in a foreign Claude plugin, so both report alike; MCP servers from
+  `native/claude/.mcp.json` (and files the key names) and
+  `targets.claude.native.mcpServers` go through the Claude plugin reader, so each
+  server is listed by name, and a native server replaces the capability's
+  server of the same name. A stdio server's
   fingerprint covers the packaged files its command and arguments name through
   an ACF path placeholder or by a relative path under its `cwd` (exact files
   only, inside the snapshot). A plugin configuration component's fingerprint
