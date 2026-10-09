@@ -216,13 +216,21 @@ function scopeReport(
     }
     if (installed === undefined) return pluginReport(plugin, unreadState);
     if (options.preview === true) {
-      const current =
-        plugin.action === "other-scope"
-          ? others.find((p) => p.name === plugin.name)
-          : atScope.get(plugin.id);
-      return current === undefined
-        ? pluginReport(plugin, "not installed")
-        : pluginReport(plugin, enabledState(current), current);
+      if (plugin.action === "other-scope") {
+        const other = others.find((p) => p.name === plugin.name);
+        return other === undefined
+          ? pluginReport(plugin, "not installed")
+          : pluginReport(plugin, enabledState(other), other);
+      }
+      const current = atScope.get(plugin.id);
+      if (current === undefined) return pluginReport(plugin, "not installed");
+      const state = listedState(plugin, current);
+      if (state === "unknown") {
+        const step = plan.steps.find((item) => item.plugin === plugin.id);
+        const pending = step === undefined ? undefined : formatClaudeCommand(step.command);
+        diagnostics.push(versionMismatchDiagnostic(plugin, current, pending));
+      }
+      return pluginReport(plugin, state, current);
     }
     if (plugin.action === "other-scope") {
       const other = others.find((p) => p.name === plugin.name);
@@ -415,15 +423,24 @@ function dependsOn(plan: ClaudeScopePlan, j: number, i: number): boolean {
   return after.includes(i) || after.some((k) => dependsOn(plan, k, i));
 }
 
+/**
+ * Claude lists `entry` at another version than caplet generated. `pending` is the planned
+ * command a dry run or status did not run; without it the commands ran and Claude ignored them.
+ */
 function versionMismatchDiagnostic(
   plugin: PlannedClaudePlugin,
   entry: ClaudeInstalledPlugin,
+  pending?: string,
 ): Diagnostic {
+  const recovery =
+    pending === undefined
+      ? "Check that the marketplace directory lists the new version and re-run `caplet apply`."
+      : `\`caplet apply\` runs \`${pending}\`.`;
   return {
     severity: "warn",
     code: "acf.claude.version-mismatch",
     targetId: "claude",
-    message: `Claude reports \`${plugin.id}\` at version ${entry.version}, expected ${plugin.desiredVersion}, so it still serves the old content. Check that the marketplace directory lists the new version and re-run \`caplet apply\`.`,
+    message: `Claude reports \`${plugin.id}\` at version ${entry.version}, expected ${plugin.desiredVersion}, so it still serves the old content. ${recovery}`,
     data: { plugin: plugin.id, reported: entry.version, expected: plugin.desiredVersion },
   };
 }

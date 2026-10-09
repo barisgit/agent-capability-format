@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCli } from "../../../src/hosts/claude/cli.js";
 import { createClaudeHost } from "../../../src/hosts/claude/host.js";
-import { reconcileClaudeHost } from "../../../src/hosts/claude/reconcile.js";
+import { previewClaudeHost, reconcileClaudeHost } from "../../../src/hosts/claude/reconcile.js";
 import { claudeMarketplaceName } from "../../../src/hosts/claude/scope.js";
 import {
   type FakeTranscript,
@@ -381,5 +381,33 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
       ["acf.claude.other-scope", "info"],
     ]);
+  });
+});
+
+describe("previewClaudeHost", () => {
+  test("an outdated installed version is unknown with a mismatch warning, enabled or disabled", async () => {
+    for (const [fixture, version] of [
+      ["list-json-installed", "1.0.0+acf.aaa"],
+      ["list-json-disabled", "banana"],
+    ] as const) {
+      const fake = userFake([fixture, "marketplace-list-json"]);
+      const report = await previewClaudeHost(
+        createClaudeHost(fake.cli),
+        userScope([{ name: "probe", version: "1.0.0+acf.new" }]),
+      );
+      expect(fake.calls).toHaveLength(2);
+      expect(report.scopes[0]?.plugins[0]).toMatchObject({
+        action: "update",
+        state: "unknown",
+        version,
+        desiredVersion: "1.0.0+acf.new",
+      });
+      expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+        ["acf.claude.version-mismatch", "warn"],
+      ]);
+      expect(report.diagnostics[0]?.message).toContain(
+        "claude plugin update probe@acf-user --scope user",
+      );
+    }
   });
 });
