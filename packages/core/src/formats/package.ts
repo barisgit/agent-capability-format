@@ -61,7 +61,7 @@ export function foreignCapability(input: {
   mcp: McpFile | undefined;
   assets: AssetRef[];
   diagnostics: Diagnostic[];
-  source: Pick<CapabilitySource, "format" | "formatVersion">;
+  source: Pick<CapabilitySource, "format" | "formatVersion" | "renamedFrom">;
   remainder: NativeRemainderComponent[];
 }): AcfCapability {
   const source: CapabilitySource = {
@@ -70,6 +70,7 @@ export function foreignCapability(input: {
     snapshotRoot: input.root,
   };
   if (input.source.formatVersion !== undefined) source.formatVersion = input.source.formatVersion;
+  if (input.source.renamedFrom !== undefined) source.renamedFrom = input.source.renamedFrom;
   return {
     root: input.root,
     scope: input.options.scope,

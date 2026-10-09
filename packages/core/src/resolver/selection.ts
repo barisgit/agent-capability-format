@@ -44,8 +44,9 @@ const remainderFamily: Partial<Record<NativeRemainderKind, FacetFamily>> = {
  * a new capability; the input is not modified.
  *
  * Diagnostics: `acf.selection.unmatched` (warn) for a pattern that matches nothing, and
- * `acf.selection.remainder-references` (lossy) when exclusion removes something from a
- * package whose preserved native components may still reference it.
+ * `acf.selection.remainder-references` (lossy) when selection removes something from, or
+ * `rename` renamed, a package whose preserved native components may still reference the
+ * removed components or the old name.
  */
 export function applyEntrySelection(
   resolved: AcfCapability,
@@ -53,7 +54,7 @@ export function applyEntrySelection(
 ): { capability: AcfCapability; diagnostics: Diagnostic[] } {
   const capability = narrowTargets(resolved, selection);
   if (isEmpty(selection.include) && isEmpty(selection.exclude))
-    return { capability, diagnostics: [] };
+    return { capability, diagnostics: remainderReferences(capability, capability) };
   const matchers = {
     include: selectorMatcher("include", selection.include),
     exclude: selectorMatcher("exclude", selection.exclude),
@@ -81,19 +82,39 @@ export function applyEntrySelection(
   const diagnostics = [
     ...matchers.include.unmatched(capability),
     ...matchers.exclude.unmatched(capability),
+    ...remainderReferences(capability, selected),
   ];
-  const removed = countComponents(capability) - countComponents(selected);
+  return { capability: selected, diagnostics };
+}
+
+/**
+ * The `acf.selection.remainder-references` warning when `selected` keeps native remainder that
+ * was written against what selection removed from `capability` or against the package's name
+ * before `rename`; empty when neither applies.
+ */
+function remainderReferences(capability: AcfCapability, selected: AcfCapability): Diagnostic[] {
   const preserved = selected.remainder?.length ?? 0;
-  if (removed > 0 && preserved > 0) {
-    diagnostics.push({
+  const removed = countComponents(capability) - countComponents(selected);
+  const renamedFrom = capability.source?.renamedFrom;
+  if (preserved === 0 || (removed === 0 && renamedFrom === undefined)) return [];
+  const referenced = [
+    ...(removed > 0 ? [`the ${removed} component(s) include/exclude removed`] : []),
+    ...(renamedFrom === undefined ? [] : [`the package name ${renamedFrom} that rename replaced`]),
+  ];
+  return [
+    {
       severity: "lossy",
       code: "acf.selection.remainder-references",
-      message: `${capability.manifest.name} keeps ${preserved} native component(s) unchanged; they may still reference the ${removed} component(s) include/exclude removed`,
+      message: `${capability.manifest.name} keeps ${preserved} native component(s) unchanged; they may still reference ${referenced.join(" and ")}`,
       path: capability.root,
-      data: { capability: capability.manifest.name, removed, preserved },
-    });
-  }
-  return { capability: selected, diagnostics };
+      data: {
+        capability: capability.manifest.name,
+        removed,
+        preserved,
+        ...(renamedFrom === undefined ? {} : { renamedFrom }),
+      },
+    },
+  ];
 }
 
 function narrowTargets(capability: AcfCapability, entry: EntrySelection): AcfCapability {

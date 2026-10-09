@@ -126,7 +126,11 @@ export async function readAgentPluginsPackage(
     mcp,
     assets: await skillAssets(root, skills),
     diagnostics,
-    source: { format: "agent-plugins", formatVersion: "1.0" },
+    source: {
+      format: "agent-plugins",
+      formatVersion: "1.0",
+      renamedFrom: named.identity.renamedFrom,
+    },
     remainder,
   });
   return { capability, diagnostics };

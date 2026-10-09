@@ -122,6 +122,11 @@ export type CapabilitySource = {
   path: string;
   /** Absolute path of the immutable materialized snapshot of the package root. */
   snapshotRoot: string;
+  /**
+   * The source manifest's package name when the entry's `rename` changed it; absent otherwise.
+   * Preserved native files may still reference this name.
+   */
+  renamedFrom?: string | undefined;
 };
 
 /** Kinds of foreign components a reader preserves without projecting them. */

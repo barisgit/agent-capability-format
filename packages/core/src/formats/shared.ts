@@ -155,6 +155,8 @@ export type PackageIdentity = {
   version: string;
   /** The manifest version when it is not SemVer, for the source dialect's package values. */
   foreignVersion?: string | undefined;
+  /** The manifest name when `rename` replaced it. */
+  renamedFrom?: string | undefined;
 };
 
 /**
@@ -184,13 +186,15 @@ export function packageIdentity(input: {
       },
     };
   }
-  if (typeof input.version === "string" && isSemVer(input.version))
-    return { identity: { name, version: input.version } };
+  const semver =
+    typeof input.version === "string" && isSemVer(input.version) ? input.version : undefined;
   const identity: PackageIdentity = {
     name,
-    version: `0.0.0-unversioned+${buildIdentifier(input.revision)}`,
+    version: semver ?? `0.0.0-unversioned+${buildIdentifier(input.revision)}`,
   };
-  if (typeof input.version === "string") identity.foreignVersion = input.version;
+  if (semver === undefined && typeof input.version === "string")
+    identity.foreignVersion = input.version;
+  if (name !== input.manifestName) identity.renamedFrom = input.manifestName;
   return { identity };
 }
 

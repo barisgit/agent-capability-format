@@ -316,6 +316,7 @@ export type CapabilitySource = {
   formatVersion?: string     // "1.0" for Agent Plugins
   path: string               // package root relative to the source root, "." for the root
   snapshotRoot: string       // immutable materialized snapshot of that root
+  renamedFrom?: string       // manifest name when the entry's rename replaced it
 }
 
 export type NativeRemainderComponent = {
@@ -2065,8 +2066,10 @@ including `targets.<target>` entries; a foreign package's native agents,
 commands, hooks, and MCP servers are selected by name, and its other
 remainder kinds follow the package. A selector that matches nothing is
 `acf.selection.unmatched` (warn). When `include` or `exclude` removes a
-component from a package that keeps native remainder, the remainder may
-still reference it, which is `acf.selection.remainder-references` (lossy).
+component from a package that keeps native remainder, or `rename` replaced
+its name (`CapabilitySource.renamedFrom`), the remainder may still reference
+the removed component or the old name, which is
+`acf.selection.remainder-references` (lossy).
 
 YAML form (canonical):
 
@@ -2695,7 +2698,7 @@ acf.lock.digest-mismatch                     # snapshot no longer matches its pa
 
 # Selection
 acf.selection.unmatched                      # selector matches nothing (warn)
-acf.selection.remainder-references           # removed component may be referenced by remainder (lossy)
+acf.selection.remainder-references           # removed component or old name may be referenced by remainder (lossy)
 
 # Support registry and extras
 acf.support.refused                          # field or component refused; blocks the capability on the target (error)

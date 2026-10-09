@@ -94,6 +94,10 @@ When a transformation applies, the writer SHALL regenerate only the native carri
 - **WHEN** the entry excludes skill `draft` from a Claude plugin
 - **THEN** no file under `skills/draft/` appears in the generated plugin and the regenerated manifest does not list it
 
+#### Scenario: Renamed package with native remainder
+- **WHEN** the entry sets `rename: kit` on a Claude plugin named `review-kit` that has an agent
+- **THEN** resolution emits `acf.selection.remainder-references` (lossy) naming `review-kit`, because the preserved agent may still reference the old name
+
 ### Requirement: Native packages are foreign sources, not ACF source
 SPEC.md §14.4 and CONTEXT.md Axiom 12 SHALL be amended: native plugin packages MAY be read through a declared format reader as foreign sources, but SHALL NOT be accepted as ACF source. Native ACF capabilities keep YAML and Markdown as their authored format and carry native files only under `native/<target>/`.
 

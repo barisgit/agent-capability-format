@@ -100,6 +100,37 @@ test("selection reaches a foreign package's native remainder and warns about ref
   ]);
 });
 
+test("renaming a foreign package with native remainder warns that it may reference the old name", async () => {
+  const root = await tempDir();
+  dirs.push(root);
+  await makeCapability(root, {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "review-kit", version: "1.0.0" }),
+    "skills/review/SKILL.md": skill("review"),
+    "agents/reviewer.md": "---\nname: reviewer\n---\n",
+  });
+  const read = (rename?: string) =>
+    readClaudePluginPackage(root, {
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      revision: null,
+      rename,
+    });
+
+  const renamed = (await read("kit")).capability;
+  if (renamed === undefined) throw new Error("plugin did not load");
+  const { capability, diagnostics } = applyEntrySelection(renamed, {});
+  expect(capability.manifest.name).toBe("kit");
+  expect(diagnostics.map((diagnostic) => [diagnostic.severity, diagnostic.code])).toEqual([
+    ["lossy", "acf.selection.remainder-references"],
+  ]);
+  expect(diagnostics[0]?.message).toContain("review-kit");
+
+  // The locked name of an unrenamed package is its manifest name: no transformation.
+  const same = (await read("review-kit")).capability;
+  if (same === undefined) throw new Error("plugin did not load");
+  expect(applyEntrySelection(same, {}).diagnostics).toEqual([]);
+});
+
 test("entry only/except intersect with the capability's own applicability", async () => {
   const { cap, dir } = await readTempCapability({
     "acf.yml": `${baseManifest}except: [cursor]\n`,
