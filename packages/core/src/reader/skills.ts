@@ -23,6 +23,7 @@ const coreSkillKeys: ReadonlySet<string> = new Set([
   "compatibility",
   "metadata",
   "argument-hint",
+  "allowed-tools",
 ]);
 
 /**

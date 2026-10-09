@@ -95,7 +95,7 @@ test("a target's skill key in a native ACF skill fails and names its ACF spellin
     "description: S",
     "disable-model-invocation: true",
     "user-invocable: false",
-    "allowed-tools: Read Grep",
+    "model: opus",
     "when_to_use: Before a release",
     "version: 1.0.0",
     "---",
@@ -111,16 +111,28 @@ test("a target's skill key in a native ACF skill fails and names its ACF spellin
     expect(message("disable-model-invocation")).toContain("invocation.model: false");
     expect(about("user-invocable")).toEqual([["error", notCore]]);
     expect(message("user-invocable")).toContain("invocation.user: false");
-    expect(about("allowed-tools")).toEqual([["error", notCore]]);
-    for (const target of ["claude", "codex", "pi"]) {
-      expect(message("allowed-tools")).toContain(`targets.${target}.native.allowed-tools`);
-    }
+    expect(about("model")).toEqual([["error", notCore]]);
+    expect(message("model")).toContain("targets.claude.native.model");
     // Dropping a descriptive key changes no behavior, so it only warns.
     expect(about("when_to_use")).toEqual([["warn", notCore]]);
     expect(message("when_to_use")).toContain("targets.claude.native.when_to_use");
     // No target knows the key, so it is an ordinary unknown field.
     expect(about("version")).toEqual([["info", "acf.markdown.unknown-frontmatter-field"]]);
   });
+});
+
+test("top-level allowed-tools is the Agent Skills field, not a native key", async () => {
+  for (const value of ['"Read Grep"', "[Read, Grep]"]) {
+    const skill = `---\nname: s\ndescription: S\nallowed-tools: ${value}\n---\n`;
+    await withCapability({ "skills/s/SKILL.md": skill }, (cap) => {
+      expect(cap.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
+      expect(cap.skills[0]?.frontmatter["allowed-tools"]).toBeDefined();
+    });
+  }
+  await withCapability(
+    { "skills/s/SKILL.md": "---\nname: s\ndescription: S\nallowed-tools: 3\n---\n" },
+    (cap) => expect(errors(cap)).toEqual(["acf.markdown.invalid-frontmatter-field"]),
+  );
 });
 
 test("stdio server cwd starts with a capability or data directory placeholder or ./", async () => {

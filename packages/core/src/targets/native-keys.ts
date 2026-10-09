@@ -26,7 +26,6 @@ import type { TargetId } from "../types/model.js";
 export const pendingCoreFields: Readonly<Record<string, string>> = {
   "skill.display-name": "skill display name",
   "skill.paths": "path-scoped activation",
-  "skill.allowed-tools": "tool pre-approval",
   "skill.arguments": "declared arguments and body placeholders",
   "skill.context": "isolated execution",
   "skill.agent": "agent coupling",
@@ -74,6 +73,7 @@ const approvalMode = z.enum(["auto", "prompt", "writes", "approve"]);
 
 const descriptive = (value: z.ZodType): KeySpec => ({ class: "descriptive", value });
 const functional = (value: z.ZodType): KeySpec => ({ class: "functional", value });
+const granting = (value: z.ZodType): KeySpec => ({ class: "granting", value });
 const restricting = (value: z.ZodType): KeySpec => ({ class: "restricting", value });
 const gen = (safety: SafetyClass, field: string): KeySpec => ({
   class: safety,
@@ -108,7 +108,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
     arguments: pend("functional", "skill.arguments", strOrList),
     "disable-model-invocation": gen("restricting", "skill.invocation.model=false"),
     "user-invocable": gen("restricting", "skill.invocation.user=false"),
-    "allowed-tools": pend("granting", "skill.allowed-tools", strOrList),
+    "allowed-tools": granting(strOrList),
     "disallowed-tools": restricting(strOrList),
     model: functional(str),
     effort: functional(z.enum(["low", "medium", "high", "xhigh", "max"])),
@@ -123,7 +123,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
   // codex.md, SKILL.md and agents/openai.yaml; openai.yaml keys are dotted paths.
   codex: {
     ...AGENT_SKILLS_KEYS,
-    "allowed-tools": pend("granting", "skill.allowed-tools", strOrList),
+    "allowed-tools": granting(strOrList),
     "interface.display_name": pend("descriptive", "skill.display-name", str),
     "interface.short_description": descriptive(str),
     "interface.icon_small": descriptive(str),
@@ -160,7 +160,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
   // pi.md, Skills.
   pi: {
     ...AGENT_SKILLS_KEYS,
-    "allowed-tools": pend("granting", "skill.allowed-tools", strOrList),
+    "allowed-tools": granting(strOrList),
     "disable-model-invocation": gen("restricting", "skill.invocation.model=false"),
   },
 };

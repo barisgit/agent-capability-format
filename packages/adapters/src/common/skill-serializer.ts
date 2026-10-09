@@ -55,6 +55,7 @@ const sameKeyFields = [
   "compatibility",
   "metadata",
   "argument-hint",
+  "allowed-tools",
 ] as const;
 
 /** Invocation value conditions and the frontmatter spelling of their native cells. */
@@ -104,9 +105,11 @@ export function renderNativeSkill(
   const consider = (field: string): boolean =>
     considerField(result, subject, field)?.kind === "native";
 
+  const ownExtras = nativeExtras(skill.frontmatter.targets, target);
   for (const key of sameKeyFields) {
     const value = skill.frontmatter[key];
-    if (value !== undefined && consider(`skill.${key}`)) result.frontmatter[key] = value;
+    if (value === undefined || replacedByOwnExtra(target, ownExtras, key)) continue;
+    if (consider(`skill.${key}`)) result.frontmatter[key] = value;
   }
   for (const entry of invocationFields) {
     if (!entry.applies(skill) || !consider(entry.field)) continue;
@@ -127,7 +130,7 @@ export function renderNativeSkill(
       result.diagnostics.push(bodyPlaceholdersUnexpanded(subject, placeholders));
   }
 
-  for (const [key, value] of Object.entries(nativeExtras(skill.frontmatter.targets, target))) {
+  for (const [key, value] of Object.entries(ownExtras)) {
     // Core fields own their generated keys; validation reports an extra that repeats one.
     if (nativeKeyInfo(target, "skill", key)?.generatedFrom !== undefined) continue;
     if (target === "codex" && key.includes(".")) {
@@ -142,6 +145,23 @@ export function renderNativeSkill(
 
   if (Object.keys(metadata).length > 0) result.files[CODEX_SKILL_METADATA] = stringifyYml(metadata);
   return result;
+}
+
+/**
+ * True when the target's own native extra sets `key` and the target does not generate that key
+ * from the core field, so the extra is the target-specific value that replaces the core one
+ * (`targets.<t>.native.allowed-tools`, design D26). A generated key's extra is a validation
+ * conflict instead and never replaces the core value.
+ */
+function replacedByOwnExtra(
+  target: TargetId,
+  ownExtras: Readonly<Record<string, unknown>>,
+  key: string,
+): boolean {
+  return (
+    Object.hasOwn(ownExtras, key) &&
+    nativeKeyInfo(target, "skill", key)?.generatedFrom === undefined
+  );
 }
 
 /**

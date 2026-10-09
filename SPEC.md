@@ -593,8 +593,7 @@ ACF facets.
 ### 7.8 Pending core meanings
 
 A meaning that may satisfy the promotion rule (§7.1) but whose core contract
-is deferred is pending core: permission expressions such as skill
-`allowed-tools`, argument and body placeholder dialects, agent coupling,
+is deferred is pending core: host-neutral permission expressions, argument and body placeholder dialects, agent coupling,
 isolated execution, MCP requirements, path-scoped activation, MCP
 authentication and host-environment references, and the MCP meanings in
 §13a.4.2. It is authored with the target's `native` extras in the same
@@ -612,7 +611,8 @@ extra is dropped with `acf.extras.dropped` (`lossy`). An extra the registry
 classifies as `restricting`, with no core equivalent the target carries,
 instead refuses the component for that target (§14.3). Unclassified extras
 are dropped; `diagnostics.failOnLossy` and strict mode turn the drop into a
-failure. A grant such as `allowed-tools` never reaches another target.
+failure. A grant in an extra, such as `targets.claude.native.allowed-tools`,
+never reaches another target.
 
 ## 8. Facet families overview
 
@@ -671,6 +671,7 @@ lines. Required and optional frontmatter fields:
 | `compatibility`  | string      | no       | Environment requirements; at most 500 characters. |
 | `metadata`       | mapping     | no       | String keys to string values.                    |
 | `argument-hint`  | string      | no       | Hint shown for the skill's arguments.            |
+| `allowed-tools`  | string or list | no    | Agent Skills tool pre-approval (§9.3).           |
 | `assets`         | list        | no       | Explicit asset references (§16).                 |
 | `only`           | list        | no       | Target applicability (§6).                       |
 | `except`         | list        | no       | Target applicability (§6).                       |
@@ -710,6 +711,18 @@ keeps its other keys; a bundled value that contradicts a written one is
 `argument-hint` is native on Claude and dropped with a `lossy` diagnostic
 elsewhere.
 
+`allowed-tools` is the Agent Skills field (`granting`). It is written
+unchanged for Claude, on both carriers, because Claude reads the same field
+with the same spelling as a pre-approval; every other target drops it with
+the `lossy` `acf.support.degraded` diagnostic, which narrows what runs
+without asking and never widens it. Caplet never translates the value into
+another host's permission syntax. `targets.<target>.native.allowed-tools`
+sets a target-specific value: it replaces the top-level value on that
+target, which then reports no drop, and reaches no other target. Readers
+of Agent Plugins skills and bare imported skills read the field the same
+way; the Claude plugin reader keeps it as a Claude extra, with the same
+output.
+
 ### 9.4 Body
 
 The body of `SKILL.md` is plain CommonMark Markdown. It is the skill's
@@ -738,7 +751,8 @@ Avoid adding new generic helpers unless two call sites already need them.
 
 Target-native frontmatter keys are not core fields and MUST be authored as
 `targets.<target>.native` extras (§7.5). A top-level native key in ACF
-source is an `error` (`acf.skill.native-key-not-core`) naming its core
+source (`allowed-tools` is a core field, §9.2) is an `error`
+(`acf.skill.native-key-not-core`) naming its core
 equivalent or its extra form, for example `invocation.model: false` for
 `disable-model-invocation`; a descriptive native key such as Claude
 `when_to_use` only warns. Top-level `paths` is the `error`

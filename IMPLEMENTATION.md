@@ -405,6 +405,7 @@ export type SkillFacet = {
     compatibility?: string              // at most 500 characters
     metadata?: Record<string, string>
     "argument-hint"?: string
+    "allowed-tools"?: string | string[] // Agent Skills field; written for Claude only (D26)
   }>
   body: string                          // Markdown body after frontmatter
 }
@@ -1624,6 +1625,7 @@ export const skillFrontmatterSchema = z
     compatibility: z.string().max(500).optional(),
     metadata: z.record(z.string(), z.string()).optional(),
     "argument-hint": z.string().optional(),
+    "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
     assets: z.array(z.string()).optional(),
     only: z.array(slugSchema).optional(),
     except: z.array(slugSchema).optional(),

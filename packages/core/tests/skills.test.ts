@@ -62,8 +62,9 @@ test("import marker keeps every bare skill key: core, per target, or agent-plugi
   try {
     const frontmatter = cap.skills[0]?.frontmatter;
     expect(frontmatter?.invocation).toEqual({ model: false, user: false });
+    expect(frontmatter?.["allowed-tools"]).toBe("Read");
     const targets = frontmatter?.targets;
-    expect(nativeExtras(targets, "claude")).toEqual({ paths: ["src/**"], "allowed-tools": "Read" });
+    expect(nativeExtras(targets, "claude")).toEqual({ paths: ["src/**"] });
     expect(nativeExtras(targets, "cursor")).toEqual({});
     expect(nativeExtras(targets, "agent-plugins")).toEqual({ "x-team": "docs" });
     expect(codes(cap)).not.toContain("acf.markdown.unknown-frontmatter-field");

@@ -11,7 +11,7 @@ import { parseMarkdown } from "../reader/helpers.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
-import { isRecord, isSlug, isStringMap } from "../utils/guards.js";
+import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 import { filesUnder, isFile, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
@@ -61,11 +61,19 @@ export async function readForeignSkill(
   };
 }
 
-const AGENT_SKILL_KEYS = new Set(["name", "description", "license", "compatibility", "metadata"]);
+const AGENT_SKILL_KEYS = new Set([
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "allowed-tools",
+]);
 
 /** Agent Skills frontmatter: a closed set of checked keys; the rest are dialect extras. */
 function projectAgentSkill(raw: Record<string, unknown>, dirName: string): Frontmatter | string {
   const { name, description, license, compatibility, metadata } = raw;
+  const allowedTools = raw["allowed-tools"];
   if (typeof name !== "string" || !isSlug(name)) return "name must be a lowercase slug";
   if (name !== dirName) return `name ${name} does not match its directory ${dirName}`;
   if (typeof description !== "string" || description.length === 0 || description.length > 1024)
@@ -78,11 +86,18 @@ function projectAgentSkill(raw: Record<string, unknown>, dirName: string): Front
     return "compatibility must be a string of at most 500 characters";
   if (metadata !== undefined && !isStringMap(metadata))
     return "metadata must map strings to strings";
+  if (
+    allowedTools !== undefined &&
+    typeof allowedTools !== "string" &&
+    !isStringArray(allowedTools)
+  )
+    return "allowed-tools must be a string or a list of strings";
 
   const frontmatter: Frontmatter = { name, description };
   if (license !== undefined) frontmatter.license = license;
   if (compatibility !== undefined) frontmatter.compatibility = compatibility;
   if (metadata !== undefined) frontmatter.metadata = metadata;
+  if (allowedTools !== undefined) frontmatter["allowed-tools"] = allowedTools;
   return withExtras(frontmatter, raw, AGENT_SKILL_KEYS, "agent-plugins");
 }
 

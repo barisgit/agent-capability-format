@@ -45,11 +45,11 @@ Each core field and each support-table cell SHALL cite the documented contract i
 A meaning that satisfies or may satisfy the promotion rule but whose core contract this change defers (permission expressions, argument and body placeholder dialects, agent coupling, path-scoped activation, MCP authentication and host-environment references, and the meanings listed in the skill and MCP capabilities) SHALL be listed as pending core. Native ACF SHALL be able to author a pending meaning for each target through that target's inline or file extras, with the same native spelling a foreign package would use; validation SHALL report `acf.core.pending` as `info` naming the future core field. When a later change promotes the meaning, that change SHALL define the migration from the per-target extras to the core field, and an extra that then duplicates a promoted core field SHALL be `acf.extras.conflict`.
 
 #### Scenario: Author uses a pending meaning as an extra
-- **WHEN** an ACF skill declares `targets.claude.native.allowed-tools: "Bash(git status *)"` and is emitted for Claude and Codex
-- **THEN** validation reports `acf.core.pending` as `info`, the Claude SKILL.md contains the same `allowed-tools` value, and the Codex skill omits it with `acf.extras.dropped`
+- **WHEN** an ACF skill declares `targets.claude.native.context: fork` and is emitted for Claude and Codex
+- **THEN** validation reports `acf.core.pending` as `info`, the Claude SKILL.md contains the same `context` value, and the Codex skill omits it with `acf.extras.dropped`
 
 #### Scenario: Imported pending meaning survives same-format output
-- **WHEN** an unchanged Claude plugin whose skill declares `allowed-tools` is installed for Claude
+- **WHEN** an unchanged Claude plugin whose skill declares `context: fork` is installed for Claude
 - **THEN** the emitted skill file is byte-identical to the source file
 
 ### Requirement: Native ACF expressiveness parity
