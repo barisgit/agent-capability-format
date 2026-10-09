@@ -22,6 +22,13 @@ For the Claude plugin carrier, caplet SHALL write one Claude plugin per capabili
 - **WHEN** ACF capability `review` version `1.2.0` with one skill and one stdio server is applied for Claude at project scope
 - **THEN** `.claude/.acf/marketplace/plugins/review/` contains `.claude-plugin/plugin.json` with `"name": "review"` and a version starting `1.2.0+acf.`, `skills/<skill>/SKILL.md` and `.mcp.json`
 
+### Requirement: Claude configuration in a native ACF root
+When caplet writes a native ACF capability as a Claude plugin, it SHALL leave out of the plugin each root entry Claude would read as plugin configuration (`.claude-plugin/`, `.mcp.json`, `.lsp.json`, `settings.json`, `output-styles/`) and report each with an `info` diagnostic `acf.claude.plugin-file-ignored` that names the entry and points to `native/claude/`, where files for the capability's Claude plugin belong (SPEC.md §14.4). The capability's own `plugin.json` and `.mcp.json` are generated from `acf.yml` and its MCP servers. Claude plugin and Agent Plugins sources are not affected: those files are their own configuration.
+
+#### Scenario: Native ACF capability with a .claude-plugin directory
+- **WHEN** ACF capability `review` has a `.claude-plugin/` directory at its root and is applied for Claude with the plugin carrier
+- **THEN** the generated plugin's `.claude-plugin/` holds only the generated `plugin.json`, and the plan shows `acf.claude.plugin-file-ignored` for `.claude-plugin` with a hint to use `native/claude/`
+
 ### Requirement: Claude capabilities eligible for the plugin carrier
 A capability SHALL use the Claude plugin carrier when every Claude-selected component is a skill, an MCP server, Claude native remainder, or a `native/claude/` file. A native ACF capability that also selects agents, commands, hooks or instructions for Claude SHALL stay whole on the loose Claude carrier with an `info` diagnostic `acf.claude.legacy-carrier`; caplet SHALL NOT split one capability across both carriers.
 
