@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { CapabilityEntry, SourceSpec } from "@caplet/core";
+import type { CapabilitiesLock, CapabilityEntry, SourceSpec } from "@caplet/core";
 
 // The lock schema lives in @caplet/core so core, the installer and caplet share one
 // definition; these re-exports keep the installer's public surface unchanged.
@@ -12,6 +12,14 @@ export {
   sortLockEntries,
   writeLockfile,
 } from "@caplet/core";
+
+/**
+ * The `acf` version a lockfile declares. `readLockfile` types it as `1` but passes a
+ * future version through so drift detection can report `acf.lock.unsupported-version`.
+ */
+export function lockVersion(lock: CapabilitiesLock): number {
+  return (lock as { acf: number }).acf;
+}
 
 export function canonicalizePathLocation(location: string, baseDir = process.cwd()): string {
   if (location === "~") return homedir();

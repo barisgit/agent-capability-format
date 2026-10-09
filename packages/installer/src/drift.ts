@@ -1,6 +1,6 @@
 import type { CapabilitiesYml, CapabilityEntry, Diagnostic, EntrySelection } from "@caplet/core";
 import type { CapabilitiesLock, LockEntry } from "./lockfile.js";
-import { entrySourceId, sourceId } from "./lockfile.js";
+import { entrySourceId, lockVersion, sourceId } from "./lockfile.js";
 
 export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | null): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
@@ -152,8 +152,4 @@ function missingEntryDiagnostic(sourceIdValue: string): Diagnostic {
     message: `capabilities.lock is missing ${sourceIdValue}`,
     data: { sourceId: sourceIdValue },
   };
-}
-
-function lockVersion(lock: CapabilitiesLock): number {
-  return (lock as { acf: number }).acf;
 }

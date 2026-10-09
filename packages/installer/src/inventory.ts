@@ -12,6 +12,7 @@ import {
   selectSourceFormat,
   skillFrontmatterSchema,
 } from "@caplet/core";
+import { isErrno } from "./errno.js";
 
 export type SourceCapabilityCandidate = {
   /**
@@ -226,10 +227,6 @@ async function isRegularFile(candidate: string): Promise<boolean> {
     if (isErrno(error, "ENOENT")) return false;
     throw error;
   }
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 /** The error for a bare skill whose frontmatter is malformed YAML or fails its schema. */

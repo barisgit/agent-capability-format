@@ -10,6 +10,7 @@ import {
   selectorKeys,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
+import { isErrno } from "./errno.js";
 import { entrySourceId } from "./lockfile.js";
 
 export async function readCapabilitiesYml(
@@ -161,8 +162,4 @@ function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string):
 
 function emptyCapabilitiesYml(): CapabilitiesYml {
   return { acf: 1, capabilities: [] };
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

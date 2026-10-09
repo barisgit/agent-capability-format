@@ -12,6 +12,7 @@ import {
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
+import { isErrno } from "./errno.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
 import {
   inspectSource,
@@ -25,6 +26,7 @@ import {
   canonicalizePathLocation,
   entrySourceId,
   type LockEntry,
+  lockVersion,
   readLockfile,
   sourceId,
   sourceString,
@@ -678,12 +680,4 @@ function byRecordName(a: CapabilityRecord, b: CapabilityRecord): number {
 
 function emptyTreeHash(): string {
   return "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-}
-
-function lockVersion(lock: CapabilitiesLock): number {
-  return (lock as { acf: number }).acf;
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
