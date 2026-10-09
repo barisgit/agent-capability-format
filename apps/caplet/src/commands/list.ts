@@ -1,5 +1,10 @@
 import path from "node:path";
-import { type AcfCapability, type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
+import {
+  type AcfCapability,
+  type Diagnostic,
+  hookEntries,
+  resolveScopeCapabilities,
+} from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope } from "../internal/args.js";
@@ -91,7 +96,7 @@ function describeCapability(capability: AcfCapability): {
     ["agents", capability.agents.length],
     ["commands", capability.commands.length],
     ["instructions", capability.instructions.length],
-    ["hooks", Object.values(capability.hooks?.buckets ?? {}).flat().length],
+    ["hooks", hookEntries(capability.hooks).length],
     ["mcp", capability.mcp?.servers.length ?? 0],
   ]
     .filter((item) => item[1] !== 0)

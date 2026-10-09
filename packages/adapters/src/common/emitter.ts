@@ -17,6 +17,7 @@ import {
   type HookEntry,
   type HookRun,
   hookEffectMatrix,
+  hookEntries,
   type InstructionFacet,
   type ReadOnlyFs,
   type Scope,
@@ -241,6 +242,14 @@ export async function emitHooks(
   const beforeSettings = await fs.readText(settingsFile);
   let settings = beforeSettings;
   const entriesByNativeEvent = new Map<string, HookSettingsEntry[]>();
+  // Each entry with the native events it is written to: canonical types through the target's
+  // mapping, then target-native events (SPEC.md §13.9) as declared. The capability reaching this
+  // writer is already filtered to the entries that apply to its target.
+  const planned: Array<{
+    type: CanonicalHookType | undefined;
+    entry: HookEntry;
+    nativeEvents: readonly string[];
+  }> = [];
   for (const type of canonicalHookTypesInOrder()) {
     const entries = hooks.buckets[type] ?? [];
     const nativeEvents = targetMap[layout.targetId]?.mappings.hookEvents[type] ?? [];
@@ -254,29 +263,30 @@ export async function emitHooks(
       });
       continue;
     }
-    for (const entry of entries) {
-      const effect = degradeEffectIfNeeded(type, entry, layout.targetId, diagnostics);
-      const scriptPath = path.join(
-        hookDir,
-        `${input.capability.manifest.name}__${entry.name}${hookExtension(entry.run)}`,
+    for (const entry of entries) planned.push({ type, entry, nativeEvents });
+  }
+  for (const [event, entries] of Object.entries(hooks.native?.[layout.targetId] ?? {}))
+    for (const entry of entries) planned.push({ type: undefined, entry, nativeEvents: [event] });
+  for (const { type, entry, nativeEvents } of planned) {
+    const effect = degradeEffectIfNeeded(type, entry, layout.targetId, diagnostics);
+    const scriptPath = path.join(
+      hookDir,
+      `${input.capability.manifest.name}__${entry.name}${hookExtension(entry.run)}`,
+    );
+    const scriptBefore = await fs.readText(scriptPath);
+    diffs.push(makeFileDiff(scriptPath, scriptBefore, renderHookScript(entry), [{ kind: "file" }]));
+    for (const eventName of nativeEvents) {
+      const settingsEntry = hookSettingsEntry(
+        input.capability,
+        type,
+        eventName,
+        entry,
+        effect,
+        scriptPath,
       );
-      const scriptBefore = await fs.readText(scriptPath);
-      diffs.push(
-        makeFileDiff(scriptPath, scriptBefore, renderHookScript(entry), [{ kind: "file" }]),
-      );
-      for (const eventName of nativeEvents) {
-        const settingsEntry = hookSettingsEntry(
-          input.capability,
-          type,
-          eventName,
-          entry,
-          effect,
-          scriptPath,
-        );
-        const bucket = entriesByNativeEvent.get(eventName) ?? [];
-        bucket.push(settingsEntry);
-        entriesByNativeEvent.set(eventName, bucket);
-      }
+      const bucket = entriesByNativeEvent.get(eventName) ?? [];
+      bucket.push(settingsEntry);
+      entriesByNativeEvent.set(eventName, bucket);
     }
   }
   const owns: AcfOwnership[] = [];
@@ -422,7 +432,7 @@ function familyHasItems(cap: AcfCapability, family: FacetFamily): boolean {
     case "instruction":
       return cap.instructions.length > 0;
     case "hook":
-      return Object.values(cap.hooks?.buckets ?? {}).some((entries) => (entries?.length ?? 0) > 0);
+      return hookEntries(cap.hooks).length > 0;
     case "mcp":
       return (cap.mcp?.servers.length ?? 0) > 0;
   }
@@ -483,14 +493,18 @@ function fileContextPaths(trigger: unknown): string[] {
     : [];
 }
 
+/**
+ * The effect `entry` is written with: `observe` when its canonical hook type does not allow the
+ * declared effect or the target only partially supports hook effects. A target-native event
+ * (`type` undefined) has no canonical effect matrix.
+ */
 function degradeEffectIfNeeded(
-  type: CanonicalHookType,
+  type: CanonicalHookType | undefined,
   entry: HookEntry,
   targetId: TargetId,
   diagnostics: Diagnostic[],
 ): HookEffect {
-  const canonicalAllowed = hookEffectMatrix[type];
-  if (!canonicalAllowed.includes(entry.effect)) {
+  if (type !== undefined && !hookEffectMatrix[type].includes(entry.effect)) {
     pushLossy(diagnostics, {
       code: "acf.adapter.effect-degraded",
       message: `${entry.effect} is not portable for ${type}; emitted as observe`,
@@ -530,7 +544,7 @@ function renderHookScript(entry: HookEntry): string {
 
 function hookSettingsEntry(
   cap: AcfCapability,
-  type: CanonicalHookType,
+  type: CanonicalHookType | undefined,
   eventName: string,
   entry: HookEntry,
   effect: HookEffect,
@@ -552,7 +566,7 @@ function hookSettingsEntry(
   const out: HookSettingsEntry = {
     acfMarker: `acf:${cap.manifest.name}:${entry.name}`,
     name: entry.name,
-    type,
+    ...(type === undefined ? {} : { type }),
     event: eventName,
     effect,
     timeoutMs: entry.timeout ?? defaultHookTimeoutMs,
@@ -566,7 +580,8 @@ function hookSettingsEntry(
 type HookSettingsEntry = {
   acfMarker: string;
   name: string;
-  type: CanonicalHookType;
+  /** The canonical hook type; absent for a target-native event (SPEC.md §13.9). */
+  type?: CanonicalHookType | undefined;
   event: string;
   effect: HookEffect;
   timeoutMs: number;

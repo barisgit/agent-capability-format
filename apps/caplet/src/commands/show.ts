@@ -13,7 +13,7 @@ import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../inte
 import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { capabilitySummary } from "../internal/workflow.js";
+import { capabilitySummary, hookEvents } from "../internal/workflow.js";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
@@ -68,7 +68,7 @@ export const showCommand = defineCommand({
           ["agents", capability.agents.map((facet) => facet.name)],
           ["commands", capability.commands.map((facet) => facet.name)],
           ["instructions", capability.instructions.map((facet) => facet.name)],
-          ["hooks", Object.keys(capability.hooks?.buckets ?? {})],
+          ["hooks", hookEvents(capability)],
           // Servers for different targets may share a name (SPEC.md §13a.5).
           ["mcp", [...new Set(capability.mcp?.servers.map((server) => server.name))]],
         ];

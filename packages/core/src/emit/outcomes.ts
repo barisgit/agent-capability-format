@@ -12,6 +12,7 @@ import type {
   OutcomeFamily,
   TargetId,
 } from "../types/index.js";
+import { hookEntries } from "../types/index.js";
 
 /** Outcome kinds from best to worst; a component takes the worst outcome reported for it. */
 export const componentOutcomeKinds: readonly ComponentOutcomeKind[] = [
@@ -222,9 +223,7 @@ type Component = { family: OutcomeFamily; component: string };
 function listComponents(capability: AcfCapability): Component[] {
   const of = (family: OutcomeFamily, names: readonly string[]): Component[] =>
     names.map((component) => ({ family, component }));
-  const hooks = Object.values(capability.hooks?.buckets ?? {}).flatMap((entries) =>
-    (entries ?? []).map((entry) => entry.name),
-  );
+  const hooks = hookEntries(capability.hooks).map(({ entry }) => entry.name);
   return [
     ...of(
       "skill",

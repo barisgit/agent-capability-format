@@ -160,8 +160,16 @@ export const triggerInterruptDefaults = {
 export type HookFile = {
   path: string;
   buckets: Partial<Record<CanonicalHookType, HookEntry[]>>;
-  targets?: HookTargetExtensions | undefined;
+  /**
+   * The family-level `targets.<target>.hooks` (SPEC.md §13.9) by target, then native event name.
+   * The reader leaves out unknown targets and sets each entry's `only` to `<target>` intersected
+   * with its own `only`/`except`, so applicability treats it like a canonical entry.
+   */
+  native?: NativeHooks | undefined;
 };
+
+/** Target-native hook entries by target, then by the target's own event name. */
+export type NativeHooks = Partial<Record<TargetId, Record<string, HookEntry[]>>>;
 
 export type HookEntry = {
   name: Slug;
@@ -194,9 +202,32 @@ export type HookEffect =
   | "continue"
   | "block_result"
   | "decide";
-export type HookTargetExtensions = Partial<
-  Record<TargetId, { hooks?: Record<string, HookEntry[]> | undefined } & Record<string, unknown>>
->;
+/**
+ * One hook entry with the event it runs on: a canonical hook type, or, with `target` set, a
+ * native event of that target (SPEC.md §13.9).
+ */
+export type HookEventEntry =
+  | { type: CanonicalHookType; event: CanonicalHookType; entry: HookEntry; target?: undefined }
+  | { type?: undefined; event: string; entry: HookEntry; target: TargetId };
+
+/**
+ * Every entry of `hooks`: the canonical buckets in file order, then the native events of each
+ * target. Readers of the whole hook family use this, so native entries are never left out.
+ */
+export function hookEntries(hooks: HookFile | undefined): HookEventEntry[] {
+  if (hooks === undefined) return [];
+  const out: HookEventEntry[] = [];
+  for (const [type, entries] of Object.entries(hooks.buckets) as Array<
+    [CanonicalHookType, HookEntry[] | undefined]
+  >)
+    for (const entry of entries ?? []) out.push({ type, event: type, entry });
+  for (const [target, events] of Object.entries(hooks.native ?? {}) as Array<
+    [TargetId, Record<string, HookEntry[]> | undefined]
+  >)
+    for (const [event, entries] of Object.entries(events ?? {}))
+      for (const entry of entries) out.push({ event, entry, target });
+  return out;
+}
 
 export const hookEffectMatrix: Record<CanonicalHookType, readonly HookEffect[]> = {
   session_start: ["observe", "add_context"],

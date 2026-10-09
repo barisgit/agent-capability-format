@@ -1522,10 +1522,15 @@ targets:
           effect: observe
 ```
 
-Native entries reuse the canonical entry shape (`name`, `description`,
-`run`, `effect` where supported, `timeout`). Only the event key is
-non-portable. Their schema is validated by the target's hook extension
-schema (§7).
+Native entries reuse the canonical entry shape (§13.4) and get its
+checks, except the effect matrix (§13.7) and the required `match`, which
+belong to canonical hook types. Only the event key is non-portable; an
+unknown `<target>` is an error (§7.3). Readers give each entry the
+applicability `<target>` intersected with its own `only`/`except` (§6),
+so it is selected like a canonical entry and reaches only that target's
+hook writer, which writes it to the named native event as declared,
+after the canonical entries mapped to the same event. A target without
+hook support reports it like a canonical entry.
 
 Mixing canonical and target-native events for the same effect is allowed
 and is not deduplicated by ACF.

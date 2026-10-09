@@ -81,6 +81,17 @@ describe("executableComponents", () => {
     expect(await executableComponents(cap, "cursor")).toEqual([]);
   });
 
+  test("lists a family-level native hook only for the target it applies to", async () => {
+    const cap = await capability({
+      "acf.yml": baseManifest,
+      "hooks/hooks.yml":
+        "targets:\n  claude:\n    hooks:\n      InstructionsLoaded:\n        - name: extra\n          run:\n            command: ./extra.sh\n          effect: observe\n        - name: skipped\n          except: [claude]\n          run:\n            command: ./skipped.sh\n          effect: observe\n",
+    });
+    const claude = await executableComponents(cap, "claude");
+    expect(claude.map((item) => item.name)).toEqual(["InstructionsLoaded/extra"]);
+    expect(await executableComponents(cap, "codex")).toEqual([]);
+  });
+
   test("lists a foreign package's executable support files where a plugin carries them", async () => {
     const dir = await tempDir();
     dirs.push(dir);

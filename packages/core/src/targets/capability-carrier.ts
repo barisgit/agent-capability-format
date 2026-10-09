@@ -3,7 +3,7 @@
  * the target's default, except that the Claude plugin writer does not generate every component
  * family yet, so a capability with one of those stays whole on loose files.
  */
-import type { AcfCapability, Carrier, TargetId } from "../types/index.js";
+import { type AcfCapability, type Carrier, hookEntries, type TargetId } from "../types/index.js";
 import { carriersOf } from "./field-support.js";
 
 /**
@@ -14,11 +14,7 @@ export function claudeLegacyFamilies(capability: AcfCapability): string[] {
   const families: string[] = [];
   if (capability.agents.length > 0) families.push("agents");
   if (capability.commands.length > 0) families.push("commands");
-  if (
-    capability.hooks !== undefined &&
-    Object.values(capability.hooks.buckets).some((entries) => (entries?.length ?? 0) > 0)
-  )
-    families.push("hooks");
+  if (hookEntries(capability.hooks).length > 0) families.push("hooks");
   if (capability.instructions.length > 0) families.push("instructions");
   return families;
 }

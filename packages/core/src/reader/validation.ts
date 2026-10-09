@@ -1,9 +1,5 @@
 import path from "node:path";
-import {
-  type CanonicalHookType,
-  type CanonicalTriggerName,
-  isProvisionalOperation,
-} from "@caplet/runtime-taxonomy";
+import { type CanonicalTriggerName, isProvisionalOperation } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
 import { applicableTargets } from "../applicability/index.js";
 import { makeDiagnostic } from "../diagnostics/index.js";
@@ -13,11 +9,10 @@ import type {
   AcfCapability,
   Diagnostic,
   FacetFamily,
-  HookEntry,
   HookMatch,
   TargetExtensions,
 } from "../types/index.js";
-import { hookEffectMatrix, hookMatchRequired } from "../types/index.js";
+import { hookEffectMatrix, hookEntries, hookMatchRequired } from "../types/index.js";
 import { validateInlineExtras, validateNativeFileCollisions } from "./extras-rules.js";
 import { counts } from "./helpers.js";
 import { validateMcpServerValues } from "./mcp-rules.js";
@@ -37,38 +32,36 @@ export function validateCapability(cap: AcfCapability): void {
 function validateHookFile(cap: AcfCapability): void {
   const hooks = cap.hooks;
   if (hooks === undefined) return;
-  for (const [type, entries] of Object.entries(hooks.buckets) as Array<
-    [CanonicalHookType, HookEntry[] | undefined]
-  >) {
-    for (const entry of entries ?? []) {
-      if (!hookEffectMatrix[type].includes(entry.effect)) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.hook.effect.not-allowed",
-          message: `effect ${entry.effect} is not allowed for ${type}`,
-          path: hooks.path,
-          family: "hook",
-        });
-      }
-      if (hookMatchRequired.has(type) && isEmptyMatch(entry.match)) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.hook.match.required",
-          message: `${type} entries require a non-empty match`,
-          path: hooks.path,
-          family: "hook",
-        });
-      }
-      validateMatch(entry.match, hooks.path, cap.diagnostics);
-      if (entry.run.args !== undefined && entry.run.shell !== undefined) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.hook.run.args-and-shell",
-          message: "args and shell are mutually exclusive",
-          path: hooks.path,
-          family: "hook",
-        });
-      }
+  // The effect matrix and required `match` belong to canonical hook types; a native event
+  // (SPEC.md §13.9) gets only the entry-shape checks.
+  for (const { type, entry } of hookEntries(hooks)) {
+    if (type !== undefined && !hookEffectMatrix[type].includes(entry.effect)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.effect.not-allowed",
+        message: `effect ${entry.effect} is not allowed for ${type}`,
+        path: hooks.path,
+        family: "hook",
+      });
+    }
+    if (type !== undefined && hookMatchRequired.has(type) && isEmptyMatch(entry.match)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.match.required",
+        message: `${type} entries require a non-empty match`,
+        path: hooks.path,
+        family: "hook",
+      });
+    }
+    validateMatch(entry.match, hooks.path, cap.diagnostics);
+    if (entry.run.args !== undefined && entry.run.shell !== undefined) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.run.args-and-shell",
+        message: "args and shell are mutually exclusive",
+        path: hooks.path,
+        family: "hook",
+      });
     }
   }
 }
@@ -159,10 +152,8 @@ function validateOnlyExceptTargets(cap: AcfCapability): void {
       family: facet.family,
     });
   }
-  for (const entries of Object.values(cap.hooks?.buckets ?? {})) {
-    for (const entry of entries ?? [])
-      decls.push({ ...entry, path: cap.hooks?.path, family: "hook" });
-  }
+  for (const { entry } of hookEntries(cap.hooks))
+    decls.push({ ...entry, path: cap.hooks?.path, family: "hook" });
   for (const server of cap.mcp?.servers ?? []) {
     decls.push({ ...server, path: cap.mcp?.path, family: "mcp" });
   }
@@ -197,7 +188,7 @@ function validateTargetExtensions(cap: AcfCapability): void {
       path: "source" in facet ? facet.source.primary : facet.primaryFile,
     });
   }
-  for (const entry of Object.values(cap.hooks?.buckets ?? {}).flatMap((value) => value ?? [])) {
+  for (const { entry } of hookEntries(cap.hooks)) {
     checks.push({ family: "hook", targets: entry.targets, path: cap.hooks?.path });
   }
   for (const server of cap.mcp?.servers ?? []) {

@@ -20,6 +20,7 @@ import {
   executableChanges,
   executableComponents,
   type FileDiff,
+  hookEntries,
   readCapletConfig,
   resolveScopeCapabilities,
   type Scope,
@@ -1019,6 +1020,17 @@ function isCanonicalSkillPath(filePath: string, scopeRoot: ScopeRoot): boolean {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
+/**
+ * The hook events a capability declares, in file order: canonical hook types, then each
+ * target-native event as `<target>:<event>` (SPEC.md §13.9).
+ */
+export function hookEvents(capability: AcfCapability): string[] {
+  const events = hookEntries(capability.hooks).map(({ event, target }) =>
+    target === undefined ? event : `${target}:${event}`,
+  );
+  return [...new Set(events)];
+}
+
 export function capabilitySummary(
   capability: AcfCapability,
   targets: readonly TargetId[],
@@ -1034,7 +1046,7 @@ export function capabilitySummary(
       agents: capability.agents.map((facet) => facet.name),
       commands: capability.commands.map((facet) => facet.name),
       instructions: capability.instructions.map((facet) => facet.name),
-      hooks: Object.keys(capability.hooks?.buckets ?? {}),
+      hooks: hookEvents(capability),
       // Servers for different targets may share a name (SPEC.md §13a.5).
       mcp: [...new Set(capability.mcp?.servers.map((server) => server.name))],
     },

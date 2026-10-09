@@ -30,6 +30,7 @@ import type {
   Manifest,
   McpFile,
   McpServer,
+  NativeHooks,
   Scope,
   SkillFacet,
 } from "../types/index.js";
@@ -388,8 +389,55 @@ export async function readHooks(
   if (data.stop !== undefined) buckets.stop = data.stop as HookEntry[];
   if (data.pre_compact !== undefined) buckets.pre_compact = data.pre_compact as HookEntry[];
   const hookFile: HookFile = { path: file, buckets };
-  if (data.targets !== undefined) hookFile.targets = data.targets as HookFile["targets"];
+  const native = nativeHooks(
+    data.targets as Record<string, { hooks?: Record<string, HookEntry[]> }> | undefined,
+    file,
+    diagnostics,
+  );
+  if (native !== undefined) hookFile.native = native;
   return hookFile;
+}
+
+/**
+ * The family-level `targets.<target>.hooks` blocks (SPEC.md §13.9) as entries that apply to
+ * `<target>` only: an entry's own `only`/`except` narrows it, so its applicability becomes the
+ * intersection with `[<target>]`, possibly empty. An unknown block target id is reported and the
+ * block left out. Unknown entry target ids are reported here because the entry's own
+ * `only`/`except` does not survive into the model.
+ */
+function nativeHooks(
+  targets: Record<string, { hooks?: Record<string, HookEntry[]> }> | undefined,
+  file: string,
+  diagnostics: Diagnostic[],
+): NativeHooks | undefined {
+  if (targets === undefined) return undefined;
+  const unknownTarget = (id: string): void => {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.target.unknown-id",
+      message: `unknown target id: ${id}`,
+      path: file,
+      family: "hook",
+      targetId: id,
+    });
+  };
+  const out: NativeHooks = {};
+  for (const [target, block] of Object.entries(targets)) {
+    if (!isTargetId(target)) {
+      unknownTarget(target);
+      continue;
+    }
+    const events: Record<string, HookEntry[]> = {};
+    for (const [event, entries] of Object.entries(block.hooks ?? {})) {
+      events[event] = entries.map(({ only, except, ...entry }) => {
+        for (const id of [...(only ?? []), ...(except ?? [])])
+          if (!isTargetId(id)) unknownTarget(id);
+        return { ...entry, only: computeSet({ only, except }, [target]) };
+      });
+    }
+    out[target] = events;
+  }
+  return out;
 }
 
 export async function readMcp(

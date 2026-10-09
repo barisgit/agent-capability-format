@@ -553,7 +553,9 @@ export type HookFile = {
     stop?: HookEntry[]
     pre_compact?: HookEntry[]
   }
-  targets?: HookTargetExtensions
+  // Family-level targets.<target>.hooks by target, then native event name. Unknown targets
+  // are left out; each entry's only is <target> intersected with its own only/except (SPEC §13.9).
+  native?: Partial<Record<TargetId, Record<string, HookEntry[]>>>
 }
 
 export type HookEntry = {
@@ -1431,8 +1433,8 @@ generates from a core field is an `acf.extras.conflict` error.
 (`packages/core/src/targets/capability-carrier.ts`) decides the carrier of a
 capability already filtered by applicability for `target`: the configured
 carrier, else the target default, except that Claude falls back to `loose`
-when `claudeLegacyFamilies` finds agents, commands, non-empty hook buckets,
-or instructions. The Claude writer, the executable inventory
+when `claudeLegacyFamilies` finds agents, commands, hook entries (canonical
+or Claude-native, `hookEntries`), or instructions. The Claude writer, the executable inventory
 (`packages/core/src/emit/executables.ts`), and caplet's MCP conflict check
 (`apps/caplet/src/internal/mcp-conflicts.ts`) all call it, so reports and
 output agree. `targets.<id>.carrier` is validated against `carriersOf` when
@@ -1817,7 +1819,8 @@ function validateCapability(cap: AcfCapability): void {
 }
 ```
 
-Hook-specific validation:
+Hook-specific validation (native events, SPEC §13.9, get every check except
+the effect matrix and required `match`):
 
 ```ts
 function validateHookFile(cap: AcfCapability): void {
@@ -2060,7 +2063,11 @@ async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookF
     return undefined
   }
 
-  return { path: file, buckets: pickBuckets(parsed.data), targets: parsed.data.targets }
+  return {
+    path: file,
+    buckets: pickBuckets(parsed.data),
+    native: nativeHooks(parsed.data.targets, file, diagnostics), // acf.target.unknown-id
+  }
 }
 ```
 

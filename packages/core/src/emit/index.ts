@@ -13,6 +13,7 @@ import type {
   McpFile,
   TargetId,
 } from "../types/index.js";
+import { hookEntries } from "../types/index.js";
 
 export type {
   AcfManagedSidecar,
@@ -87,7 +88,16 @@ function filterHooks(capability: AcfCapability, targetId: TargetId): HookFile | 
     );
     if (kept.length > 0) buckets[type] = kept;
   }
-  return { ...hooks, buckets };
+  // Native events of other targets never apply here; the reader set each entry's `only`.
+  const events: Record<string, HookEntry[]> = {};
+  for (const [event, entries] of Object.entries(hooks.native?.[targetId] ?? {})) {
+    const kept = entries.filter((entry) => applicableTargets(capability, entry).includes(targetId));
+    if (kept.length > 0) events[event] = kept;
+  }
+  const { native: _native, ...rest } = hooks;
+  return Object.keys(events).length > 0
+    ? { ...rest, buckets, native: { [targetId]: events } }
+    : { ...rest, buckets };
 }
 
 function filterMcp(capability: AcfCapability, targetId: TargetId): McpFile | undefined {
@@ -113,7 +123,7 @@ function familyHasItems(
     case "instruction":
       return cap.instructions.length > 0;
     case "hook":
-      return Object.values(cap.hooks?.buckets ?? {}).some((entries) => (entries?.length ?? 0) > 0);
+      return hookEntries(cap.hooks).length > 0;
     case "mcp":
       return (cap.mcp?.servers.length ?? 0) > 0;
   }

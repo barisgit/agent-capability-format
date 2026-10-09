@@ -6,13 +6,13 @@ import { capabilityCarrier, remainderTargets, targetMap } from "../targets/index
 import type {
   AcfCapability,
   Carrier,
-  HookEntry,
   NativeRemainderComponent,
   NativeRemainderKind,
   Scope,
   SourceFormat,
   TargetId,
 } from "../types/index.js";
+import { hookEntries } from "../types/index.js";
 import { applyApplicability } from "./index.js";
 
 /** What kind of executing code a component is: a remainder kind, or a file with the executable bit. */
@@ -111,15 +111,7 @@ export async function executableComponents(
   if (targetMap[target]?.support.hook !== "none") {
     const hookDir =
       filtered.hooks === undefined ? filtered.root : path.dirname(filtered.hooks.path);
-    const hooks: Array<[string, HookEntry]> = [
-      ...Object.entries(filtered.hooks?.buckets ?? {}).flatMap(([event, entries]) =>
-        (entries ?? []).map((entry): [string, HookEntry] => [event, entry]),
-      ),
-      ...Object.entries(filtered.hooks?.targets?.[target]?.hooks ?? {}).flatMap(
-        ([event, entries]) => entries.map((entry): [string, HookEntry] => [event, entry]),
-      ),
-    ];
-    for (const [event, entry] of hooks) {
+    for (const { event, entry } of hookEntries(filtered.hooks)) {
       const { description: _description, ...executing } = entry;
       components.push({
         ...base,

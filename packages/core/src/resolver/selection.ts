@@ -9,7 +9,7 @@ import type {
   NativeRemainderKind,
   TargetId,
 } from "../types/index.js";
-import { selectorKeys } from "../types/index.js";
+import { hookEntries, selectorKeys } from "../types/index.js";
 
 /**
  * What a `capabilities.yml` entry installs of a resolved capability, as its lock entry
@@ -178,7 +178,7 @@ function componentNames(capability: AcfCapability, family: FacetFamily): string[
     case "instruction":
       return capability.instructions.map((facet) => facet.name);
     case "hook":
-      return [...hookEntries(capability.hooks).map((entry) => entry.name), ...native];
+      return [...hookEntries(capability.hooks).map(({ entry }) => entry.name), ...native];
     case "mcp":
       return [...(capability.mcp?.servers ?? []).map((server) => server.name), ...native];
   }
@@ -202,18 +202,17 @@ function selectHooks(
     if (kept.length > 0) buckets[type] = kept;
   }
   const selected: HookFile = { ...hooks, buckets };
-  if (hooks.targets !== undefined) {
-    selected.targets = Object.fromEntries(
-      Object.entries(hooks.targets).map(([target, extension]) => {
-        if (extension?.hooks === undefined) return [target, extension];
-        const events = Object.fromEntries(
-          Object.entries(extension.hooks).map(([event, entries]) => [
+  if (hooks.native !== undefined) {
+    selected.native = Object.fromEntries(
+      Object.entries(hooks.native).map(([target, events]) => [
+        target,
+        Object.fromEntries(
+          Object.entries(events ?? {}).map(([event, entries]) => [
             event,
             entries.filter((entry) => keep(entry.name)),
           ]),
-        );
-        return [target, { ...extension, hooks: events }];
-      }),
+        ),
+      ]),
     );
   }
   return selected;
@@ -222,14 +221,6 @@ function selectHooks(
 function selectMcp(mcp: McpFile | undefined, keep: (name: string) => boolean): McpFile | undefined {
   if (mcp === undefined) return undefined;
   return { ...mcp, servers: mcp.servers.filter((server) => keep(server.name)) };
-}
-
-function hookEntries(hooks: HookFile | undefined) {
-  const shared = Object.values(hooks?.buckets ?? {}).flatMap((entries) => entries ?? []);
-  const targeted = Object.values(hooks?.targets ?? {}).flatMap((extension) =>
-    Object.values(extension?.hooks ?? {}).flat(),
-  );
-  return [...shared, ...targeted];
 }
 
 /** `*` matches any run of characters and `?` exactly one; everything else is literal. */
