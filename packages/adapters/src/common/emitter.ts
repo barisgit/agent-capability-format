@@ -36,6 +36,7 @@ import {
   substituteStringArray,
   substituteStringRecord,
 } from "./placeholders.js";
+import { isRecord } from "./records.js";
 import { renderGeneratedMarkdown, renderMarkdownFile } from "./text.js";
 
 export type AdapterLayout = {
@@ -649,8 +650,4 @@ function canonicalHookTypesInOrder(): CanonicalHookType[] {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

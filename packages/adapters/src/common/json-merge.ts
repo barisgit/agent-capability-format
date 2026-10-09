@@ -1,4 +1,4 @@
-import { ownValue, setOwn } from "./records.js";
+import { isRecord, ownValue, setOwn } from "./records.js";
 
 type JsonContainer = Record<string, unknown> | unknown[];
 
@@ -357,10 +357,6 @@ function lineIndentAt(text: string, index: number): string {
 
 function isContainer(value: unknown): value is JsonContainer {
   return isRecord(value) || Array.isArray(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isArrayIndex(value: string): boolean {

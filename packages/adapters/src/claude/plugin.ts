@@ -34,6 +34,7 @@ import {
 import { makeFileDiff } from "../common/diff.js";
 import { mergeJson } from "../common/json-merge.js";
 import { type McpPlaceholderValues, renderNativeMcpServer } from "../common/mcp.js";
+import { isRecord } from "../common/records.js";
 import { renderNativeSkill } from "../common/skill-serializer.js";
 import { readSkillAssets } from "../common/skills.js";
 import type { EmitReport } from "../common/support-report.js";
@@ -556,10 +557,6 @@ function parseJsonObject(text: string | null): Record<string, unknown> | undefin
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function sameList(a: readonly string[], b: readonly string[]): boolean {
