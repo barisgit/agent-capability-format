@@ -177,3 +177,56 @@ Single dim line on TTY when a newer published version exists (npm registry check
 
 - Loose-skill backups in `/tmp/skills-migration-backup/` — delete after a week of stable use
 - `explain-canvas` skill: `tool/node_modules` excluded from migration; document install step in its SKILL.md or vendor a lockfile
+
+---
+
+## Plugin-Interop Foundation Follow-ups
+
+Open work found while finishing `plugin-interop-foundation`. Each entry: path, symptom, suspected cause.
+
+### Quality gates
+
+- **Cognitive complexity rule is off.** `biome.json` does not enable `complexity/noExcessiveCognitiveComplexity` (max 15); 24 functions exceed it, worst `validateActivationConstraints` (34, `packages/core/src/reader/validation.ts`), `tomlDefinesTable` (31, `packages/adapters/src/common/toml.ts`), `buildPlanView` (30, `apps/caplet/src/internal/plan-view.ts`), `unknownFlagError` (29, `apps/caplet/src/internal/spec.ts`). Split them, then enable the rule.
+- **Two apply flows.** `apps/caplet/src/commands/apply.ts` plans and applies on its own while `add`/`update` go through `planAndApply` in `apps/caplet/src/internal/apply-flow.ts`; fixes to one flow miss the other.
+- **Locale-dependent order in emitted bytes.** `localeCompare` still orders written output: `packages/adapters/src/claude/plugin.ts` (MCP server order in `.mcp.json` and the plugin version digest), `packages/adapters/src/common/{mcp,hooks,emitter,skills,assets}.ts`, `apps/caplet/src/internal/claude-marketplace.ts` (`marketplace.json`), core reader/format sorts. Output can differ between machines; use `compareCodeUnits`.
+
+### Correctness
+
+- **Unreadable lockfile is an internal error.** `readLockfile` (`packages/core/src/lock/index.ts`) rethrows everything but ENOENT, so a directory at the lock path surfaces as `acf.cli.internal` instead of a diagnostic, and `list` exits 0.
+- **Pending inline MCP server fingerprinted by the whole manifest.** `remainderExecutables` (`packages/core/src/emit/executables.ts`) fingerprints every file in a remainder component's `paths`; a foreign Claude plugin's pending server lists `.claude-plugin/plugin.json`, so a version-only bump reports an executable change. `nativeServerExecutables` already drops the manifest path; the foreign path should do the same.
+- **Root-layer config resolution can over-include ACF files.** `packageLayers` (`packages/core/src/emit/executables.ts`) falls back to the capability root without the `ACF_OWNED`/`CLAUDE_DISCOVERED` exclusions emission applies (`packages/adapters/src/claude/plugin.ts`), so a native key naming an ACF-owned path is fingerprinted though never copied. Errs toward reporting more.
+- **Loose hook pointers are positional.** `packages/adapters/src/common/hooks.ts` owns `/hooks/<event>/<index>`; when a user inserts or removes a hook before an owned one, the recorded pointer names the user's entry and the next apply can overwrite or remove it.
+- **`no-capabilities` severity differs.** `acf.resolve.no-capabilities` is `info` in `packages/core/src/resolver/index.ts` and `error` in `packages/installer/src/inventory.ts`; the same empty source passes or fails depending on the path taken.
+- **SDK omits native hooks.** `hookViews` (`packages/sdk/src/helpers/views.ts`) reads only `capability.hooks.buckets`, so `getHooks` misses hooks a capability ships under `targets.<id>.native` or as plugin remainder.
+- **Component name collisions across capabilities.** Only MCP servers (`apps/caplet/src/internal/mcp-conflicts.ts`) and whole capabilities (`acf.capability.name-collision`) are checked; two capabilities emitting the same skill, agent or command name silently overwrite one another.
+- **Remainder report rows keyed by name.** Two remainder components of different kinds with the same name share one row in the compatibility report (`apps/caplet/src/internal/compatibility.ts`).
+- **`caplet remove` is not atomic across roots.** `apps/caplet/src/commands/remove.ts` now refuses before changing anything when a root would be violated, but it rewrites the manifest before `applyEmitPlan`; a write failure in a later root leaves the manifest and earlier roots changed.
+- **Containment check races the write.** The containment preflight and the later write are separate steps (TOCTOU); a symlink swapped in between is followed.
+- **Dry run overstates gated deletions.** Without the Claude CLI, `apply --dry-run` and `status` (`apps/caplet/src/internal/claude-host-flow.ts`, `claude-gates.ts`) list deletions that the real apply would hold back.
+- **`--offline` with a missing snapshot.** `mode: "never"` in `packages/installer/src/resolve.ts` fetches nothing; an entry with no snapshot may be skipped without a diagnostic that names it. Not reproduced.
+- **`targets.<id>.out.<scope>` ignores native skill copies.** `apps/caplet/src/internal/workflow.ts` applies the override to generated output only; native skill copies keep the default location. Needs a SPEC decision on what `out` covers.
+- **`exclude` is not per target.** `packages/core/src/resolver/selection.ts` applies `include`/`exclude` to every target, but `acf.mcp.config-conflict` is per native MCP file (SPEC §13a.5) and names `exclude` as its recovery, so resolving a conflict in one target drops the server from all of them.
+- **Windows `claude` launcher.** `apps/caplet/src/hosts/claude/cli.ts` spawns `claude` without a shell, which cannot run the `claude.cmd` shim npm installs on Windows.
+- **Old lockfiles may hold credential URLs.** New sources with userinfo are rejected (`packages/installer/src/fetch.ts`, `apps/caplet/src/internal/manifest.ts`), but `parseLockEntry` accepts a lock written before that check and keeps the URL until the entry is rewritten.
+- **YAML merge keys in `agents/openai.yaml`.** `parseYaml` (`packages/core/src/yaml.ts`) does not enable merge keys, so `<<:` in a bundled `agents/openai.yaml` becomes a literal key. Codex's own handling is unverified.
+
+### Output and messages
+
+- **Reverse rename has no notice.** Moving a capability from plugin to loose output deletes the plugin and writes loose files with no notice of the switch, unlike the loose-to-plugin direction.
+- **Compatibility block repeats diagnostics.** The compatibility block and the diagnostics list can state the same fact twice (`apps/caplet/src/internal/compatibility.ts`).
+- **Placeholder description for imported skills.** A bare skill without `description` gets `Imported skill` (`packages/installer/src/inventory.ts`, `packages/core/src/reader/skills.ts`), which reaches agents as the skill's description; a missing description should be a warning that names the file.
+- **No `caplet add --format`.** A source whose format detection picks the wrong reader cannot be forced from the CLI (`apps/caplet/src/internal/spec.ts`).
+
+### Configuration
+
+- **`CLAUDE_CONFIG_DIR` read deep in the flow.** `apps/caplet/src/internal/claude-host-flow.ts` reads `process.env.CLAUDE_CONFIG_DIR`; read it once at the composition root and pass it in, so tests and hosts share one value.
+- **Pending change `claude-loose-hooks-repair`.** Its proposal predates the hook markers that carry the hook type or native event (`acf:<capability>:<type>:<name>`, `acf:<capability>:native:<event>:<name>`, plus the legacy `acf:<capability>:<name>` takeover in `packages/adapters/src/common/hooks.ts`); its tasks must migrate every marker form.
+
+Dropped as fixed: `research/plugin-interop/facets/distribution.md` lock-types row (the core and installer lock types are one schema; the row now says so).
+
+### Open product decisions
+
+- `-t/--target` is not persisted between runs; a later bare `apply` targets everything again.
+- Codex project config stores absolute paths, so a committed project config only works on the machine that wrote it.
+- The same capability declared at user and project scope installs twice in Claude.
+- An imported bare skill with an invalid native value fails the whole capability, while a Claude plugin component with the same value is dropped with a warning; pick one rule.
