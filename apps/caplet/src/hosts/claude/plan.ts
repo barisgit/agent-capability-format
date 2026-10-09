@@ -24,6 +24,7 @@ export type DesiredClaudeScope = {
  */
 export type ClaudePluginAction = "install" | "update" | "unchanged" | "uninstall" | "other-scope";
 
+/** The planned action for one plugin of the scope, desired or left over at caplet's identity. */
 export type PlannedClaudePlugin = {
   name: string;
   id: string;
@@ -44,6 +45,7 @@ export type PlannedClaudeStep = {
   after: number[];
 };
 
+/** The commands for one ACF scope, in run order, and what the plan found in host state. */
 export type ClaudeScopePlan = {
   target: ClaudeScopeTarget;
   claudeScope: ClaudeScope;

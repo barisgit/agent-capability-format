@@ -42,7 +42,10 @@ export type ClaudeGate =
 /** Whether a plugin's files under its package directory match what caplet recorded. */
 export type ClaudeFileState = "current" | "drifted" | "missing";
 
+/** A plugin's host report and, unless it is uninstalled, the state of its files. */
 export type ClaudePluginStatus = ClaudePluginReport & { files?: ClaudeFileState | undefined };
+
+/** A scope's host report with file states: the `--json` `claude` entry. */
 export type ClaudeScopeStatus = Omit<ClaudeScopeReport, "plugins"> & {
   plugins: ClaudePluginStatus[];
 };
@@ -209,7 +212,7 @@ export async function previewClaude(
 }
 
 /** Adds the file state of each plugin whose files the root should hold after apply. */
-export async function withFileStates(
+async function withFileStates(
   report: ClaudeHostReport,
   roots: readonly ClaudeRootPlan[],
 ): Promise<ClaudeReport> {

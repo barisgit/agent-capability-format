@@ -13,6 +13,7 @@ export type ClaudeCliOutcome =
  */
 export type ClaudeCli = (args: readonly string[]) => Promise<ClaudeCliOutcome>;
 
+/** Options of {@link execClaudeCli}. Caplet passes only `cwd`; tests set `binary` and `timeoutMs`. */
 export type ExecClaudeCliOptions = {
   /**
    * Working directory. Claude resolves `local` and `project` scope from it, so project-scope
@@ -21,7 +22,6 @@ export type ExecClaudeCliOptions = {
   cwd: string;
   /** Program to run; defaults to `claude` on `PATH`. */
   binary?: string | undefined;
-  env?: NodeJS.ProcessEnv | undefined;
   /** Kill the command after this long; defaults to two minutes (install fetches over the network). */
   timeoutMs?: number | undefined;
 };
@@ -34,7 +34,6 @@ export function execClaudeCli(options: ExecClaudeCliOptions): ClaudeCli {
     new Promise((resolve) => {
       const child = spawn(options.binary ?? "claude", [...args], {
         cwd: options.cwd,
-        env: options.env ?? process.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";

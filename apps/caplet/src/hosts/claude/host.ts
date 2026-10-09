@@ -19,7 +19,8 @@ import {
 /**
  * Why a host call failed. `unavailable`: the CLI is missing or cannot start, so registration is
  * the user's to do. `policy-blocked`: managed settings refuse the marketplace or plugin.
- * `unreadable`: a list command printed output caplet cannot parse.
+ * `failed`: the command exited non-zero or was killed. `unreadable`: a list command printed
+ * output caplet cannot parse.
  */
 export type ClaudeHostFailure =
   | { kind: "unavailable"; reason: "missing" | "failed-to-start"; message: string }
@@ -27,6 +28,7 @@ export type ClaudeHostFailure =
   | { kind: "failed"; message: string }
   | { kind: "unreadable"; message: string };
 
+/** A host call's value, or the failure it returned instead of throwing. */
 export type ClaudeHostResult<T> =
   | { ok: true; value: T }
   | { ok: false; failure: ClaudeHostFailure };

@@ -38,6 +38,7 @@ export type ClaudeRelease = {
   gate: ClaudeGate;
 };
 
+/** What {@link planClaudeMigration} split off a plan's gated retirements. */
 export type ClaudeMigration = { releases: ClaudeRelease[]; renames: ClaudeRename[] };
 
 /**

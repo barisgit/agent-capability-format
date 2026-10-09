@@ -1,5 +1,5 @@
 /**
- * The `claude` program subprocess tests put on `PATH` (see `claudeShim` in `claude-host.ts`).
+ * The `claude` program subprocess tests put on `PATH` (see `claudeShim` in `claude-path.ts`).
  * It replays the transcripts of the scenario file named by `CAPLET_FAKE_CLAUDE` with the same
  * code as the in-process fake, and appends each call to `<scenario>.calls.jsonl` so that later
  * invocations skip transcripts already replayed and the test can read what ran.

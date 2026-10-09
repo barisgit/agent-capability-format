@@ -1,6 +1,8 @@
+/**
+ * Host state as `claude plugin list --json`, `claude plugin marketplace list --json` and the
+ * Claude settings files report it, and the parsers that read it.
+ */
 import type { ClaudeScope } from "./commands.js";
-
-/** Host state as `claude plugin list --json` and `claude plugin marketplace list --json` report it. */
 
 /** One entry of `claude plugin list --json`. */
 export type ClaudeInstalledPlugin = {

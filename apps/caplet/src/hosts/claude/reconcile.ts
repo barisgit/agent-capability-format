@@ -33,6 +33,7 @@ export type ClaudeHostState =
   | "unknown"
   | "not installed";
 
+/** One plugin's planned action and the host state caplet reports for it. */
 export type ClaudePluginReport = {
   name: string;
   id: string;
@@ -49,6 +50,7 @@ export type ClaudePluginReport = {
 /** `not run`: planned but not attempted because the CLI is unavailable or state was unreadable. */
 export type ClaudeCommandStatus = "succeeded" | "failed" | "skipped" | "not run";
 
+/** One planned command, as a user can paste it, and what became of it. */
 export type ClaudeCommandReport = {
   op: ClaudeCommand["op"];
   command: string;
@@ -64,6 +66,7 @@ export type ClaudeLocalRegistration = {
   plugins: string[];
 };
 
+/** Host outcome of one ACF scope; the `--json` `claude` entry before file states are added. */
 export type ClaudeScopeReport = {
   scope: Scope;
   claudeScope: ClaudeScope;
@@ -81,10 +84,11 @@ export type ClaudeScopeReport = {
   stateRead: boolean;
 };
 
+/** Host outcome of every desired scope, with the diagnostics of the run. */
 export type ClaudeHostReport = { scopes: ClaudeScopeReport[]; diagnostics: Diagnostic[] };
 
 /** A host state read; a failure names the list command that failed. */
-export type ClaudeStateRead =
+type ClaudeStateRead =
   | { ok: true; value: ObservedClaudeState }
   | { ok: false; failure: ClaudeHostFailure; command: string };
 
@@ -92,7 +96,7 @@ export type ClaudeStateRead =
  * Reads `claude plugin list --json`, then `claude plugin marketplace list --json`, then the
  * settings files `marketplace remove` would edit.
  */
-export async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
+async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
   const plugins = await host.listPlugins();
   if (!plugins.ok) return { ...plugins, command: listCommand(LIST_PLUGINS_ARGS) };
   const marketplaces = await host.listMarketplaces();
