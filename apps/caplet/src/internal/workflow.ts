@@ -52,6 +52,11 @@ import {
   writeSidecar,
 } from "../apply/sidecar.js";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args.js";
+import {
+  type ClaudeRootPlan,
+  planClaudeMarketplaces,
+  recordClaudeMarketplaces,
+} from "./claude-marketplace.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
@@ -94,6 +99,8 @@ export type EmitPlan = {
   diffs: EmittedDiff[];
   /** Every plugin package the plan writes, whether or not its files changed. */
   plugins: PlannedPlugin[];
+  /** Claude install roots whose local marketplace the plan maintains or retires. */
+  claude: ClaudeRootPlan[];
   staleEntries: StaleSidecarEntry[];
   /**
    * Capabilities refused on a target: their earlier output there is kept as it was, so a later
@@ -328,6 +335,17 @@ export async function buildEmitPlan(
       }
     }
   }
+  const claude = await planClaudeMarketplaces({
+    roots: targets.includes("claude")
+      ? scopes.flatMap((scopeRoot) => {
+          const installRoot = installRootFor("claude", scopeRoot, configResult.config, cwd);
+          return installRoot === null ? [] : [{ scopeRoot, installRoot }];
+        })
+      : [],
+    plugins,
+    blocked,
+  });
+  desiredDiffs.push(...claude.diffs);
   const sweep = await sweepStaleSidecarEntries(
     scopes,
     targets,
@@ -356,6 +374,7 @@ export async function buildEmitPlan(
     diagnostics,
     diffs,
     plugins,
+    claude: claude.roots,
     staleEntries: sweep.staleEntries,
     blocked,
     outcomes: [...outcomes.values()],
@@ -664,6 +683,7 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
         !skipped.has(`${entry.installRoot}\u0000${entry.path}\u0000${entry.capability}`),
     ),
   );
+  await recordClaudeMarketplaces(plan.claude.filter((root) => !blockedRoots.has(root.installRoot)));
   return { results, diagnostics };
 }
 
@@ -862,19 +882,22 @@ type ApplyGroup = {
 function groupByApplyTarget(items: readonly EmittedDiff[]): ApplyGroup[] {
   const groups = new Map<string, ApplyGroup>();
   for (const item of items) {
-    const key = `${item.installRoot}\0${item.capabilityName}`;
+    // The owner is recorded on every entry a group writes, so it is part of the group key: the
+    // reserved owner writes the loose inventory and the plugin-carrier marketplace in one root.
+    const owner = sidecarOwner(item);
+    const key = `${item.installRoot}\0${item.capabilityName}\0${owner.target}\0${owner.carrier}`;
     const group = groups.get(key) ?? {
       installRoot: item.installRoot,
       capabilityName: item.capabilityName,
-      owner: sidecarOwner(item),
+      owner,
       diffs: [],
     };
     group.diffs.push(item.diff);
     groups.set(key, group);
   }
-  return [...groups.values()].sort((a, b) =>
-    `${a.installRoot}:${a.capabilityName}`.localeCompare(`${b.installRoot}:${b.capabilityName}`),
-  );
+  const order = (group: ApplyGroup) =>
+    `${group.installRoot}:${group.capabilityName}:${group.owner.target}:${group.owner.carrier}`;
+  return [...groups.values()].sort((a, b) => order(a).localeCompare(order(b)));
 }
 
 export type Reach = {

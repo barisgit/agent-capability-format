@@ -860,13 +860,16 @@ Shape:
 ```ts
 export type AcfManagedSidecar = {
   acf: 1
+  // Claude install roots only: caplet's local marketplace, while caplet owns its
+  // marketplace.json there, so a later apply also retires its registration.
+  marketplace?: { name: string; scope: "user" | "local" }
   managed: Array<{
     path: string             // relative to the sidecar directory
     owns: AcfOwnership[]
     capability: string       // capability name that produced this entry
     facet?: { family: FacetFamily; name: string }
     target?: TargetId | "canonical" // root owner; filled in on the next write
-    carrier?: Carrier        // "loose" for every output caplet writes today
+    carrier?: Carrier        // "plugin" inside a Claude plugin package or marketplace
     mode?: number            // POSIX permission bits of a whole-file entry
     hash: string             // sha256 of the rendered content for drift detection
   }>

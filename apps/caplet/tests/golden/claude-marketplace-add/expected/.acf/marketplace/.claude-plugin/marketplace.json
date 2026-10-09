@@ -1,0 +1,16 @@
+{
+  "name": "acf-project-<h>",
+  "owner": {
+    "name": "caplet"
+  },
+  "plugins": [
+    {
+      "name": "lint",
+      "source": "./plugins/lint"
+    },
+    {
+      "name": "review",
+      "source": "./plugins/review"
+    }
+  ]
+}

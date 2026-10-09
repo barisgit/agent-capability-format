@@ -191,7 +191,22 @@ function parseSidecar(value: unknown, sidecarPath: string): AcfManagedSidecar {
   if (!isRecord(value) || value.acf !== 1 || !Array.isArray(value.managed)) {
     throw new Error(`invalid ACF sidecar at ${sidecarPath}`);
   }
-  return { acf: 1, managed: value.managed.map((entry) => parseEntry(entry, sidecarPath)) };
+  const sidecar: AcfManagedSidecar = {
+    acf: 1,
+    managed: value.managed.map((entry) => parseEntry(entry, sidecarPath)),
+  };
+  if (value.marketplace !== undefined) {
+    const record = value.marketplace;
+    if (
+      !isRecord(record) ||
+      typeof record.name !== "string" ||
+      (record.scope !== "user" && record.scope !== "local")
+    ) {
+      throw new Error(`invalid sidecar marketplace at ${sidecarPath}`);
+    }
+    sidecar.marketplace = { name: record.name, scope: record.scope };
+  }
+  return sidecar;
 }
 
 function parseEntry(value: unknown, sidecarPath: string): ManagedEntry {
@@ -249,7 +264,13 @@ function parseOwnership(value: unknown): AcfOwnership {
 }
 
 function canonicalSidecar(sidecar: AcfManagedSidecar): AcfManagedSidecar {
-  return { acf: 1, managed: sortEntries(sidecar.managed.map(canonicalEntry)) };
+  return {
+    acf: 1,
+    ...(sidecar.marketplace === undefined
+      ? {}
+      : { marketplace: { name: sidecar.marketplace.name, scope: sidecar.marketplace.scope } }),
+    managed: sortEntries(sidecar.managed.map(canonicalEntry)),
+  };
 }
 
 function canonicalEntry(entry: ManagedEntry): ManagedEntry {

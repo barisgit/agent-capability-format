@@ -35,6 +35,6 @@ export function claudeMarketplaceName(target: ClaudeScopeTarget): string {
  * because Claude would write the marketplace's absolute path into the committed
  * `.claude/settings.json` at Claude `project` scope (D25).
  */
-export function claudeScopeFor(scope: Scope): ClaudeScope {
+export function claudeScopeFor(scope: Scope): Extract<ClaudeScope, "user" | "local"> {
   return scope === "user" ? "user" : "local";
 }

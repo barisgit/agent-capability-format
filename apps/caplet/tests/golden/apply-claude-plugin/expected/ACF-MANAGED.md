@@ -6,6 +6,10 @@ Do not edit listed artifacts or managed sections directly.
 To make changes, find the capability in `capabilities.yml`, edit its declared source,
 and run `caplet apply`.
 
+## `acf-system`
+
+- `.acf/marketplace/` (artifact directory)
+
 ## `review`
 
 - `.acf/marketplace/plugins/review/` (artifact directory)

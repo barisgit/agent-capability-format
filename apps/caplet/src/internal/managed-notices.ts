@@ -5,6 +5,7 @@ import {
   type Diagnostic,
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
+  pluginMarketplaceDir,
   type ReadOnlyFs,
   type RootInventoryArtifact,
   renderRootInventory,
@@ -76,10 +77,22 @@ export async function rootNoticeDiffFromSidecar(
   };
 }
 
-function artifactRootFromSidecar(
-  relativePath: string,
-  facet: AcfManagedSidecar["managed"][number]["facet"],
-): string | null {
+/** The marketplace directory relative to its install root, `.acf/marketplace`. */
+const MARKETPLACE_DIR = path.relative("/", pluginMarketplaceDir("/")).split(path.sep).join("/");
+
+/**
+ * The directory artifact a sidecar entry belongs to: a plugin package
+ * (`.acf/marketplace/plugins/<name>/`) or the marketplace itself for plugin-carrier entries,
+ * the skill directory for skill facets, and none otherwise.
+ */
+function artifactRootFromSidecar(entry: AcfManagedSidecar["managed"][number]): string | null {
+  const { path: relativePath, facet } = entry;
+  if (entry.carrier === "plugin" && relativePath.startsWith(`${MARKETPLACE_DIR}/`)) {
+    const [kind, name] = relativePath.slice(MARKETPLACE_DIR.length + 1).split("/");
+    return kind === "plugins" && name !== undefined
+      ? `${MARKETPLACE_DIR}/plugins/${name}/`
+      : `${MARKETPLACE_DIR}/`;
+  }
   if (facet?.family !== "skill") return null;
   const segments = relativePath.split("/");
   const index = segments.lastIndexOf(facet.name);
@@ -150,14 +163,15 @@ function inventoryArtifactsFromSidecar(
 ): RootInventoryArtifact[] {
   const artifacts: RootInventoryArtifact[] = [];
   for (const entry of sidecar.managed) {
+    // The marketplace is the one caplet-owned artifact the inventory lists.
     if (
-      entry.capability === ACF_SYSTEM_OWNER ||
+      (entry.capability === ACF_SYSTEM_OWNER && entry.carrier !== "plugin") ||
       path.basename(entry.path) === MANAGEMENT_NOTICE_FILENAME ||
       excluded.has(`${entry.capability}\0${entry.path}`)
     ) {
       continue;
     }
-    const facetRoot = artifactRootFromSidecar(entry.path, entry.facet);
+    const facetRoot = artifactRootFromSidecar(entry);
     artifacts.push({
       capability: entry.capability,
       path: facetRoot ?? entry.path,

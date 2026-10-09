@@ -178,9 +178,12 @@ export type SidecarTarget = TargetId | "canonical";
  * `.acf-managed.json`: what caplet owns under one output root (IMPLEMENTATION.md §4.2.2).
  * `target`, `carrier` and `mode` are absent only in sidecars written before
  * plugin-interop-foundation; caplet fills them in on its next write of the sidecar.
+ * `marketplace` is present only in a Claude install root whose local marketplace caplet
+ * maintains, so a later apply reconciles that registration even after the last plugin is gone.
  */
 export type AcfManagedSidecar = {
   acf: 1;
+  marketplace?: ClaudeMarketplaceRecord | undefined;
   managed: Array<{
     path: string;
     owns: AcfOwnership[];
@@ -193,6 +196,12 @@ export type AcfManagedSidecar = {
     hash: string;
   }>;
 };
+
+/**
+ * Caplet's Claude marketplace of one install root: its name (`acf-user`, `acf-project-<h>`) and
+ * the Claude scope caplet registers it at (claude-plugin-output, Scope mapping).
+ */
+export type ClaudeMarketplaceRecord = { name: string; scope: "user" | "local" };
 
 export type ScopeRoot = {
   scope: Scope;
