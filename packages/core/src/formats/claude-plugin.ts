@@ -9,6 +9,7 @@ import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
 import { nativeKeyClass, nativeKeyInfo, strictestClass } from "../targets/native-keys.js";
 import {
+  binComponentName,
   CLAUDE_PLUGIN_BIN_DIR,
   CLAUDE_PLUGIN_MANIFEST,
   claudePluginComponents,
@@ -345,7 +346,7 @@ async function binComponents(root: string): Promise<RemainderInput[]> {
   const files = await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR));
   return files.map((file) => ({
     kind: "bin",
-    name: path.posix.basename(file),
+    name: binComponentName(file),
     paths: [file],
     class: "functional",
     executable: true,

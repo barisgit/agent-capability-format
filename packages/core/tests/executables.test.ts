@@ -205,6 +205,52 @@ describe("native ACF executable configuration", () => {
     expect(await inventory(await nativeCapability())).toEqual(expected);
   });
 
+  test("bin entries are identified by their path under bin/", async () => {
+    async function foreign(files: Record<string, string>): Promise<AcfCapability> {
+      const dir = await tempDir();
+      dirs.push(dir);
+      await makeCapability(dir, {
+        ".claude-plugin/plugin.json": JSON.stringify({ name: "test-cap", version: "1.0.0" }),
+        ...files,
+      });
+      const { capability: cap } = await readClaudePluginPackage(dir, {
+        scope: "project",
+        origin: { kind: "local", directory: dir },
+        revision: null,
+      });
+      if (cap === undefined) throw new Error("the plugin did not read as a capability");
+      return cap;
+    }
+    const before = await foreign({ "bin/tool": "#!/bin/sh\n", "bin/lib/tool": "#!/bin/sh\n" });
+    const inventory = async (cap: AcfCapability) =>
+      (await executableComponents(cap, "claude")).map(({ kind, name, fingerprint }) => ({
+        kind,
+        name,
+        fingerprint,
+      }));
+    expect((await inventory(before)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "bin lib/tool",
+      "bin tool",
+    ]);
+    const native = await capability({
+      "acf.yml": baseManifest,
+      "native/claude/bin/tool": "#!/bin/sh\n",
+      "native/claude/bin/lib/tool": "#!/bin/sh\n",
+    });
+    expect(await inventory(native)).toEqual(await inventory(before));
+    const changes = async (after: AcfCapability) =>
+      executableChanges(
+        await executableComponents(before, "claude"),
+        await executableComponents(after, "claude"),
+      ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+    expect(
+      await changes(await foreign({ "bin/tool": "#!/bin/sh\n", "bin/lib/tool": "#!/bin/sh\nx\n" })),
+    ).toEqual(["changed bin lib/tool"]);
+    expect(await changes(await foreign({ "bin/tool": "#!/bin/sh\n" }))).toEqual([
+      "removed bin lib/tool",
+    ]);
+  });
+
   test("reports changed native hooks and manifest keys only where the plugin carries them", async () => {
     const before = await nativeCapability();
     const changes = async (after: AcfCapability) =>

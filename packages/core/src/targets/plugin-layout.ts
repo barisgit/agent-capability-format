@@ -137,3 +137,11 @@ export function perFileComponentName(spec: PerFileComponentSpec, file: string): 
 
 /** The Claude plugin directory whose every file is one executable `bin` component. */
 export const CLAUDE_PLUGIN_BIN_DIR = "bin";
+
+/**
+ * The name of the `bin` component of package-relative `file` under {@link CLAUDE_PLUGIN_BIN_DIR}:
+ * its path below that directory, so files with one name in different subdirectories stay apart.
+ */
+export function binComponentName(file: string): string {
+  return path.posix.relative(CLAUDE_PLUGIN_BIN_DIR, file);
+}

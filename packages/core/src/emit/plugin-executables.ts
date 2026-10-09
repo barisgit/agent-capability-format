@@ -8,6 +8,7 @@ import { nativeExtras, nativeFiles } from "../extras/index.js";
 import { readClaudeMcp } from "../formats/claude-mcp.js";
 import { componentPaths } from "../formats/shared.js";
 import {
+  binComponentName,
   CLAUDE_PLUGIN_BIN_DIR,
   CLAUDE_PLUGIN_MANIFEST,
   claudePluginComponents,
@@ -210,7 +211,7 @@ function pluginConfigComponents(
     const prefix = `${layers[0]}/${file}`;
     components.push({
       kind: "bin",
-      name: path.posix.basename(file),
+      name: binComponentName(file),
       detail: prefix,
       prefixes: [prefix],
       definition: null,
