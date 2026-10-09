@@ -2952,7 +2952,12 @@ commands run. Deleting a removed plugin's files waits until Claude no
 longer lists it, because Claude keeps serving an installed plugin from its
 cache, and deleting `marketplace.json` waits until the marketplace is
 removed; a change whose condition is not met stays, with its sidecar
-entry, for the next apply.
+entry, for the next apply. When apply skips a write of a plugin package or
+of `marketplace.json` because the file changed after planning, the install
+root's packages are incomplete: no `claude` command runs for that root,
+every change that waits on Claude there (including the retirement of loose
+output, §22.8.5) stays for the next apply, and the warning
+`acf.claude.host-deferred` says so.
 
 ACF user scope registers at Claude user scope; ACF project scope registers
 at Claude local scope (`.claude/settings.local.json`), so registration

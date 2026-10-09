@@ -106,6 +106,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.claude.version-mismatch",
   "acf.claude.other-scope",
   "acf.claude.marketplace-kept",
+  "acf.claude.host-deferred",
   "acf.migration.drifted",
   "acf.cli.partial-implementation",
   "acf.cli.usage",

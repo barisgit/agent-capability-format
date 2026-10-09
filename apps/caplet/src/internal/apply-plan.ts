@@ -52,7 +52,10 @@ import {
  * Claude install roots apply in two phases: every change without a gate, then host
  * reconciliation through the `claude` CLI (the plugin files must exist before Claude installs
  * them), then the gated changes whose host state allows them. A held-back change keeps its sidecar
- * entry, so the next apply retries it, and the root's inventory is rebuilt from the sidecar.
+ * entry, so the next apply retries it, and the root's inventory is rebuilt from the sidecar. A root
+ * whose plugin packages or marketplace lost a write to a skip is not complete, so it is not
+ * reconciled at all (`acf.claude.host-deferred`): Claude would install or update a partial
+ * package, and every gated change there, including the retirement of loose output, is held back.
  */
 export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary> {
   const diagnostics: Diagnostic[] = [];
@@ -63,13 +66,19 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
     diagnostics,
     skipped: new Set(),
     heldBackRoots: new Set(),
+    incompletePackageRoots: new Set(),
   };
   await applyItems(
     progress,
     plan.diffs.filter((item) => item.gate === undefined),
   );
   const claudeRoots = plan.claude.filter((root) => !blockedRoots.has(root.installRoot));
-  const claude = await applyGatedChanges(progress, plan, claudeRoots);
+  const hostRoots = claudeRoots.filter((root) => {
+    if (!progress.incompletePackageRoots.has(root.installRoot)) return true;
+    diagnostics.push(hostDeferred(root));
+    return false;
+  });
+  const claude = await applyGatedChanges(progress, plan, hostRoots);
   await removeStaleSidecarEntries(
     plan.staleEntries.filter(
       (entry) =>
@@ -92,6 +101,8 @@ type ApplyProgress = {
   skipped: Set<string>;
   /** Roots with a held-back change, whose inventory the plan wrote assuming every change. */
   heldBackRoots: Set<string>;
+  /** Roots where a plugin-carrier change (a package file or the marketplace) was skipped. */
+  incompletePackageRoots: Set<string>;
 };
 
 function skipKey(installRoot: string, relativePath: string, capability: string): string {
@@ -114,7 +125,22 @@ async function applyItems(progress: ApplyProgress, items: readonly EmittedDiff[]
       const relative = relativeSidecarPath(group.installRoot, skippedPath);
       progress.skipped.add(skipKey(group.installRoot, relative, group.capabilityName));
     }
+    if (group.owner.carrier === "plugin" && result.skipped.length > 0) {
+      progress.incompletePackageRoots.add(group.installRoot);
+    }
   }
+}
+
+/** `acf.claude.host-deferred`: the host step of `root` waits for an apply that completes it. */
+function hostDeferred(root: ClaudeRootPlan): Diagnostic {
+  return {
+    severity: "warn",
+    code: "acf.claude.host-deferred",
+    message: `Claude plugins at ${root.scopeRoot.scope} scope were not installed, updated or uninstalled: their files changed after the plan was computed; run apply again`,
+    path: root.marketplaceDir,
+    targetId: "claude",
+    data: { installRoot: root.installRoot },
+  };
 }
 
 function holdBack(progress: ApplyProgress, item: EmittedDiff): void {
@@ -127,36 +153,36 @@ function holdBack(progress: ApplyProgress, item: EmittedDiff): void {
 }
 
 /**
- * The second apply phase: reconciles `claudeRoots` with the host, applies each gated change whose
- * gate opened, and holds back the rest. Returns the host report, with the renames to announce,
- * or `undefined` when there is no Claude root to reconcile, which holds back every release.
+ * The second apply phase: reconciles `hostRoots` with the host, applies each gated change whose
+ * gate opened, and holds back the rest, including every gated change of a root not reconciled.
+ * Returns the host report, with the renames to announce, or `undefined` when there is no root to
+ * reconcile.
  */
 async function applyGatedChanges(
   progress: ApplyProgress,
   plan: ApplicablePlan,
-  claudeRoots: readonly ClaudeRootPlan[],
+  hostRoots: readonly ClaudeRootPlan[],
 ): Promise<ClaudeReport | undefined> {
   const { releases, renames } = plan.migration;
-  if (claudeRoots.length === 0) {
-    for (const release of releases) holdBack(progress, release.item);
-    return undefined;
-  }
-  const claude = await reconcileClaude(claudeRoots, plan.cwd);
-  progress.diagnostics.push(...claude.diagnostics);
+  const claude = hostRoots.length === 0 ? undefined : await reconcileClaude(hostRoots, plan.cwd);
+  if (claude !== undefined) progress.diagnostics.push(...claude.diagnostics);
   const open: EmittedDiff[] = [];
   for (const item of plan.diffs) {
-    if (item.gate === undefined) continue;
-    const change = gatedChange(item, item.gate, claude);
+    if (item.gate === undefined || progress.blockedRoots.has(item.installRoot)) continue;
+    // A root left out of the host step has no scope in the report, so its gates stay closed.
+    const change = claude === undefined ? undefined : gatedChange(item, item.gate, claude);
     if (change === undefined) holdBack(progress, item);
     else open.push(change);
   }
   await applyItems(progress, open);
   // A drifted artifact stays on disk; its sidecar entry goes with the stale entries.
   for (const release of releases) {
-    if (gateOpen(release.gate, claude)) progress.diagnostics.push(driftedWarning(release));
-    else holdBack(progress, release.item);
+    if (progress.blockedRoots.has(release.item.installRoot)) continue;
+    if (claude !== undefined && gateOpen(release.gate, claude)) {
+      progress.diagnostics.push(driftedWarning(release));
+    } else holdBack(progress, release.item);
   }
-  claude.renames = renames.filter((rename) => gateOpen(rename.gate, claude));
+  if (claude !== undefined) claude.renames = renames.filter((r) => gateOpen(r.gate, claude));
   return claude;
 }
 
