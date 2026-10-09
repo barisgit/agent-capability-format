@@ -281,3 +281,11 @@ test("a __proto__ key is reported instead of silently dropped", async () => {
       ]),
     );
 });
+
+test("a native/<target>/ file at or above a generated directory or file collides", async () => {
+  for (const file of ["skills/review", "skills", ".claude-plugin", "Skills/Review"]) {
+    await withCapability({ ...skill(""), [`native/claude/${file}`]: "x\n" }, (cap) =>
+      expect([file, errorCodes(cap)]).toEqual([file, ["acf.native.collision"]]),
+    );
+  }
+});

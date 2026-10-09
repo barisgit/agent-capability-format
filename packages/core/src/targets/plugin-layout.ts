@@ -40,7 +40,8 @@ export function generatedPluginPaths(target: TargetId, contents: PluginContents)
 }
 
 /**
- * The generated path that package-relative `file` collides with, or undefined. Paths are
+ * The generated path that package-relative `file` collides with, or undefined: `file` equals a
+ * generated path, lies under it, or sits where a directory on the way to it must be. Paths are
  * compared after NFC normalization and case folding, so a file that would overwrite generated
  * output on a case-insensitive file system collides too.
  */
@@ -50,10 +51,8 @@ export function generatedPathCollision(
 ): string | undefined {
   const target = fold(file);
   return generated.find((entry) => {
-    const folded = fold(entry);
-    return folded.endsWith("/")
-      ? target.startsWith(folded)
-      : target === folded || target.startsWith(`${folded}/`);
+    const folded = fold(entry).replace(/\/$/, "");
+    return target === folded || target.startsWith(`${folded}/`) || folded.startsWith(`${target}/`);
   });
 }
 

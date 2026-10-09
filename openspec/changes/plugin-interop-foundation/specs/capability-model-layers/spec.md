@@ -141,7 +141,7 @@ The extension data at every location listed in SPEC.md §7.2, and the package le
 - **THEN** validation fails with `acf.extras.conflict`
 
 ### Requirement: File-level native extras
-A capability MAY contain `native/<target>/`; for a plugin carrier of that target, its files SHALL be copied byte- and mode-exact to the same relative paths inside the generated package. Paths SHALL stay inside the package after normalization. A path that collides with a generated file SHALL be an `error`; manifest values are set through package-level `native` extras and `targets.<target>.package`, never through a file under `native/<target>/`. For other targets, and for loose carriers in this change, the tree SHALL be dropped with an `acf.extras.dropped` diagnostic. Files under `native/` SHALL NOT be read as ACF source facets.
+A capability MAY contain `native/<target>/`; for a plugin carrier of that target, its files SHALL be copied byte- and mode-exact to the same relative paths inside the generated package. Paths SHALL stay inside the package after normalization. A path that collides with a generated path (the same path, a path inside a generated directory, or a file where a generated path needs a directory) SHALL be an `error`; manifest values are set through package-level `native` extras and `targets.<target>.package`, never through a file under `native/<target>/`. For other targets, and for loose carriers in this change, the tree SHALL be dropped with an `acf.extras.dropped` diagnostic. Files under `native/` SHALL NOT be read as ACF source facets.
 
 #### Scenario: Claude-only output style
 - **WHEN** a capability contains `native/claude/output-styles/terse.md`
