@@ -340,7 +340,10 @@ function bytesOf(content: FileContent): Uint8Array {
 
 /**
  * The file a diff path names: absolute as given, one starting with `.` against the process cwd
- * (so `.claude/x` too, not only `./x`), any other relative to the install root.
+ * (so `.claude/x` too, not only `./x`), any other relative to the install root. Adapters write
+ * project-scope skill roots (`.agents/skills`, a target's `skillInstallPaths` such as
+ * `.claude/skills`) relative to the project, which caplet makes the process cwd; resolving them
+ * against the install root would nest them inside it.
  */
 export function resolveDiffPath(installRoot: string, diffPath: string): string {
   if (path.isAbsolute(diffPath)) return path.normalize(diffPath);
