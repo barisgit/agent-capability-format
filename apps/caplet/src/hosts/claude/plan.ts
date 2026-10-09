@@ -141,8 +141,9 @@ export function partitionInstalls(
  * `marketplace add` when any plugin is desired, `install` for plugins not installed at caplet's
  * managed identity, `update` for changed versions (also for disabled plugins, which stay disabled),
  * and `uninstall` for plugins no longer desired, keeping Claude's data for a carrier change
- * ({@link planUninstall}). It never plans `install` for an installed plugin, because install
- * re-enables a plugin the user disabled (D15). The marketplace is removed only when no plugin is
+ * ({@link planUninstall}). It never plans `install` for an installed plugin, or for one the
+ * settings disable ({@link disabledInSettings}), because install re-enables a plugin the user
+ * disabled (D15). The marketplace is removed only when no plugin is
  * desired or kept and the removal touches nothing but caplet's registration:
  * `marketplace remove` uninstalls its plugins at every scope and directory and drops its
  * declarations from every settings file it edits (`ObservedClaudeState.settings`). When Claude
@@ -276,9 +277,8 @@ function disabledInSettings(
     claudeScope === "user" ? ["user"] : ["user", "project", "local"];
   let enabled: boolean | undefined;
   for (const scope of deciding) {
-    const value = observed.settings.find((file) => file.scope === scope)?.settings?.enabledPlugins[
-      id
-    ];
+    const file = observed.settings.find((candidate) => candidate.scope === scope);
+    const value = file?.settings?.enabledPlugins[id];
     if (value !== undefined) enabled = value;
   }
   return enabled === false;
