@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCli } from "../../../src/hosts/claude/cli.js";
@@ -223,6 +223,34 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       action: "unchanged",
       state: "registered",
     });
+  });
+
+  test("a plugin disabled only in the user settings is not installed and stays disabled", async () => {
+    await mkdir(path.join(home, ".claude"), { recursive: true });
+    await writeFile(
+      path.join(home, ".claude/settings.json"),
+      JSON.stringify({ enabledPlugins: { "probe@acf-user": false } }),
+    );
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json",
+      "marketplace-add-already-known",
+    ]);
+    const report = await reconcileClaudeHost(
+      host(fake.cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.diagnostics).toEqual([]);
+    expect(report.scopes[0]?.plugins).toEqual([
+      {
+        name: "probe",
+        id: "probe@acf-user",
+        action: "disabled",
+        state: "disabled by user",
+        desiredVersion: "1.0.0+acf.aaa",
+      },
+    ]);
   });
 
   test("an unchanged plugin gets only the idempotent marketplace add", async () => {

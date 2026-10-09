@@ -83,7 +83,7 @@ Alternative: always emit the canonical copy (SPEC.md §22.2). Rejected because C
 
 ### D15. Native disable wins
 
-When the user disables a caplet-installed plugin in the host, caplet keeps updating files and never re-enables it.
+When the user disables a caplet-installed plugin in the host, caplet keeps updating files and never re-enables it. A disable left only in settings (`enabledPlugins` `false` for a plugin Claude does not list) counts too: `claude plugin install` would rewrite it to `true` (verified with Claude 2.1.97), so caplet does not install such a plugin and reports it `disabled by user`.
 
 Alternative: re-enable on apply. Rejected because host enablement is the consumer's runtime choice.
 

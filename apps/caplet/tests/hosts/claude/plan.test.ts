@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { formatClaudeCommand } from "../../../src/hosts/claude/commands.js";
-import { planClaudeScope } from "../../../src/hosts/claude/plan.js";
+import { type ClaudePluginAction, planClaudeScope } from "../../../src/hosts/claude/plan.js";
 import {
   claudeMarketplaceName,
   resolveClaudeScopeTarget,
@@ -33,8 +33,9 @@ function settingsFile(
   file: string,
   marketplaces: string[],
   configuredPlugins: string[] = [],
+  enabledPlugins: Record<string, boolean> = {},
 ): ClaudeSettingsFile {
-  return { scope, path: file, settings: { marketplaces, configuredPlugins } };
+  return { scope, path: file, settings: { marketplaces, configuredPlugins, enabledPlugins } };
 }
 
 function commands(plan: ReturnType<typeof planClaudeScope>): string[] {
@@ -332,6 +333,50 @@ describe("a marketplace of caplet's name that caplet did not register", () => {
     });
     expect(commands(plan)).toEqual([]);
     expect(plan.keptBy).toEqual(["caplet's sidecar has no record of it"]);
+  });
+});
+
+describe("a desired plugin the user disabled only in settings", () => {
+  const plan = (
+    target: Parameters<typeof claudeMarketplaceName>[0],
+    settings: ClaudeSettingsFile[],
+  ) =>
+    planClaudeScope(
+      {
+        target,
+        marketplaceDir: target.scope === "user" ? userDir : projectDir,
+        plugins: [{ name: "review", version: "1.0.0" }],
+      },
+      { plugins: [], marketplaces: [], projectDir: projectRoot, settings },
+    );
+  const user = { scope: "user" as const };
+  const project = { scope: "project" as const, projectRoot };
+  const local = `review@${projectMarketplace}`;
+  const file = (scope: ClaudeSettingsFile["scope"], enabled: boolean, id = local) =>
+    settingsFile(scope, `/settings/${scope}.json`, [], [], { [id]: enabled });
+
+  test("is not installed, because install would enable it again", () => {
+    const disabled = plan(user, [file("user", false, "review@acf-user")]);
+    expect(disabled.plugins.map((p) => [p.name, p.action])).toEqual([["review", "disabled"]]);
+    expect(commands(disabled)).toEqual([`claude plugin marketplace add ${userDir} --scope user`]);
+  });
+
+  test("at local scope the most specific settings file that names it decides", () => {
+    const cases: [ClaudeSettingsFile[], ClaudePluginAction][] = [
+      [[file("user", false)], "disabled"],
+      [[file("project", false)], "disabled"],
+      [[file("local", false), file("user", true)], "disabled"],
+      [[file("user", false), file("local", true)], "install"],
+      [[file("project", false), file("local", true)], "install"],
+    ];
+    for (const [settings, action] of cases) {
+      expect(plan(project, settings).plugins[0]?.action).toBe(action);
+    }
+  });
+
+  test("at user scope only the user settings count, since project files still win there", () => {
+    const installed = plan(user, [file("local", false, "review@acf-user")]);
+    expect(installed.plugins[0]?.action).toBe("install");
   });
 });
 

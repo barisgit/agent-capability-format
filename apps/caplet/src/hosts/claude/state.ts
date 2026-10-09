@@ -36,6 +36,11 @@ export type ClaudeSettings = {
    * secrets, when the id's last install is uninstalled (Claude 2.1.97).
    */
   configuredPlugins: string[];
+  /**
+   * The `enabledPlugins` values that are booleans, by plugin id. A `false` for a plugin Claude
+   * does not list is a disable that `claude plugin install` overwrites with `true` (Claude 2.1.97).
+   */
+  enabledPlugins: Readonly<Record<string, boolean>>;
 };
 
 /**
@@ -84,6 +89,13 @@ export function parseClaudeSettings(text: string): ClaudeSettings {
   return {
     marketplaces: [...new Set([...declared, ...enabled])],
     configuredPlugins: isRecord(settings.pluginConfigs) ? Object.keys(settings.pluginConfigs) : [],
+    enabledPlugins: isRecord(settings.enabledPlugins)
+      ? Object.fromEntries(
+          Object.entries(settings.enabledPlugins).filter(
+            (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+          ),
+        )
+      : {},
   };
 }
 

@@ -2950,7 +2950,11 @@ command and always with `--scope`: `claude plugin marketplace add <dir>`
 update` for a changed version, and `claude plugin uninstall` for a removed
 one (with `--keep-data` after a carrier switch, §22.8.1), reading state with `claude plugin list --json`. It never runs
 `install` for a plugin Claude already has, because that re-enables a plugin
-the user disabled. It never writes Claude's private plugin state
+the user disabled. Nor does it install a plugin Claude does not list whose
+`enabledPlugins` value is `false` in the settings that decide it after the
+install (the user file for a user install; for a local install the most
+specific of the user, project and local files that names it), because
+`install` rewrites that value to `true`. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
 `extraKnownMarketplaces`. It removes the marketplace only when no plugin
 in it is desired or held, the sidecar records it as caplet's, and the removal touches nothing but caplet's registration,
@@ -2987,8 +2991,9 @@ state:
 
 - `registered` — Claude lists the plugin, enabled, at caplet's Claude
   scope (for project scope, Claude local scope of that project root).
-- `disabled by user` — Claude lists it disabled; caplet updates the files
-  and never re-enables it.
+- `disabled by user` — Claude lists it disabled, or does not list it while
+  its settings disable it (§22.8.3); caplet updates the files and never
+  re-enables or installs it.
 - `not installed` — Claude does not list it at caplet's Claude scope: a
   removed plugin after its uninstall, a plugin that a dry run or status
   shows apply would install, or a plugin installed only at another Claude

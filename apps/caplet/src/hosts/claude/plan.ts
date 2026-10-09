@@ -41,6 +41,8 @@ export type DesiredClaudeScope = {
  * changed, but uninstalling it would delete the options and secrets Claude saved for it, so it
  * stays installed until the user uninstalls it. `blocked`: Claude lists caplet's marketplace name
  * from another source, so caplet runs nothing for the scope (`ClaudeScopePlan.foreign`).
+ * `disabled`: Claude does not list it, but the settings that decide its enablement at caplet's
+ * scope disable it, and `install` would enable it again (D15), so caplet does not install it.
  */
 export type ClaudePluginAction =
   | "install"
@@ -49,7 +51,8 @@ export type ClaudePluginAction =
   | "uninstall"
   | "other-scope"
   | "kept"
-  | "blocked";
+  | "blocked"
+  | "disabled";
 
 /** The planned action for one plugin of the scope, desired or left over at caplet's identity. */
 export type PlannedClaudePlugin = {
@@ -198,7 +201,9 @@ export function planClaudeScope(
       current === undefined
         ? otherScopeInstalls.some((p) => p.name === plugin.name)
           ? "other-scope"
-          : "install"
+          : disabledInSettings(id, claudeScope, observed)
+            ? "disabled"
+            : "install"
         : current.version === plugin.version
           ? "unchanged"
           : "update";
@@ -253,6 +258,30 @@ export function planClaudeScope(
     foreign: undefined,
     keptBy,
   };
+}
+
+/**
+ * Whether the settings files that decide `id`'s enablement after an install at `claudeScope`
+ * disable it. Claude merges `enabledPlugins` with local over project over user (the most specific
+ * file naming the id wins), and `install` writes `true` into the file of its scope, so a user
+ * install is decided by the user file alone (project and local files still override it per
+ * project), while a local install overrides all three. Unreadable files decide nothing.
+ */
+function disabledInSettings(
+  id: string,
+  claudeScope: ClaudeScope,
+  observed: ObservedClaudeState,
+): boolean {
+  const deciding: readonly ClaudeScope[] =
+    claudeScope === "user" ? ["user"] : ["user", "project", "local"];
+  let enabled: boolean | undefined;
+  for (const scope of deciding) {
+    const value = observed.settings.find((file) => file.scope === scope)?.settings?.enabledPlugins[
+      id
+    ];
+    if (value !== undefined) enabled = value;
+  }
+  return enabled === false;
 }
 
 /** Whether Claude lists `marketplace` from the directory `dir`, compared by real path. */

@@ -106,7 +106,7 @@ describe("createClaudeHost settings", () => {
       path.join(configDir, "settings.json"),
       JSON.stringify({
         extraKnownMarketplaces: { "acf-user": {} },
-        enabledPlugins: { "review@team-mkt": true },
+        enabledPlugins: { "review@team-mkt": true, "lint@team-mkt": false, "old@team-mkt": [] },
         pluginConfigs: { "review@team-mkt": { options: { region: "eu" } } },
       }),
     );
@@ -119,6 +119,7 @@ describe("createClaudeHost settings", () => {
         settings: {
           marketplaces: ["acf-user", "team-mkt"],
           configuredPlugins: ["review@team-mkt"],
+          enabledPlugins: { "review@team-mkt": true, "lint@team-mkt": false },
         },
       },
       {
@@ -129,7 +130,7 @@ describe("createClaudeHost settings", () => {
       {
         scope: "local",
         path: path.join(projectDir, ".claude", "settings.local.json"),
-        settings: { marketplaces: [], configuredPlugins: [] },
+        settings: { marketplaces: [], configuredPlugins: [], enabledPlugins: {} },
       },
     ]);
   });

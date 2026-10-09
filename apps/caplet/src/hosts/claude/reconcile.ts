@@ -386,6 +386,7 @@ function listedPluginReport(
   // report that install; caplet's own registration does not exist.
   if (plugin.action === "other-scope") return pluginReport(plugin, "not installed");
   if (plugin.action === "blocked") return pluginReport(plugin, "unknown");
+  if (plugin.action === "disabled") return pluginReport(plugin, "disabled by user");
   if (preview) {
     if (entry === undefined) return pluginReport(plugin, "not installed");
   } else if (plugin.action === "uninstall") {
