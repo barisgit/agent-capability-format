@@ -2276,8 +2276,9 @@ export async function fetchCapability(
 
 After fetch, the shared source inventory discovers valid capability candidates
 and assigns each a selector: a POSIX path relative to `<fetched-root>/acf/` for
-manifested collections, or the validated capability name for direct manifested
-capabilities and synthesized skills. When `entry.capabilities` is present the
+manifested collections, or the discovered name (before `rename`) for direct
+manifested capabilities, synthesized skills, and foreign packages. `rename`
+is applied once, when the resolver names the staged snapshot. When `entry.capabilities` is present the
 resolver matches every exact/glob selector against those values, requires every
 selector to match, and deduplicates overlaps. It stages (without symlinks) each selected capability outside the live
 snapshot tree. Only after every source entry validates does it replace

@@ -30,7 +30,7 @@ A source whose only recognized manifest is a marketplace or catalog (such as `.c
 - **THEN** resolution fails and the diagnostic suggests the entry `path: plugins/review`
 
 ### Requirement: One package is one capability
-An Agent Plugins or Claude plugin source SHALL become exactly one capability. Its name SHALL be the manifest `name`, which SHALL satisfy the ACF slug rule (SPEC.md §5.1) or be renamed with the entry's `rename`. Its version SHALL be the manifest `version` when it is SemVer 2.0.0, otherwise `0.0.0-unversioned+<resolved-revision-or-local>`; the original value stays in the preserved source, and a Claude plugin reader SHALL record it as `targets.claude.package.version` (canonical-package-metadata, Per-target package values) so transformed Claude output keeps it.
+An Agent Plugins or Claude plugin source SHALL become exactly one capability. Its name SHALL be the manifest `name`, which SHALL satisfy the ACF slug rule (SPEC.md §5.1) or be renamed with the entry's `rename`. `capabilities` selectors SHALL match the manifest `name`, and `rename` SHALL apply to it exactly once. Its version SHALL be the manifest `version` when it is SemVer 2.0.0, otherwise `0.0.0-unversioned+<resolved-revision-or-local>`; the original value stays in the preserved source, and a Claude plugin reader SHALL record it as `targets.claude.package.version` (canonical-package-metadata, Per-target package values) so transformed Claude output keeps it.
 
 #### Scenario: Plugin with three skills
 - **WHEN** an Agent Plugins package named `docs-kit` contains three skills
@@ -39,6 +39,10 @@ An Agent Plugins or Claude plugin source SHALL become exactly one capability. It
 #### Scenario: Name outside the slug rule
 - **WHEN** an Agent Plugins package is named `acme.docs`
 - **THEN** resolution fails with a diagnostic recommending `rename`, and succeeds once `rename: acme-docs` is set
+
+#### Scenario: Selecting a renamed package
+- **WHEN** an entry for a Claude plugin named `review-kit` sets `capabilities: [review-kit]` and `rename: {review-kit: kit, kit: other}`
+- **THEN** the package installs as `kit`
 
 ### Requirement: Preserved source snapshot
 For every source format the materialized snapshot SHALL contain every regular file under the selected package root except `.git/`, including hidden files, with exact bytes and the executable bit. Symbolic links, special files, and sibling names that collide after NFC normalization or case folding (as on a case-insensitive file system) SHALL fail resolution with the error `acf.source.snapshot-rejected` naming the path. The snapshot SHALL be immutable after materialization and SHALL be enough to re-read the capability offline with an identical projection.

@@ -14,8 +14,12 @@ import {
 } from "@caplet/core";
 
 export type SourceCapabilityCandidate = {
-  /** Capability name; for Agent Plugins and Claude plugin packages, after `rename`. */
+  /**
+   * Discovered capability name, before `rename`: the manifest or skill name. The resolver
+   * applies `rename` exactly once, when it names the snapshot.
+   */
   name: string;
+  /** What `capabilities:` selectors match (SPEC.md §20.5): a collection path or the name. */
   selector: string;
   root: string;
   sourcePath: string;
@@ -62,13 +66,15 @@ export async function inspectSource(
       rename: options.rename,
       revision: options.revision ?? null,
     });
+    // The reader validates the package name under `rename`; candidates keep the name it
+    // replaced, because selectors match it and the resolver applies `rename` itself.
     const candidates: SourceCapabilityCandidate[] =
       capability === undefined
         ? []
         : [
             {
-              name: capability.manifest.name,
-              selector: capability.manifest.name,
+              name: capability.source?.renamedFrom ?? capability.manifest.name,
+              selector: capability.source?.renamedFrom ?? capability.manifest.name,
               root,
               sourcePath: ".",
               synthesized: false,

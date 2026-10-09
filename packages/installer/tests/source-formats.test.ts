@@ -154,6 +154,18 @@ describe("foreign source formats", () => {
     expect(await exists(path.join(scopeRoot.capabilitiesDir, "kit-two"))).toBe(true);
   });
 
+  test("selectors match the package's own name and rename applies once", async () => {
+    const { result, scopeRoot } = await scopeWith(
+      claudePlugin,
+      "    capabilities: [review-kit]\n    rename:\n      review-kit: kit\n      kit: unexpected\n",
+    );
+    expect(errors(result)).toEqual([]);
+    const entry = (await readLockfile(scopeRoot.lockPath))?.entries[0];
+    expect(entry?.capabilityNames).toEqual(["kit"]);
+    expect(entry?.selectorsByCapability).toEqual({ kit: "review-kit" });
+    expect(await exists(path.join(scopeRoot.capabilitiesDir, "kit"))).toBe(true);
+  });
+
   test("the lock records the requested format apart from the detected one", async () => {
     const detected = await scopeWith(polyglot);
     expect(detected.records.map((item) => item.format)).toEqual(["acf"]);

@@ -2223,7 +2223,7 @@ Each entry under `capabilities[]`:
 | `ref`      | string  | conditional | Required for `github:` and `git:` sources. Branch, tag, or SHA.             |
 | `path`     | string  | no       | Subdirectory inside the source to use as the selected source root, such as one plugin of a marketplace repository. |
 | `format`   | enum    | no       | `acf` \| `agent-plugins` \| `claude-plugin` \| `skills`. Overrides format detection (§20.6). |
-| `capabilities` | string or non-empty list | no | Exact/glob discovered capability selectors; manifested collections use paths relative to `acf/`, synthesized skills use capability names; omitted selects all. |
+| `capabilities` | string or non-empty list | no | Exact/glob discovered capability selectors; manifested collections use paths relative to `acf/`, other capabilities their discovered name before `rename`; omitted selects all. |
 | `include`  | mapping | no       | Family-keyed allowlist of facet names. Globs allowed. Implicit `*`.            |
 | `exclude`  | mapping | no       | Family-keyed denylist of facet names. Globs allowed.                           |
 | `rename`   | slug or mapping | no | Renames capabilities: a slug for an entry that yields one capability, or a map `<discovered-name>: <new-name>`. Required for a foreign package whose name is not a slug. |
@@ -2570,16 +2570,18 @@ A source entry MAY declare `capabilities` as one selector string or a non-empty
 list. Scalar syntax normalizes to a one-item list. Omission selects every
 discovered capability. Manifested collections match selectors against normalized
 POSIX paths relative to the selected source root's `acf/` directory. A direct
-manifested capability and a synthesized skill use their validated capability
-name as the selector:
+manifested capability, a synthesized skill, and an Agent Plugins or Claude
+plugin package use their discovered name (the manifest or skill name, before
+`rename`) as the selector; `rename` then applies once to the selected
+capabilities. Selectors match as follows:
 
 - an exact path matches one complete capability path;
 - `*` matches zero or more characters within one segment;
 - `?` matches exactly one character within one segment;
 - a `**` segment matches zero or more path segments.
 
-Only manifested capability roots and synthesized skills discovered by §§20.1–20.3
-are candidates. Every selector MUST match at least one candidate; overlapping matches are deduplicated.
+Only manifested capability roots, synthesized skills, and foreign packages
+discovered by §§20.1–20.3 and §20.6 are candidates. Every selector MUST match at least one candidate; overlapping matches are deduplicated.
 Absolute paths, backslashes, empty segments, `.`/`..` segments, and `**` embedded
 inside another segment are invalid. Invalid or unmatched selection MUST NOT
 change existing snapshots or the lockfile.
