@@ -568,3 +568,15 @@ test("status with errors does not close with an up-to-date line", async () => {
     await cleanup(scope);
   }
 });
+
+test("status points sources that are listed but not fetched at apply, not add", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["status", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.stdout).not.toContain("caplet add <source>");
+    expect(result.stdout).toContain("2 sources not fetched — caplet apply");
+  } finally {
+    await cleanup(scope);
+  }
+});

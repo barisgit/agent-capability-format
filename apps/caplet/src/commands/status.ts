@@ -1,4 +1,5 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
+import { readCapabilitiesYml } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { claudeJson, printClaude } from "../internal/apply-flow.js";
@@ -31,7 +32,10 @@ export const statusCommand = defineCommand({
       const out = reporter(context.args);
       const scopes = await resolveScopeRoots(readScope(context.args), cwd);
       const capabilityNames = new Map<string, string[]>();
+      const listedSources = new Map<string, number>();
       for (const scopeRoot of scopes) {
+        const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
+        listedSources.set(scopeRoot.scope, manifest.value.capabilities.length);
         // The plan resolves each scope again and reports its diagnostics.
         const resolved = await resolveScopeCapabilities(scopeRoot);
         capabilityNames.set(
@@ -65,7 +69,13 @@ export const statusCommand = defineCommand({
         const names = capabilityNames.get(scopeRoot.scope) ?? [];
         out.log(`${colors.bold(scopeRoot.scope)}  ${colors.dim(displayPath(scopeRoot.agentsDir))}`);
         if (names.length === 0) {
-          out.log(`  ${colors.dim("none — caplet add <source>")}`);
+          // Sources listed in capabilities.yml but never fetched (`caplet add --no-apply`).
+          const listed = listedSources.get(scopeRoot.scope) ?? 0;
+          const hint =
+            listed === 0
+              ? "none — caplet add <source>"
+              : `${listed} ${listed === 1 ? "source" : "sources"} not fetched — caplet apply`;
+          out.log(`  ${colors.dim(hint)}`);
           continue;
         }
         const sources = reach.sources.filter((item) => item.scope === scopeRoot.scope);
