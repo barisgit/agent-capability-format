@@ -1,11 +1,12 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ScopeRoot } from "@caplet/core";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
   retainLockedCapabilities,
+  type ScopeRoot,
   type SourceSpec,
+  sourceUrlCredentialProblem,
   stringifyYml,
 } from "@caplet/core";
 import {
@@ -14,9 +15,7 @@ import {
   type LockEntry,
   readCapabilitiesYml,
   readLockfile,
-  sourceId,
   sourceString,
-  sourceUrlCredentialProblem,
   writeLockfile,
 } from "@caplet/installer";
 import { validationError } from "./args.js";
@@ -116,7 +115,7 @@ export async function removeManifestEntries(
   const found = new Set<string>();
   const kept = manifest.capabilities.flatMap((entry) => {
     const id = entrySourceId(entry, path.dirname(root.manifestPath));
-    const legacyId = sourceId(entry.source, path.dirname(root.manifestPath));
+    const legacyId = sourceString(entry.source, path.dirname(root.manifestPath));
     const lockEntry = lock?.entries.find(
       (candidate) => candidate.sourceId === id || candidate.sourceId === legacyId,
     );

@@ -7,7 +7,7 @@ import {
 } from "@caplet/core";
 import { ensureCleanCache, getCachePath } from "./cache.js";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git.js";
-import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile.js";
+import { canonicalizePathLocation, entrySourceId, sourceString } from "./lockfile.js";
 
 /** Where and how {@link fetchCapability} clones git sources. */
 export type FetchOptions = {
@@ -42,7 +42,7 @@ export async function fetchCapability(
   opts: FetchOptions,
 ): Promise<FetchedCapability> {
   const normalized = withAbsolutePathSource(entry);
-  const repositoryId = sourceId(normalized.source);
+  const repositoryId = sourceString(normalized.source);
   const id = entrySourceId(normalized);
   switch (normalized.source.kind) {
     case "path": {

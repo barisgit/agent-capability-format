@@ -133,6 +133,7 @@ export const ACF_DIAGNOSTIC_CODES = [
 
 export type AcfDiagnosticCode = (typeof ACF_DIAGNOSTIC_CODES)[number];
 
+/** A {@link Diagnostic} from `input`, leaving out the optional fields `input` does not set. */
 export function makeDiagnostic(input: {
   severity: Diagnostic["severity"];
   code: string;

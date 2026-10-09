@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   extractMarkedBlock,
@@ -6,13 +6,15 @@ import {
   mergeJson,
   replaceMarkedBlock,
 } from "@caplet/adapters/common";
-import type {
-  AcfManagedSidecar,
-  AcfOwnership,
-  Diagnostic,
-  FileContent,
-  FileDiff,
+import {
+  type AcfManagedSidecar,
+  type AcfOwnership,
+  type Diagnostic,
+  type FileContent,
+  type FileDiff,
+  isErrno,
 } from "@caplet/core";
+import { readBytesIfExists, readModeIfExists, readTextIfExists } from "../internal/fs.js";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 import {
   hashOwnedRegions,
@@ -292,33 +294,6 @@ async function writeContent(filePath: string, content: FileContent): Promise<voi
   await writeFile(filePath, content);
 }
 
-async function readTextIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-async function readBytesIfExists(filePath: string): Promise<Uint8Array | null> {
-  try {
-    return await readFile(filePath);
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-async function readModeIfExists(filePath: string): Promise<number | null> {
-  try {
-    return (await stat(filePath)).mode & 0o777;
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
 function textContent(content: FileContent | null): string | null {
   if (content === null || typeof content === "string") return content;
   throw new Error("structured ownership requires text content");
@@ -353,8 +328,4 @@ export function resolveDiffPath(installRoot: string, diffPath: string): string {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

@@ -33,7 +33,6 @@ import { validateCapability } from "./validation.js";
 export { parseMarkdown } from "./helpers.js";
 export { readHooks } from "./hooks.js";
 export { readMcp } from "./mcp.js";
-export { readAgents, readCommands, readInstructions } from "./prose.js";
 export { readSkills } from "./skills.js";
 export { validateCapability } from "./validation.js";
 

@@ -11,7 +11,8 @@ import {
 } from "../internal/apply-flow.js";
 import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
-import { type ClaudeReport, previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
+import { previewedDiffs } from "../internal/claude-gates.js";
+import { type ClaudeReport, previewClaude } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { buildEmitPlan } from "../internal/emit-plan.js";
 import {

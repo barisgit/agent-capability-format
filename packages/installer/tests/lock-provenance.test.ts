@@ -28,7 +28,7 @@ test("a multi-capability source locks each capability's provenance and digests",
     const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errors(result)).toEqual([]);
 
     const records = result.lockfile.entries[0]?.resolvedCapabilities ?? [];
@@ -56,14 +56,14 @@ test("an entry locked without records gains them on its next resolution", async 
     await writeText(path.join(repo, "acf.yml"), "acf: 1\nname: solo\nversion: 1.0.0\n");
     const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    await resolveCapabilities({ scopeRoot, mode: "auto" });
     const lock = JSON.parse(await readFile(scopeRoot.lockPath, "utf8")) as {
       entries: Array<Record<string, unknown>>;
     };
     for (const entry of lock.entries) delete entry.resolvedCapabilities;
     await writeFile(scopeRoot.lockPath, JSON.stringify(lock), "utf8");
 
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    await resolveCapabilities({ scopeRoot, mode: "force" });
 
     const upgraded = await readLockfile(scopeRoot.lockPath);
     expect(upgraded?.entries[0]?.resolvedCapabilities).toEqual([

@@ -1,3 +1,5 @@
+import { isRecord } from "@caplet/core";
+
 type JsonRecord = Record<string, unknown>;
 type JsonContainer = JsonRecord | unknown[];
 
@@ -271,8 +273,4 @@ function consumeOneLineBreak(text: string, index: number): number {
   if (text[index] === "\r" && text[index + 1] === "\n") return index + 2;
   if (text[index] === "\n") return index + 1;
   return index;
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

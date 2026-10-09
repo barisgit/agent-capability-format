@@ -25,7 +25,7 @@ test("path source resolves into scope capabilities and is idempotent", async () 
       "acf: 1\ncapabilities:\n  - source: path:./fixtures/local-cap\n",
     );
 
-    const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const first = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errors(first)).toEqual([]);
     expect(first.capabilities).toHaveLength(1);
     expect(first.capabilities[0]?.name).toBe("local-cap");
@@ -42,7 +42,7 @@ test("path source resolves into scope capabilities and is idempotent", async () 
     expect(entry !== undefined && "resolvedSha" in entry).toBe(false);
 
     const before = await readFile(scopeRoot.lockPath, "utf8");
-    const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const second = await resolveCapabilities({ scopeRoot, mode: "auto" });
     const after = await readFile(scopeRoot.lockPath, "utf8");
     expect(second.capabilities[0]?.contentHash).toBe(expectedHash);
     expect(after).toBe(before);
@@ -73,7 +73,7 @@ test("path collections select exact and globbed capabilities and reconcile remov
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [cap1, group1/*]\n`,
     );
 
-    const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const first = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(first)).toEqual([]);
     expect(first.capabilities.map((item) => item.name)).toEqual(["cap1", "cap3"]);
     expect(first.lockfile.entries[0]?.capabilities).toEqual(["cap1", "group1/*"]);
@@ -82,7 +82,7 @@ test("path collections select exact and globbed capabilities and reconcile remov
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [group1/**, group1/cap3]\n`,
     );
-    const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const second = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errors(second)).toEqual([]);
     expect(second.capabilities.map((item) => item.name)).toEqual(["cap3", "cap4"]);
     await expect(access(path.join(scopeRoot.capabilitiesDir, "cap1"))).rejects.toThrow();
@@ -109,7 +109,7 @@ test("globstar selectors include top-level and nested capabilities", async () =>
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: "**"\n`,
     );
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["nested", "top"]);
   } finally {
@@ -128,7 +128,7 @@ test("selectors can name a direct capability source", async () => {
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: direct\n`,
     );
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["direct"]);
     await access(path.join(scopeRoot.capabilitiesDir, "direct"));
@@ -147,14 +147,14 @@ test("unmatched capability selectors fail without changing prior snapshots or lo
       "acf: 1\nname: cap1\nversion: 1.0.0\n",
     );
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    await resolveCapabilities({ scopeRoot, mode: "force" });
     const before = await readFile(scopeRoot.lockPath, "utf8");
     await writeText(
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: missing/*\n`,
     );
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(result.diagnostics.map((item) => item.code)).toContain(
       "acf.resolve.capability-selector-unmatched",
     );
@@ -183,7 +183,7 @@ test("a later selector failure preserves earlier source snapshots and the lock",
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${firstRepo}\n  - source: path:${secondRepo}\n`,
     );
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    await resolveCapabilities({ scopeRoot, mode: "force" });
     const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
     const snapshotBefore = await readFile(
       path.join(scopeRoot.capabilitiesDir, "one", "acf.yml"),
@@ -198,7 +198,7 @@ test("a later selector failure preserves earlier source snapshots and the lock",
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${firstRepo}\n    capabilities: one\n  - source: path:${secondRepo}\n    capabilities: missing\n`,
     );
-    const failed = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const failed = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(failed.diagnostics.map((item) => item.code)).toContain(
       "acf.resolve.capability-selector-unmatched",
     );
@@ -249,7 +249,7 @@ test("a missing git ref cannot prune a locked sibling snapshot", async () => {
       `acf: 1\ncapabilities:\n  - source: github:owner/repo\n  - source: path:${pathRepo}\n`,
     );
 
-    const failed = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const failed = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(failed.diagnostics.map((item) => item.code)).toContain("acf.resolve.ref-required");
     expect(await readFile(scopeRoot.lockPath, "utf8")).toBe(lockBefore);
     await access(path.join(scopeRoot.capabilitiesDir, "locked-cap", "acf.yml"));
@@ -286,7 +286,7 @@ test("bare skills resolve as independent synthesized snapshots of their skill di
     );
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
 
     expect(errors(result)).toEqual([]);
     expect(result.diagnostics.map((item) => item.code)).toContain(
@@ -333,7 +333,7 @@ test("synthesized capability selectors narrow by generated capability name", asy
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [pdf]\n`,
     );
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["pdf"]);
     expect(result.lockfile.entries[0]?.capabilities).toEqual(["pdf"]);
@@ -354,9 +354,9 @@ test("unfiltered synthesized updates delete disappeared snapshots", async () => 
       );
     }
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    await resolveCapabilities({ scopeRoot, mode: "force" });
     await rm(path.join(repo, "skills", "docs"), { recursive: true });
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(result.capabilities.map((item) => item.name)).toEqual(["pdf"]);
     await expect(access(path.join(scopeRoot.capabilitiesDir, "docs"))).rejects.toThrow();
   } finally {
@@ -377,14 +377,14 @@ test("a missing explicitly selected synthesized skill preserves prior state", as
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [docs]\n`,
     );
-    await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    await resolveCapabilities({ scopeRoot, mode: "force" });
     const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
     const skillBefore = await readFile(
       path.join(scopeRoot.capabilitiesDir, "docs", "skills", "docs", "SKILL.md"),
       "utf8",
     );
     await rm(path.join(repo, "skills", "docs"), { recursive: true });
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(result.diagnostics.map((item) => item.code)).toContain(
       "acf.resolve.capability-selector-unmatched",
     );
@@ -412,7 +412,7 @@ test("duplicate synthesized names fail atomically", async () => {
       );
     }
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(result.diagnostics.map((item) => item.code)).toContain("acf.capability.name-collision");
     expect(await Bun.file(scopeRoot.lockPath).exists()).toBe(false);
     expect(await Bun.file(path.join(scopeRoot.capabilitiesDir, "duplicate")).exists()).toBe(false);
@@ -438,7 +438,6 @@ test("resolver reuses a prefetched source inventory", async () => {
     const inventory = await inspectSource(repo);
 
     const result = await resolveCapabilities({
-      scope: "project",
       scopeRoot,
       mode: "force",
       prefetchedSources: new Map([[id, { fetched, inventory }]]),

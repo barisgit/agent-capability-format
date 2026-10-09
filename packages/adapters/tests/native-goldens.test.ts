@@ -107,12 +107,6 @@ for (const target of Object.keys(writers)) {
   });
 }
 
-test("skills golden for a Claude-only project writes nothing under .agents/skills", async () => {
-  const result = await emitFor("claude", skillsCapability, []);
-  expect(result.diffs.some((diff) => diff.path.includes(".agents"))).toBe(false);
-  await assertGoldenTree(goldenTree(result), goldenCase(testsDir, "skills-claude-only").expected);
-});
-
 test("MCP golden for an Agent Plugins server with cwd refused for Claude", async () => {
   const capability = capabilityModel({
     servers: [

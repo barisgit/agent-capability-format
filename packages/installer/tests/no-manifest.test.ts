@@ -20,7 +20,7 @@ test("resolving a scope with no manifest and no lock writes nothing", async () =
   try {
     const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
 
     expect(result.capabilities).toEqual([]);
     expect(result.lockfile).toEqual({ acf: 1, entries: [] });

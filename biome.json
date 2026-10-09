@@ -30,7 +30,7 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noConsole": "off"
       },
       "style": {
@@ -40,7 +40,7 @@
       },
       "correctness": {
         "noUnusedVariables": "off",
-        "noUnusedImports": "warn"
+        "noUnusedImports": "error"
       },
       "complexity": {
         "noForEach": "off"

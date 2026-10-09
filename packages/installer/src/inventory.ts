@@ -5,6 +5,7 @@ import {
   type CapabilityEntry,
   type Diagnostic,
   type ForeignFormat,
+  isErrno,
   isForeignFormat,
   marketplaceDiagnostic,
   parseMarkdown,
@@ -14,7 +15,6 @@ import {
   selectSourceFormat,
   skillFrontmatterSchema,
 } from "@caplet/core";
-import { isErrno } from "./errno.js";
 
 /** One package a source provides, as `capabilities:` selectors and the resolver see it. */
 export type SourceCapabilityCandidate = {

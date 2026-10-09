@@ -2,6 +2,7 @@
  * Host state as `claude plugin list --json`, `claude plugin marketplace list --json` and the
  * Claude settings files report it, and the parsers that read it.
  */
+import { isRecord } from "@caplet/core";
 import type { ClaudeScope } from "./commands.js";
 
 /** One entry of `claude plugin list --json`. */
@@ -60,11 +61,11 @@ export type ObservedClaudeState = {
  */
 export function parseSettingsMarketplaces(text: string): string[] {
   const settings: unknown = JSON.parse(text);
-  if (!isObject(settings)) throw new Error("settings are not a JSON object");
-  const declared = isObject(settings.extraKnownMarketplaces)
+  if (!isRecord(settings)) throw new Error("settings are not a JSON object");
+  const declared = isRecord(settings.extraKnownMarketplaces)
     ? Object.keys(settings.extraKnownMarketplaces)
     : [];
-  const enabled = isObject(settings.enabledPlugins)
+  const enabled = isRecord(settings.enabledPlugins)
     ? Object.keys(settings.enabledPlugins).flatMap((id) => {
         const separator = id.lastIndexOf("@");
         return separator > 0 ? [id.slice(separator + 1)] : [];
@@ -128,13 +129,9 @@ function parseArray(stdout: string, what: string): Record<string, unknown>[] {
   }
   if (!Array.isArray(value)) throw new Error(`${what} did not print a JSON array`);
   return value.map((entry: unknown, index) => {
-    if (!isObject(entry)) throw new Error(`${what} entry ${index} is not an object`);
+    if (!isRecord(entry)) throw new Error(`${what} entry ${index} is not an object`);
     return entry;
   });
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringField(entry: Record<string, unknown>, key: string, at: string): string {

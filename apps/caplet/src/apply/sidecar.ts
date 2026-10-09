@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, removeMarkedBlock } from "@caplet/adapters/common";
 import {
@@ -10,9 +10,13 @@ import {
   type Diagnostic,
   type FacetFamily,
   type FileContent,
+  isErrno,
+  isRecord,
   type SidecarTarget,
+  stableJson,
   targetIds,
 } from "@caplet/core";
+import { readTextIfExists } from "../internal/fs.js";
 import { containmentViolation, fileOwnership, type OutputBoundary } from "./containment.js";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
@@ -38,13 +42,8 @@ export type RemoveOwnedRegionsResult = {
 
 /** Reads and validates a sidecar; a missing file is an empty sidecar, an invalid one throws. */
 export async function readSidecar(sidecarPath: string): Promise<AcfManagedSidecar> {
-  let raw: string;
-  try {
-    raw = await readFile(sidecarPath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return emptySidecar();
-    throw error;
-  }
+  const raw = await readTextIfExists(sidecarPath);
+  if (raw === null) return emptySidecar();
   return parseSidecar(JSON.parse(raw) as unknown, sidecarPath);
 }
 
@@ -357,17 +356,6 @@ function regionContent(content: FileContent | null, own: AcfOwnership): FileCont
   return hasJsonPointer(parsed, own.pointer) ? stableJson(getJsonPointer(parsed, own.pointer)) : "";
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (isRecord(value)) {
-    const parts = Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`);
-    return `{${parts.join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function groupByPath(entries: ManagedEntry[]): Map<string, ManagedEntry[]> {
   const grouped = new Map<string, ManagedEntry[]>();
   for (const entry of entries) {
@@ -376,19 +364,6 @@ function groupByPath(entries: ManagedEntry[]): Map<string, ManagedEntry[]> {
     grouped.set(entry.path, bucket);
   }
   return grouped;
-}
-
-async function readTextIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isSidecarTarget(value: unknown): value is SidecarTarget {
@@ -404,8 +379,4 @@ function isFacetFamily(value: unknown): value is FacetFamily {
     value === "hook" ||
     value === "mcp"
   );
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return isRecord(error) && error.code === code;
 }

@@ -14,6 +14,7 @@ import {
   renderArtifactNotice,
   type Scope,
   type SkillFacet,
+  stableJson,
   type TargetDefinition,
   type TargetId,
 } from "@caplet/core";
@@ -30,7 +31,7 @@ import {
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { mcpSupport } from "./mcp.js";
-import { isRecord, ownValue, setOwn } from "./records.js";
+import { ownValue, setOwn } from "./records.js";
 import { CODEX_SKILL_METADATA, type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
@@ -188,15 +189,6 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
     setOwn(target, key, value);
   }
   return true;
-}
-
-/** JSON with object keys sorted, for comparing values regardless of key order. */
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, item: unknown) =>
-    isRecord(item)
-      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
-      : item,
-  );
 }
 
 /**

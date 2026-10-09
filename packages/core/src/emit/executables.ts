@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
 import { readClaudeMcp } from "../formats/claude-mcp.js";
-import { CLAUDE_MANIFEST, componentPaths } from "../formats/shared.js";
+import { componentPaths } from "../formats/shared.js";
 import type { TreeFile } from "../hash/tree.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
+  CLAUDE_PLUGIN_MANIFEST,
   capabilityCarrier,
   claudePluginComponents,
   type PluginComponentSpec,
@@ -70,7 +71,7 @@ export type ExecutableChange = Omit<ExecutableComponent, "fingerprint"> & {
 
 /** Package manifest holding a format's manifest keys, relative to the package root. */
 const manifestPaths: Readonly<Record<NativeRemainderComponent["format"], string>> = {
-  "claude-plugin": ".claude-plugin/plugin.json",
+  "claude-plugin": CLAUDE_PLUGIN_MANIFEST,
   "agent-plugins": "plugin.json",
 };
 
@@ -342,7 +343,7 @@ async function nativeServerExecutables({
   for (const component of remainder) {
     // A server declared inline under the key lives in the generated manifest, not a package file.
     const prefixes = component.paths
-      .filter((item) => item !== CLAUDE_MANIFEST)
+      .filter((item) => item !== CLAUDE_PLUGIN_MANIFEST)
       .map((item) => `${dir}/${item}`);
     result.claimed.push(...prefixes);
     if (!component.executable) continue;

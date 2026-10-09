@@ -1,12 +1,11 @@
 /**
  * Apply side of the Claude plugin carrier (claude-plugin-output): reconciles each planned Claude
- * install root with the host through the `claude` CLI, decides which host-dependent file changes
- * may proceed, and reports host and file state per plugin.
+ * install root with the host through the `claude` CLI and reports host and file state per plugin.
+ * Which file changes wait for the host is decided in `claude-gates.ts`.
  */
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { ACF_SYSTEM_OWNER, type Diagnostic } from "@caplet/core";
+import type { Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
 import {
   hashOwnedRegions,
@@ -18,31 +17,18 @@ import { execClaudeCli } from "../hosts/claude/cli.js";
 import { createClaudeHost } from "../hosts/claude/host.js";
 import type { ClaudePluginAction } from "../hosts/claude/plan.js";
 import {
-  type ClaudeCommandReport,
   type ClaudeHostReport,
   type ClaudePluginReport,
   type ClaudeScopeReport,
   previewClaudeHost,
   reconcileClaudeHost,
 } from "../hosts/claude/reconcile.js";
-import { type ClaudeRootPlan, marketplaceFile, renderMarketplace } from "./claude-marketplace.js";
+import type { ClaudeRootPlan } from "./claude-marketplace.js";
 import { type ClaudeRename, renameLines } from "./claude-migration.js";
+import { readBytesIfExists } from "./fs.js";
 import { displayPath } from "./plan-view.js";
 import { columns } from "./render.js";
-import type { EmitPlan, EmittedDiff } from "./workflow.js";
-
-/**
- * A file change that must wait for the host. `uninstalled`: deleting a removed plugin's files
- * waits until Claude no longer has it installed, because Claude keeps serving an installed plugin
- * from its cache. `retired`: deleting `marketplace.json` waits until the marketplace is removed.
- * `registered`: deleting the loose Claude files of a capability that became a plugin waits until
- * Claude reports the plugin registered or disabled by the user, so the capability never drops
- * out of Claude in between.
- */
-export type ClaudeGate =
-  | { kind: "uninstalled"; marketplaceDir: string; plugin: string }
-  | { kind: "retired"; marketplaceDir: string }
-  | { kind: "registered"; marketplaceDir: string; plugin: string };
+import type { EmitPlan } from "./workflow.js";
 
 /** Whether a plugin's files under its package directory match what caplet recorded. */
 export type ClaudeFileState = "current" | "drifted" | "missing";
@@ -64,129 +50,6 @@ export type ClaudeReport = {
   diagnostics: Diagnostic[];
   renames?: ClaudeRename[] | undefined;
 };
-
-/** The gate a planned change waits on, or undefined when it does not depend on the host. */
-export function claudeGate(
-  item: EmittedDiff,
-  roots: readonly ClaudeRootPlan[],
-): ClaudeGate | undefined {
-  if (item.diff.after !== null || item.destination !== "native") return undefined;
-  const root = roots.find((candidate) => candidate.installRoot === item.installRoot);
-  if (root === undefined) return undefined;
-  const marketplaceDir = root.marketplaceDir;
-  if (item.capabilityName === ACF_SYSTEM_OWNER) {
-    const file = path.resolve(item.installRoot, item.diff.path);
-    return file === marketplaceFile(item.installRoot)
-      ? { kind: "retired", marketplaceDir }
-      : undefined;
-  }
-  const plugin = item.capabilityName;
-  const wanted = root.plugins.some((candidate) => candidate.name === plugin);
-  if (item.carrier === "loose") {
-    return item.targetId === "claude" && wanted
-      ? { kind: "registered", marketplaceDir, plugin }
-      : undefined;
-  }
-  return wanted ? undefined : { kind: "uninstalled", marketplaceDir, plugin };
-}
-
-/** Whether the host report lets a change behind `gate` proceed. */
-export function gateOpen(gate: ClaudeGate, report: ClaudeReport): boolean {
-  const scope = gateScope(gate, report);
-  if (scope === undefined || !scope.stateRead) return false;
-  if (gate.kind === "registered") {
-    const state = scope.plugins.find((item) => item.name === gate.plugin)?.state;
-    return state === "registered" || state === "disabled by user";
-  }
-  if (gate.kind === "uninstalled") {
-    const plugin = scope.plugins.find((item) => item.name === gate.plugin);
-    return plugin === undefined || plugin.state === "not installed";
-  }
-  const remove = marketplaceRemove(scope);
-  return (
-    scope.otherScopeInstalls.length === 0 &&
-    scope.plugins.every((plugin) => plugin.state === "not installed") &&
-    (remove === undefined ? !scope.marketplaceKnown : remove.status === "succeeded")
-  );
-}
-
-/**
- * The change to apply for a gated `item` once the host has run: `item` when its gate is open,
- * undefined to hold it back. A retired marketplace that stays registered
- * (`acf.claude.marketplace-kept`) keeps `marketplace.json` as an empty catalog instead of
- * deleting it, so the registration Claude keeps still points at a valid marketplace.
- */
-export function gatedChange(
-  item: EmittedDiff,
-  gate: ClaudeGate,
-  report: ClaudeReport,
-): EmittedDiff | undefined {
-  if (gateOpen(gate, report)) return item;
-  if (gate.kind !== "retired") return undefined;
-  const scope = gateScope(gate, report);
-  if (scope === undefined) return undefined;
-  const kept = marketplaceKept(scope, (plugin) => plugin.state === "not installed");
-  return kept ? emptyCatalog(item, scope) : undefined;
-}
-
-/**
- * The plan's changes as apply will make them, judged from a host preview ({@link previewClaude}):
- * `marketplace.json` of a retired marketplace that stays registered becomes the empty catalog
- * apply writes ({@link gatedChange}) instead of a deletion, and drops out when the file already
- * is that catalog. Every other change is kept as planned.
- */
-export function previewedDiffs(
-  plan: Pick<EmitPlan, "diffs" | "claude">,
-  report: ClaudeReport | undefined,
-): EmittedDiff[] {
-  if (report === undefined) return plan.diffs;
-  return plan.diffs.flatMap((item) => {
-    const gate = claudeGate(item, plan.claude);
-    if (gate?.kind !== "retired") return [item];
-    const scope = gateScope(gate, report);
-    // The plugins the plan uninstalls are gone by the time apply settles the marketplace.
-    const kept =
-      scope !== undefined &&
-      marketplaceKept(
-        scope,
-        (plugin) => plugin.state === "not installed" || plugin.action === "uninstall",
-      );
-    if (!kept) return [item];
-    const change = emptyCatalog(item, scope);
-    return change.diff.before === change.diff.after ? [] : [change];
-  });
-}
-
-/**
- * Whether the host keeps the retired marketplace of `scope` registered
- * (`acf.claude.marketplace-kept`): Claude lists it, caplet plans no `marketplace remove`, and
- * every plugin is gone by `gone`.
- */
-function marketplaceKept(
-  scope: ClaudeScopeStatus,
-  gone: (plugin: ClaudePluginStatus) => boolean,
-): boolean {
-  return (
-    scope.stateRead &&
-    scope.marketplaceKnown &&
-    marketplaceRemove(scope) === undefined &&
-    scope.plugins.every(gone)
-  );
-}
-
-/** `item` (the retired `marketplace.json`) rewritten as the marketplace's empty catalog. */
-function emptyCatalog(item: EmittedDiff, scope: ClaudeScopeStatus): EmittedDiff {
-  return { ...item, diff: { ...item.diff, after: renderMarketplace(scope.marketplace, []) } };
-}
-
-/** The scope of the marketplace `gate` belongs to. */
-function gateScope(gate: ClaudeGate, report: ClaudeReport): ClaudeScopeStatus | undefined {
-  return report.scopes.find((scope) => scope.marketplaceDir === gate.marketplaceDir);
-}
-
-function marketplaceRemove(scope: ClaudeScopeStatus): ClaudeCommandReport | undefined {
-  return scope.commands.find((command) => command.op === "marketplace remove");
-}
 
 /**
  * Registers, updates and uninstalls the plugins of `roots` with the `claude` CLI
@@ -319,22 +182,11 @@ async function fileState(
   if (entries.length === 0) return "missing";
   let drifted = false;
   for (const entry of entries) {
-    const content = await readOrNull(path.resolve(installRoot, entry.path));
+    const content = await readBytesIfExists(path.resolve(installRoot, entry.path));
     if (content === null) return "missing";
     const wholeFile = entry.owns.some((own) => own.kind === "file");
     const current = wholeFile ? content : content.toString("utf8");
     if (hashOwnedRegions(current, entry.owns) !== entry.hash) drifted = true;
   }
   return drifted ? "drifted" : "current";
-}
-
-async function readOrNull(filePath: string): Promise<Buffer | null> {
-  try {
-    return await readFile(filePath);
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
 }

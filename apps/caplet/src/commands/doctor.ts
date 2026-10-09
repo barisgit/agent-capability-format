@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { type Diagnostic, targetIds, targetMap } from "@caplet/core";
+import { type Diagnostic, isErrno, targetIds, targetMap } from "@caplet/core";
 import { readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope } from "../internal/args.js";
@@ -164,10 +164,6 @@ async function checkLockfiles(
       });
     }
   }
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 function capitalize(value: string): string {

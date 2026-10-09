@@ -55,11 +55,9 @@ const instructionExtension = z
   })
   .strict();
 
-export const nativeHookEntrySchema = hookEntrySchema;
-
 const hookExtension = z
   .object({
-    hooks: z.record(z.string(), z.array(nativeHookEntrySchema)).optional(),
+    hooks: z.record(z.string(), z.array(hookEntrySchema)).optional(),
     runInBackground: z.boolean().optional(),
   })
   .strict();
@@ -70,6 +68,7 @@ const hookExtension = z
  */
 const mcpExtension = z.object({ native }).strict();
 
+/** The `targets.<target>` schema of each family; every built-in target accepts the same keys. */
 export const commonTargetExtensionSchemas = {
   capability: capabilityExtension,
   skill: skillExtension,
@@ -79,9 +78,3 @@ export const commonTargetExtensionSchemas = {
   hook: hookExtension,
   mcp: mcpExtension,
 } as const;
-
-export const claudeExtensionSchemas = commonTargetExtensionSchemas;
-export const codexExtensionSchemas = commonTargetExtensionSchemas;
-export const cursorExtensionSchemas = commonTargetExtensionSchemas;
-export const opencodeExtensionSchemas = commonTargetExtensionSchemas;
-export const piExtensionSchemas = commonTargetExtensionSchemas;

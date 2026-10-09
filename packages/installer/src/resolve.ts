@@ -5,11 +5,11 @@ import {
   type CapabilityEntry,
   type Diagnostic,
   digestMismatchDiagnostic,
+  isErrno,
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
-import { isErrno } from "./errno.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
 import type { SourceInventory } from "./inventory.js";
 import {
@@ -19,16 +19,14 @@ import {
   canonicalizePathLocation,
   entrySourceId,
   type LockEntry,
-  lockVersion,
   readLockfile,
-  sourceId,
+  sourceString,
   writeLockfile,
 } from "./lockfile.js";
 import { type CapabilityRecord, capabilityPath, materializeFetched } from "./materialize.js";
 
 /** What {@link resolveCapabilities} reconciles and how far it may go. */
 export type ResolveOptions = {
-  scope: "user" | "project";
   scopeRoot: ScopeRoot;
   /**
    * `auto` fetches entries that are new, changed in intent, locked under a legacy key or
@@ -173,7 +171,7 @@ async function resolveCapabilitiesStaged(
 ): Promise<ResolveResult> {
   const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
-  const usableLock = existingLock !== null && lockVersion(existingLock) === 1 ? existingLock : null;
+  const usableLock = existingLock !== null && existingLock.acf === 1 ? existingLock : null;
   const drift = detectLockDrift(yml, existingLock);
   const frozenDrift = opts.frozen === true && drift.length > 0;
   diagnostics.push(
@@ -204,7 +202,7 @@ async function resolveCapabilitiesStaged(
 
   for (const entry of yml.capabilities) {
     const id = entrySourceId(entry);
-    const legacyId = sourceId(entry.source);
+    const legacyId = sourceString(entry.source);
     const locked = lockedBySource.get(id) ?? lockedBySource.get(legacyId);
     if (locked !== undefined) {
       priorRecords.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));

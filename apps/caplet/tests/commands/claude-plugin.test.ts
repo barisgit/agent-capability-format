@@ -15,7 +15,7 @@ import {
   type TestScope,
   writeText,
 } from "../helpers.js";
-import { claudeHost, localPluginList, plannedVersion } from "../support/claude-scenario.js";
+import { claudeScenarioShim, localPluginList, plannedVersion } from "../support/claude-scenario.js";
 
 const PROJECT_ARGS = (scope: TestScope) => [
   "--cwd",
@@ -164,7 +164,7 @@ test("the scope's marketplace lists every generated plugin and follows desired s
   // Claude has only review installed, so lint's files may go.
   await selectSources(scope, [review]);
   const version = await plannedVersion(scope, PROJECT_ARGS(scope), "review");
-  const kept = await claudeHost(scope, "project", "review", [
+  const kept = await claudeScenarioShim(scope, "project", "review", [
     localPluginList(version),
     "marketplace-list-json",
     "marketplace-add-local",
@@ -180,7 +180,7 @@ test("the scope's marketplace lists every generated plugin and follows desired s
   ).rejects.toThrow();
 
   await selectSources(scope, []);
-  const retired = await claudeHost(scope, "project", "review", [
+  const retired = await claudeScenarioShim(scope, "project", "review", [
     localPluginList(version),
     "marketplace-list-json",
     "uninstall-local",

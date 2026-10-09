@@ -4,7 +4,7 @@ import {
   type CapabilitiesLock,
   computeCapabilityDigests,
   deduplicateCapabilities,
-  discoverCapabilityRoots,
+  discoverRepository,
   readRepositoryCapabilities,
   resolveScopeCapabilities,
   scopeRoot,
@@ -15,7 +15,7 @@ test("resolver discovers single-root acf.yml", async () => {
   const dir = await tempDir("acf-resolver-single-");
   try {
     await writeText(path.join(dir, "acf.yml"), "acf: 1\nname: single\nversion: 1.0.0\n");
-    expect(await discoverCapabilityRoots(dir)).toEqual([dir]);
+    expect((await discoverRepository(dir)).roots).toEqual([dir]);
   } finally {
     await cleanup(dir);
   }
@@ -29,7 +29,7 @@ test("resolver discovers multi acf directory at arbitrary depth", async () => {
       path.join(dir, "acf", "nested", "two", "acf.yml"),
       "acf: 1\nname: two\nversion: 1.0.0\n",
     );
-    expect((await discoverCapabilityRoots(dir)).map((p) => path.basename(p)).sort()).toEqual([
+    expect((await discoverRepository(dir)).roots.map((p) => path.basename(p)).sort()).toEqual([
       "one",
       "two",
     ]);

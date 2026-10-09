@@ -10,6 +10,7 @@
 import path from "node:path";
 import {
   type AcfCapability,
+  CLAUDE_PLUGIN_MANIFEST,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
@@ -34,7 +35,7 @@ import { readSkillAssets } from "../common/skills.js";
 import { type EmitReport, reportPackageDrops } from "../common/support-report.js";
 import { renderMarkdownFile } from "../common/text.js";
 import { listTree, type TreeFile } from "../common/tree.js";
-import { CLAUDE_MANIFEST_PATH, pluginManifest, pluginVersion } from "./manifest.js";
+import { pluginManifest, pluginVersion } from "./manifest.js";
 import {
   bundleReferences,
   isUnchangedClaudePlugin,
@@ -105,7 +106,7 @@ export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promis
   if (report.diagnostics.some((diagnostic) => diagnostic.code === "acf.support.refused"))
     return { diffs: [], diagnostics: report.diagnostics, outcomes: report.outcomes };
 
-  const atBase = built.files.with(CLAUDE_MANIFEST_PATH, built.manifest(built.baseVersion));
+  const atBase = built.files.with(CLAUDE_PLUGIN_MANIFEST, built.manifest(built.baseVersion));
   const digest = payloadDigestOfEntries(
     [...atBase].map(([relativePath, file]) => ({
       path: relativePath,
@@ -114,7 +115,7 @@ export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promis
     })),
   );
   const version = pluginVersion(built.baseVersion, digest);
-  const files = built.files.with(CLAUDE_MANIFEST_PATH, built.manifest(version));
+  const files = built.files.with(CLAUDE_PLUGIN_MANIFEST, built.manifest(version));
 
   const diffs: FileDiff[] = [];
   for (const [relativePath, file] of [...files].sort(([a], [b]) => (a < b ? -1 : 1))) {
@@ -170,7 +171,7 @@ async function copiedPackage(capability: AcfCapability, fs: ReadOnlyFs): Promise
   const files = new PackageFiles();
   let manifestText = "{}\n";
   for (const file of await listTree(fs, capability.root, { skip: (p) => p === ".git" })) {
-    if (file.path === CLAUDE_MANIFEST_PATH) manifestText = new TextDecoder().decode(file.bytes);
+    if (file.path === CLAUDE_PLUGIN_MANIFEST) manifestText = new TextDecoder().decode(file.bytes);
     else files.set(file.path, { content: file.bytes, mode: file.mode });
   }
   const raw = parseJsonObject(manifestText);
@@ -203,7 +204,8 @@ async function generatedPackage(
   const format = capability.source?.format ?? "acf";
   const rawManifest =
     format === "claude-plugin"
-      ? (parseJsonObject(await fs.readText(path.join(capability.root, CLAUDE_MANIFEST_PATH))) ?? {})
+      ? (parseJsonObject(await fs.readText(path.join(capability.root, CLAUDE_PLUGIN_MANIFEST))) ??
+        {})
       : {};
 
   for (const file of await supportFiles(capability, fs, rawManifest, report.diagnostics))
@@ -339,7 +341,7 @@ async function supportFiles(
   const owned = new Set<string>([".git"]);
   if (format === "acf") for (const p of ACF_OWNED) owned.add(p);
   if (format === "claude-plugin") {
-    owned.add(CLAUDE_MANIFEST_PATH);
+    owned.add(CLAUDE_PLUGIN_MANIFEST);
     owned.add(MCP_PATH);
     for (const p of jsonConfigPaths(rawManifest.mcpServers)) owned.add(p);
     for (const p of unselectedPathsAndKeys(capability).paths) owned.add(p);

@@ -97,7 +97,10 @@ Owns:
 - the asset reference resolver (§9),
 - the applicability cascade (§10),
 - **per-target extension schemas** (§4.5) for `targets.<target>` validation,
-- **canonical `EmitOptions`** type (§4.2).
+- **canonical `EmitOptions`** type (§4.2),
+- the shared shape guards (`isRecord`, `isStringArray`, `isStringMap`,
+  `isSlug`, `isErrno`) and `stableJson`, which the other packages import
+  rather than copy.
 
 Core invariants:
 
@@ -1091,15 +1094,7 @@ export const targets = defineTargets([
       },
     },
 
-    extensions: {
-      capability:  claudeCapabilityExtensionSchema,
-      skill:       claudeSkillExtensionSchema,
-      agent:       claudeAgentExtensionSchema,
-      command:     claudeCommandExtensionSchema,
-      instruction: claudeInstructionExtensionSchema,
-      hook:        claudeHookExtensionSchema,
-      mcp:         claudeMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
 
     adapter: claudeAdapter,
   }),
@@ -1147,15 +1142,7 @@ export const targets = defineTargets([
       },
     },
 
-    extensions: {
-      capability:  codexCapabilityExtensionSchema,
-      skill:       codexSkillExtensionSchema,
-      agent:       codexAgentExtensionSchema,
-      command:     codexCommandExtensionSchema,
-      instruction: codexInstructionExtensionSchema,
-      hook:        codexHookExtensionSchema,
-      mcp:         codexMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
 
     adapter: codexAdapter,
   }),
@@ -1198,15 +1185,7 @@ export const targets = defineTargets([
         project: `./opencode.json`,
       },
     },
-    extensions: {
-      capability:  opencodeCapabilityExtensionSchema,
-      skill:       opencodeSkillExtensionSchema,
-      agent:       opencodeAgentExtensionSchema,
-      command:     opencodeCommandExtensionSchema,
-      instruction: opencodeInstructionExtensionSchema,
-      hook:        opencodeHookExtensionSchema,
-      mcp:         opencodeMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: opencodeAdapter,
   }),
 
@@ -1246,14 +1225,7 @@ export const targets = defineTargets([
         project: `./.cursor/mcp.json`,
       },
     },
-    extensions: {
-      capability:  cursorCapabilityExtensionSchema,
-      skill:       cursorSkillExtensionSchema,
-      agent:       cursorAgentExtensionSchema,
-      command:     cursorCommandExtensionSchema,
-      instruction: cursorInstructionExtensionSchema,
-      mcp:         cursorMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: cursorAdapter,
   }),
 
@@ -1295,15 +1267,7 @@ export const targets = defineTargets([
         project: `./.pi/mcp.json`,
       },
     },
-    extensions: {
-      capability:  piCapabilityExtensionSchema,
-      skill:       piSkillExtensionSchema,
-      agent:       piAgentExtensionSchema,
-      command:     piCommandExtensionSchema,
-      instruction: piInstructionExtensionSchema,
-      hook:        piHookExtensionSchema,
-      mcp:         piMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: piAdapter,
   }),
 ] as const)
@@ -1312,21 +1276,15 @@ export const targets = defineTargets([
 ### 4.4 Derived outputs
 
 ```ts
-export type TargetId = (typeof targets)[number]["id"]
+export type TargetId = string                   // types/model.ts; not narrowed to the built-ins
 
-export const targetIds: readonly TargetId[] =
-  targets.map((t) => t.id) as TargetId[]
+export const targetIds: readonly TargetId[] = targets.map((target) => target.id)
 
 export const targetMap: Readonly<Record<TargetId, TargetDefinition<TargetId>>> =
-  deriveTargetMap(targets)
-
-export const targetExtensionSchemas = deriveExtensionSchemas(targets)
-export const targetSupportMatrix    = deriveSupportMatrix(targets)
-export const targetHookEventMap     = deriveHookEventMap(targets)
-export const targetTriggerSupport   = deriveTriggerSupport(targets)
+  Object.fromEntries(targets.map((target) => [target.id, target]))
 
 export function isTargetId(value: unknown): value is TargetId {
-  return typeof value === "string" && (targetIds as string[]).includes(value)
+  return typeof value === "string" && targetIds.includes(value)
 }
 ```
 
@@ -1341,23 +1299,17 @@ export function isTargetId(value: unknown): value is TargetId {
 
 ### 4.5 Extension schemas
 
-Per-target, per-family extension schemas are declared next to the adapter:
+Every built-in target validates a family's `targets.<target>` block against the
+same per-family schema, `commonTargetExtensionSchemas` in
+`packages/core/src/targets/extensions.ts`. Each schema is strict, for example:
 
 ```ts
-import { z } from "zod"
-
-export const claudeHookExtensionSchema = z.object({
-  hooks: z
-    .record(
-      z.string(),                    // native event name; not slug-restricted
-      z.array(
-        canonicalHookEntrySchema.extend({
-          runInBackground: z.boolean().optional(),
-        }),
-      ),
-    )
-    .optional(),
-})
+const hookExtension = z
+  .object({
+    hooks: z.record(z.string(), z.array(hookEntrySchema)).optional(),
+    runInBackground: z.boolean().optional(),
+  })
+  .strict()
 ```
 
 Unknown target ids or unknown keys under a known target id are diagnostics
@@ -1522,7 +1474,8 @@ Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 | Module | Role |
 | --- | --- |
 | `claude-marketplace.ts` | `planClaudeMarketplaces` returns a `ClaudeRootPlan` per Claude install root that lists a plugin or whose sidecar shows an earlier marketplace or plugin (`leftover` names plugins the sidecar still owns but the plan dropped), plus the diff of `marketplaceFile(installRoot)`, `<claude-install-root>/.acf/marketplace/.claude-plugin/marketplace.json`, owned by `acf-system` with `carrier: plugin`. It lists `{name, source: "./plugins/<capability>"}` for every plugin of the plan and the installed plugin of a capability a refusal blocks. `recordClaudeMarketplaces` keeps the sidecar's `marketplace` record in line with ownership of that file. |
-| `claude-host-flow.ts` | `claudeGate` marks a planned change that waits on the host: `registered` (retiring loose Claude files of a capability that is now a plugin), `uninstalled` (deleting a removed plugin's files), `retired` (deleting `marketplace.json`). `gateOpen` decides from the host report; `registered` opens on `registered` or `disabled by user`. `gatedChange` applies an open change, and in place of a closed `retired` deletion whose marketplace stays registered writes an empty catalog; `previewedDiffs` makes the same substitution for `status` and dry runs from the host preview. `reconcileClaude` and `previewClaude` call the host port and add each plugin's file state (`current`, `drifted`, `missing`) from its `carrier: plugin` sidecar entries; `claudeLines` renders the host block. |
+| `claude-gates.ts` | `claudeGate` marks a planned change that waits on the host: `registered` (retiring loose Claude files of a capability that is now a plugin), `uninstalled` (deleting a removed plugin's files), `retired` (deleting `marketplace.json`). `gateClaudeChanges` attaches those gates to a plan's changes and splits off the migration, for both apply and remove plans. `gateOpen` decides from the host report; `registered` opens on `registered` or `disabled by user`. `gatedChange` applies an open change, and in place of a closed `retired` deletion whose marketplace stays registered writes an empty catalog; `previewedDiffs` makes the same substitution for `status` and dry runs from the host preview. |
+| `claude-host-flow.ts` | `reconcileClaude` and `previewClaude` call the host port and add each plugin's file state (`current`, `drifted`, `missing`) from its `carrier: plugin` sidecar entries; `claudeLines` renders the host block. |
 | `claude-migration.ts` | `planClaudeMigration` turns gated retirements of drifted loose artifacts into releases (reported by `driftedWarning` as `acf.migration.drifted`) and each retired skill into a `/<skill> -> /<capability>:<skill>` rename. Renames are not recorded: retirement happens once, so the apply that performs it is the only one that announces them. |
 
 `applyEmitPlan` (`apply-plan.ts`) runs in this order: write every change without a
@@ -2079,25 +2032,12 @@ async function readProseFamily<Family extends "agent" | "command" | "instruction
 
 ```ts
 async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookFile | undefined> {
-  const dir = path.join(root, "hooks")
-  const candidates = ["hooks.yml", "hooks.yaml"].map((n) => path.join(dir, n))
-  const present = (await Promise.all(candidates.map(exists)))
-    .map((ok, i) => (ok ? candidates[i] : null))
-    .filter((p): p is string => !!p)
-
-  if (present.length === 0) return undefined
-  if (present.length > 1) {
-    diagnostics.push({
-      severity: "error",
-      code: "acf.hooks.duplicate-file",
-      message: `hooks/hooks.yml and hooks/hooks.yaml both exist`,
-    })
-    return undefined
-  }
-
-  const file = present[0]
-  const raw = await readYaml(file)
-  const parsed = hookFileSchema.safeParse(raw)
+  // hooks.yml or hooks.yaml; both present is acf.hooks.duplicate-file
+  const file = await pickFamilyYaml(
+    path.join(root, "hooks"), "hooks", "acf.hooks.duplicate-file", diagnostics,
+  )
+  if (file === undefined) return undefined
+  const parsed = hookFileSchema.safeParse(await parseYamlFile(file, diagnostics))
   if (!parsed.success) {
     pushZodIssues(diagnostics, parsed.error, file, {
       baseCode: "acf.hooks.invalid-field",
@@ -2107,11 +2047,11 @@ async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookF
     return undefined
   }
 
-  return {
-    path: file,
-    buckets: pickBuckets(parsed.data),
-    native: nativeHooks(parsed.data.targets, file, diagnostics), // acf.target.unknown-id
-  }
+  const hookFile: HookFile = { path: file, buckets: pickBuckets(parsed.data) }
+  // family-level targets.<target>.hooks; an unknown target id is acf.target.unknown-id
+  const native = nativeHooks(parsed.data.targets, file, diagnostics)
+  if (native !== undefined) hookFile.native = native
+  return hookFile
 }
 ```
 
@@ -2262,7 +2202,7 @@ the ref updates the same lock entry.
 entry's `path:` within the source as `root`, the checked-out `commit` (null
 for `path:` sources) and the entry's `sourceId`. A `path:` source is read in
 place. A git source is cloned afresh into
-`<agentsDir>/.cache/acf-installer/<cacheKeyFor(sourceId(source), ref)>`
+`<agentsDir>/.cache/acf-installer/<cacheKeyFor(sourceString(source), ref)>`
 through the `git` CLI (`packages/installer/src/git.ts`):
 
 - `--depth 1 --branch <ref>` (shallow) and `--filter=blob:none` (blobless) by
@@ -2319,7 +2259,7 @@ over this unfiltered snapshot (§7.5).
 
 ```ts
 export type CapabilitiesLock = {
-  acf: 1
+  acf: number // as read; caplet writes 1, drift reports any other version
   entries: LockEntry[]
 }
 
@@ -2369,15 +2309,13 @@ or forces a refetch:
 
 ```ts
 export async function computeContentHash(root: string): Promise<string> {
-  const files = await listRegularFilesRecursive(root)        // no symlinks, no specials
-  const rels = files
-    .map((f) => path.relative(root, f).split(path.sep).join("/").normalize("NFC"))
-    .sort()                                                   // byte-lexicographic
   const hash = crypto.createHash("sha256")
-  for (const rel of rels) {
-    hash.update(Buffer.from(rel, "utf8"))
+  // listTreeFiles (hash/tree.ts): no symlinks or special files; NFC relative paths
+  // sorted by their UTF-8 bytes
+  for (const entry of await listTreeFiles(root)) {
+    hash.update(Buffer.from(entry.rel, "utf8"))
     hash.update(Buffer.from([0]))
-    hash.update(await fs.readFile(path.join(root, ...rel.split("/"))))
+    hash.update(await fs.readFile(entry.absPath))
     hash.update(Buffer.from([0]))
   }
   return `sha256-${hash.digest("hex")}`
@@ -2464,19 +2402,12 @@ suggesting `path:`. Readers live in `packages/core/src/formats/`
 is not a slug fails with `acf.manifest.invalid-name`, whose
 `data.suggestedRename` gives a valid `rename`.
 
-```ts
-export async function discoverCapabilityRoots(repoRoot: string): Promise<string[]> {
-  if (await exists(path.join(repoRoot, "acf.yml"))) return [repoRoot]
-  if (await exists(path.join(repoRoot, "acf.yaml"))) return [repoRoot]
-
-  const acfDir = path.join(repoRoot, "acf")
-  if (await exists(acfDir)) return findAllAcfManifests(acfDir)
-
-  if (await exists(path.join(repoRoot, "skills"))) return [synthesizeLegacyManifest(repoRoot)]
-
-  return []
-}
-```
+`discoverRepository` in `packages/core/src/resolver/` finds the capabilities of
+an ACF repository: the root itself when it has `acf.yml` or `acf.yaml`;
+otherwise every outermost directory with one under `acf/`, skipping dot
+entries, sorted. Finding neither yields no roots and an
+`acf.resolve.no-capabilities` info diagnostic. Bare `skills/` synthesis
+happens earlier, in the installer's `inspectSource`.
 
 ## 8. Caplet configuration (`caplet.yml`)
 

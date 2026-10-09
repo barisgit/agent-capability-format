@@ -19,8 +19,8 @@ import {
 } from "../helpers.js";
 import {
   atVersion,
-  claudeHost,
   claudeMarketplaceDir,
+  claudeScenarioShim,
   localPluginList,
   plannedVersion,
 } from "../support/claude-scenario.js";
@@ -105,7 +105,7 @@ async function applyWithoutCli(scope: TestScope): Promise<string> {
 }
 
 async function userHost(scope: TestScope, transcripts: FakeTranscript[]) {
-  return await claudeHost(scope, "user", NAME, transcripts);
+  return await claudeScenarioShim(scope, "user", NAME, transcripts);
 }
 
 test("apply installs a new plugin after adding the marketplace", async () => {
@@ -518,7 +518,7 @@ test("a project registers at Claude local scope from the project root", async ()
   const scope = await reviewScope("project");
   const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
   const version = await plannedVersion(scope, args, NAME);
-  const host = await claudeHost(scope, "project", NAME, [
+  const host = await claudeScenarioShim(scope, "project", NAME, [
     "list-json-empty",
     "marketplace-list-json-empty",
     "marketplace-add-local",

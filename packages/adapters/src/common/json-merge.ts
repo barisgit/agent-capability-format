@@ -2,7 +2,8 @@
  * Edits one JSON pointer of a user-owned JSON file in place, keeping the rest of the text
  * (formatting, key order, other entries) byte for byte.
  */
-import { isRecord, ownValue, setOwn } from "./records.js";
+import { isRecord } from "@caplet/core";
+import { ownValue, setOwn } from "./records.js";
 
 type JsonContainer = Record<string, unknown> | unknown[];
 

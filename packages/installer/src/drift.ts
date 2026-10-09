@@ -1,6 +1,6 @@
 import type { CapabilitiesYml, CapabilityEntry, Diagnostic, EntrySelection } from "@caplet/core";
 import type { CapabilitiesLock, LockEntry } from "./lockfile.js";
-import { entrySourceId, lockVersion, sourceId } from "./lockfile.js";
+import { entrySourceId, sourceString } from "./lockfile.js";
 
 /**
  * Reports how `capabilities.yml` disagrees with the lock: an entry without a lock entry is
@@ -13,7 +13,7 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
     return yml.capabilities.map((entry) => missingEntryDiagnostic(entrySourceId(entry)));
   }
 
-  const version = lockVersion(lock);
+  const version = lock.acf;
   if (version !== 1) {
     return [
       {
@@ -29,7 +29,7 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
   const entriesBySource = new Map(lock.entries.map((entry) => [entry.sourceId, entry]));
   for (const entry of yml.capabilities) {
     const id = entrySourceId(entry);
-    const lockEntry = entriesBySource.get(id) ?? entriesBySource.get(sourceId(entry.source));
+    const lockEntry = entriesBySource.get(id) ?? entriesBySource.get(sourceString(entry.source));
     if (lockEntry === undefined) {
       diagnostics.push(missingEntryDiagnostic(id));
       continue;

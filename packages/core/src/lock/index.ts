@@ -13,7 +13,7 @@ import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
-import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
+import { isErrno, isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -60,7 +60,12 @@ export type LockEntry = {
   synthesized?: true | undefined;
 };
 
-export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
+/**
+ * A parsed `capabilities.lock`. `acf` is the version the file declares: `readLockfile` passes a
+ * future version through so drift detection can report `acf.lock.unsupported-version`, and
+ * every lock caplet writes declares `1`.
+ */
+export type CapabilitiesLock = { acf: number; entries: LockEntry[] };
 
 type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
 
@@ -255,7 +260,7 @@ function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
   }
   const entries = value.entries.map((entry) => parseLockEntry(entry, lockPath));
   // A future version is reported by drift detection (`acf.lock.unsupported-version`).
-  return { acf: value.acf as 1, entries };
+  return { acf: value.acf, entries };
 }
 
 function parseLockEntry(value: unknown, lockPath: string): LockEntry {
@@ -369,8 +374,4 @@ function isCapabilitySelectorMap(value: unknown): value is Record<string, string
       ([name, selector]) => isSlug(name) && typeof selector === "string" && selector.length > 0,
     )
   );
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return isRecord(error) && error.code === code;
 }
