@@ -20,6 +20,8 @@ type NegativeFixture = {
   /** Source package directory under `tests/negative/`. */
   source: string;
   targets: string[];
+  /** `targets.claude.carrier`; absent leaves Claude's default, the plugin carrier. */
+  claudeCarrier?: "plugin" | "loose";
   /** Refusals the plan reports: target and `data.source` (the field, key or component). */
   refused: { target: string; source: string; mentions?: string }[];
   /** Project files written besides caplet's own `.agents` state; none by default. */
@@ -78,10 +80,21 @@ const fixtures: NegativeFixture[] = [
     refused: [{ target: "codex", source: "hook hooks" }],
     forbidden: ["PreToolUse", "guard.js", "Run shell commands"],
   },
+  // A refused component blocks the capability for the target, so neither the plugin's own
+  // .mcp.json nor the project's .mcp.json receives the server.
   {
     id: "mcp-agent-plugins-cwd-claude",
     source: "agent-plugins-cwd",
     targets: ["claude"],
+    claudeCarrier: "plugin",
+    refused: [{ target: "claude", source: "mcp.cwd", mentions: "directory" }],
+    forbidden: ["server.js"],
+  },
+  {
+    id: "mcp-agent-plugins-cwd-claude-loose",
+    source: "agent-plugins-cwd",
+    targets: ["claude"],
+    claudeCarrier: "loose",
     refused: [{ target: "claude", source: "mcp.cwd", mentions: "directory" }],
     forbidden: ["server.js"],
   },
@@ -112,7 +125,11 @@ for (const fixture of fixtures) {
       );
       await writeText(
         path.join(scope.agentsDir, "caplet.yml"),
-        `emit:\n  defaultTargets: [${fixture.targets.join(", ")}]\n`,
+        `emit:\n  defaultTargets: [${fixture.targets.join(", ")}]\n${
+          fixture.claudeCarrier === undefined
+            ? ""
+            : `targets:\n  claude:\n    carrier: ${fixture.claudeCarrier}\n`
+        }`,
       );
 
       const result = await runCaplet(scope, [

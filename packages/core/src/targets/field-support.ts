@@ -246,17 +246,26 @@ const capletDataDir = (source: string) =>
 
 const CLAUDE_CWD_REASON =
   "Claude ignores a server cwd key and starts plugin stdio servers in the directory claude was launched from, so the server would run elsewhere than declared";
-const CLAUDE_CWD_FIXTURE = "mcp-agent-plugins-cwd-claude";
+
 const CLAUDE_CWD_EVIDENCE: CellEvidence = {
   level: "verified",
   source: `${RESEARCH}/tools/claude-code.md#Runtime verification (claude 2.1.97, 2026-10-08)`,
   hostVersion: "claude 2.1.97",
 };
-const claudeCwdRefusal: SupportCell = {
-  kind: "refused",
-  reason: CLAUDE_CWD_REASON,
-  evidence: CLAUDE_CWD_EVIDENCE,
-  negativeFixture: CLAUDE_CWD_FIXTURE,
+/** The `cwd` refusal on both Claude carriers, each proven by its own negative fixture. */
+const claudeCwdRefusal: Pick<Row, "claudePlugin" | "claudeLoose"> = {
+  claudePlugin: {
+    kind: "refused",
+    reason: CLAUDE_CWD_REASON,
+    evidence: CLAUDE_CWD_EVIDENCE,
+    negativeFixture: "mcp-agent-plugins-cwd-claude",
+  },
+  claudeLoose: {
+    kind: "refused",
+    reason: CLAUDE_CWD_REASON,
+    evidence: CLAUDE_CWD_EVIDENCE,
+    negativeFixture: "mcp-agent-plugins-cwd-claude-loose",
+  },
 };
 
 /** Placeholder rows: Claude's plugin carrier has its own variable, every loose carrier an absolute path. */
@@ -288,7 +297,7 @@ const cursorCwdRefusal: SupportCell = refused(
 
 function cwdPlaceholderRow(id: string, loose: (source: string) => SupportCell): FieldSupport {
   return field("mcp", id, "functional", {
-    ...claude(claudeCwdRefusal),
+    ...claudeCwdRefusal,
     codex: loose(SRC.codexMcp),
     cursor: cursorCwdRefusal,
     opencode: loose(SRC.opencodeMcp),
@@ -351,7 +360,7 @@ const mcpFields: FieldSupport[] = [
     opencode: translated("env becomes environment", SRC.opencodeMcp),
   }),
   sameKey("mcp", "mcp.cwd", "functional", "cwd", {
-    ...claude(claudeCwdRefusal),
+    ...claudeCwdRefusal,
     cursor: cursorCwdRefusal,
   }),
   sameKey("mcp", "mcp.url", "functional", "url"),
