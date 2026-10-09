@@ -1,5 +1,9 @@
 import type { AcfOwnership, FileContent, FileDiff } from "@caplet/core";
 
+/**
+ * A file diff owning `owns`; `modes` is given for files whose permission bits are written too
+ * (assets), and omitted for generated text.
+ */
 export function makeFileDiff(
   path: string,
   before: FileContent | null,
