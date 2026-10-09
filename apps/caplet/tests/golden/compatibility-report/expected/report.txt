@@ -8,4 +8,3 @@ Compatibility
   helper / pi - omitted: agent helper is not installed for pi (agent). Recovery: exclude: { agents: [helper] } or except: [pi]
   pi - native: 1 MCP server
   pi - dropped: skill.argument-hint (review), native/claude/ (tools)
-

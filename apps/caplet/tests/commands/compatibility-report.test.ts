@@ -87,8 +87,9 @@ const constructed: ComponentOutcome[] = [
   },
 ];
 
+/** The report as written, one line per entry; its trailing section separator ends the file. */
 function plain(lines: readonly string[]): string {
-  return `${lines.map(stripAnsi).join("\n")}\n`;
+  return lines.map(stripAnsi).join("\n");
 }
 
 describe("behavior-first compatibility report", () => {
