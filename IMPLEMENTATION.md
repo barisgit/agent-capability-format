@@ -2304,7 +2304,9 @@ bookkeeping, so older lockfiles keep reading.
 The resolver recomputes each snapshot's payload digest when it reads the
 capability and fails with `acf.lock.digest-mismatch` before anything is
 emitted from a snapshot that no longer matches its record. Restoring a missing
-snapshot refetches `resolvedSha` and must reproduce the locked digests.
+snapshot refetches `resolvedSha` and must reproduce exactly the locked
+capability names and digests; a capability the lock does not name fails the
+restore like a changed digest, so no snapshot is installed without a record.
 
 `capabilityHash` uses the v1 algorithm of SPEC §19.5 over the whole
 snapshot, before selection, so a selection change never invalidates a hash

@@ -27,7 +27,7 @@ The core and installer lock definitions SHALL be unified into one schema. Each l
 - **THEN** it fails with `acf.lock.drift` and changes neither the lock nor the installed snapshots
 
 ### Requirement: Verify before emission and frozen restore
-Before emitting from a lock, caplet SHALL recompute each capability's payload digest from the snapshot and SHALL fail with `acf.lock.digest-mismatch` when it differs from the lock. A frozen or locked restore SHALL fetch the recorded `resolvedSha`, not the moving `ref`. An installed capability SHALL count as present only when its digest verifies, not merely when its directory exists.
+Before emitting from a lock, caplet SHALL recompute each capability's payload digest from the snapshot and SHALL fail with `acf.lock.digest-mismatch` when it differs from the lock. A frozen or locked restore SHALL fetch the recorded `resolvedSha`, not the moving `ref`, and SHALL reproduce exactly the locked capability names and payload digests; otherwise it SHALL fail with `acf.lock.digest-mismatch` and install nothing from that entry. An installed capability SHALL count as present only when its digest verifies, not merely when its directory exists.
 
 #### Scenario: Tampered cache
 - **WHEN** a cached snapshot file is modified after locking and apply runs
@@ -36,6 +36,10 @@ Before emitting from a lock, caplet SHALL recompute each capability's payload di
 #### Scenario: Branch moved upstream
 - **WHEN** the locked `ref` is `main`, upstream `main` has moved, and a frozen install runs
 - **THEN** caplet installs the content at the locked `resolvedSha`
+
+#### Scenario: Restore finds a capability the lock does not name
+- **WHEN** a locked snapshot is missing and its source now also provides a capability the lock entry does not name
+- **THEN** the restore fails with `acf.lock.digest-mismatch` naming that capability, and neither snapshot is installed nor the lock changed
 
 ### Requirement: Credential-free sources
 Source URLs containing userinfo, and query parameters or fragments that look like credentials, SHALL be rejected when added or resolved, and SHALL never be written to `capabilities.yml`, the lockfile, sidecars or diagnostics. Authentication SHALL use the configured auth mechanism (SPEC.md §18).

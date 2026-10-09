@@ -2424,7 +2424,9 @@ the lock, an implementation recomputes each capability's payload digest
 from its snapshot and fails with `acf.lock.digest-mismatch`, writing nothing
 for that capability, when it differs. A capability counts as installed only
 when its digest verifies. A frozen restore fetches the recorded
-`resolvedSha`, never the moving `ref`.
+`resolvedSha`, never the moving `ref`. A restore MUST reproduce exactly
+the locked capability names and their payload digests; otherwise it fails
+with `acf.lock.digest-mismatch` and installs nothing from that entry.
 
 ### 19.5 Hash computation
 

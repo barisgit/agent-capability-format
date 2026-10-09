@@ -456,18 +456,35 @@ function withSelection(locked: LockEntry, entry: CapabilityEntry): LockEntry {
   return next;
 }
 
-/** Digest mismatches between restored records and the lock records they must reproduce. */
+/**
+ * How restored records differ from the lock entry they must reproduce: the same capability
+ * names exactly, and each name's locked payload digest when the entry records one. A name the
+ * lock does not record is a mismatch too, since committing it would install a snapshot no lock
+ * record verifies.
+ */
 function restoreMismatches(locked: LockEntry, restored: CapabilityRecord[]): Diagnostic[] {
-  if (locked.resolvedCapabilities === undefined) return [];
+  const absent = "no such capability";
   const actual = new Map(
     restored.map((record) => [record.name, record.lockRecord?.payloadDigest ?? "nothing"]),
   );
-  return locked.resolvedCapabilities.flatMap((expected) => {
-    const digest = actual.get(expected.name) ?? "no such capability";
-    return digest === expected.payloadDigest
+  const expected = new Map(
+    locked.resolvedCapabilities?.map((record) => [record.name, record.payloadDigest]),
+  );
+  const lockedNames = new Set(locked.capabilityNames);
+  const missingOrChanged = locked.capabilityNames.flatMap((name) => {
+    const digest = actual.get(name) ?? absent;
+    const want = expected.get(name);
+    const same = digest !== absent && (want === undefined || want === digest);
+    return same
       ? []
-      : [digestMismatchDiagnostic(expected.name, "restore", expected.payloadDigest, digest)];
+      : [digestMismatchDiagnostic(name, "restore", want ?? "a locked capability", digest)];
   });
+  const unlocked = restored
+    .filter((record) => !lockedNames.has(record.name))
+    .map((record) =>
+      digestMismatchDiagnostic(record.name, "restore", absent, actual.get(record.name) ?? absent),
+    );
+  return [...missingOrChanged, ...unlocked];
 }
 
 function shouldFetch(
