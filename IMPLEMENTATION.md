@@ -3225,7 +3225,11 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   pending changes.
 - `caplet list` (alias `ls`) — list installed capabilities per scope.
 - `caplet show <name>` — show one capability's facets, scope root, and
-  target support; `--json` gives machine output.
+  target support; `--json` gives machine output. Support per target comes
+  from the compatibility outcomes a plan for every target reports: `no` when
+  the target installs none of the capability (not applicable, blocked, or
+  every component omitted), `partial` when a component is omitted or changes
+  behavior, else `yes`.
 - `caplet check [--target …] [--frozen]` — validate without writing. Exits
   1 when emitted outputs are stale, 2 on validation errors or an `error`
   the plan reports (such as a component apply refuses), and 3 with
