@@ -2915,16 +2915,27 @@ other `acf: 1` target accepts only `loose`, and setting `plugin` for one is
 a configuration error naming the target. Switching Claude to `loose`
 writes the capabilities' loose files and uninstalls caplet's Claude
 plugins; each plugin's files are deleted once Claude no longer lists it.
-That uninstall passes `--keep-data`, so the plugin's data directory
-survives. Claude still deletes the options and secrets it saved for a
-plugin when its last install is uninstalled, so while the plugin is the
-id's last install and Claude may hold them (the user settings have
+
+What an uninstall keeps depends on why the plugin goes. Deselecting a
+capability (dropping it from `capabilities.yml`, or leaving Claude out with
+`only` or `except`) or `caplet remove` uninstalls its plugin without
+`--keep-data`, deleting what Claude saved for it (data directory, options
+and secrets), as `claude plugin uninstall` does. A capability that stays
+selected but loses its plugin (a switch to `loose`, or nothing left to
+carry, §22.8.2) is uninstalled with `--keep-data`, so the plugin's data
+directory survives. Claude still deletes the options and secrets it saved
+for a plugin when its last install is uninstalled, so while the plugin is
+the id's last install and Claude may hold them (the user settings have
 `pluginConfigs` for it or cannot be read, or its manifest declares
 `userConfig`, a channel `userConfig`, or an MCP bundle), caplet keeps it
-installed and the warning `acf.claude.uninstall-held` gives the uninstall
-command to run by hand; until then Claude loads the capability from both
-the plugin and the loose files. Removing a capability uninstalls its
-plugin without `--keep-data`, as a native uninstall does.
+installed and the warning `acf.claude.uninstall-held` gives the command to
+run by hand, `claude plugin uninstall <id> --scope <scope> --keep-data`.
+Until then Claude loads the capability twice, from the plugin and the loose
+files (or keeps loading the installed plugin when nothing of it is left).
+A capability whose reader left out an invalid component
+(`acf.source.component-invalid`) and of which nothing else reaches Claude
+keeps its installed plugin and files as they are, with the warning
+`acf.claude.plugin-kept`: an invalid value is no deselection.
 
 The Claude plugin carrier holds skills, MCP servers, Claude native
 remainder, and `native/claude/` files. A native ACF capability that also
@@ -2952,7 +2963,8 @@ bookkeeping (a bare skill import's synthesized `acf.yml` and
 carry (no emitted skill or server, no Claude remainder or `native/claude/`
 file, no manifest entry beyond listing metadata) gets no plugin, reported
 with the `info` diagnostic `acf.claude.plugin-empty`; a plugin installed for
-it earlier is uninstalled and removed like a deselected capability's.
+it earlier is retired keeping Claude's data, or kept when an invalid
+component was left out (§22.8.1).
 Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is
@@ -2984,7 +2996,8 @@ through the `claude` CLI only, as an argument vector rather than a shell
 command and always with `--scope`: `claude plugin marketplace add <dir>`
 (idempotent), `claude plugin install` for a new plugin, `claude plugin
 update` for a changed version, and `claude plugin uninstall` for a removed
-one (with `--keep-data` after a carrier switch, §22.8.1), reading state with `claude plugin list --json`. It never runs
+one (with `--keep-data` while its capability stays selected, §22.8.1),
+reading state with `claude plugin list --json`. It never runs
 `install` for a plugin Claude already has, because that re-enables a plugin
 the user disabled. Nor does it install a plugin Claude does not list whose
 `enabledPlugins` value is `false` in the settings that decide it after the

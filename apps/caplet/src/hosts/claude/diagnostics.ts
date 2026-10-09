@@ -184,8 +184,9 @@ export function duplicateScopeDiagnostic(
 }
 
 /**
- * `plugin` moved to loose files but stays installed (action `kept`), because uninstalling it would
- * delete the options and secrets Claude may have saved for it.
+ * `plugin`'s capability is still selected but has no plugin now (it moved to loose files, or
+ * nothing of it reaches Claude), and the plugin stays installed (action `kept`), because
+ * uninstalling it would delete the options and secrets Claude may have saved for it.
  */
 export function uninstallHeldDiagnostic(
   plan: ClaudeScopePlan,
@@ -197,11 +198,21 @@ export function uninstallHeldDiagnostic(
     scope: plan.claudeScope,
     keepData: true,
   });
+  const [change, until] =
+    plugin.output === "empty"
+      ? [
+          `nothing of ${plugin.name} reaches Claude now`,
+          "Until it is uninstalled, Claude keeps loading the installed version.",
+        ]
+      : [
+          `${plugin.name} now uses loose Claude files`,
+          `Until it is uninstalled, Claude loads ${plugin.name} from both.`,
+        ];
   return {
     severity: "warn",
     code: "acf.claude.uninstall-held",
     targetId: "claude",
-    message: `\`${plugin.id}\` stays installed at Claude ${plan.claudeScope} scope although ${plugin.name} now uses loose Claude files, because uninstalling it would delete the options and secrets Claude may have saved for it. Until it is uninstalled, Claude loads ${plugin.name} from both. To uninstall it and drop them, run \`${command}\`, then re-run \`caplet apply\`.`,
+    message: `\`${plugin.id}\` stays installed at Claude ${plan.claudeScope} scope although ${change}, because uninstalling it would delete the options and secrets Claude may have saved for it. ${until} To uninstall it and drop them, run \`${command}\`, then re-run \`caplet apply\`.`,
     data: { plugin: plugin.id, command },
   };
 }

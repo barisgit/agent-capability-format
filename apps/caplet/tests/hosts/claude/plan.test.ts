@@ -394,7 +394,7 @@ describe("uninstalling for a carrier change", () => {
         marketplaceDir: userDir,
         plugins: [],
         recorded: true,
-        carrierChanged: [{ name: "moved", declaresConfig }],
+        retained: [{ name: "moved", output: "loose", declaresConfig }],
       },
       {
         plugins,

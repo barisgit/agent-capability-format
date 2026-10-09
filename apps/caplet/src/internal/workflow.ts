@@ -77,6 +77,25 @@ export type StaleSidecarEntry = {
 /** A capability a refusal blocks on one target in one scope (`capabilityBlocked`). */
 export type BlockedCapability = { scope: Scope; target: TargetId; capability: string };
 
+/**
+ * A capability the scope still selects for Claude whose reader left out an invalid component
+ * (design D27.4) and of which nothing else reaches Claude. The plan keeps its installed Claude
+ * plugin as it is, because retiring it would delete what Claude saved for it although the user
+ * neither deselected nor removed it.
+ */
+export type HeldClaudePlugin = { scope: Scope; capability: string };
+
+/**
+ * A capability the scope still selects for Claude that the plan gives no Claude plugin: `loose`
+ * when it writes loose Claude files instead, `empty` when nothing of it reaches Claude. Its
+ * earlier plugin is retired keeping what Claude saved for it, unlike a deselected capability's.
+ */
+export type PluginlessClaudeCapability = {
+  scope: Scope;
+  capability: string;
+  output: "loose" | "empty";
+};
+
 /** Everything one plan holds for reporting and applying ({@link ApplicablePlan}). */
 export type EmitPlan = {
   /** Directory relative target paths resolve against (the process cwd while planning). */

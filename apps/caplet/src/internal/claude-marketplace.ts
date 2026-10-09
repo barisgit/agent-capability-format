@@ -8,6 +8,7 @@ import {
   ACF_SYSTEM_OWNER,
   CLAUDE_PLUGIN_MANIFEST,
   type ClaudeMarketplaceRecord,
+  type Diagnostic,
   isRecord,
   pluginMarketplaceDir,
   pluginPackageDir,
@@ -28,7 +29,13 @@ import {
   resolveClaudeScopeTarget,
 } from "../hosts/claude/scope.js";
 import { readTextIfExists } from "./fs.js";
-import type { BlockedCapability, EmittedDiff, PlannedPlugin } from "./workflow.js";
+import type {
+  BlockedCapability,
+  EmittedDiff,
+  HeldClaudePlugin,
+  PlannedPlugin,
+  PluginlessClaudeCapability,
+} from "./workflow.js";
 
 /**
  * The Claude marketplace of one install root as a plan sees it: every plugin it lists (an empty
@@ -46,8 +53,12 @@ export type ClaudeRootPlan = {
   leftover: string[];
   /** Whether the sidecar records this marketplace as caplet's. */
   recorded: boolean;
-  /** The left-over plugins whose capability the plan now writes as loose Claude files. */
-  carrierChanged: { name: string; declaresConfig: boolean }[];
+  /**
+   * The left-over plugins whose capability the scope still selects for Claude
+   * (`DesiredClaudeScope.retained`); every other left-over plugin's capability was deselected or
+   * removed.
+   */
+  retained: { name: string; output: "loose" | "empty"; declaresConfig: boolean }[];
 };
 
 /** `<install-root>/.acf/marketplace/.claude-plugin/marketplace.json`. */
@@ -58,19 +69,22 @@ export function marketplaceFile(installRoot: string): string {
 /**
  * Plans the marketplace of each Claude install root in `roots`. It lists every plugin the plan
  * generates there, plus the installed plugin of each capability a refusal blocks on Claude in that
- * scope, because a blocked capability keeps its earlier install. `marketplace.json` is owned by
- * the reserved `acf-system` owner; it is deleted only when nothing is listed and the sidecar shows
- * caplet wrote it. `desired` are the plan's file changes; a left-over plugin whose capability has
- * loose Claude output among them changed carrier.
+ * scope and of each `held` one, because those keep their earlier install; a listed held plugin
+ * gets `acf.claude.plugin-kept`. `marketplace.json` is owned by the reserved `acf-system`
+ * owner; it is deleted only when nothing is listed and the sidecar shows caplet wrote it.
+ * A left-over plugin whose capability is `pluginless` is retained; any other left-over plugin
+ * belongs to a capability the user deselected or removed.
  */
 export async function planClaudeMarketplaces(input: {
   roots: ReadonlyArray<{ scopeRoot: ScopeRoot; installRoot: string }>;
   plugins: readonly PlannedPlugin[];
   blocked: readonly BlockedCapability[];
-  desired?: readonly EmittedDiff[];
-}): Promise<{ roots: ClaudeRootPlan[]; diffs: EmittedDiff[] }> {
+  held?: readonly HeldClaudePlugin[] | undefined;
+  pluginless?: readonly PluginlessClaudeCapability[] | undefined;
+}): Promise<{ roots: ClaudeRootPlan[]; diffs: EmittedDiff[]; diagnostics: Diagnostic[] }> {
   const roots: ClaudeRootPlan[] = [];
   const diffs: EmittedDiff[] = [];
+  const diagnostics: Diagnostic[] = [];
   for (const { scopeRoot, installRoot } of input.roots) {
     const listed = await listedPlugins(scopeRoot, installRoot, input);
     const file = marketplaceFile(installRoot);
@@ -91,18 +105,18 @@ export async function planClaudeMarketplaces(input: {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([plugin, version]) => ({ name: plugin, version }));
     const marketplaceDir = pluginMarketplaceDir(installRoot);
-    const carrierChanged: ClaudeRootPlan["carrierChanged"] = [];
+    const retained: ClaudeRootPlan["retained"] = [];
     for (const plugin of leftover) {
-      const loose = (input.desired ?? []).some(
-        (item) =>
-          item.targetId === "claude" &&
-          item.carrier === "loose" &&
-          item.installRoot === installRoot &&
-          item.capabilityName === plugin,
+      const selected = input.pluginless?.find(
+        (item) => item.scope === scopeRoot.scope && item.capability === plugin,
       );
-      if (!loose) continue;
+      if (selected === undefined) continue;
       const declaresConfig = await declaresUserConfig(pluginPackageDir(installRoot, plugin));
-      carrierChanged.push({ name: plugin, declaresConfig });
+      retained.push({ name: plugin, output: selected.output, declaresConfig });
+    }
+    for (const held of input.held ?? []) {
+      if (held.scope !== scopeRoot.scope || !listed.has(held.capability)) continue;
+      diagnostics.push(pluginKeptDiagnostic(held, `${held.capability}@${name}`));
     }
     roots.push({
       scopeRoot,
@@ -113,7 +127,7 @@ export async function planClaudeMarketplaces(input: {
       plugins,
       recorded: sidecar.marketplace?.name === name,
       leftover,
-      carrierChanged,
+      retained,
     });
     const after = plugins.length === 0 ? null : renderMarketplace(name, plugins);
     if (after === null && !owned) continue;
@@ -133,18 +147,33 @@ export async function planClaudeMarketplaces(input: {
       },
     });
   }
-  return { roots, diffs };
+  return { roots, diffs, diagnostics };
+}
+
+/** `acf.claude.plugin-kept`: the installed plugin `id` of a held capability stays as it is. */
+function pluginKeptDiagnostic(held: HeldClaudePlugin, id: string): Diagnostic {
+  return {
+    severity: "warn",
+    code: "acf.claude.plugin-kept",
+    targetId: "claude",
+    message: `Claude plugin \`${id}\` stays installed as it is: its reader left out an invalid component of ${held.capability}, and nothing else of it reaches Claude. Caplet uninstalls a plugin, deleting what Claude saved for it, only when its capability is deselected or removed. Fix the source, or run \`caplet remove ${held.capability}\` to uninstall it.`,
+    data: { plugin: id },
+  };
 }
 
 /**
  * The plugins the marketplace of `installRoot` lists, by name with their version: those the plan
  * generates there, and the installed one of each capability a refusal blocks on Claude in the
- * scope, read from its `plugin.json`.
+ * scope or the plan holds there, read from its `plugin.json`.
  */
 async function listedPlugins(
   scopeRoot: ScopeRoot,
   installRoot: string,
-  input: { plugins: readonly PlannedPlugin[]; blocked: readonly BlockedCapability[] },
+  input: {
+    plugins: readonly PlannedPlugin[];
+    blocked: readonly BlockedCapability[];
+    held?: readonly HeldClaudePlugin[] | undefined;
+  },
 ): Promise<Map<string, string>> {
   const listed = new Map<string, string>();
   for (const plugin of input.plugins) {
@@ -152,9 +181,9 @@ async function listedPlugins(
       listed.set(plugin.name, plugin.version);
     }
   }
-  for (const item of input.blocked) {
-    if (item.target !== "claude" || item.scope !== scopeRoot.scope) continue;
-    if (listed.has(item.capability)) continue;
+  const kept = [...input.blocked.filter((item) => item.target === "claude"), ...(input.held ?? [])];
+  for (const item of kept) {
+    if (item.scope !== scopeRoot.scope || listed.has(item.capability)) continue;
     const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
     if (version !== undefined) listed.set(item.capability, version);
   }

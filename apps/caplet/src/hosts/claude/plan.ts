@@ -27,20 +27,25 @@ export type DesiredClaudeScope = {
    */
   leftover?: string[] | undefined;
   /**
-   * Left-over plugins whose capability now writes loose Claude files in this scope: the carrier
-   * changed, so their uninstall keeps what Claude saved for them (`--keep-data`).
-   * `declaresConfig`: the plugin's manifest declares configuration Claude prompts for, so Claude
-   * may hold options or secrets for it that caplet cannot see.
+   * Left-over plugins whose capability the scope still selects for Claude, now without a plugin:
+   * `output` `loose` when it writes loose Claude files instead (a carrier change), `empty` when
+   * nothing of it reaches Claude. Their uninstall keeps what Claude saved for them
+   * (`--keep-data`). `declaresConfig`: the plugin's manifest declares configuration Claude
+   * prompts for, so Claude may hold options or secrets for it that caplet cannot see. Any other
+   * left-over plugin's capability was deselected or removed.
    */
-  carrierChanged?: ReadonlyArray<{ name: string; declaresConfig: boolean }> | undefined;
+  retained?:
+    | ReadonlyArray<{ name: string; output: "loose" | "empty"; declaresConfig: boolean }>
+    | undefined;
 };
 
 /**
  * What happens to one plugin. `other-scope`: the id is installed only at another Claude scope that
- * applies here, so caplet leaves it alone instead of installing over it. `kept`: its carrier
- * changed, but uninstalling it would delete the options and secrets Claude saved for it, so it
- * stays installed until the user uninstalls it. `blocked`: Claude lists caplet's marketplace name
- * from another source, so caplet runs nothing for the scope (`ClaudeScopePlan.foreign`).
+ * applies here, so caplet leaves it alone instead of installing over it. `kept`: its capability is
+ * still selected but has no plugin now, and uninstalling it would delete the options and secrets
+ * Claude saved for it, so it stays installed until the user uninstalls it. `blocked`: Claude
+ * lists caplet's marketplace name from another source, so caplet runs nothing for the scope
+ * (`ClaudeScopePlan.foreign`).
  * `disabled`: Claude does not list it, but the settings that decide its enablement at caplet's
  * scope disable it, and `install` would enable it again (D15), so caplet does not install it.
  */
@@ -61,6 +66,8 @@ export type PlannedClaudePlugin = {
   action: ClaudePluginAction;
   /** Absent for `uninstall` and `kept`. */
   desiredVersion?: string | undefined;
+  /** For `kept`: what its capability has in Claude instead (`DesiredClaudeScope.retained`). */
+  output?: "loose" | "empty" | undefined;
   /** The entry at caplet's managed identity, when installed there. */
   observed?: ClaudeInstalledPlugin | undefined;
 };
@@ -140,11 +147,11 @@ export function partitionInstalls(
  * Plans the `claude plugin` commands for one ACF scope (D8, D25): an unconditional, idempotent
  * `marketplace add` when any plugin is desired, `install` for plugins not installed at caplet's
  * managed identity, `update` for changed versions (also for disabled plugins, which stay disabled),
- * and `uninstall` for plugins no longer desired, keeping Claude's data for a carrier change
- * ({@link planUninstall}). It never plans `install` for an installed plugin, or for one the
- * settings disable ({@link disabledInSettings}), because install re-enables a plugin the user
- * disabled (D15). The marketplace is removed only when no plugin is
- * desired or kept and the removal touches nothing but caplet's registration:
+ * and `uninstall` for plugins no longer desired, keeping Claude's data for a capability that is
+ * still selected ({@link planUninstall}). It never plans `install` for an installed plugin, or for
+ * one the settings disable ({@link disabledInSettings}), because install re-enables a plugin the
+ * user disabled (D15). The marketplace is removed only when no plugin is desired or kept and the
+ * removal touches nothing but caplet's registration:
  * `marketplace remove` uninstalls its plugins at every scope and directory and drops its
  * declarations from every settings file it edits (`ObservedClaudeState.settings`). When Claude
  * lists the marketplace name from anywhere but caplet's directory, the plan runs nothing.
@@ -226,10 +233,20 @@ export function planClaudeScope(
   const uninstalls: number[] = [];
   for (const current of atScope.values()) {
     if (desiredNames.has(current.name)) continue;
-    const command = planUninstall(current, claudeScope, desired, observed);
-    const action = command === undefined ? "kept" : "uninstall";
-    plugins.push({ name: current.name, id: current.id, action, observed: current });
-    if (command === undefined) continue;
+    const retained = desired.retained?.find((plugin) => plugin.name === current.name);
+    const command = planUninstall(current, claudeScope, retained, observed);
+    if (command === undefined) {
+      const output = retained?.output;
+      plugins.push({
+        name: current.name,
+        id: current.id,
+        action: "kept",
+        output,
+        observed: current,
+      });
+      continue;
+    }
+    plugins.push({ name: current.name, id: current.id, action: "uninstall", observed: current });
     uninstalls.push(steps.length);
     steps.push({ command, plugin: current.id, after: [] });
   }
@@ -300,27 +317,27 @@ function isDirectory(
 
 /**
  * The uninstall of `current`, a plugin no longer desired at caplet's identity, or undefined to
- * keep it installed. A removed capability's uninstall deletes what Claude saved for the plugin, as
- * a native uninstall does. A carrier change keeps the plugin's data directory (`--keep-data`), but
- * Claude still deletes its saved options and secrets when no other install of the id remains, so
- * the plugin stays installed when it may have any: user settings hold options for it or cannot be
- * read, or its manifest declares configuration (secrets live outside the settings files).
+ * keep it installed. The plugin of a deselected or removed capability (not `retained`) is
+ * uninstalled deleting what Claude saved for it, as a native uninstall does. A retained one keeps
+ * its data directory (`--keep-data`), but Claude still deletes its saved options and secrets when
+ * no other install of the id remains, so the plugin stays installed when it may have any: user
+ * settings hold options for it or cannot be read, or its manifest declares configuration (secrets
+ * live outside the settings files).
  */
 function planUninstall(
   current: ClaudeInstalledPlugin,
   scope: ClaudeScope,
-  desired: DesiredClaudeScope,
+  retained: { declaresConfig: boolean } | undefined,
   observed: ObservedClaudeState,
 ): ClaudeCommand | undefined {
-  const moved = desired.carrierChanged?.find((plugin) => plugin.name === current.name);
   const command = { op: "uninstall" as const, plugin: current.id, scope };
-  if (moved === undefined) return { ...command, keepData: false };
+  if (retained === undefined) return { ...command, keepData: false };
   const lastInstall = !observed.plugins.some((p) => p.id === current.id && p !== current);
   const user = observed.settings.find((file) => file.scope === "user");
   const configured =
     user !== undefined &&
     (user.settings === undefined || user.settings.configuredPlugins.includes(current.id));
-  return lastInstall && (moved.declaresConfig || configured)
+  return lastInstall && (retained.declaresConfig || configured)
     ? undefined
     : { ...command, keepData: true };
 }

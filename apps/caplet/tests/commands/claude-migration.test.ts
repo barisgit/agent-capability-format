@@ -20,6 +20,7 @@ import {
   writeText,
 } from "../helpers.js";
 import {
+  atVersion,
   claudeMarketplace,
   claudeScenarioShim,
   localPluginList,
@@ -348,4 +349,41 @@ test("a capability that migrates again later in the same install root announces 
   expect(applied.stdout).toContain(NOTICE);
   expect(applied.stdout).toContain(`/${NAME} -> /${NAME}:${NAME}`);
   expect(existsSync(looseSkill(scope))).toBe(false);
+});
+
+test("an MCP-only capability switching to loose at user scope keeps Claude's plugin data", async () => {
+  const scope = await makeScope();
+  scopes.push(scope);
+  const source = path.join(scope.sourceRoot, "tools");
+  await writeText(path.join(source, "acf.yml"), "acf: 1\nname: tools\nversion: 1.0.0\n");
+  await writeText(
+    path.join(source, "mcp", "mcp.yml"),
+    "servers:\n  - name: diff\n    transport: http\n    url: https://mcp.example.com/diff\n",
+  );
+  const agents = path.join(scope.home, ".agents");
+  await writeText(
+    path.join(agents, "capabilities.yml"),
+    `acf: 1\ncapabilities:\n  - source: path:${source}\n`,
+  );
+  const userArgs = ["apply", "--cwd", scope.cwd, "--scope", "user", "--target", "claude"];
+  // Without the CLI apply writes the plugin files; the host then reports the plugin installed.
+  expect((await runCaplet(scope, userArgs)).exitCode).toBe(0);
+  const version = await plannedVersion(scope, userArgs.slice(1), "tools");
+  await writeText(path.join(agents, "caplet.yml"), "targets:\n  claude:\n    carrier: loose\n");
+  const host = await claudeScenarioShim(scope, "user", "tools", [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+    { fixture: "uninstall-local-keep-data", replace: { local1: "tools", local: "user" } },
+    "marketplace-remove",
+    "list-json-empty",
+  ]);
+
+  const applied = await runCaplet(scope, userArgs, host.env);
+
+  expect(applied.exitCode).toBe(0);
+  expect(await host.calls()).toContain(
+    "claude plugin uninstall tools@acf-user --scope user --keep-data",
+  );
+  expect(await host.unused()).toEqual([]);
+  expect(await host.unexpected()).toEqual([]);
 });

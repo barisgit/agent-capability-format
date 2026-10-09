@@ -99,6 +99,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
   "acf.claude.plugin-empty",
+  "acf.claude.plugin-kept",
   "acf.claude.skills-option-ignored",
   "acf.claude.cli-unavailable",
   "acf.claude.state-unreadable",
