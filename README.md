@@ -213,8 +213,8 @@ generated files, then run `caplet apply`. The machine-readable
 `.acf-managed.json` sidecar remains the authority used for drift detection
 and safe cleanup.
 
-`add`, `update`, and `apply` (including `--dry-run`) list every added or
-changed executable: MCP stdio commands, hooks, LSP servers, monitors, files
+`add`, `update`, and `apply` (including `--dry-run`) list every added,
+changed, or removed executable: MCP stdio commands, hooks, LSP servers, monitors, files
 with the executable bit, and Claude `bin/` entries (`executables` in
 `--json`). Running `add` or `update` is your approval; caplet never prompts,
 so read that list when a source changes.
@@ -240,29 +240,32 @@ it (Codex, Cursor, OpenCode, Pi). Claude never reads it.
 Claude receives each capability as a generated plugin by default.
 Caplet writes it under `<claude-root>/.acf/marketplace/` (`~/.claude/` for
 user scope, `./.claude/` for project scope) and registers it through the
-`claude` CLI. Skills are then invoked as `/<capability>:<skill>`; the first
-apply after the switch prints each rename once (`/review` becomes
-`/review-kit:review`). Project scope registers at Claude's `local` scope, and
+`claude` CLI. Skills are then invoked as `/<capability>:<skill>`; the apply
+that moves a capability's loose skills into its plugin prints each rename
+(`/review` becomes `/review-kit:review`). Project scope registers at Claude's `local` scope, and
 Claude adds `**/.claude/settings.local.json` to your global git ignore the
 first time it writes there.
 
 Only capabilities made of skills, MCP servers, Claude-native components, and
-`native/claude/` files fit in a plugin. An ACF capability that also has
-agents, commands, hooks, or instructions stays loose for Claude as a whole
+`native/claude/` files fit in a plugin. An ACF capability that also selects
+agents, commands, hooks, or instructions for Claude stays loose as a whole
 (`acf.claude.legacy-carrier`). Set `targets.claude.carrier: loose` in
 `caplet.yml` to use loose files for everything; caplet then uninstalls its
 Claude plugins.
 
-`caplet status` reports each plugin as `registered`, `registration
-required`, `disabled by user`, `blocked by host policy`, or `unknown`.
+`caplet status` reports each plugin's host state (`registered`, `disabled by
+user`, `not installed`, `registration required`, `blocked by host policy`,
+or `unknown`) and whether its files are `current`, `drifted`, or `missing`.
 Without the `claude` CLI, caplet writes the plugin, reports `registration
-required` with the exact commands to run, and exits 0. A plugin you disable
+required` with the exact commands to run, and exits 0. Any other failed
+`claude` command is the error `acf.claude.command-failed`, and apply exits
+2. A plugin you disable
 in Claude stays disabled across updates. A host policy block is reported,
 not worked around with loose files.
 
 Upgrading moves existing loose Claude skills and MCP servers into the
-plugin. Caplet removes the old loose files only after Claude reports the
-plugin registered, and leaves any you edited in place with an
+plugin. Caplet removes the old loose files only after Claude lists the
+plugin, enabled or disabled, and leaves any you edited in place with an
 `acf.migration.drifted` warning naming the duplicate.
 
 ### Known limits
@@ -381,8 +384,9 @@ optional `only`/`except`/`targets`. A `url` must be `https`, or `http` on
 localhost, and must not carry credentials; put tokens in `headers`.
 `${ACF_CAPABILITY_DIR}` is the capability root and `${ACF_DATA_DIR}` a
 writable directory per capability that survives updates. Caplet writes
-servers into each host's own config: the plugin's `.mcp.json` for Claude,
-`.codex/config.toml`, `.cursor/mcp.json`, `opencode.json`, and
+servers into each host's own config: the plugin's `.mcp.json` for Claude
+(the project `.mcp.json` with `carrier: loose`, which omits user-scope
+servers), `.codex/config.toml`, `.cursor/mcp.json`, `opencode.json`, and
 `.pi/mcp.json` (user-scope paths in SPEC.md §22.5). A server name already
 used by another capability or by your own config is withheld with
 `acf.mcp.config-conflict`. ACF declares servers; MCP itself owns runtime

@@ -1694,8 +1694,12 @@ target cannot carry a declared `cwd` refuses the server instead of dropping
 The path placeholders defined in §13.6.3 (`${ACF_CAPABILITY_DIR}`,
 `${ACF_PACKAGE_DIR}`, `${ACF_HOOK_DIR}`) MAY appear in `command`, `args`,
 `env`, and `cwd` values for stdio servers and are substituted before
-emission (a Claude plugin keeps `${CLAUDE_PLUGIN_ROOT}` instead of an
-absolute path). A path placeholder in `url` or `headers` is refused on every
+emission. A Claude plugin writes `${CLAUDE_PLUGIN_ROOT}` for
+`${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
+`${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
+directory of the MCP file inside the capability; loose carriers write
+absolute paths. Claude refuses `cwd` (§13a.4.3), placeholders included. A
+path placeholder in `url` or `headers` is refused on every
 target, because no tool shares a meaning for a filesystem path in a URL.
 
 `${ACF_DATA_DIR}` is a persistent, writable directory per capability and
@@ -1723,7 +1727,8 @@ canonical form in `acf: 1`: a reader keeps such a server whole as native
 remainder of its source format (§20.6), and native ACF authors it as a
 native entry for one target, for Claude under package-level
 `targets.claude.native.mcpServers`, which only the Claude plugin carrier
-emits.
+emits, verbatim in `.claude-plugin/plugin.json` next to the generated
+`.mcp.json`.
 
 #### 13a.4.2 Pending MCP meanings
 
@@ -1748,8 +1753,8 @@ carriers unless a cell names the plugin carrier. Pi refers to the
 | `transport: sse`                              | N `type: sse`                                   | R                        | R        | R                            | R        |
 | `command`, `args`, `env`, `url`, literal `headers` | N                                          | N (`http_headers`)       | N        | T `environment` for `env`    | N        |
 | `cwd`                                         | R                                               | N                        | R        | N                            | N        |
-| `${ACF_CAPABILITY_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_ROOT}` (plugin), absolute (loose) | T absolute | T absolute | T absolute             | T absolute |
-| `${ACF_DATA_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose) | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
+| `${ACF_CAPABILITY_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_ROOT}` (plugin), absolute (loose); R in `cwd` | T absolute | T absolute | T absolute             | T absolute |
+| `${ACF_DATA_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose); R in `cwd` | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
 
 The Claude `cwd` refusal is verified (Claude 2.1.97): Claude ignores the
 key and a POSIX `cd` wrapper would change the executed command and fail on
@@ -1923,12 +1928,15 @@ read native artifacts as if they were canonical ACF inputs.
 A native plugin package MAY be installed through a declared format reader
 as a foreign source (§20.6); it is then projected into a capability, never
 accepted as ACF source. Inside a native ACF capability, native files live
-only under `native/<target>/` (§7.7); a `.claude-plugin/plugin.json`
-elsewhere in the capability is ignored with an `info` diagnostic.
+only under `native/<target>/` (§7.7). When the Claude plugin writer
+generates a plugin from a native ACF capability, it leaves out the root
+entries Claude would read as plugin configuration (`.claude-plugin/`,
+`.mcp.json`, `.lsp.json`, `settings.json`, `output-styles/`) and reports
+each with the `info` diagnostic `acf.claude.plugin-file-ignored`, which
+points to `native/claude/`.
 
 Install paths and native artifact layout per target are owned by the
-target adapter and are documented in §22 and `IMPLEMENTATION.md`. SPEC
-does not constrain on-disk artifact paths.
+target adapter and are documented in §22 and `IMPLEMENTATION.md`.
 
 ### 14.5 Runtime taxonomy boundary
 
@@ -2003,8 +2011,10 @@ machine sidecar.
 - Generated plugin packages and their marketplace (§22.8) are the exception:
   no notice is written inside them, because a plugin package's files are its
   published content and same-format output must equal the source package.
-  The install-root inventory lists each plugin directory and the
-  marketplace instead.
+  The install-root inventory lists the marketplace directory
+  `.acf/marketplace/` under the reserved `acf-system` owner and each plugin
+  directory `.acf/marketplace/plugins/<capability>/` under its capability
+  instead.
 - Shared directories and shared files MUST be represented only in the install
   root inventory. Emitters MUST NOT place an extra Markdown file in a host
   directory whose direct children have host-defined discovery semantics.
@@ -2755,13 +2765,14 @@ Instruction trigger support is summarized as one of:
 | `opencode` | `./opencode.json` `mcp`                         | `~/.config/opencode/opencode.json` `mcp`     |
 | `pi`       | `./.pi/mcp.json` `mcpServers`                   | `~/.pi/agent/mcp.json` `mcpServers`          |
 
-Caplet owns each server entry, not the file: JSON entries by JSON pointer,
-Codex tables by a `# acf:begin`/`# acf:end` marker region per server. Claude
-reads user-scope MCP servers only from `~/.claude.json`, a state file Claude
-rewrites, so the loose Claude carrier omits user-scope servers with
-`acf.support.component-omitted` (`lossy`) and the recovery
-`targets.claude.carrier: plugin`; the plugin carrier writes MCP
-configuration only inside the package.
+On loose carriers caplet owns each server entry, not the file: JSON
+entries by JSON pointer, Codex tables by a `# acf:begin`/`# acf:end` marker
+region per server. A plugin's `.mcp.json` is a whole file of the package,
+and package-level `targets.claude.native.mcpServers` go into its
+`plugin.json` (§13a.4.1). Claude reads user-scope MCP servers only from
+`~/.claude.json`, a state file Claude rewrites, so the loose Claude carrier
+omits user-scope servers with `acf.support.component-omitted` (`lossy`) and
+the recovery `targets.claude.carrier: plugin`.
 
 ### 22.6 Effect mapping
 
@@ -2823,7 +2834,8 @@ Caplet selects a carrier per target with `targets.<target>.carrier` in
 `caplet.yml`. Claude accepts `plugin` (the default) and `loose`; every
 other `acf: 1` target accepts only `loose`, and setting `plugin` for one is
 a configuration error naming the target. Switching Claude to `loose`
-uninstalls caplet's Claude plugins.
+writes the capabilities' loose files and uninstalls caplet's Claude
+plugins; each plugin's files are deleted once Claude no longer lists it.
 
 The Claude plugin carrier holds skills, MCP servers, Claude native
 remainder, and `native/claude/` files. A native ACF capability that also
@@ -2839,8 +2851,10 @@ Each capability becomes one package at
 Claude install root is `./.claude/` for project scope and `~/.claude/` for
 user scope. It contains `.claude-plugin/plugin.json` (`name` is the
 capability slug; metadata per §4.2.2 plus package-level native extras),
-`skills/<name>/`, `.mcp.json`, preserved Claude remainder, and the
-`native/claude/` files. Claude invokes its skills as `/<capability>:<skill>`.
+`skills/<name>/`, `.mcp.json` when a server is emitted, preserved Claude
+remainder, the `native/claude/` files, and the capability's other files
+outside ACF-defined paths (such as a server script), copied unchanged.
+Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is
 `targets.claude.package.version` when set, else the capability version, and
@@ -2855,7 +2869,12 @@ notices an update.
 
 `<claude-install-root>/.acf/marketplace/.claude-plugin/marketplace.json`
 lists `./plugins/<capability>` for every desired plugin, under the
-marketplace name `acf-user` or `acf-project-<hash>`. Caplet registers
+marketplace name `acf-user` or `acf-project-<hash>`, where `<hash>` is the
+first 8 hex digits of the SHA-256 of the project root's real path, because
+Claude keeps one marketplace record per name for the whole user. The
+install root's sidecar records the marketplace name and Claude scope, so a
+later apply can retire the registration after the last plugin is gone.
+Caplet registers
 through the `claude` CLI only, as an argument vector rather than a shell
 command and always with `--scope`: `claude plugin marketplace add <dir>`
 (idempotent), `claude plugin install` for a new plugin, `claude plugin
@@ -2864,8 +2883,17 @@ one, reading state with `claude plugin list --json`. It never runs
 `install` for a plugin Claude already has, because that re-enables a plugin
 the user disabled. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
-`extraKnownMarketplaces`, and it removes the marketplace only when no
-plugin in it is desired.
+`extraKnownMarketplaces`. It removes the marketplace only when no plugin
+in it is desired and no other Claude scope has one installed, because
+`claude plugin marketplace remove` uninstalls the marketplace's plugins in
+every scope.
+
+File changes that do not depend on Claude are applied before the `claude`
+commands run. Deleting a removed plugin's files waits until Claude no
+longer lists it, because Claude keeps serving an installed plugin from its
+cache, and deleting `marketplace.json` waits until the marketplace is
+removed; a change whose condition is not met stays, with its sidecar
+entry, for the next apply.
 
 ACF user scope registers at Claude user scope; ACF project scope registers
 at Claude local scope (`.claude/settings.local.json`), so registration
@@ -2877,27 +2905,44 @@ changed.
 
 #### 22.8.4 Host state
 
-Apply reports each plugin as one of:
+`caplet apply` and `caplet status` report each plugin's file state
+(`current`, `drifted`, or `missing` against the sidecar) and one host
+state:
 
-- `registered` — Claude lists the plugin at the expected version.
-- `registration required` — the `claude` CLI is unavailable; the package is
-  written, the exact commands are printed with a warning, and apply exits
-  0.
-- `disabled by user` — the user's disable wins; caplet updates the files
-  and never re-enables the plugin.
-- `blocked by host policy` — Claude policy refuses the plugin; caplet does
-  not fall back to loose output.
-- `unknown` — Claude's state could not be read.
+- `registered` — Claude lists the plugin, enabled, at caplet's Claude
+  scope.
+- `disabled by user` — Claude lists it disabled; caplet updates the files
+  and never re-enables it.
+- `not installed` — Claude does not list it: a removed plugin after its
+  uninstall, or a plugin that a dry run or status shows apply would
+  install.
+- `registration required` — the `claude` CLI is missing or fails to start,
+  or the install failed and Claude does not list the plugin. Without the
+  CLI the package is written, the warning `acf.claude.cli-unavailable`
+  lists the exact commands, and apply exits 0.
+- `blocked by host policy` — a command failed with a Claude policy message
+  (`acf.claude.policy-blocked`, warning); caplet does not fall back to
+  loose output.
+- `unknown` — Claude's state could not be read
+  (`acf.claude.state-unreadable`), or Claude still lists another version
+  than caplet generated after its commands succeeded
+  (`acf.claude.version-mismatch`).
+
+Any other failed `claude` command is the error `acf.claude.command-failed`
+carrying Claude's message. The commands that depend on it are skipped,
+other plugins' commands still run, and apply exits 2.
 
 #### 22.8.5 Migration from loose output
 
-Each capability and scope migrates as one unit. After Claude reports the
-plugin registered, caplet removes the capability's earlier loose Claude
-output that the sidecar owns and that has not drifted, including owned JSON
-pointers, and keeps `.agents/skills` copies that a still-selected target
-discovers. A drifted loose artifact is left in place, its sidecar entry is
-released, and the warning `acf.migration.drifted` names the path, the
-duplicate, and the command that removes it. When migration fails, the
+Each capability and scope migrates as one unit. Once Claude reports the
+plugin `registered` or `disabled by user`, caplet removes the capability's
+earlier loose Claude output that the sidecar owns and that has not
+drifted, including owned JSON pointers, and keeps `.agents/skills` copies
+that a still-selected target discovers. A disabled plugin counts, because
+keeping the loose copies would keep the capability active against the
+user's choice. A drifted loose artifact is left in place, its sidecar entry
+is released, and the warning `acf.migration.drifted` names the path, the
+duplicate, and the command that removes it. When registration fails, the
 loose output stays and the next apply retries. Because plugin skills are
 namespaced, the apply that retires a capability's loose skills shows each
 rename (for example `/review` to `/review-kit:review`) and lists them in

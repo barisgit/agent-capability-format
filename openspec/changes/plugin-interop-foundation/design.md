@@ -199,7 +199,7 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 
 ## Risks / Trade-offs
 
-- [Claude CLI behavior can change between versions] -> Flags, exit codes and JSON shapes are pinned by verified transcripts of 2.1.97 replayed by the fake CLI; the opt-in real-host test (task 5.9) re-checks them against the installed Claude.
+- [Claude CLI behavior can change between versions] -> Flags, exit codes and JSON shapes are pinned by verified transcripts of 2.1.97 replayed by the fake CLI; the opt-in real-host test (task 5.9) re-checks them against the installed Claude. It verifies install, the plugin MCP server's start and connection, update, uninstall, and marketplace removal (`apps/caplet/tests/hosts/claude/real-host.test.ts`, `research/plugin-interop/tools/claude-code.md`); model invocation of the skill and the MCP tool remains UNKNOWN.
 - [Policy-block output is not runtime-verified] -> Caplet recognizes the policy messages found in the 2.1.97 binary; an unrecognized failure is reported as `unknown` host state with Claude's message, never as a loose fallback.
 - [The Claude reader classifies every hook as restricting (`keyClass` in `packages/core/src/formats/claude-plugin.ts` takes the `hooks` key's registry class), so a package with only non-blocking hooks, such as a logging `PostToolUse` hook, is refused on every target that cannot carry Claude plugin hooks] -> Deliberately conservative: dropping a guard hook would run the package without its restriction, and the reader cannot yet tell guards from observers. Classifying hooks per event and effect, so observers are omitted instead, is follow-up work; until then the recovery is `except: [<target>]` or excluding the hooks.
 - [Plugin-qualified invocation names break user habits and scripts] -> One-time rename notice on migration (decided 2026-10-08).
@@ -234,7 +234,7 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 
 - Resolved by task 5.1 (`research/plugin-interop/tools/claude-code.md`, Runtime verification): CLI flags, exit codes and JSON shapes; plugins are cached by version, not loaded in place (D8); plugin stdio servers start in the launch directory and `cwd` is ignored (D22 refusal confirmed).
 - Resolved by task 5.2: project-scope marketplaces record an absolute path in committed settings (D25).
-- Still unknown: the policy-block exit code and output at runtime (needs root or a managed account; caplet matches the policy messages found in the 2.1.97 binary), the interactive trust prompt for project-declared marketplaces, and skill-body reload in a model session after update (needs an authenticated session; task 5.9).
+- Still unknown: the policy-block exit code and output at runtime (needs root or a managed account; caplet matches the policy messages found in the 2.1.97 binary), the interactive trust prompt for project-declared marketplaces, and, because they need an authenticated model session (task 5.9), whether a model session invokes the plugin's skill and MCP tool and reloads the skill body after update.
 - Whether Cursor resolves a `./` command and the default working directory of an Agent Plugins package against the plugin root, and whether Codex connects plugin SSE servers (`agent-plugins-output` tasks 1.5 and 2.1); both are refused until verified.
 - Codex headless plugin install and `agents/openai.yaml` handling inside plugin skills, and Copilot directory-marketplace live loading (`agent-plugins-output` tasks 2.1 and 3.1).
 
