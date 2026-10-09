@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { claudeAdapter, codexAdapter, opencodeAdapter, piAdapter } from "../src";
-import { capabilityModel, emitModel, fileText, skillFacet, withCode } from "./util/model";
+import { CAP_ROOT, capabilityModel, emitModel, fileText, skillFacet, withCode } from "./util/model";
 
 const manualOnly = skillFacet({
   name: "deploy",
@@ -144,6 +144,44 @@ test("a server another discovering target refuses keeps the skill out of the sha
   expect(withCode(pi, "acf.support.refused")[0]?.data?.component).toBe("search");
   expect(codex.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
   expect(fileText(codex, ".codex/skills/review/SKILL.md")).toContain("name: review");
+});
+
+function withBundledMetadata(yaml: string) {
+  const capability = capabilityModel({ skills: [manualOnly] });
+  capability.assets = [
+    {
+      path: "skills/deploy/agents/openai.yaml",
+      origin: "implicit",
+      facet: { family: "skill", name: "deploy" },
+    },
+  ];
+  return emitModel(
+    codexAdapter,
+    capability,
+    ".codex",
+    { canonicalSkillReaders: ["codex"] },
+    {
+      [`${CAP_ROOT}/skills/deploy/agents/openai.yaml`]: yaml,
+    },
+  );
+}
+
+test("a bundled agents/openai.yaml keeps its keys and gains the generated policy", async () => {
+  const result = await withBundledMetadata(
+    "# Shown in the Codex app\ninterface:\n  display_name: Deploy\npolicy:\n  products: [codex]\n",
+  );
+  expect(fileText(result, ".agents/skills/deploy/agents/openai.yaml")).toBe(
+    "# Shown in the Codex app\ninterface:\n  display_name: Deploy\npolicy:\n  products: [ codex ]\n  allow_implicit_invocation: false\n",
+  );
+  expect(withCode(result, "acf.extras.conflict")).toEqual([]);
+});
+
+test("a bundled agents/openai.yaml that contradicts a generated key is a conflict", async () => {
+  const result = await withBundledMetadata("policy:\n  allow_implicit_invocation: true\n");
+  const [conflict] = withCode(result, "acf.extras.conflict");
+  expect(conflict?.severity).toBe("error");
+  expect(conflict?.path).toBe("skills/deploy/agents/openai.yaml");
+  expect(conflict?.message).toContain("policy.allow_implicit_invocation");
 });
 
 test("Claude-only selection writes no canonical copy", async () => {

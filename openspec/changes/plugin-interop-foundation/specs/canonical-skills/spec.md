@@ -60,6 +60,10 @@ Evidence per cell: Claude documents that `user-invocable: false` disallows typed
 - **WHEN** a skill with `invocation.model: false` is emitted loose for Codex
 - **THEN** the skill directory contains `agents/openai.yaml` with `policy.allow_implicit_invocation: false`, and `SKILL.md` contains no `invocation` key
 
+#### Scenario: Codex sidecar next to a bundled one
+- **WHEN** that skill also bundles its own `agents/openai.yaml`
+- **THEN** the written file keeps the bundled keys and comments and gains the generated keys, and a bundled value that contradicts a generated one, or a bundled file that is not a YAML mapping, is `acf.extras.conflict`
+
 #### Scenario: User-only skill to Codex
 - **WHEN** a skill with `invocation.user: false` is planned for Codex
 - **THEN** the skill is refused for Codex, because explicit `$skill` invocation would remain possible

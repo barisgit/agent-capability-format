@@ -17,11 +17,12 @@ import {
   type TargetDefinition,
   type TargetId,
 } from "@caplet/core";
+import { isMap, parse, parseDocument } from "yaml";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { mcpSupport } from "./mcp.js";
 import { ownValue, setOwn } from "./records.js";
-import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
+import { CODEX_SKILL_METADATA, type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
 
@@ -193,7 +194,8 @@ async function pushSkillCopy(
   const facet = { family: "skill" as const, name: skill.name };
   const metadata = { artifactRoot: skillRoot, facet };
   const skillPath = path.join(skillRoot, "SKILL.md");
-  const { frontmatter, files } = copy.rendering;
+  const { frontmatter } = copy.rendering;
+  const files = withBundledMetadata(cap, skill, copy.rendering.files, assets, diagnostics);
   await pushTextDiff(
     diffs,
     emittedPaths,
@@ -238,6 +240,75 @@ async function pushSkillCopy(
       metadata,
     );
   }
+}
+
+/**
+ * The skill's generated files, with the generated Codex metadata merged into a bundled
+ * `agents/openai.yaml` so the bundled keys and formatting survive. A bundled value that differs
+ * from a generated one, or a bundled file that is not a YAML mapping, is `acf.extras.conflict`:
+ * the generated keys come from the skill's fields and `targets.codex.native`, which the file
+ * must not contradict.
+ */
+function withBundledMetadata(
+  cap: AcfCapability,
+  skill: SkillFacet,
+  files: Record<string, string>,
+  assets: readonly AssetPayload[],
+  diagnostics: Diagnostic[],
+): Record<string, string> {
+  const generated = files[CODEX_SKILL_METADATA];
+  const bundled = assets.find((asset) => asset.relativePath === CODEX_SKILL_METADATA);
+  if (generated === undefined || bundled === undefined) return files;
+  const merged = mergeYamlMapping(new TextDecoder().decode(bundled.bytes), generated);
+  if (merged.conflicts.length > 0) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.extras.conflict",
+      message: `${bundled.sourcePath} sets ${merged.conflicts.join(", ")} unlike the value generated from skill ${skill.name}'s fields and targets.codex.native; make them agree or remove the keys from the file`,
+      path: bundled.sourcePath,
+      family: "skill",
+      capability: { name: cap.manifest.name },
+      data: { facet: skill.name, keys: merged.conflicts },
+    });
+  }
+  return { ...files, [CODEX_SKILL_METADATA]: merged.text };
+}
+
+/**
+ * Sets every leaf of the YAML mapping `generated` in the YAML mapping `text`, keeping its other
+ * keys and comments. Returns the dotted keys whose existing value differs, or `<file>` when `text`
+ * is not a mapping (the result is then `generated` alone).
+ */
+function mergeYamlMapping(text: string, generated: string): { text: string; conflicts: string[] } {
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0 || !(doc.contents === null || isMap(doc.contents))) {
+    return { text: generated, conflicts: ["<file>"] };
+  }
+  const current: unknown = doc.toJS() ?? {};
+  const conflicts: string[] = [];
+  for (const [keys, value] of leaves(parse(generated), [])) {
+    const existing = valueAt(current, keys);
+    if (existing === undefined) doc.setIn(keys, value);
+    else if (stableJson(existing) !== stableJson(value)) conflicts.push(keys.join("."));
+  }
+  return { text: doc.toString(), conflicts };
+}
+
+/** Every non-mapping value of a nested record, with its key path. */
+function leaves(value: unknown, keys: string[]): [string[], unknown][] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [[keys, value]];
+  return Object.entries(value).flatMap(([key, item]) => leaves(item, [...keys, key]));
+}
+
+/** The value at `keys` in nested own entries; null when a step is not a mapping. */
+function valueAt(value: unknown, keys: readonly string[]): unknown {
+  let cursor = value;
+  for (const key of keys) {
+    if (cursor === undefined) return undefined;
+    if (typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) return null;
+    cursor = ownValue(cursor as Record<string, unknown>, key);
+  }
+  return cursor;
 }
 
 async function pushAssetDiff(

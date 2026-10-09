@@ -699,7 +699,10 @@ spelling, R = refused):
 | `invocation.user: false`  | N `user-invocable: false`          | R                                                         | R                                   | R        | R                                   |
 
 `license`, `compatibility`, `metadata`, `name`, `description`, and bundled
-files with their executable bits are native on every target.
+files with their executable bits are native on every target. Keys written to
+Codex `agents/openai.yaml` are merged into a bundled `agents/openai.yaml`, which
+keeps its other keys; a bundled value that contradicts a written one is
+`acf.extras.conflict`.
 `argument-hint` is native on Claude and dropped with a `lossy` diagnostic
 elsewhere.
 
