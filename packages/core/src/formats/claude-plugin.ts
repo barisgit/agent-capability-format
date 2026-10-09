@@ -23,7 +23,7 @@ import type {
   SafetyClass,
   SkillFacet,
 } from "../types/index.js";
-import { isRecord } from "../utils/guards.js";
+import { isRecord, isStringArray } from "../utils/guards.js";
 import { readClaudeMcp } from "./claude-mcp.js";
 import {
   type ForeignReadOptions,
@@ -107,18 +107,17 @@ function manifestProblem(raw: Record<string, unknown>): string | undefined {
   for (const key of STRING_KEYS) {
     if (raw[key] !== undefined && typeof raw[key] !== "string") return `${key} must be a string`;
   }
-  if (
-    raw.keywords !== undefined &&
-    !(Array.isArray(raw.keywords) && raw.keywords.every((item) => typeof item === "string"))
-  )
+  if (raw.keywords !== undefined && !isStringArray(raw.keywords))
     return "keywords must be a list of strings";
-  if (raw.author !== undefined) {
-    if (!isRecord(raw.author) || typeof raw.author.name !== "string")
-      return "author must be an object with a name";
-    for (const key of ["email", "url"]) {
-      if (raw.author[key] !== undefined && typeof raw.author[key] !== "string")
-        return `author.${key} must be a string`;
-    }
+  return raw.author === undefined ? undefined : authorProblem(raw.author);
+}
+
+function authorProblem(author: unknown): string | undefined {
+  if (!isRecord(author) || typeof author.name !== "string")
+    return "author must be an object with a name";
+  for (const key of ["email", "url"]) {
+    if (author[key] !== undefined && typeof author[key] !== "string")
+      return `author.${key} must be a string`;
   }
   return undefined;
 }
@@ -158,24 +157,8 @@ async function readSkills(
   declared: unknown,
   diagnostics: Diagnostic[],
 ): Promise<SkillFacet[]> {
-  const roots = [path.join(root, "skills")];
-  for (const relative of componentPaths(declared)) {
-    const resolved = contained(root, relative);
-    if (resolved === undefined) {
-      diagnostics.push(outsidePackage(root, "skills", relative));
-      continue;
-    }
-    roots.push(resolved);
-  }
-  const dirs: string[] = [];
-  for (const skillsRoot of roots) {
-    const own = (await isFile(path.join(skillsRoot, "SKILL.md")))
-      ? [skillsRoot]
-      : await skillDirectories(skillsRoot);
-    for (const dir of own) if (!dirs.includes(dir)) dirs.push(dir);
-  }
   const skills: SkillFacet[] = [];
-  for (const dir of dirs) {
+  for (const dir of await skillDirs(skillRoots(root, declared, diagnostics))) {
     const skill = await readForeignSkill(dir, "claude", diagnostics);
     if (skill === undefined) continue;
     if (skills.some((existing) => existing.name === skill.name)) {
@@ -191,6 +174,29 @@ async function readSkills(
     skills.push(skill);
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** `skills/` and each contained manifest `skills` path; an outside path is diagnosed and skipped. */
+function skillRoots(root: string, declared: unknown, diagnostics: Diagnostic[]): string[] {
+  const roots = [path.join(root, "skills")];
+  for (const relative of componentPaths(declared)) {
+    const resolved = contained(root, relative);
+    if (resolved === undefined) diagnostics.push(outsidePackage(root, "skills", relative));
+    else roots.push(resolved);
+  }
+  return roots;
+}
+
+/** Skill directories under `roots` in order, without repeats. */
+async function skillDirs(roots: readonly string[]): Promise<string[]> {
+  const dirs: string[] = [];
+  for (const skillsRoot of roots) {
+    const own = (await isFile(path.join(skillsRoot, "SKILL.md")))
+      ? [skillsRoot]
+      : await skillDirectories(skillsRoot);
+    for (const dir of own) if (!dirs.includes(dir)) dirs.push(dir);
+  }
+  return dirs;
 }
 
 /**
@@ -241,56 +247,93 @@ const KEY_COMPONENTS = [
   { key: "dependencies", kind: "dependencies" },
 ] as const;
 
+type RemainderInput = Omit<NativeRemainderComponent, "format" | "executable">;
+
+/** Manifest keys some reader step owns; every other key becomes a monitor or `other` component. */
+const HANDLED_KEYS: ReadonlySet<string> = new Set([
+  ...METADATA_KEYS,
+  ...LISTING_KEYS,
+  ...FILE_COMPONENTS.map((spec) => spec.key),
+  ...MERGED_COMPONENTS.map((spec) => spec.key),
+  ...KEY_COMPONENTS.map((spec) => spec.key),
+]);
+
 /** Every component the reader does not project, as Claude native remainder. */
 async function remainderComponents(
   root: string,
   raw: Record<string, unknown>,
 ): Promise<NativeRemainderComponent[]> {
+  const inputs = [
+    ...(await fileComponents(root, raw)),
+    ...(await mergedComponents(root, raw)),
+    ...(await binComponents(root)),
+    ...keyComponents(raw),
+    ...(await listingComponents(root, raw)),
+    ...unhandledComponents(root, raw),
+  ];
   const out: NativeRemainderComponent[] = [];
-  const add = async (
-    input: Omit<NativeRemainderComponent, "format" | "executable"> & { executable?: boolean },
-  ): Promise<void> => {
+  for (const input of inputs) {
     out.push(await remainderComponent(root, { format: "claude-plugin", ...input }));
-  };
-  const handled = new Set([...METADATA_KEYS, ...LISTING_KEYS]);
+  }
+  return out;
+}
 
+/** One component per file of each {@link FILE_COMPONENTS} kind, or per `commands` map entry. */
+async function fileComponents(
+  root: string,
+  raw: Record<string, unknown>,
+): Promise<RemainderInput[]> {
+  const inputs: RemainderInput[] = [];
   for (const spec of FILE_COMPONENTS) {
-    handled.add(spec.key);
-    if (spec.key === "commands" && isRecord(raw.commands)) {
-      for (const [name, definition] of Object.entries(raw.commands))
-        await add({
+    const value = raw[spec.key];
+    const componentClass = keyClass(raw, [spec.key]);
+    if (spec.key === "commands" && isRecord(value)) {
+      for (const [name, definition] of Object.entries(value)) {
+        const paths = await commandSource(root, definition);
+        inputs.push({
           kind: spec.kind,
           name,
-          paths: await commandSource(root, definition),
+          paths,
           manifestKeys: [spec.key],
-          class: keyClass(raw, [spec.key]),
-        });
-      continue;
-    }
-    const declared = componentPaths(raw[spec.key]);
-    const sources = raw[spec.key] === undefined ? [spec.dir] : declared;
-    for (const relative of sources) {
-      const resolved = contained(root, relative);
-      if (resolved === undefined) continue;
-      const files = (await isDirectory(resolved))
-        ? await filesUnder(root, resolved)
-        : (await isFile(resolved))
-          ? [path.relative(root, resolved).split(path.sep).join("/")]
-          : [];
-      for (const file of files) {
-        await add({
-          kind: spec.kind,
-          name: path.posix.basename(file).replace(/\.[^.]*$/, ""),
-          paths: [file],
-          manifestKeys: raw[spec.key] === undefined ? [] : [spec.key],
-          class: keyClass(raw, [spec.key]),
+          class: componentClass,
         });
       }
+      continue;
+    }
+    const sources = value === undefined ? [spec.dir] : componentPaths(value);
+    for (const file of await sourceFiles(root, sources)) {
+      inputs.push({
+        kind: spec.kind,
+        name: path.posix.basename(file).replace(/\.[^.]*$/, ""),
+        paths: [file],
+        manifestKeys: value === undefined ? [] : [spec.key],
+        class: componentClass,
+      });
     }
   }
+  return inputs;
+}
 
+/** Package-relative files of each contained source: a directory's files, or the file itself. */
+async function sourceFiles(root: string, sources: readonly string[]): Promise<string[]> {
+  const files: string[] = [];
+  for (const relative of sources) {
+    const resolved = contained(root, relative);
+    if (resolved === undefined) continue;
+    if (await isDirectory(resolved)) files.push(...(await filesUnder(root, resolved)));
+    else if (await isFile(resolved))
+      files.push(path.relative(root, resolved).split(path.sep).join("/"));
+  }
+  return files;
+}
+
+/** One component per {@link MERGED_COMPONENTS} kind the package has a file or manifest key for. */
+async function mergedComponents(
+  root: string,
+  raw: Record<string, unknown>,
+): Promise<RemainderInput[]> {
+  const inputs: RemainderInput[] = [];
   for (const spec of MERGED_COMPONENTS) {
-    handled.add(spec.key);
     const paths: string[] = (await isFile(path.join(root, spec.file))) ? [spec.file] : [];
     for (const relative of componentPaths(raw[spec.key])) {
       const normalized = path.posix.normalize(relative);
@@ -299,7 +342,7 @@ async function remainderComponents(
     }
     const manifestKeys = raw[spec.key] === undefined ? [] : [spec.key];
     if (paths.length === 0 && manifestKeys.length === 0) continue;
-    await add({
+    inputs.push({
       kind: spec.kind,
       name: spec.name,
       paths,
@@ -307,32 +350,41 @@ async function remainderComponents(
       class: keyClass(raw, [spec.key]),
     });
   }
+  return inputs;
+}
 
-  for (const file of await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR))) {
-    await add({
-      kind: "bin",
-      name: path.posix.basename(file),
-      paths: [file],
-      class: "functional",
-    });
-  }
+/** One functional component per file under the plugin's `bin/`. */
+async function binComponents(root: string): Promise<RemainderInput[]> {
+  const files = await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR));
+  return files.map((file) => ({
+    kind: "bin",
+    name: path.posix.basename(file),
+    paths: [file],
+    class: "functional",
+  }));
+}
 
-  for (const spec of KEY_COMPONENTS) {
-    handled.add(spec.key);
-    if (raw[spec.key] === undefined) continue;
-    await add({
-      kind: spec.kind,
-      name: spec.key,
-      paths: [],
-      manifestKeys: [spec.key],
-      class: keyClass(raw, [spec.key]),
-    });
-  }
+/** One file-less component per {@link KEY_COMPONENTS} key the manifest sets. */
+function keyComponents(raw: Record<string, unknown>): RemainderInput[] {
+  return KEY_COMPONENTS.filter((spec) => raw[spec.key] !== undefined).map((spec) => ({
+    kind: spec.kind,
+    name: spec.key,
+    paths: [],
+    manifestKeys: [spec.key],
+    class: keyClass(raw, [spec.key]),
+  }));
+}
 
+/** The marketplace listing keys as one component, with the icon file when it is in the package. */
+async function listingComponents(
+  root: string,
+  raw: Record<string, unknown>,
+): Promise<RemainderInput[]> {
   const listing = LISTING_KEYS.filter((key) => raw[key] !== undefined);
-  if (listing.length > 0) {
-    const icon = typeof raw.icon === "string" ? contained(root, raw.icon) : undefined;
-    await add({
+  if (listing.length === 0) return [];
+  const icon = typeof raw.icon === "string" ? contained(root, raw.icon) : undefined;
+  return [
+    {
       kind: "listing-metadata",
       name: "listing",
       paths:
@@ -341,22 +393,29 @@ async function remainderComponents(
           : [],
       manifestKeys: listing,
       class: keyClass(raw, listing),
+    },
+  ];
+}
+
+/** Every other manifest key, by name: a monitor when its value holds monitors, else `other`. */
+function unhandledComponents(root: string, raw: Record<string, unknown>): RemainderInput[] {
+  return Object.keys(raw)
+    .sort()
+    .filter((key) => !HANDLED_KEYS.has(key))
+    .map((key) => {
+      const monitor = MONITOR_COMPONENTS.some(
+        (spec) => spec.key === key && (spec.holds?.(raw[key]) ?? true),
+      );
+      return {
+        kind: monitor ? "monitor" : "other",
+        name: key,
+        paths: componentPaths(raw[key]).filter(
+          (relative) => contained(root, relative) !== undefined,
+        ),
+        manifestKeys: [key],
+        class: keyClass(raw, [key]),
+      };
     });
-  }
-  for (const key of Object.keys(raw).sort()) {
-    if (handled.has(key)) continue;
-    const monitor = MONITOR_COMPONENTS.some(
-      (spec) => spec.key === key && (spec.holds?.(raw[key]) ?? true),
-    );
-    await add({
-      kind: monitor ? "monitor" : "other",
-      name: key,
-      paths: componentPaths(raw[key]).filter((relative) => contained(root, relative) !== undefined),
-      manifestKeys: [key],
-      class: keyClass(raw, [key]),
-    });
-  }
-  return out;
 }
 
 /** The package file a command-map definition's `source` names, when it is one. */
