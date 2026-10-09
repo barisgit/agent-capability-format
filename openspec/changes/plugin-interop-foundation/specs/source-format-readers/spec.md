@@ -98,6 +98,10 @@ When a transformation applies, the writer SHALL regenerate only the native carri
 - **WHEN** the entry sets `rename: kit` on a Claude plugin named `review-kit` that has an agent
 - **THEN** resolution emits `acf.selection.remainder-references` (lossy) naming `review-kit`, because the preserved agent may still reference the old name
 
+#### Scenario: Renamed Claude plugin with an MCP bundle
+- **WHEN** a renamed Claude plugin's manifest `mcpServers` lists `./mcp/extra.json` and `./bundles/tool.mcpb`
+- **THEN** the servers of `mcp/extra.json` are regenerated into `.mcp.json`, the regenerated manifest keeps `mcpServers: ["./bundles/tool.mcpb"]`, and `bundles/tool.mcpb` is copied
+
 ### Requirement: Native packages are foreign sources, not ACF source
 SPEC.md §14.4 and CONTEXT.md Axiom 12 SHALL be amended: native plugin packages MAY be read through a declared format reader as foreign sources, but SHALL NOT be accepted as ACF source. Native ACF capabilities keep YAML and Markdown as their authored format and carry native files only under `native/<target>/`.
 

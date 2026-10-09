@@ -283,6 +283,57 @@ test("an Agent Plugins package leaves out the Claude configuration Claude would 
   }
 });
 
+test("a transformed Claude plugin keeps its selected MCP bundle references and bundle files", async () => {
+  const input = await mkdtemp(path.join(tmpdir(), "claude-bundles-"));
+  try {
+    const remote = "https://example.com/remote.mcpb";
+    const files: Record<string, string> = {
+      ".claude-plugin/plugin.json": `${JSON.stringify({
+        name: "kit",
+        version: "1.0.0",
+        mcpServers: ["./mcp/extra.json", "./bundles/tool.mcpb", "./bundles/other.mcpb", remote],
+      })}\n`,
+      ".mcp.json": `${JSON.stringify({ mcpServers: { local: { command: "node", args: ["server.js"] } } })}\n`,
+      "mcp/extra.json": `${JSON.stringify({ mcpServers: { extra: { type: "http", url: "https://example.com/mcp" } } })}\n`,
+      "bundles/tool.mcpb": "tool bundle",
+      "bundles/other.mcpb": "other bundle",
+      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+    };
+    for (const [relative, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
+      await writeFile(path.join(input, relative), text);
+    }
+    const selected = applyEntrySelection(await readInput(input, "claude-plugin", "kit2"), {
+      exclude: { mcp: ["./bundles/other.mcpb"] },
+    });
+
+    const result = await emit(
+      claudeAdapter,
+      selected.capability,
+      INSTALL_ROOT,
+      await inputFs(input),
+    );
+
+    const tree = pluginTree(result, input);
+    const json = (file: string) =>
+      JSON.parse(new TextDecoder().decode(tree.get(file)?.bytes)) as Record<string, unknown>;
+    expect([...tree.keys()].sort()).toEqual([
+      ".claude-plugin/plugin.json",
+      ".mcp.json",
+      "bundles/tool.mcpb",
+      "report.json",
+      "skills/review/SKILL.md",
+    ]);
+    expect(json(".claude-plugin/plugin.json").mcpServers).toEqual(["./bundles/tool.mcpb", remote]);
+    expect(Object.keys(json(".mcp.json").mcpServers as object).sort()).toEqual(["extra", "local"]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      "acf.support.component-omitted",
+    );
+  } finally {
+    await rm(input, { recursive: true, force: true });
+  }
+});
+
 test("a Claude plugin with remainder is refused on loose Claude files", async () => {
   const golden = goldenCase(testsDir, "claude-plugin-loose-refused");
   const capability = await readInput(golden.input, "claude-plugin");

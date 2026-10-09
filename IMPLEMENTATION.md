@@ -1478,7 +1478,9 @@ applicability). `isUnchangedClaudePlugin` compares it and `renamedFrom` with
 the capability the writer receives: an unchanged package is copied
 byte-identically except the `plugin.json` `version` value; a transformed one
 gets a regenerated manifest, skills, and `.mcp.json`, and loses the files and
-manifest keys that only removed remainder components used.
+manifest keys that only removed remainder components used. `.mcp.json` cannot
+hold an MCP bundle, so the manifest `mcpServers` keeps the selected `.mcpb` and
+HTTPS bundle references and a local bundle file is copied.
 
 Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 

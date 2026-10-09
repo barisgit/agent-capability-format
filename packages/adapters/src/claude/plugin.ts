@@ -312,6 +312,8 @@ async function generatedPackage(
 
   const extras: Array<[string, unknown]> =
     format === "claude-plugin" ? selectedManifestEntries(capability, rawManifest) : [];
+  const bundles = selectedBundles(capability, rawManifest.mcpServers);
+  if (bundles !== undefined) extras.push(["mcpServers", bundles]);
   for (const entry of Object.entries(nativeExtras(capability.manifest.targets, "claude")))
     if (!extras.some(([key]) => key === entry[0])) extras.push(entry);
   const manifest = pluginManifest(capability, extras, report);
@@ -348,7 +350,8 @@ async function addSkills(
 
 /**
  * The plugin's `.mcp.json`: every canonical server Claude accepts, plus the raw entries of a
- * Claude plugin source's servers its reader kept as remainder. Undefined without servers.
+ * Claude plugin source's servers its reader kept as remainder. Bundle references stay in the
+ * manifest (`selectedBundles`). Undefined without servers.
  */
 async function mcpConfig(
   capability: AcfCapability,
@@ -376,8 +379,9 @@ async function mcpConfig(
     }
   }
   if (capability.source?.format === "claude-plugin") {
+    const bundles = bundleReferences(rawManifest.mcpServers);
     for (const component of capability.remainder ?? []) {
-      if (component.kind !== "mcp-server") continue;
+      if (component.kind !== "mcp-server" || bundles.includes(component.name)) continue;
       const entry = await rawServerEntry(capability, fs, rawManifest, component);
       if (entry !== undefined) servers[component.name] = entry;
       else
@@ -390,7 +394,7 @@ async function mcpConfig(
               family: "mcp",
               component: component.name,
             },
-            "a transformed plugin regenerates .mcp.json, which cannot reference a remote or .mcpb server",
+            "its declaration could not be read again from the source",
           ),
         );
     }
@@ -480,13 +484,48 @@ async function supportFiles(
   });
 }
 
-/** Package-relative JSON config files named by a Claude manifest `mcpServers` value. */
+/**
+ * Package-relative JSON config files named by a Claude manifest `mcpServers` value. Their servers
+ * are regenerated into `.mcp.json`, so the files themselves are not copied.
+ */
 function jsonConfigPaths(value: unknown): string[] {
-  const values = Array.isArray(value) ? value : [value];
-  return values
-    .filter((item): item is string => typeof item === "string" && !item.includes("://"))
+  return references(value)
+    .filter((item) => !isBundleReference(item))
     .map((item) => path.posix.normalize(item))
     .filter((item) => !item.startsWith("../"));
+}
+
+/**
+ * The manifest `mcpServers` value for the bundle references whose servers selection kept, in
+ * the source's shape (one string or a list); undefined when none is kept. `.mcp.json` cannot
+ * hold a bundle, so these stay manifest references, and a local bundle file is copied as a
+ * support file.
+ */
+function selectedBundles(capability: AcfCapability, value: unknown): unknown {
+  const kept = bundleReferences(value).filter((reference) =>
+    (capability.remainder ?? []).some(
+      (component) => component.kind === "mcp-server" && component.name === reference,
+    ),
+  );
+  if (kept.length === 0) return undefined;
+  return typeof value === "string" ? kept[0] : kept;
+}
+
+/** The `.mcpb` and HTTPS bundle references of a manifest `mcpServers` value, as authored. */
+function bundleReferences(value: unknown): string[] {
+  return references(value).filter(isBundleReference);
+}
+
+/** The string entries of a manifest component value: one string or a list mixing forms. */
+function references(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [value]).filter(
+    (item): item is string => typeof item === "string",
+  );
+}
+
+/** True for an MCP bundle reference, which the Claude plugin reader keeps as remainder. */
+function isBundleReference(reference: string): boolean {
+  return reference.startsWith("https://") || reference.endsWith(".mcpb");
 }
 
 function parseJsonObject(text: string | null): Record<string, unknown> | undefined {
