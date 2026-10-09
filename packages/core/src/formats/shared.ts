@@ -12,6 +12,7 @@ import type {
   PackageAuthor,
   SafetyClass,
 } from "../types/index.js";
+import { assertNoProtoKey } from "../utils/proto-key.js";
 
 /** True for a plain JSON object (not null, not an array). */
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -52,7 +53,9 @@ export async function readJson(
   severity: Diagnostic["severity"],
 ): Promise<JsonRead> {
   try {
-    return { ok: true, value: JSON.parse(await readFile(file, "utf8")) };
+    const value: unknown = JSON.parse(await readFile(file, "utf8"));
+    assertNoProtoKey(value);
+    return { ok: true, value };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return {

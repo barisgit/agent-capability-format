@@ -2720,6 +2720,9 @@ trigger holds, MAY emit additional more-specific codes, and MUST NOT
 collapse listed codes into more generic ones.
 
 ```txt
+# Schema
+acf.schema.invalid-yaml                      # malformed YAML or frontmatter, or a `__proto__` key; the file is skipped (error)
+
 # Manifest
 acf.manifest.invalid-name
 acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...)

@@ -1,12 +1,16 @@
 import { parseDocument, stringify } from "yaml";
+import { assertNoProtoKey } from "./utils/proto-key.js";
 
+/** Parses one YAML document; throws on a syntax error or a `__proto__` key. */
 export function parseYaml(str: string): unknown {
   const doc = parseDocument(str, { prettyErrors: false });
   if (doc.errors.length > 0) {
     const first = doc.errors[0];
     throw new Error(first?.message ?? "invalid YAML");
   }
-  return doc.toJS();
+  const value: unknown = doc.toJS();
+  assertNoProtoKey(value);
+  return value;
 }
 
 export function stringifyYml(value: unknown): string {

@@ -226,3 +226,12 @@ describe("Claude plugin reader", () => {
     ]);
   });
 });
+
+test("a __proto__ key in plugin.json rejects the manifest instead of vanishing", async () => {
+  const result = await read({
+    ".claude-plugin/plugin.json":
+      '{"name":"review-kit","mcpServers":{"__proto__":{"command":"node"}}}',
+  });
+  expect(result.capability).toBeUndefined();
+  expect(result.diagnostics.map((d) => d.code)).toEqual(["acf.source.manifest-invalid"]);
+});
