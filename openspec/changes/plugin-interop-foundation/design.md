@@ -143,6 +143,19 @@ Claude records a directory marketplace as an absolute path in the scope's settin
 
 Alternative: Claude `project` scope (the earlier mapping). Rejected because it commits a machine-specific path and churns between teammates. Alternative: no automatic project registration (`registration required`). Rejected because new project installs would not load until each user ran manual commands, and loose installs would never migrate.
 
+### D26. Top-level `allowed-tools` in SKILL.md is an Agent Skills field (decided 2026-10-09 from the real-manifest review)
+
+A native ACF skill may declare `allowed-tools` at the top level of SKILL.md, because the Agent Skills specification defines it (experimental) and inputs caplet already applied must keep working. Caplet passes the value unchanged to targets that read the same field with the same spelling (Claude), and drops it for other targets with a diagnostic. `allowed-tools` only pre-approves tools, so dropping it narrows what runs without asking and never widens it. This refines D11: caplet still never translates a grant between hosts or invents one; it only carries the author's Agent Skills field to a host that reads that exact field. `targets.<t>.native.allowed-tools` stays valid for target-specific values.
+
+Alternative: keep rejecting the top-level key with `acf.skill.native-key-not-core`. Rejected because it breaks existing capabilities (github:barisgit/capabilities) that the released caplet installs.
+
+### D27. Product decisions (user delegated, 2026-10-09)
+
+1. `--target` is not remembered between runs. Default targets come from configuration; a flag narrows one run only.
+2. Codex project config uses paths relative to the config file when Codex resolves them that way; otherwise absolute paths stay, recorded as a follow-up until Codex's behavior is checked.
+3. A capability installed at both user and project scope appears twice in Claude. Caplet cannot hide the user plugin for one project, so it warns.
+4. An invalid native value in a foreign or imported source (bare skill, Agent Plugins package, Claude plugin) leaves out only the invalid component, with a warning, the same way for every source format. Native ACF stays strict: an invalid value is an error.
+
 ### Moved decisions
 
 The earlier draft's native-ACF-root decision moved to `acf-root-agent-plugins-package`; its Copilot-and-VS-Code-as-separate-targets and Cursor-placeholder decisions moved to `agent-plugins-output`, where they are requirements.
@@ -238,6 +251,5 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 - Resolved by task 5.2: project-scope marketplaces record an absolute path in committed settings (D25).
 - Still unknown: the policy-block exit code and output at runtime (needs root or a managed account; caplet matches the policy messages found in the 2.1.97 binary), the interactive trust prompt for project-declared marketplaces, and, because they need an authenticated model session (task 5.9), whether a model session invokes the plugin's skill and MCP tool and reloads the skill body after update.
 - Whether Cursor resolves a `./` command and the default working directory of an Agent Plugins package against the plugin root, and whether Codex connects plugin SSE servers (`agent-plugins-output` tasks 1.5 and 2.1); both are refused until verified.
-- Codex headless plugin install and `agents/openai.yaml` handling inside plugin skills, and Copilot directory-marketplace live loading (`agent-plugins-output` tasks 2.1 and 3.1).
 
-[Showing lines 44-288 of 288 (50.0KB limit). Full output: /tmp/pi-bash-70de84484769174e.log]
+[Showing lines 1-240 of 243 (50.0KB limit). Use offset=241 to continue.]

@@ -224,9 +224,9 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 Dropped as fixed: `research/plugin-interop/facets/distribution.md` lock-types row (the core and installer lock types are one schema; the row now says so).
 
-### Open product decisions
+### Product decisions (decided 2026-10-09, design.md D27)
 
-- `-t/--target` is not persisted between runs; a later bare `apply` targets everything again.
-- Codex project config stores absolute paths, so a committed project config only works on the machine that wrote it.
-- The same capability declared at user and project scope installs twice in Claude.
-- An imported bare skill with an invalid native value fails the whole capability, while a Claude plugin component with the same value is dropped with a warning; pick one rule.
+- `-t/--target` is not remembered; default targets come from configuration.
+- Codex project config: relative paths if Codex resolves them against the config file, else absolute paths remain until checked.
+- The same capability at user and project scope appears twice in Claude; caplet warns.
+- Invalid native values: foreign and imported sources leave out only the invalid component with a warning; native ACF stays strict.
