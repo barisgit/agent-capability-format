@@ -822,9 +822,22 @@ Consequence for open question 7: Claude records a machine-specific absolute path
 - `marketplace remove` uninstalls every plugin of that marketplace in every scope; remove the caplet marketplace only when it has no desired plugins.
 - D22: Claude starts plugin stdio servers in the directory `claude` was launched from and ignores `cwd`, so Claude cannot honor an explicit working directory; under D22 a server with `cwd: ${ACF_CAPABILITY_DIR}` (every Agent Plugins stdio server read with D22's default) is refused for Claude. Paths in `command` and `args` can use `${CLAUDE_PLUGIN_ROOT}`.
 
+### Caplet end to end (claude 2.1.97, task 5.9)
+
+The opt-in test `apps/caplet/tests/hosts/claude/real-host.test.ts` (`CAPLET_HOST_TESTS=claude bun test tests/hosts/claude/real-host.test.ts` in `apps/caplet`) runs caplet and the installed `claude` 2.1.97 with the same isolation as the spike: an empty environment, `HOME` and `CLAUDE_CONFIG_DIR` under a fresh `/tmp/claude-spike.*` root (refused otherwise or when inside the real home), `PATH` limited to a `claude` symlink, node and `/usr/bin:/bin`, the three Claude opt-out variables, no credentials. It asserts that the real `~/.claude/plugins` tree and `~/.claude/settings.json` hash the same before and after. Run on 2026-10-09: passed, real state unchanged.
+
+| Step | Result | Level |
+|---|---|---|
+| Install: `caplet apply --scope user` of ACF capabilities `probe` (skill + stdio MCP server `node ${ACF_CAPABILITY_DIR}/server.js`) and `helper` (skill) | Exit 0, no diagnostics; `plugin list --json` shows `probe@acf-user` and `helper@acf-user` at user scope, enabled, with the generated `1.0.0+acf.<d>` version; the installed copy holds the skill body. | verified |
+| MCP server from the plugin | `claude mcp list` reports `plugin:probe:files: node <HOME>/.claude/plugins/cache/acf-user/probe/1.0.0-acf.<d>/server.js ... - ✓ Connected`: `${ACF_CAPABILITY_DIR}` became `${CLAUDE_PLUGIN_ROOT}`, which Claude expanded to its cache copy; the server ran in the launch directory. | verified |
+| Invoke the skill (`/probe:probe`) and call the MCP tool through a model | Not run: needs an authenticated model session. | UNKNOWN |
+| Update: changed skill body, `caplet update --scope user` | Exit 0; new `+acf.<d>` version installed through `plugin update`; the new cache copy holds the new body. | verified |
+| Uninstall one plugin while the marketplace stays | `caplet apply` after deselecting `probe` rewrites `marketplace.json` without `probe` before running `plugin uninstall probe@acf-user --scope user`; Claude uninstalls a plugin its marketplace no longer lists (exit 0), `helper` stays. | verified |
+| Uninstall the last plugin | `caplet apply` with nothing selected uninstalls `helper`, removes the marketplace, then deletes `~/.claude/.acf/marketplace/`; `plugin list --json` and `plugin marketplace list --json` return `[]`. | verified |
+
 ### Not established
 
 - Policy-block exit code and output at runtime (needs root for `/etc/claude-code/managed-settings.json` or an authenticated managed account).
-- Skill body reload in a model session after update, and the interactive trust prompt for project-declared marketplaces (need an authenticated interactive session).
+- Skill body reload in a model session after update, invoking a plugin skill (`/<plugin>:<skill>`) or calling a plugin MCP tool through a model, and the interactive trust prompt for project-declared marketplaces (need an authenticated interactive session).
 - When Claude deletes `.orphaned_at` cache directories.
 - Whether `cwd` is honored for non-plugin (project `.mcp.json` or `claude mcp add`) servers; only plugin servers were probed.

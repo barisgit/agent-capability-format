@@ -253,6 +253,13 @@ const CLAUDE_CWD_EVIDENCE: CellEvidence = {
   hostVersion: "claude 2.1.97",
 };
 /** The `cwd` refusal on both Claude carriers, each proven by its own negative fixture. */
+/** The opt-in real-host test: caplet's plugin ran its stdio server from Claude's install copy. */
+const CLAUDE_END_TO_END_EVIDENCE: CellEvidence = {
+  level: "verified",
+  source: `${RESEARCH}/tools/claude-code.md#Caplet end to end (claude 2.1.97, task 5.9)`,
+  hostVersion: "claude 2.1.97",
+};
+
 const claudeCwdRefusal: Pick<Row, "claudePlugin" | "claudeLoose"> = {
   claudePlugin: {
     kind: "refused",
@@ -273,9 +280,10 @@ function placeholderRow(
   id: string,
   claudePluginRule: string,
   loose: (source: string) => SupportCell,
+  claudePluginEvidence: CellEvidence = documented(SRC.claudeMcpExpansion),
 ): FieldSupport {
   return field("mcp", id, "functional", {
-    claudePlugin: translated(claudePluginRule, SRC.claudeMcpExpansion),
+    claudePlugin: { kind: "translated", rule: claudePluginRule, evidence: claudePluginEvidence },
     claudeLoose: loose(SRC.claudeMcpExpansion),
     codex: loose(SRC.codexMcp),
     cursor: loose(SRC.cursorMcp),
@@ -371,6 +379,7 @@ const mcpFields: FieldSupport[] = [
     `mcp.args=${CAPABILITY_DIR}`,
     `${CAPABILITY_DIR} becomes ${CLAUDE_PLUGIN_ROOT}`,
     absoluteCapabilityDir,
+    CLAUDE_END_TO_END_EVIDENCE,
   ),
   placeholderRow(
     `mcp.env=${CAPABILITY_DIR}`,
