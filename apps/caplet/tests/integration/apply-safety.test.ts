@@ -257,3 +257,53 @@ test("remove does not delete through a skills directory replaced by an outside s
   expect(`${result.stdout}${result.stderr}`).toContain(path.join("skills", "linked"));
   expect(existsSync(path.join(outside, "linked", "SKILL.md"))).toBe(true);
 });
+
+test("an owned file replaced by a symlink leaving the root fails Claude without writing through it", async () => {
+  await writeSkill("linked");
+  expect((await applyProject(scope)).exitCode).toBe(0);
+  const skill = path.join(scope.cwd, ".claude", "skills", "linked", "SKILL.md");
+  const outside = path.join(scope.dir, "outside.md");
+  await writeText(outside, "outside\n");
+  await rm(skill);
+  await symlink(outside, skill);
+  await writeText(
+    path.join(scope.sourceRoot, "alpha", "skills", "linked", "SKILL.md"),
+    "---\nname: linked\ndescription: Skill linked\n---\nChanged.\n",
+  );
+
+  const result = await runCaplet(scope, [
+    "apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+    "--target",
+    "claude",
+    "--mode",
+    "force",
+    "--json",
+  ]);
+
+  expect(result.exitCode).not.toBe(0);
+  expect(await readText(outside)).toBe("outside\n");
+  const json = JSON.parse(result.stdout) as { diagnostics: Array<{ code: string; path?: string }> };
+  expect(json.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "acf.apply.outside-root", path: skill }),
+  );
+});
+
+test("a sidecar replaced by a symlink leaving the root fails that root without writing through it", async () => {
+  expect((await applyProject(scope)).exitCode).toBe(0);
+  const sidecar = path.join(scope.cwd, ".claude", ".acf-managed.json");
+  const outside = path.join(scope.dir, "outside.json");
+  await rename(sidecar, outside);
+  const before = await readText(outside);
+  await symlink(outside, sidecar);
+  await writeText(
+    path.join(scope.sourceRoot, "alpha", "agents", "alpha-helper.md"),
+    "---\nname: alpha-helper\ndescription: Helper alpha-cap\n---\nNew help.\n",
+  );
+
+  expect(await reapply()).not.toBe(0);
+  expect(await readText(outside)).toBe(before);
+});

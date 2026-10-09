@@ -2847,9 +2847,11 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   by the user: it is kept with its sidecar entry and reported as drift
   until the user deletes or restores it.
 - Every write and delete MUST resolve, after following existing parent
-  directories, inside the declared output root of its target and scope.
-  A symlinked parent that leads outside fails that target before any
-  write and names the offending path.
+  directories and an existing symbolic link at the path itself, inside the
+  declared output root of its target and scope; the root's sidecar and
+  `ACF-MANAGED.md` included. A symlinked parent or file that leads
+  outside, or dangles, fails that target before any write and names the
+  offending path.
 - Adapters MUST preserve unowned content byte-for-byte in any file they
   patch. Reformatting outside owned regions is forbidden.
 - Adapters MUST emit the listed degradation diagnostics (`acf.adapter.*`,

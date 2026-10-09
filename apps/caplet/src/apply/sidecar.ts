@@ -15,6 +15,9 @@ import {
 import { containmentViolation, type OutputBoundary } from "./containment.js";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
+/** The sidecar's file name directly under each output root it describes. */
+export const SIDECAR_FILENAME = ".acf-managed.json";
+
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
 /** Target and carrier recorded on entries written for one output root. */
 export type SidecarOwner = { target: SidecarTarget; carrier: Carrier };
