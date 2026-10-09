@@ -71,43 +71,15 @@ export async function applyDiffs(diffs: FileDiff[], opts: ApplyDiffsOptions): Pr
       diagnostics.push(driftDiagnostic(diff, absolutePath, opts.capabilityName));
       continue;
     }
-    const applied = await applyOneDiff(diff, absolutePath, opts.installRoot);
-
-    if (diff.after === null) {
-      const removed = new Set(diff.owns.map(ownershipKey));
-      sidecar.managed = sidecar.managed.filter(
-        (entry) =>
-          !(
-            entry.path === relativePath &&
-            entry.capability === opts.capabilityName &&
-            entry.owns.every((own) => removed.has(ownershipKey(own)))
-          ),
-      );
-      if (!applied.changed) unchanged.push(absolutePath);
-      else if (applied.content === null) deleted.push(absolutePath);
-      else written.push(absolutePath);
-      continue;
-    }
-
-    if (applied.changed) written.push(absolutePath);
-    else unchanged.push(absolutePath);
-
-    const entry: ManagedEntry = {
-      path: relativePath,
-      owns: diff.owns,
-      capability: opts.capabilityName,
-      hash: hashOwnedRegions(applied.content, diff.owns),
-    };
-    if (diff.facet !== undefined) entry.facet = diff.facet;
-    if (opts.owner !== undefined) {
-      entry.target = opts.owner.target;
-      entry.carrier = opts.owner.carrier;
-    }
-    if (isWholeFile(diff.owns)) {
-      const mode = await readModeIfExists(absolutePath);
-      if (mode !== null) entry.mode = mode;
-    }
-    mergeSidecarEntry(sidecar, entry);
+    const applied = isWholeFile(diff.owns)
+      ? await applyWholeFile(diff, absolutePath, opts.installRoot)
+      : await applyOwnedRegions(diff, absolutePath);
+    if (!applied.changed) unchanged.push(absolutePath);
+    else if (applied.content === null) deleted.push(absolutePath);
+    else written.push(absolutePath);
+    if (diff.after === null)
+      dropRemovedEntries(sidecar, diff.owns, relativePath, opts.capabilityName);
+    else mergeSidecarEntry(sidecar, await managedEntry(diff, applied.content, absolutePath, opts));
   }
 
   await writeSidecar(opts.sidecarPath, sidecar, opts.owner);
@@ -119,6 +91,49 @@ export async function applyDiffs(diffs: FileDiff[], opts: ApplyDiffsOptions): Pr
     diagnostics,
     sidecar,
   };
+}
+
+/** Drops the capability's entries for `relativePath` whose every region the removal owns. */
+function dropRemovedEntries(
+  sidecar: AcfManagedSidecar,
+  owns: readonly AcfOwnership[],
+  relativePath: string,
+  capability: string,
+): void {
+  const removed = new Set(owns.map(ownershipKey));
+  sidecar.managed = sidecar.managed.filter(
+    (entry) =>
+      !(
+        entry.path === relativePath &&
+        entry.capability === capability &&
+        entry.owns.every((own) => removed.has(ownershipKey(own)))
+      ),
+  );
+}
+
+/** The sidecar entry recording what an applied write owns, with the file's mode when whole. */
+async function managedEntry(
+  diff: FileDiff,
+  content: FileContent | null,
+  absolutePath: string,
+  opts: ApplyDiffsOptions,
+): Promise<ManagedEntry> {
+  const entry: ManagedEntry = {
+    path: relativeSidecarPath(opts.installRoot, absolutePath),
+    owns: diff.owns,
+    capability: opts.capabilityName,
+    hash: hashOwnedRegions(content, diff.owns),
+  };
+  if (diff.facet !== undefined) entry.facet = diff.facet;
+  if (opts.owner !== undefined) {
+    entry.target = opts.owner.target;
+    entry.carrier = opts.owner.carrier;
+  }
+  if (isWholeFile(diff.owns)) {
+    const mode = await readModeIfExists(absolutePath);
+    if (mode !== null) entry.mode = mode;
+  }
+  return entry;
 }
 
 /** True when the regions `diff` owns are on disk exactly as the plan saw them in `before`. */
@@ -171,8 +186,7 @@ async function assertNoticePathOwnedOrAbsent(
   absolutePath: string,
 ): Promise<void> {
   const owned = sidecar.managed.some(
-    (entry) =>
-      entry.path === relativePath && entry.owns.some((ownership) => ownership.kind === "file"),
+    (entry) => entry.path === relativePath && isWholeFile(entry.owns),
   );
   if (owned) return;
   try {
@@ -184,30 +198,35 @@ async function assertNoticePathOwnedOrAbsent(
   throw new Error(`refusing to overwrite unowned reserved notice path: ${absolutePath}`);
 }
 
-async function applyOneDiff(
+/** What applying one diff left in its file, and whether the file changed. */
+type AppliedDiff = { content: FileContent | null; changed: boolean };
+
+/** Writes or deletes a whole-file diff (deleting prunes emptied directories up to the root). */
+async function applyWholeFile(
   diff: FileDiff,
   absolutePath: string,
   installRoot: string,
-): Promise<{ content: FileContent | null; changed: boolean }> {
-  if (diff.owns.some((own) => own.kind === "file")) {
-    const byteOriented = diff.before instanceof Uint8Array || diff.after instanceof Uint8Array;
-    const before = byteOriented
-      ? await readBytesIfExists(absolutePath)
-      : await readTextIfExists(absolutePath);
-    const beforeMode = await readModeIfExists(absolutePath);
-    if (diff.after === null) {
-      await rm(absolutePath, { force: true });
-      await pruneEmptyDirs(path.dirname(absolutePath), installRoot);
-      return { content: null, changed: before !== null };
-    }
-    const contentChanged = !contentEquals(before, diff.after);
-    const afterMode = diff.afterMode;
-    const modeChanged = afterMode !== undefined && afterMode !== null && beforeMode !== afterMode;
-    if (contentChanged) await writeContent(absolutePath, diff.after);
-    if (modeChanged) await chmod(absolutePath, afterMode);
-    return { content: diff.after, changed: contentChanged || modeChanged };
+): Promise<AppliedDiff> {
+  const byteOriented = diff.before instanceof Uint8Array || diff.after instanceof Uint8Array;
+  const before = byteOriented
+    ? await readBytesIfExists(absolutePath)
+    : await readTextIfExists(absolutePath);
+  const beforeMode = await readModeIfExists(absolutePath);
+  if (diff.after === null) {
+    await rm(absolutePath, { force: true });
+    await pruneEmptyDirs(path.dirname(absolutePath), installRoot);
+    return { content: null, changed: before !== null };
   }
+  const contentChanged = !contentEquals(before, diff.after);
+  const afterMode = diff.afterMode;
+  const modeChanged = afterMode !== undefined && afterMode !== null && beforeMode !== afterMode;
+  if (contentChanged) await writeContent(absolutePath, diff.after);
+  if (modeChanged) await chmod(absolutePath, afterMode);
+  return { content: diff.after, changed: contentChanged || modeChanged };
+}
 
+/** Merges or strips the JSON-pointer and marker regions a diff owns, leaving the rest. */
+async function applyOwnedRegions(diff: FileDiff, absolutePath: string): Promise<AppliedDiff> {
   const before = await readTextIfExists(absolutePath);
   if (diff.after === null) {
     if (before === null) return { content: null, changed: false };
@@ -317,6 +336,10 @@ function bytesOf(content: FileContent): Uint8Array {
   return typeof content === "string" ? Buffer.from(content, "utf8") : content;
 }
 
+/**
+ * The file a diff path names: absolute as given, one starting with `.` against the process cwd
+ * (so `.claude/x` too, not only `./x`), any other relative to the install root.
+ */
 export function resolveDiffPath(installRoot: string, diffPath: string): string {
   if (path.isAbsolute(diffPath)) return path.normalize(diffPath);
   if (diffPath.startsWith(".")) return path.resolve(process.cwd(), diffPath);
