@@ -96,8 +96,9 @@ function describeCapability(capability: AcfCapability): {
     ["agents", capability.agents.length],
     ["commands", capability.commands.length],
     ["instructions", capability.instructions.length],
-    ["hooks", hookEntries(capability.hooks).length],
-    ["mcp", capability.mcp?.servers.length ?? 0],
+    // A hook or server declared for several targets is one component (SPEC.md §13.9, §13a.5).
+    ["hooks", new Set(hookEntries(capability.hooks).map(({ entry }) => entry.name)).size],
+    ["mcp", new Set(capability.mcp?.servers.map((server) => server.name)).size],
   ]
     .filter((item) => item[1] !== 0)
     .map((item) => `${item[0]} ${item[1]}`)
