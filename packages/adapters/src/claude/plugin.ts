@@ -11,6 +11,7 @@ import path from "node:path";
 import {
   type AcfCapability,
   CLAUDE_PLUGIN_MANIFEST,
+  claudePluginComponents,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
@@ -18,6 +19,7 @@ import {
   type FileContent,
   type FileDiff,
   isExecutableMode,
+  isPerFileComponent,
   MANAGEMENT_NOTICE_FILENAME,
   NATIVE_FILES_DIR,
   nativeExtras,
@@ -81,13 +83,9 @@ const ACF_OWNED = new Set([
 const CLAUDE_DISCOVERED = new Set([
   ".claude-plugin",
   MCP_PATH,
-  ".lsp.json",
-  "settings.json",
-  "agents",
-  "commands",
-  "hooks/hooks.json",
-  "output-styles",
-  "workflows",
+  ...claudePluginComponents.flatMap((spec) =>
+    isPerFileComponent(spec) ? [spec.dir] : spec.file === undefined ? [] : [spec.file],
+  ),
 ]);
 
 /** One file of the plugin package, relative to its root. */

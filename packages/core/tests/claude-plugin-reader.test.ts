@@ -310,3 +310,29 @@ test("a remainder file is executable only with the owner execute bit", async () 
     ["command", true],
   ]);
 });
+
+test("workflows are executing components, found by default or only at the manifest's paths", async () => {
+  const byDefault = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "workflows/release.js": "export default {}\n",
+  });
+  expect(byDefault.capability?.remainder).toEqual([
+    {
+      format: "claude-plugin",
+      kind: "workflow",
+      name: "release",
+      paths: ["workflows/release.js"],
+      class: "functional",
+      executable: true,
+    },
+  ]);
+  // A manifest `workflows` path replaces the default `workflows/` directory.
+  const declared = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", workflows: "./flows" }),
+    "workflows/ignored.js": "export default {}\n",
+    "flows/ship.js": "export default {}\n",
+  });
+  expect(
+    declared.capability?.remainder?.map((item) => [item.kind, item.name, item.executable]),
+  ).toEqual([["workflow", "ship", true]]);
+});

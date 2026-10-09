@@ -130,7 +130,11 @@ async function anyExecutable(root: string, paths: readonly string[]): Promise<bo
   return false;
 }
 
-/** Builds a remainder component; `executable` is forced on for kinds that run code. */
+/**
+ * Builds a remainder component. It is executable when `input.executable` marks a kind that runs
+ * code whatever its files' modes (the format's component table owns which kinds do), or when any
+ * of its files has the executable bit.
+ */
 export async function remainderComponent(
   root: string,
   input: Omit<NativeRemainderComponent, "executable" | "class"> & {
@@ -138,7 +142,7 @@ export async function remainderComponent(
     executable?: boolean;
   },
 ): Promise<NativeRemainderComponent> {
-  const runsCode = input.executable ?? executableKinds.has(input.kind);
+  const runsCode = input.executable ?? false;
   const component: NativeRemainderComponent = {
     format: input.format,
     kind: input.kind,
@@ -151,13 +155,6 @@ export async function remainderComponent(
     component.manifestKeys = input.manifestKeys;
   return component;
 }
-
-const executableKinds = new Set<NativeRemainderComponent["kind"]>([
-  "hook",
-  "lsp-server",
-  "monitor",
-  "bin",
-]);
 
 /** Canonical package identity of a foreign package. */
 export type PackageIdentity = {

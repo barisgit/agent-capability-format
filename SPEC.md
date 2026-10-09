@@ -2334,9 +2334,9 @@ in the lockfile; that explicit act is the approval of the content. `caplet
 add`, `caplet update`, and `caplet apply` (human and `--json` output,
 including `--dry-run`) list, per capability and target, every executable
 component added, changed, or removed relative to the previously locked or
-installed content: MCP stdio commands, hooks, LSP servers, monitors, files
-with the executable bit, Claude `bin/` entries, and other code the registry
-classifies as executing. The list is shown whenever it is non-empty,
+installed content: MCP stdio commands, hooks, LSP servers, monitors, Claude
+workflows, files with the executable bit, Claude `bin/` entries, and other
+code the registry classifies as executing. The list is shown whenever it is non-empty,
 including in non-interactive runs, and never prompts or blocks. Caplet keeps
 no acceptance store, pre-approves no tool, permission, or MCP server, and
 never writes or bypasses a host's own trust, approval, or policy state.
@@ -2650,7 +2650,8 @@ Readers project into the canonical model:
   `skills` paths, and MCP servers from `.mcp.json` and manifest
   `mcpServers` (inline or a relative path). Agents, commands (each file or
   manifest `commands` map entry is one component), hooks, output styles,
-  LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`,
+  workflows (each module is one component), LSP servers, monitors, `bin/`,
+  plugin `settings.json`, `userConfig`,
   channels, dependencies, and listing metadata are kept as
   Claude native remainder with their safety class. Pending keys are read as
   Claude extras.

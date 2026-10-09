@@ -71,7 +71,7 @@ Every write and delete SHALL resolve, after following existing parent directorie
 - **THEN** apply and remove update the server entries in the linked file and leave the link in place
 
 ### Requirement: Executable change report
-The consumer's explicit act of adding a source or updating it, which pins the resolved revision and payload digest in `capabilities.lock`, SHALL be the approval of that content; caplet SHALL NOT add its own acceptance prompt, acceptance store or activation gate for executable components. `caplet add`, `caplet update` and `caplet apply` (human and `--json` output, including `--dry-run`) SHALL list, per capability and target, every executable component added, changed or removed relative to the previously locked or installed content: MCP stdio commands, hooks, LSP servers, monitors, files with the executable bit, Claude `bin/` entries and other code modules the registry classifies as executing code. The list SHALL be shown whenever it is non-empty, including in non-interactive runs, and SHALL NOT prompt or block. Caplet SHALL NOT pre-approve tools, permissions or MCP servers in any host, and SHALL NOT write or bypass a host's own trust, approval or enterprise-policy state.
+The consumer's explicit act of adding a source or updating it, which pins the resolved revision and payload digest in `capabilities.lock`, SHALL be the approval of that content; caplet SHALL NOT add its own acceptance prompt, acceptance store or activation gate for executable components. `caplet add`, `caplet update` and `caplet apply` (human and `--json` output, including `--dry-run`) SHALL list, per capability and target, every executable component added, changed or removed relative to the previously locked or installed content: MCP stdio commands, hooks, LSP servers, monitors, Claude workflows, files with the executable bit, Claude `bin/` entries and other code modules the registry classifies as executing code. The list SHALL be shown whenever it is non-empty, including in non-interactive runs, and SHALL NOT prompt or block. Caplet SHALL NOT pre-approve tools, permissions or MCP servers in any host, and SHALL NOT write or bypass a host's own trust, approval or enterprise-policy state.
 
 #### Scenario: New server in an update
 - **WHEN** an update adds a stdio MCP server to an installed Claude plugin and apply runs non-interactively
@@ -80,6 +80,10 @@ The consumer's explicit act of adding a source or updating it, which pins the re
 #### Scenario: Native executable configuration
 - **WHEN** an update changes `native/claude/hooks/hooks.json` or `targets.claude.native.lspServers` of a native ACF capability installed as a Claude plugin
 - **THEN** the output lists the changed hook or LSP server component for Claude, as it would for the same change in a foreign Claude plugin
+
+#### Scenario: Workflow module without the executable bit
+- **WHEN** an update changes a JavaScript module under a Claude plugin's `workflows/` directory whose file mode is 0644
+- **THEN** the output lists the changed workflow component for Claude, whether the plugin is a foreign Claude plugin or comes from `native/claude/workflows/`
 
 #### Scenario: Unchanged executables
 - **WHEN** apply runs with no executable component added, changed or removed

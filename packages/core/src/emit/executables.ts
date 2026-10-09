@@ -9,7 +9,11 @@ import {
   CLAUDE_PLUGIN_MANIFEST,
   capabilityCarrier,
   claudePluginComponents,
+  isPerFileComponent,
+  type MergedComponentSpec,
+  type PerFileComponentSpec,
   type PluginComponentSpec,
+  perFileComponentName,
   remainderTargets,
   targetMap,
 } from "../targets/index.js";
@@ -83,15 +87,17 @@ const kindOrder: readonly ExecutableKind[] = [
   "hook",
   "lsp-server",
   "monitor",
+  "workflow",
   "bin",
   "file",
 ];
 
 /**
  * Package components that execute code, per plugin carrier target, recorded the way that target's
- * plugin reader records the same component as foreign remainder (formats/claude-plugin.ts): the
- * default file merges with the paths and value of the manifest key, and `holds` limits a key to
- * values that hold executable entries. Every file under the bin directory is one `bin` component.
+ * plugin reader records the same component as foreign remainder (formats/claude-plugin.ts): a
+ * merged component's default file merges with the paths and value of the manifest key, and `holds`
+ * limits a key to values that hold executable entries; a per-file component is one component per
+ * file it discovers. Every file under the bin directory is one `bin` component.
  * MCP servers come from the target's plugin reader of the package's server files and `mcp.key`.
  */
 const pluginExecutables: Partial<
@@ -562,6 +568,12 @@ function pluginConfigComponents(
   const extras = nativeExtras(capability.manifest.targets, target);
   const components: PluginConfigComponent[] = [];
   for (const spec of plugin.components) {
+    if (isPerFileComponent(spec)) {
+      components.push(
+        ...perFileComponents(spec, extras[spec.key], files, snapshot, locate, target),
+      );
+      continue;
+    }
     const component = configComponent(spec, extras[spec.key], files, locate, target);
     if (component !== undefined) components.push(component);
   }
@@ -584,7 +596,7 @@ function pluginConfigComponents(
  * `locate` maps a package path to the snapshot path the package takes it from.
  */
 function configComponent(
-  spec: PluginComponentSpec,
+  spec: MergedComponentSpec,
   value: unknown,
   files: readonly string[],
   locate: (relative: string) => string,
@@ -606,19 +618,55 @@ function configComponent(
   };
 }
 
+/**
+ * One component per file `spec` discovers in the package: its default directory's files in
+ * `native/<target>/` (`files`), or, when the `targets.<target>.native` value `value` sets its key,
+ * the files at or under the package paths it names instead, as Claude replaces default discovery.
+ * `locate` maps a package path to the snapshot path the package takes it from.
+ */
+function perFileComponents(
+  spec: PerFileComponentSpec,
+  value: unknown,
+  files: readonly string[],
+  snapshot: Snapshot,
+  locate: (relative: string) => string,
+  target: TargetId,
+): PluginConfigComponent[] {
+  const found =
+    value === undefined
+      ? files.filter((file) => underAny(file, [spec.dir])).map(locate)
+      : packagePaths(value).flatMap((relative) =>
+          filesUnder(snapshot, [locate(relative)]).map((file) => file.rel),
+        );
+  return [...new Set(found)].map((rel) => ({
+    kind: spec.kind,
+    name: perFileComponentName(rel),
+    detail: [rel, ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`])].join(
+      ", ",
+    ),
+    prefixes: [rel],
+    definition: value === undefined ? null : { [spec.key]: value },
+  }));
+}
+
 /** The spec's default file when present, then each package-relative path `value` names. */
 function configPaths(
-  spec: PluginComponentSpec,
+  spec: MergedComponentSpec,
   value: unknown,
   files: readonly string[],
 ): string[] {
   const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
-  for (const relative of value === undefined ? [] : componentPaths(value)) {
-    const normalized = path.posix.normalize(relative);
-    if (leavesBase(normalized)) continue;
-    if (!paths.includes(normalized)) paths.push(normalized);
+  for (const relative of value === undefined ? [] : packagePaths(value)) {
+    if (!paths.includes(relative)) paths.push(relative);
   }
   return paths;
+}
+
+/** The normalized package-relative paths a manifest value names, without those leaving the package. */
+function packagePaths(value: unknown): string[] {
+  return componentPaths(value)
+    .map((relative) => path.posix.normalize(relative))
+    .filter((relative) => !leavesBase(relative));
 }
 
 /** Values of the component's manifest keys; a manifest that is not JSON counts as a whole. */

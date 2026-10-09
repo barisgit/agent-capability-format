@@ -145,6 +145,7 @@ export type NativeRemainderKind =
   | "command"
   | "hook"
   | "output-style"
+  | "workflow"
   | "lsp-server"
   | "monitor"
   | "bin"
@@ -172,6 +173,6 @@ export type NativeRemainderComponent = {
   /** Manifest keys belonging to the component, when it lives (partly) in the manifest. */
   manifestKeys?: string[] | undefined;
   class: SafetyClass;
-  /** True when the component executes code (stdio server, hook, LSP, monitor, bin). */
+  /** True when the component executes code (stdio server, hook, LSP, monitor, workflow, bin). */
   executable: boolean;
 };

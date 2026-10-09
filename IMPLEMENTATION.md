@@ -333,12 +333,12 @@ export type CapabilitySource = {
 
 export type NativeRemainderComponent = {
   format: "agent-plugins" | "claude-plugin"
-  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, bin, mcp-server, ...
+  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, workflow, bin, mcp-server, ...
   name: string
   paths: string[]            // snapshot-relative files or directories
   manifestKeys?: string[]    // manifest keys the component occupies
   class: SafetyClass
-  executable: boolean        // stdio server, hook, LSP, monitor, bin
+  executable: boolean        // stdio server, hook, LSP, monitor, workflow, bin
 }
 
 export type NativeFileExtra = {
@@ -1396,8 +1396,12 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   `<install-root>/.acf/data/<capability>/.keep`.
 - **Executables.** `executableComponents` and `executableChanges`
   (`packages/core/src/emit/executables.ts`) list added, removed, or changed MCP stdio
-  commands, hooks, LSP servers, monitors, executable files, and Claude
-  `bin/` entries for the change report and `--json` `executables`. The
+  commands, hooks, LSP servers, monitors, Claude workflows, executable files,
+  and Claude `bin/` entries for the change report and `--json` `executables`.
+  How Claude discovers each plugin component and whether it runs code is
+  registered once in `claudePluginComponents`
+  (`packages/core/src/targets/plugin-layout.ts`), which the Claude plugin
+  reader, this inventory and the Claude writer all read. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
   component in a foreign Claude plugin, so both report alike; MCP servers from
