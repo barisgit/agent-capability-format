@@ -205,7 +205,7 @@ produced inconsistent and lower-quality results.
 | Build (publish) | `tsc -p tsconfig.build.json` per package → ESM + `.d.ts` in `dist/`; `exports` point only at `dist/` |
 | Schema validation | Zod v4 |
 | CLI framework | `citty` |
-| Test runner | `bun test` |
+| Test runner | `bun test`, started by each package's `bun run test` under a throwaway HOME (`scripts/test-home.ts`; Bun fixes `os.homedir()` at process start, and a direct `bun test` fails) |
 | Lint / format | Biome (single tool; no ESLint+Prettier) |
 | YAML parser | `yaml` (eemeli/yaml) — best diagnostic positions |
 | Markdown frontmatter | `gray-matter` |

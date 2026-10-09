@@ -1,0 +1,3 @@
+[test]
+# Fails a run that did not start through `bun run test`; see scripts/test-home.ts.
+preload = ["../../scripts/test-home.ts"]

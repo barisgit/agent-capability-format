@@ -31,7 +31,7 @@
     "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for @caplet/runtime-taxonomy'",
-    "test": "bun test"
+    "test": "bun ../../scripts/test-home.ts"
   },
   "devDependencies": {
     "@typescript/native-preview": "7.0.0-dev.20251104.1",

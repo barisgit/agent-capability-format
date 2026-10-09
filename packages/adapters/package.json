@@ -55,7 +55,7 @@
     "prepack": "cp ../../LICENSE LICENSE",
     "check-types": "tsgo --noEmit -p tsconfig.json",
     "lint": "echo 'no lint for @caplet/adapters'",
-    "test": "bun test"
+    "test": "bun ../../scripts/test-home.ts"
   },
   "dependencies": {
     "@caplet/core": "workspace:*",
