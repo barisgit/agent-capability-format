@@ -1895,7 +1895,8 @@ levels (`full`, `partial`, `none`) apply only to agents, commands,
 instructions, and hooks, which have no field table in `acf: 1`.
 
 Every core field, distinct value condition, and known native key has one
-safety class:
+safety class; a native key value with a distinct effect, such as Codex MCP
+`enabled: false`, is a value condition with its own class:
 
 | Class         | Meaning                                                                 | Example                          |
 | ------------- | ----------------------------------------------------------------------- | -------------------------------- |

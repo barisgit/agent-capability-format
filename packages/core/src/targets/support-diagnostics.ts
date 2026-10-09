@@ -11,7 +11,7 @@ import type {
 } from "../types/index.js";
 import { selectorKeys } from "../types/index.js";
 import { carriersOf, findFieldSupport, supportCell } from "./field-support.js";
-import { nativeKeyInfo } from "./native-keys.js";
+import { nativeKeyClass, nativeKeyInfo } from "./native-keys.js";
 
 /** The component a support decision is about, on one target and carrier. */
 export type SupportSubject = {
@@ -144,17 +144,18 @@ export function packageRefused(
 
 /**
  * Diagnostic for an inline extra of `extra.owner` that is not emitted to `subject.target`:
- * `acf.extras.dropped` (lossy), or `acf.support.refused` when the registry classifies the key
- * as restricting and the target carries no core equivalent (capability-model-layers, Dropping
- * extras elsewhere). Unknown keys count as `unclassified`.
+ * `acf.extras.dropped` (lossy), or `acf.support.refused` when the registry classifies the
+ * extra's value as restricting and the target carries no core equivalent (capability-model-
+ * layers, Dropping extras elsewhere). Unknown keys count as `unclassified`. Pass the authored
+ * `value`; without it the key's strictest value class applies (`nativeKeyClass`).
  */
 export function extraDropped(
   subject: SupportSubject & { family: InteropFamily },
-  extra: { owner: TargetId; key: string },
+  extra: { owner: TargetId; key: string; value?: unknown },
 ): Diagnostic {
   const info = nativeKeyInfo(extra.owner, subject.family, extra.key);
   const source = `targets.${extra.owner}.native.${extra.key}`;
-  const keyClass = info?.class ?? "unclassified";
+  const keyClass = nativeKeyClass(info, extra.value);
   if (keyClass === "restricting" && !carriesCoreEquivalent(subject, info?.generatedFrom)) {
     return refusal(
       subject,

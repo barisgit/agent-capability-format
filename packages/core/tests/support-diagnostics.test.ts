@@ -158,6 +158,37 @@ describe("support diagnostics derived from registry cells", () => {
     expect(diagnostic.code).toBe("acf.extras.dropped");
   });
 
+  test("a disabling extra refuses the server on targets without an equivalent", () => {
+    const server = { capability: "tools", family: "mcp", component: "db" } as const;
+    for (const owner of ["codex", "opencode"] as const) {
+      const disabled = extraDropped(
+        { ...server, target: "claude" },
+        { owner, key: "enabled", value: false },
+      );
+      expect(disabled.code).toBe("acf.support.refused");
+      expect(readSupportData(disabled)?.source).toBe(`targets.${owner}.native.enabled`);
+      const enabled = extraDropped(
+        { ...server, target: "claude" },
+        { owner, key: "enabled", value: true },
+      );
+      expect(enabled.code).toBe("acf.extras.dropped");
+      // Without the value the strictest class of the key applies.
+      expect(extraDropped({ ...server, target: "claude" }, { owner, key: "enabled" }).code).toBe(
+        "acf.support.refused",
+      );
+    }
+    const hidden = { owner: "pi", key: "exposeResources", value: false } as const;
+    expect(extraDropped({ ...server, target: "claude" }, hidden).code).toBe("acf.support.refused");
+  });
+
+  test("a disabled-by-default Claude plugin is refused where the default cannot travel", () => {
+    const pkg = { capability: "tools", family: "package", component: "tools" } as const;
+    const dropped = (value: boolean) =>
+      extraDropped({ ...pkg, target: "codex" }, { owner: "claude", key: "defaultEnabled", value });
+    expect(dropped(false).code).toBe("acf.support.refused");
+    expect(dropped(true).code).toBe("acf.extras.dropped");
+  });
+
   test("a dropped native file tree is reported against the package", () => {
     const diagnostic = nativeTreeDropped({ capability: "tools", target: "codex" }, "claude");
     expect(diagnostic.code).toBe("acf.extras.dropped");

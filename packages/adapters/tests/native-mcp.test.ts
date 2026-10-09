@@ -107,6 +107,22 @@ test("Codex required extra reaches only the Codex entry", async () => {
   }
 });
 
+test("a server disabled on its own target is refused, not started, elsewhere", async () => {
+  for (const owner of ["codex", "opencode"] as const) {
+    const server: McpServer = { ...stdio, targets: { [owner]: { native: { enabled: false } } } };
+    const own = await emitServers(owner, [server]);
+    expect(serverEntry(owner, own.config, "tools")?.enabled).toBe(false);
+    for (const target of ["claude", "codex", "cursor", "opencode", "pi"]) {
+      if (target === owner) continue;
+      const { result, config } = await emitServers(target, [server]);
+      expect(serverEntry(target, config, "tools")).toBeUndefined();
+      expect(withCode(result, "acf.support.refused").map((d) => d.data?.source)).toEqual([
+        `targets.${owner}.native.enabled`,
+      ]);
+    }
+  }
+});
+
 test("Codex servers live in a marked config.toml table that keeps user settings", async () => {
   const user = 'model = "o4"\n\n[mcp_servers.mine]\ncommand = "mine"\n';
   const { result, config } = await emitServers("codex", [stdio], {

@@ -89,12 +89,16 @@ export type FieldSupport = {
  * A native key known to the registry for one target, attachment point and spelling.
  * `generatedFrom` marks keys a writer derives from a core field (an extra with that key
  * is `acf.extras.conflict`); `pending` names the future core field (`acf.core.pending`).
+ * `class` holds for every value except those `valueClasses` lists with a distinct effect,
+ * such as Codex `enabled: false`, which restricts. Read the class of a value through
+ * `nativeKeyClass`.
  */
 export type NativeKeyInfo = {
   target: TargetId;
   family: InteropFamily;
   key: string;
   class: SafetyClass;
+  valueClasses?: readonly { value: boolean; class: SafetyClass }[] | undefined;
   generatedFrom?: string | undefined;
   pending?: { coreField: string } | undefined;
 };

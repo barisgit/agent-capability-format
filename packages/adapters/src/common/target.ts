@@ -61,8 +61,8 @@ function reportPackageDrops(input: EmitInput, target: TargetDefinition, report: 
   };
   const targets = capability.manifest.targets;
   for (const dialect of extrasDialects(targets))
-    for (const key of Object.keys(nativeExtras(targets, dialect)))
-      report.diagnostics.push(extraDropped(subject, { owner: dialect, key }));
+    for (const [key, value] of Object.entries(nativeExtras(targets, dialect)))
+      report.diagnostics.push(extraDropped(subject, { owner: dialect, key, value }));
   for (const owner of nativeFileTargets(capability))
     report.diagnostics.push(nativeTreeDropped({ capability: name, target: target.id }, owner));
 }

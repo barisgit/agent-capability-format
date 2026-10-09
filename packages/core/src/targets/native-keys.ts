@@ -3,12 +3,17 @@
  *
  * Lists every skill frontmatter key, MCP server key and plugin-manifest key that the research
  * inventories record for Claude, Codex, Cursor, OpenCode and Pi. Readers and the extras
- * validator use the class to decide whether an untranslated key may be dropped (descriptive,
- * granting, functional) or blocks the component (restricting). `generatedFrom` marks keys a
+ * validator use the class of a key's value to decide whether an untranslated key may be
+ * dropped (descriptive, granting, functional) or blocks the component (restricting). `generatedFrom` marks keys a
  * writer derives from a core field; `pending` names the future core field of a pending
  * meaning (design D17).
  */
-import type { InteropFamily, NativeKeyInfo, SafetyClass } from "../types/interop.js";
+import type {
+  InteropFamily,
+  NativeKeyClass,
+  NativeKeyInfo,
+  SafetyClass,
+} from "../types/interop.js";
 import type { TargetId } from "../types/model.js";
 
 /**
@@ -45,6 +50,7 @@ export const pendingCoreFields: Readonly<Record<string, string>> = {
 
 type KeySpec = {
   class: SafetyClass;
+  valueClasses?: readonly { value: boolean; class: SafetyClass }[];
   generatedFrom?: string;
   pending?: string;
 };
@@ -57,6 +63,11 @@ const gen = (safety: SafetyClass, field: string): KeySpec => ({
   generatedFrom: field,
 });
 const pend = (safety: SafetyClass, field: string): KeySpec => ({ class: safety, pending: field });
+/** A switch whose `false` turns something off: dropping that value turns it back on. */
+const offRestricts = (spec: KeySpec): KeySpec => ({
+  ...spec,
+  valueClasses: [{ value: false, class: "restricting" }],
+});
 
 /** Skill keys every Agent Skills reader shares, written from core fields. */
 const AGENT_SKILLS_KEYS = {
@@ -156,7 +167,7 @@ const mcpKeys: Record<TargetId, Record<string, KeySpec>> = {
     startup_timeout_sec: pend("functional", "mcp.timeouts.startupMs"),
     startup_timeout_ms: pend("functional", "mcp.timeouts.startupMs"),
     tool_timeout_sec: pend("functional", "mcp.timeouts.toolMs"),
-    enabled: pend("functional", "mcp.enabled"),
+    enabled: offRestricts(pend("functional", "mcp.enabled")),
     required: functional,
     enabled_tools: pend("restricting", "mcp.tools.enabled"),
     disabled_tools: pend("restricting", "mcp.tools.disabled"),
@@ -181,7 +192,7 @@ const mcpKeys: Record<TargetId, Record<string, KeySpec>> = {
     environment: gen("functional", "mcp.env"),
     url: gen("functional", "mcp.url"),
     headers: gen("functional", "mcp.headers"),
-    enabled: pend("functional", "mcp.enabled"),
+    enabled: offRestricts(pend("functional", "mcp.enabled")),
     timeout: pend("functional", "mcp.timeouts.startupMs"),
     oauth: pend("functional", "mcp.oauth"),
   },
@@ -200,7 +211,7 @@ const mcpKeys: Record<TargetId, Record<string, KeySpec>> = {
     promotedTools: pend("descriptive", "mcp.tools.loading"),
     lifecycle: functional,
     idleTimeout: functional,
-    exposeResources: functional,
+    exposeResources: offRestricts(functional),
     toolOverrides: functional,
     debug: descriptive,
   },
@@ -237,7 +248,7 @@ const packageKeys: Record<TargetId, Record<string, KeySpec>> = {
     supportUrl: descriptive,
     privacyPolicyUrl: descriptive,
     termsOfServiceUrl: descriptive,
-    defaultEnabled: functional,
+    defaultEnabled: offRestricts(functional),
     dependencies: pend("functional", "package.dependencies"),
     settings: functional,
     userConfig: pend("functional", "package.userConfig"),
@@ -304,6 +315,7 @@ function flatten(
       family,
       key,
       class: spec.class,
+      ...(spec.valueClasses === undefined ? {} : { valueClasses: spec.valueClasses }),
       ...(spec.generatedFrom === undefined ? {} : { generatedFrom: spec.generatedFrom }),
       ...(spec.pending === undefined ? {} : { pending: { coreField: spec.pending } }),
     })),
@@ -331,4 +343,28 @@ export function nativeKeyInfo(
   key: string,
 ): NativeKeyInfo | undefined {
   return keyIndex.get(`${target}\u0000${family}\u0000${key}`);
+}
+
+const DROP_RANK: Record<SafetyClass, number> = {
+  descriptive: 0,
+  granting: 1,
+  functional: 2,
+  restricting: 3,
+};
+
+/**
+ * Safety class of `value` for a classified key (capability-model-layers, Safety classes: each
+ * value condition with a distinct effect has its own class); `unclassified` for an unknown key.
+ * Without a value (`undefined`, which no authored YAML or JSON value is), the class whose loss
+ * is most consequential among all values applies.
+ */
+export function nativeKeyClass(info: NativeKeyInfo | undefined, value?: unknown): NativeKeyClass {
+  if (info === undefined) return "unclassified";
+  const conditions = info.valueClasses ?? [];
+  if (value !== undefined) {
+    return conditions.find((condition) => condition.value === value)?.class ?? info.class;
+  }
+  return conditions
+    .map((condition) => condition.class)
+    .reduce((worst, next) => (DROP_RANK[next] > DROP_RANK[worst] ? next : worst), info.class);
 }
