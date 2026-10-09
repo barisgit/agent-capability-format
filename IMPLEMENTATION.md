@@ -2732,16 +2732,19 @@ acf.instruction.invalid-regex                # `paths` or `conditions` regex doe
 acf.applicability.empty                      # facet+capability applicability intersection is empty
 
 acf.markdown.unknown-frontmatter-field       # ACF.md or facet frontmatter has unknown key (info)
+acf.markdown.invalid-frontmatter-field       # ACF.md or facet frontmatter value fails its schema (error)
 
 # Hooks
 acf.hook.match.required                      # match required for pre_tool/post_tool/permission_request
 acf.hook.effect.not-allowed                  # effect not in hook type's matrix
 acf.hook.run.args-and-shell                  # `args` and `shell` are mutually exclusive
 acf.hook.target-native-event.unknown-schema  # `targets.<target>.hooks.<event>` shape unknown
+acf.hooks.invalid-field                      # any other hooks file value fails its schema (error)
 
 # MCP
 acf.mcp.transport.missing-url                # http/sse without `url`
 acf.mcp.transport.missing-command            # stdio without `command`
+acf.mcp.invalid-field                        # any other MCP file value fails its schema (error)
 
 # Asset references
 acf.path.absolute
@@ -2777,6 +2780,8 @@ acf.taxonomy.operation.unmapped              # internal alias used in adapter-si
 acf.capabilities-yml.source.unknown-scheme
 acf.capabilities-yml.duplicate-entry
 acf.capabilities-yml.unknown-key             # key capabilities.yml does not define (error)
+acf.capabilities-yml.invalid                 # any other capabilities.yml value fails its schema (error)
+acf.caplet-yml.invalid                       # caplet.yml value fails its schema (error)
 acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version

@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ZodIssue } from "zod";
 import { computeSet } from "../applicability/index.js";
 import { collectImportedSkillAssets, collectReferencedAssets } from "../assets/index.js";
-import { pushZodIssues } from "../diagnostics/index.js";
+import { type AcfDiagnosticCode, pushZodIssues } from "../diagnostics/index.js";
 import { withNativeExtras } from "../extras/index.js";
 import { mapBareSkill } from "../formats/skills.js";
 import {
@@ -180,7 +180,10 @@ export async function readManifest(
   pushUnknownFields(raw, manifestKeys, diagnostics, file);
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
-    pushZodIssues(diagnostics, parsed.error, file, { codeFor: manifestIssueCode });
+    pushZodIssues(diagnostics, parsed.error, file, {
+      baseCode: "acf.manifest.invalid-field",
+      codeFor: manifestIssueCode,
+    });
     return undefined;
   }
   const unknown = collectUnknown(raw, manifestKeys);
@@ -194,7 +197,7 @@ export async function readManifest(
  * their own codes, any other field `acf.manifest.invalid-field` (so `authors[].name` is not the
  * capability name). A whole-manifest issue such as `only` with `except` takes the generic code.
  */
-function manifestIssueCode(issue: ZodIssue): string | undefined {
+function manifestIssueCode(issue: ZodIssue): AcfDiagnosticCode | undefined {
   const [field] = issue.path;
   if (field === undefined) return undefined;
   if (field === "name") return "acf.manifest.invalid-name";
@@ -211,7 +214,11 @@ export async function readAcfMd(
   const parsed = await parseMarkdown(file);
   pushUnknownFields(parsed.frontmatter, markdownKeys, diagnostics, file);
   const result = capabilityMarkdownFrontmatterSchema.safeParse(parsed.frontmatter);
-  if (!result.success) pushZodIssues(diagnostics, result.error, file);
+  if (!result.success) {
+    pushZodIssues(diagnostics, result.error, file, {
+      baseCode: "acf.markdown.invalid-frontmatter-field",
+    });
+  }
   return { path: file, frontmatter: result.success ? result.data : {}, body: parsed.body };
 }
 
@@ -276,7 +283,10 @@ export async function readSkills(
     }
     const result = skillFrontmatterSchema.safeParse(frontmatter);
     if (!result.success) {
-      pushZodIssues(diagnostics, result.error, primary, { family: "skill" });
+      pushZodIssues(diagnostics, result.error, primary, {
+        baseCode: "acf.markdown.invalid-frontmatter-field",
+        family: "skill",
+      });
       continue;
     }
     const facet: SkillFacet = {
@@ -386,6 +396,7 @@ export async function readHooks(
   if (!parsed.success) {
     // Only the family-level target blocks reject unknown keys.
     pushZodIssues(diagnostics, parsed.error, file, {
+      baseCode: "acf.hooks.invalid-field",
       family: "hook",
       unknownKeyCode: "acf.target.extension.unknown-field",
     });
@@ -469,6 +480,7 @@ export async function readMcp(
   if (!parsed.success) {
     // Only the family-level target blocks reject unknown keys.
     pushZodIssues(diagnostics, parsed.error, file, {
+      baseCode: "acf.mcp.invalid-field",
       family: "mcp",
       unknownKeyCode: "acf.target.extension.unknown-field",
     });
@@ -565,7 +577,10 @@ async function readProseFamily<Family extends "agent" | "command" | "instruction
     pushUnknownFields(item.frontmatter, allowed, diagnostics, item.source.primary);
     const result = schema.safeParse(item.frontmatter);
     if (!result.success) {
-      pushZodIssues(diagnostics, result.error, item.source.primary, { family });
+      pushZodIssues(diagnostics, result.error, item.source.primary, {
+        baseCode: "acf.markdown.invalid-frontmatter-field",
+        family,
+      });
       continue;
     }
     validateNameMatch(family, result.data.name, item.name, item.source.primary, diagnostics);
