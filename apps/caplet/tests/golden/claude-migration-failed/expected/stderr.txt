@@ -1,0 +1,4 @@
+fail `claude plugin install review@acf-project-<h> --scope local` failed: exit 1: Failed to install plugin "review@acf-project-<h>": Plugin "review" not found in marketplace "acf-project-<h>". Fix the cause and re-run `caplet apply`.
+    code  acf.claude.command-failed
+    target  claude
+1 problem (1 error)

@@ -89,12 +89,13 @@ export async function applyProject(
 
 /**
  * Opts Claude into the shared `.agents/skills` root, which a Claude-only selection does not
- * write by default, for tests about shared-root bookkeeping.
+ * write by default, for tests about shared-root bookkeeping. The shared root belongs to loose
+ * output: a Claude plugin carries its skills inside its package.
  */
 export async function forceCanonicalSkills(scope: TestScope): Promise<void> {
   await writeText(
     path.join(scope.agentsDir, "caplet.yml"),
-    "targets:\n  claude:\n    skills:\n      canonical: true\n",
+    "targets:\n  claude:\n    carrier: loose\n    skills:\n      canonical: true\n",
   );
 }
 

@@ -1,0 +1,31 @@
+Compatibility
+  claude - native: 1 skill, 1 MCP server
+
+Plan: 8 changes
+
+project  .
+  claude  .claude
+    + .acf/marketplace/.claude-plugin/marketplace.json
+    + .acf/marketplace/plugins/review/.claude-plugin/plugin.json    review
+    + .acf/marketplace/plugins/review/.mcp.json                     review
+    + .acf/marketplace/plugins/review/skills/review/SKILL.md        review
+    - .mcp.json                                                     review
+    - skills/review/ACF-MANAGED.md                                  review
+    - skills/review/SKILL.md                                        review
+    ~ managed notices
+
++ 4 create  ~ 1 update  - 3 delete
+
+ok Applied 8 files (6 writes, 2 deletes)
+
+Claude plugins project scope · acf-project-<h>
+  review  registered  files current
+  registered for this checkout only, at Claude local scope (.claude/settings.local.json)
+Claude skills are now invoked through their plugins
+  /review -> /review:review
+
+sources
+    path:<SOURCES>/review  1 capability
+targets
+    project  claude .claude
+  Full list: --verbose

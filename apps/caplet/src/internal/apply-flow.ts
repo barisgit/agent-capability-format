@@ -6,6 +6,7 @@ import {
   claudeLines,
   previewClaude,
 } from "./claude-host-flow.js";
+import { renamesJson } from "./claude-migration.js";
 import { printJson, readJson } from "./json.js";
 import {
   blockingExitCode,
@@ -142,7 +143,7 @@ export type SettledEmptyPlan = {
  */
 export async function settleEmptyPlan(plan: EmitPlan, dryRun: boolean): Promise<SettledEmptyPlan> {
   if (dryRun) {
-    const claude = await previewClaude(plan.claude, plan.cwd);
+    const claude = await previewClaude(plan);
     return { applied: null, claude, diagnostics: claude?.diagnostics ?? [] };
   }
   if (plan.staleEntries.length === 0 && plan.claude.length === 0) {
@@ -156,9 +157,19 @@ export async function settleEmptyPlan(plan: EmitPlan, dryRun: boolean): Promise<
   };
 }
 
-/** The `claude` field of a `--json` envelope, present when the plan has Claude install roots. */
-export function claudeJson(report: ClaudeReport | undefined): { claude?: ClaudeScopeStatus[] } {
-  return report === undefined ? {} : { claude: report.scopes };
+/**
+ * The `claude` field of a `--json` envelope, present when the plan has Claude install roots, and
+ * `renames` when the one-time invocation rename notice applies.
+ */
+export function claudeJson(report: ClaudeReport | undefined): {
+  claude?: ClaudeScopeStatus[];
+  renames?: ReturnType<typeof renamesJson>;
+} {
+  if (report === undefined) return {};
+  const renames = report.renames ?? [];
+  return renames.length === 0
+    ? { claude: report.scopes }
+    : { claude: report.scopes, renames: renamesJson(renames) };
 }
 
 /** Prints the status line of a plan with no file to write, after {@link settleEmptyPlan}. */

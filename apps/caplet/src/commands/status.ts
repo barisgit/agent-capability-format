@@ -44,7 +44,7 @@ export const statusCommand = defineCommand({
       const reach = await collectReach(plan);
       const verbose = readVerbose(context.args);
       const footprint = verbose ? await collectFootprint(plan) : null;
-      const claude = await previewClaude(plan.claude, plan.cwd);
+      const claude = await previewClaude(plan);
       diagnostics.push(...(claude?.diagnostics ?? []));
       if (!json) printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
       const view = buildPlanView(plan.diffs);

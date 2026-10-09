@@ -69,6 +69,12 @@ import {
   planClaudeMarketplaces,
   recordClaudeMarketplaces,
 } from "./claude-marketplace.js";
+import {
+  type ClaudeMigration,
+  driftedWarning,
+  planClaudeMigration,
+  recordRenameNotices,
+} from "./claude-migration.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices, rootNoticeDiffFromSidecar } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
@@ -85,6 +91,11 @@ export type EmittedDiff = {
   diff: FileDiff;
   /** Host state the change waits for; such a change applies after Claude reconciliation. */
   gate?: ClaudeGate | undefined;
+  /**
+   * For the removal of a sidecar entry the plan no longer wants: the owned regions on disk differ
+   * from the hash the sidecar recorded, so the user changed them.
+   */
+  drifted?: boolean | undefined;
 };
 
 /** A generated plugin package, with the scope and output root it was planned for. */
@@ -115,6 +126,11 @@ export type EmitPlan = {
   plugins: PlannedPlugin[];
   /** Claude install roots whose local marketplace the plan maintains or retires. */
   claude: ClaudeRootPlan[];
+  /**
+   * Retirement of loose Claude output for capabilities that became plugins: drifted files to
+   * release instead of delete, and the invocation renames to announce.
+   */
+  migration: ClaudeMigration;
   staleEntries: StaleSidecarEntry[];
   /**
    * Capabilities refused on a target: their earlier output there is kept as it was, so a later
@@ -391,13 +407,15 @@ export async function buildEmitPlan(
     const gate = claudeGate(item, claude.roots);
     if (gate !== undefined) item.gate = gate;
   }
+  const migration = await planClaudeMigration(diffs);
   return {
     cwd,
     config: configResult.config,
     scopes,
     targets,
     diagnostics,
-    diffs,
+    diffs: migration.diffs,
+    migration: migration.migration,
     plugins,
     claude: claude.roots,
     staleEntries: sweep.staleEntries,
@@ -593,11 +611,22 @@ async function sweepStaleSidecarEntries(
           capabilityName: entry.capability,
           carrier: entry.carrier ?? "loose",
           diff,
+          drifted: ownedRegionsDrifted(diff.before, entry),
         });
       }
     }
   }
   return { deletes, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+/** Whether the regions `entry` owns in `current` no longer hash to what the sidecar recorded. */
+function ownedRegionsDrifted(current: FileDiff["before"], entry: ManagedEntry): boolean {
+  try {
+    return hashOwnedRegions(current, entry.owns) !== entry.hash;
+  } catch {
+    // The file no longer parses as the structure the owned regions point into.
+    return true;
+  }
 }
 
 function facetPlanned(
@@ -713,24 +742,36 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
   const claudeRoots = plan.claude.filter((root) => !blockedRoots.has(root.installRoot));
   let claude: ClaudeReport | undefined;
   const heldBackRoots = new Set<string>();
+  const holdBack = (item: EmittedDiff) => {
+    heldBackRoots.add(item.installRoot);
+    const relative = relativeSidecarPath(
+      item.installRoot,
+      resolveDiffPath(item.installRoot, item.diff.path),
+    );
+    skipped.add(`${item.installRoot}\u0000${relative}\u0000${item.capabilityName}`);
+  };
+  const { releases, renames } = plan.migration;
   if (claudeRoots.length > 0) {
     claude = await reconcileClaude(claudeRoots, plan.cwd);
     diagnostics.push(...claude.diagnostics);
+    const report = claude;
     const open: EmittedDiff[] = [];
     for (const item of plan.diffs) {
       if (item.gate === undefined) continue;
-      if (gateOpen(item.gate, claude)) {
-        open.push(item);
-        continue;
-      }
-      heldBackRoots.add(item.installRoot);
-      const relative = relativeSidecarPath(
-        item.installRoot,
-        resolveDiffPath(item.installRoot, item.diff.path),
-      );
-      skipped.add(`${item.installRoot}\u0000${relative}\u0000${item.capabilityName}`);
+      if (gateOpen(item.gate, report)) open.push(item);
+      else holdBack(item);
     }
     await applyItems(open);
+    // A drifted artifact stays on disk; its sidecar entry goes with the stale entries below.
+    for (const release of releases) {
+      if (gateOpen(release.gate, report)) diagnostics.push(driftedWarning(release));
+      else holdBack(release.item);
+    }
+    const shown = renames.filter((rename) => gateOpen(rename.gate, report));
+    await recordRenameNotices(shown);
+    claude.renames = shown;
+  } else {
+    for (const release of releases) holdBack(release.item);
   }
   await removeStaleSidecarEntries(
     plan.staleEntries.filter(
@@ -888,12 +929,10 @@ function emitOptionsForTarget(
   config: CapletConfig,
   canonicalSkillReaders: readonly TargetId[],
 ): EmitOptions {
-  // Until migration (task 5.8) registers plugins, Claude keeps its loose output unless
-  // `targets.claude.carrier` asks for plugins; every other target is loose-only.
-  const options: EmitOptions = {
-    canonicalSkillReaders,
-    carrier: config.targets?.[targetId]?.carrier ?? "loose",
-  };
+  // Absent `targets.<t>.carrier` leaves the target's default carrier (`carriersOf`).
+  const options: EmitOptions = { canonicalSkillReaders };
+  const carrier = config.targets?.[targetId]?.carrier;
+  if (carrier !== undefined) options.carrier = carrier;
   const skills = config.targets?.[targetId]?.skills;
   if (skills !== undefined) options.skills = skills;
   return options;

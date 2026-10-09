@@ -1,0 +1,13 @@
+{
+  "renameNoticeShown": false,
+  "managed": [
+    "../.mcp.json review loose",
+    ".acf/marketplace/.claude-plugin/marketplace.json acf-system plugin",
+    ".acf/marketplace/plugins/review/.claude-plugin/plugin.json review plugin",
+    ".acf/marketplace/plugins/review/.mcp.json review plugin",
+    ".acf/marketplace/plugins/review/skills/review/SKILL.md review plugin",
+    "ACF-MANAGED.md acf-system loose",
+    "skills/review/ACF-MANAGED.md review loose",
+    "skills/review/SKILL.md review loose"
+  ]
+}

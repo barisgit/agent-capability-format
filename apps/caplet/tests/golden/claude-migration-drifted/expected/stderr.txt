@@ -1,0 +1,5 @@
+warn .claude/skills/review/SKILL.md was edited after caplet wrote it, so moving review to a Claude plugin left it in place and caplet no longer manages it. Claude loads skill review twice, as /review from this file and as /review:review from the plugin. To remove it: rm '<PROJECT>/.claude/skills/review/SKILL.md'
+    code  acf.migration.drifted
+    path  <PROJECT>/.claude/skills/review/SKILL.md
+    target  claude
+1 problem (1 warning)

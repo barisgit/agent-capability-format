@@ -180,10 +180,13 @@ export type SidecarTarget = TargetId | "canonical";
  * plugin-interop-foundation; caplet fills them in on its next write of the sidecar.
  * `marketplace` is present only in a Claude install root whose local marketplace caplet
  * maintains, so a later apply reconciles that registration even after the last plugin is gone.
+ * `renameNoticeShown` records that a Claude install root showed the one-time notice that its
+ * migrated skills are invoked as `/<capability>:<skill>`.
  */
 export type AcfManagedSidecar = {
   acf: 1;
   marketplace?: ClaudeMarketplaceRecord | undefined;
+  renameNoticeShown?: true | undefined;
   managed: Array<{
     path: string;
     owns: AcfOwnership[];

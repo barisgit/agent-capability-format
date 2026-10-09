@@ -19,18 +19,23 @@ import {
   reconcileClaudeHost,
 } from "../hosts/claude/reconcile.js";
 import { type ClaudeRootPlan, marketplaceFile } from "./claude-marketplace.js";
+import { type ClaudeRename, renameLines } from "./claude-migration.js";
 import { displayPath } from "./plan-view.js";
 import { columns } from "./render.js";
-import type { EmittedDiff } from "./workflow.js";
+import type { EmitPlan, EmittedDiff } from "./workflow.js";
 
 /**
  * A file change that must wait for the host. `uninstalled`: deleting a removed plugin's files
  * waits until Claude no longer has it installed, because Claude keeps serving an installed plugin
  * from its cache. `retired`: deleting `marketplace.json` waits until the marketplace is removed.
+ * `registered`: deleting the loose Claude files of a capability that became a plugin waits until
+ * Claude reports the plugin registered or disabled by the user, so the capability never drops
+ * out of Claude in between.
  */
 export type ClaudeGate =
   | { kind: "uninstalled"; marketplaceDir: string; plugin: string }
-  | { kind: "retired"; marketplaceDir: string };
+  | { kind: "retired"; marketplaceDir: string }
+  | { kind: "registered"; marketplaceDir: string; plugin: string };
 
 /** Whether a plugin's files under its package directory match what caplet recorded. */
 export type ClaudeFileState = "current" | "drifted" | "missing";
@@ -40,8 +45,15 @@ export type ClaudeScopeStatus = Omit<ClaudeScopeReport, "plugins"> & {
   plugins: ClaudePluginStatus[];
 };
 
-/** Host and file state of every planned Claude install root. */
-export type ClaudeReport = { scopes: ClaudeScopeStatus[]; diagnostics: Diagnostic[] };
+/**
+ * Host and file state of every planned Claude install root, and the invocation renames to
+ * announce: those the migration completed on apply, or those it plans on a dry run.
+ */
+export type ClaudeReport = {
+  scopes: ClaudeScopeStatus[];
+  diagnostics: Diagnostic[];
+  renames?: ClaudeRename[] | undefined;
+};
 
 /** The gate a planned change waits on, or undefined when it does not depend on the host. */
 export function claudeGate(
@@ -58,15 +70,24 @@ export function claudeGate(
       ? { kind: "retired", marketplaceDir }
       : undefined;
   }
-  if (item.carrier !== "plugin") return undefined;
-  if (root.plugins.some((plugin) => plugin.name === item.capabilityName)) return undefined;
-  return { kind: "uninstalled", marketplaceDir, plugin: item.capabilityName };
+  const plugin = item.capabilityName;
+  const wanted = root.plugins.some((candidate) => candidate.name === plugin);
+  if (item.carrier === "loose") {
+    return item.targetId === "claude" && wanted
+      ? { kind: "registered", marketplaceDir, plugin }
+      : undefined;
+  }
+  return wanted ? undefined : { kind: "uninstalled", marketplaceDir, plugin };
 }
 
 /** Whether the host report lets a change behind `gate` proceed. */
 export function gateOpen(gate: ClaudeGate, report: ClaudeReport): boolean {
   const scope = report.scopes.find((item) => item.marketplaceDir === gate.marketplaceDir);
   if (scope === undefined || !scope.stateRead) return false;
+  if (gate.kind === "registered") {
+    const state = scope.plugins.find((item) => item.name === gate.plugin)?.state;
+    return state === "registered" || state === "disabled by user";
+  }
   if (gate.kind === "uninstalled") {
     const plugin = scope.plugins.find((item) => item.name === gate.plugin);
     return plugin === undefined || plugin.state === "not installed";
@@ -95,16 +116,21 @@ export async function reconcileClaude(
   );
 }
 
-/** What {@link reconcileClaude} would do, without changing the host. */
+/**
+ * What {@link reconcileClaude} would do, without changing the host, and the invocation renames
+ * the plan announces when the host registers its plugins.
+ */
 export async function previewClaude(
-  roots: readonly ClaudeRootPlan[],
-  cwd: string,
+  plan: Pick<EmitPlan, "claude" | "cwd" | "migration">,
 ): Promise<ClaudeReport | undefined> {
+  const roots = plan.claude;
   if (roots.length === 0) return undefined;
-  return await withFileStates(
-    await previewClaudeHost(claudeHost(roots, cwd), desiredScopes(roots)),
+  const report = await withFileStates(
+    await previewClaudeHost(claudeHost(roots, plan.cwd), desiredScopes(roots)),
     roots,
   );
+  report.renames = plan.migration.renames;
+  return report;
 }
 
 /** Adds the file state of each plugin whose files the root should hold after apply. */
@@ -162,6 +188,7 @@ export function claudeLines(report: ClaudeReport, mode: "applied" | "planned"): 
       for (const command of planned) lines.push(`    ${command.command}`);
     }
   }
+  lines.push(...renameLines(report.renames ?? []));
   return lines;
 }
 

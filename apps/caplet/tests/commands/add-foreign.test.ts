@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+import { cleanup, makeScope, readText, runCaplet, type TestScope, writeText } from "../helpers";
 
 const DOLLAR = "$";
 const AP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -16,38 +16,100 @@ async function lockedFormats(agentsDir: string, name: string): Promise<string[] 
     ?.resolvedCapabilities?.map((record) => record.format);
 }
 
-test("caplet add installs a Claude plugin into the loose targets and refuses it on loose Claude files", async () => {
+/** A Claude plugin with skills from a custom path, an MCP server, and an agent. */
+async function writeReviewPlugin(scope: TestScope): Promise<string> {
+  const plugin = path.join(scope.sourceRoot, "review-plugin");
+  await writeText(
+    path.join(plugin, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "review-kit",
+      version: "1.2.0",
+      description: "Review helpers",
+      skills: "./extra-skills",
+    }),
+  );
+  await writeText(
+    path.join(plugin, "extra-skills", "triage", "SKILL.md"),
+    "---\ndescription: Triage issues\n---\nTriage.\n",
+  );
+  await writeText(path.join(plugin, "extra-skills", "triage", "notes.md"), "Notes.\n");
+  await writeText(
+    path.join(plugin, "skills", "review", "SKILL.md"),
+    "---\nname: review\ndescription: Review code\n---\nReview.\n",
+  );
+  await writeText(path.join(plugin, "skills", "review", "checklist.md"), "- one\n");
+  await writeText(
+    path.join(plugin, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        files: { command: `${DOLLAR}{CLAUDE_PLUGIN_ROOT}/bin/files`, args: ["--stdio"] },
+      },
+    }),
+  );
+  await writeText(path.join(plugin, "agents", "reviewer.md"), "---\nname: reviewer\n---\n");
+  return plugin;
+}
+
+test("caplet add installs a Claude plugin as a Claude plugin and into the loose targets", async () => {
   const scope = await makeScope();
   try {
-    const plugin = path.join(scope.sourceRoot, "review-plugin");
-    await writeText(
-      path.join(plugin, ".claude-plugin", "plugin.json"),
-      JSON.stringify({
-        name: "review-kit",
-        version: "1.2.0",
-        description: "Review helpers",
-        skills: "./extra-skills",
-      }),
+    const plugin = await writeReviewPlugin(scope);
+
+    const result = await runCaplet(scope, [
+      "add",
+      `path:${plugin}`,
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+
+    // Files are written; only the host registration waits for a Claude CLI.
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("acf.claude.cli-unavailable");
+    expect(result.stdout).toContain("Capabilities  review-kit");
+    expect(await lockedFormats(scope.agentsDir, "review-kit")).toEqual(["claude-plugin"]);
+    const snapshot = path.join(scope.agentsDir, "capabilities", "review-kit");
+    for (const file of [
+      "review/SKILL.md",
+      "review/checklist.md",
+      "triage/SKILL.md",
+      "triage/notes.md",
+    ]) {
+      expect(await Bun.file(path.join(scope.agentsDir, "skills", file)).exists()).toBe(true);
+    }
+    // The agent and the MCP server travel in the Claude plugin, not in loose Claude files.
+    const packageDir = path.join(
+      scope.cwd,
+      ".claude",
+      ".acf",
+      "marketplace",
+      "plugins",
+      "review-kit",
     );
+    expect(await Bun.file(path.join(packageDir, "agents", "reviewer.md")).exists()).toBe(true);
+    const pluginMcp = JSON.parse(await readText(path.join(packageDir, ".mcp.json")));
+    expect(pluginMcp.mcpServers.files).toBeDefined();
+    const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
+    expect(claudeMcp.mcpServers.files).toBeUndefined();
+    const piMcp = JSON.parse(await readText(path.join(scope.cwd, ".pi", "mcp.json")));
+    expect(piMcp.mcpServers.files).toEqual({
+      command: path.join(snapshot, "bin", "files"),
+      args: ["--stdio"],
+    });
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet add refuses a Claude plugin's agent on loose Claude files", async () => {
+  const scope = await makeScope();
+  try {
+    const plugin = await writeReviewPlugin(scope);
     await writeText(
-      path.join(plugin, "extra-skills", "triage", "SKILL.md"),
-      "---\ndescription: Triage issues\n---\nTriage.\n",
+      path.join(scope.agentsDir, "caplet.yml"),
+      "targets:\n  claude:\n    carrier: loose\n",
     );
-    await writeText(path.join(plugin, "extra-skills", "triage", "notes.md"), "Notes.\n");
-    await writeText(
-      path.join(plugin, "skills", "review", "SKILL.md"),
-      "---\nname: review\ndescription: Review code\n---\nReview.\n",
-    );
-    await writeText(path.join(plugin, "skills", "review", "checklist.md"), "- one\n");
-    await writeText(
-      path.join(plugin, ".mcp.json"),
-      JSON.stringify({
-        mcpServers: {
-          files: { command: `${DOLLAR}{CLAUDE_PLUGIN_ROOT}/bin/files`, args: ["--stdio"] },
-        },
-      }),
-    );
-    await writeText(path.join(plugin, "agents", "reviewer.md"), "---\nname: reviewer\n---\n");
 
     const result = await runCaplet(scope, [
       "add",
@@ -62,27 +124,8 @@ test("caplet add installs a Claude plugin into the loose targets and refuses it 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("agent reviewer");
     expect(result.stderr).toContain("targets.claude.carrier: plugin or except: [claude]");
-    expect(result.stdout).toContain("Capabilities  review-kit");
-    expect(await lockedFormats(scope.agentsDir, "review-kit")).toEqual(["claude-plugin"]);
-    const snapshot = path.join(scope.agentsDir, "capabilities", "review-kit");
-    expect(await Bun.file(path.join(snapshot, ".claude-plugin", "plugin.json")).exists()).toBe(
-      true,
-    );
-    for (const file of [
-      "review/SKILL.md",
-      "review/checklist.md",
-      "triage/SKILL.md",
-      "triage/notes.md",
-    ]) {
-      expect(await Bun.file(path.join(scope.agentsDir, "skills", file)).exists()).toBe(true);
-    }
     const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
     expect(claudeMcp.mcpServers.files).toBeUndefined();
-    const piMcp = JSON.parse(await readText(path.join(scope.cwd, ".pi", "mcp.json")));
-    expect(piMcp.mcpServers.files).toEqual({
-      command: path.join(snapshot, "bin", "files"),
-      args: ["--stdio"],
-    });
   } finally {
     await cleanup(scope);
   }

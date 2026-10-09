@@ -49,7 +49,10 @@ function scoped(scope: TestScope, args: string[]): string[] {
 }
 
 function normalized(scope: TestScope, result: RunResult): string {
-  return result.stdout.replaceAll(scope.dir, "<tmp>");
+  // The project marketplace name hashes the temporary project path.
+  return result.stdout
+    .replaceAll(scope.dir, "<tmp>")
+    .replaceAll(/acf-project-[0-9a-f]+/g, "acf-project-<h>");
 }
 
 function executablesJson(result: RunResult): string {

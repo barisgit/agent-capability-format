@@ -1,0 +1,12 @@
+{
+  "name": "acf-project-<h>",
+  "owner": {
+    "name": "caplet"
+  },
+  "plugins": [
+    {
+      "name": "review",
+      "source": "./plugins/review"
+    }
+  ]
+}

@@ -125,7 +125,7 @@ export const applyCommand = defineCommand({
         out.executables(executables);
       }
       if (dryRun) {
-        const claude = await previewClaude(plan.claude, plan.cwd);
+        const claude = await previewClaude(plan);
         const previewed = claude?.diagnostics ?? [];
         if (json) {
           printJson("apply", planCode === 0, [...diagnostics, ...previewed], {

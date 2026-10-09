@@ -3,17 +3,23 @@ ok Added path source (project scope)
     Source        <tmp>/sources/tools
     Capabilities  tools
 
-Plan: 2 changes
+Plan: 5 changes
 
 project  .
   claude  .claude
-    + .mcp.json          tools
+    + .acf/marketplace/.claude-plugin/marketplace.json
+    + .acf/marketplace/plugins/tools/.claude-plugin/plugin.json    tools
+    + .acf/marketplace/plugins/tools/.mcp.json                     tools
+    + .acf/marketplace/plugins/tools/server.js                     tools
     + managed notices
 
-+ 2 create  ~ 0 update  - 0 delete
++ 5 create  ~ 0 update  - 0 delete
 
 Executable changes
   claude
     + MCP server docs: node ${ACF_CAPABILITY_DIR}/server.js --stdio  tools
 
-ok Applied 2 files (2 writes, 0 deletes)
+ok Applied 5 files (5 writes, 0 deletes)
+
+Claude plugins project scope · acf-project-<h>
+  tools  registration required  files current

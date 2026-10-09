@@ -1,2 +1,5 @@
 ok Updated 1 capability
 ok Everything up to date
+
+Claude plugins project scope · acf-project-<h>
+  tools  registration required  files current
