@@ -268,40 +268,55 @@ function isValidCapabilitySelector(selector: string): boolean {
     );
 }
 
+const capabilityEntrySchema = z.strictObject({
+  source: sourceSpecSchema,
+  ref: z.string().optional(),
+  path: z.string().optional(),
+  format: z.enum(sourceFormats).optional(),
+  capabilities: capabilitySelectorSchema.optional(),
+  include: selectorSchema.optional(),
+  exclude: selectorSchema.optional(),
+  rename: z.union([slugSchema, z.record(z.string(), slugSchema)]).optional(),
+  only: z.array(targetIdSchema).optional(),
+  except: z.array(targetIdSchema).optional(),
+});
+
+const fetchDefaultsSchema = z.strictObject({
+  shallow: z.boolean().optional(),
+  blobless: z.boolean().optional(),
+});
+
+const capabilitiesDefaultsSchema = z.strictObject({ fetch: fetchDefaultsSchema.optional() });
+
 export const capabilitiesYmlSchema = z.strictObject({
   acf: z.literal(1),
   capabilities: z.array(
-    z
-      .strictObject({
-        source: sourceSpecSchema,
-        ref: z.string().optional(),
-        path: z.string().optional(),
-        format: z.enum(sourceFormats).optional(),
-        capabilities: capabilitySelectorSchema.optional(),
-        include: selectorSchema.optional(),
-        exclude: selectorSchema.optional(),
-        rename: z.union([slugSchema, z.record(z.string(), slugSchema)]).optional(),
-        only: z.array(targetIdSchema).optional(),
-        except: z.array(targetIdSchema).optional(),
-      })
-      .superRefine((value, ctx) => {
-        if (value.only !== undefined && value.except !== undefined) {
-          ctx.addIssue({
-            code: "custom",
-            message: "only and except are mutually exclusive",
-            path: [],
-          });
-        }
-      }),
+    capabilityEntrySchema.superRefine((value, ctx) => {
+      if (value.only !== undefined && value.except !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "only and except are mutually exclusive",
+          path: [],
+        });
+      }
+    }),
   ),
-  defaults: z
-    .strictObject({
-      fetch: z
-        .strictObject({ shallow: z.boolean().optional(), blobless: z.boolean().optional() })
-        .optional(),
-    })
-    .optional(),
+  defaults: capabilitiesDefaultsSchema.optional(),
 });
+
+/**
+ * The keys each object of `capabilities.yml` accepts, in declaration order, by the dotted path
+ * of the object (`""` is the document, `capabilities` each entry), so a reader can suggest the
+ * key an unknown one was meant to be.
+ */
+export const capabilitiesYmlKnownKeys: Readonly<Record<string, readonly string[]>> = {
+  "": Object.keys(capabilitiesYmlSchema.shape),
+  capabilities: Object.keys(capabilityEntrySchema.shape),
+  "capabilities.include": Object.keys(selectorSchema.shape),
+  "capabilities.exclude": Object.keys(selectorSchema.shape),
+  defaults: Object.keys(capabilitiesDefaultsSchema.shape),
+  "defaults.fetch": Object.keys(fetchDefaultsSchema.shape),
+};
 
 const skillsEmitOptionsSchema = z.object({
   native: z.boolean().optional(),

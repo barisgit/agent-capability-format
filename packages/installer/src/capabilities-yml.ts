@@ -3,12 +3,12 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   CREDENTIAL_IN_URL,
+  capabilitiesYmlKnownKeys,
   capabilitiesYmlSchema,
   type Diagnostic,
   isErrno,
   parseYaml,
   pushZodIssues,
-  selectorKeys,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
 import { entrySourceId } from "./lockfile.js";
@@ -64,26 +64,6 @@ export async function readCapabilitiesYml(
   return { value, diagnostics };
 }
 
-const knownKeysByPath: Record<string, string[]> = {
-  "": ["acf", "capabilities", "defaults"],
-  capabilities: [
-    "source",
-    "ref",
-    "path",
-    "format",
-    "capabilities",
-    "include",
-    "exclude",
-    "rename",
-    "only",
-    "except",
-  ],
-  "capabilities.include": Object.values(selectorKeys),
-  "capabilities.exclude": Object.values(selectorKeys),
-  defaults: ["fetch"],
-  "defaults.fetch": ["shallow", "blobless"],
-};
-
 function describeUnknownKeys(
   issues: { code: string; keys?: string[]; path: PropertyKey[]; message: string }[],
 ): void {
@@ -92,7 +72,7 @@ function describeUnknownKeys(
     const pathKey = issue.path
       .filter((segment): segment is string => typeof segment === "string")
       .join(".");
-    const knownKeys = knownKeysByPath[pathKey] ?? [];
+    const knownKeys = capabilitiesYmlKnownKeys[pathKey] ?? [];
     issue.message = issue.keys
       .map((key) => {
         const suggestion = closestKey(key, knownKeys);
@@ -103,7 +83,7 @@ function describeUnknownKeys(
   }
 }
 
-function closestKey(key: string, candidates: string[]): string | undefined {
+function closestKey(key: string, candidates: readonly string[]): string | undefined {
   let best: { candidate: string; distance: number } | undefined;
   for (const candidate of candidates) {
     const distance = levenshtein(key.toLowerCase(), candidate.toLowerCase());
