@@ -67,6 +67,8 @@ async function trustStateFiles(root: string): Promise<string[]> {
   for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile()) continue;
     const file = path.join(entry.parentPath, entry.name);
+    // Bun's transpiler cache under the test HOME holds compiled source, not caplet output.
+    if (file.includes(`${path.sep}.bun${path.sep}`)) continue;
     const text = await readFile(file, "utf8").catch(() => "");
     if (/enabledMcpjsonServers|enableAllProjectMcpServers|"permissions"|allowedTools/.test(text))
       found.push(file);
