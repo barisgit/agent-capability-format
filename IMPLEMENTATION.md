@@ -2768,6 +2768,7 @@ acf.taxonomy.operation.unmapped              # internal alias used in adapter-si
 # capabilities.yml + lockfile
 acf.capabilities-yml.source.unknown-scheme
 acf.capabilities-yml.duplicate-entry
+acf.capabilities-yml.unknown-key             # key capabilities.yml does not define (error)
 acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version

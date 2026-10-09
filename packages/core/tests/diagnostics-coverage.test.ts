@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { ACF_DIAGNOSTIC_CODES } from "../src";
+import { z } from "zod";
+import { ACF_DIAGNOSTIC_CODES, type Diagnostic, pushZodIssues } from "../src";
 
 const coveredByFixtures = new Set([
   "acf.manifest.invalid-name",
@@ -65,6 +66,8 @@ const exportedOnly = new Set([
   "acf.runtime.trigger-unsupported",
   "acf.taxonomy.operation.unmapped",
   "acf.capabilities-yml.duplicate-entry",
+  // Built from capabilities.yml schema issues; installer/tests/capabilities-yml.test.ts covers it.
+  "acf.capabilities-yml.unknown-key",
   "acf.resolve.capability-selector-direct-source",
   "acf.resolve.capability-selector-unmatched",
   "acf.lock.digest-mismatch",
@@ -102,4 +105,17 @@ test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {
   for (const code of [...coveredByFixtures, ...exportedOnly]) expect(exported).toContain(code);
   for (const code of exported)
     expect(coveredByFixtures.has(code) || exportedOnly.has(code)).toBe(true);
+});
+
+test("an unknown key takes the code of the file it was found in", () => {
+  const unknownKey = (options?: Parameters<typeof pushZodIssues>[3]): string[] => {
+    const parsed = z.strictObject({ known: z.string().optional() }).safeParse({ extra: 1 });
+    const diagnostics: Diagnostic[] = [];
+    if (!parsed.success) pushZodIssues(diagnostics, parsed.error, "file.yml", options);
+    return diagnostics.map((diagnostic) => diagnostic.code);
+  };
+  expect(unknownKey({ unknownKeyCode: "acf.target.extension.unknown-field" })).toEqual([
+    "acf.target.extension.unknown-field",
+  ]);
+  expect(unknownKey()).not.toContain("acf.capabilities-yml.unknown-key");
 });

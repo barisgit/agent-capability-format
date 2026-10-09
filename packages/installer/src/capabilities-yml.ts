@@ -42,6 +42,7 @@ export async function readCapabilitiesYml(
     describeUnknownKeys(parsed.error.issues);
     pushZodIssues(diagnostics, parsed.error, manifestPath, {
       baseCode: "acf.capabilities-yml.invalid",
+      unknownKeyCode: "acf.capabilities-yml.unknown-key",
     });
     return { value: emptyCapabilitiesYml(), diagnostics };
   }

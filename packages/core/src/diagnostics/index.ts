@@ -56,6 +56,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.taxonomy.operation.unmapped",
   "acf.capabilities-yml.source.unknown-scheme",
   "acf.capabilities-yml.duplicate-entry",
+  "acf.capabilities-yml.unknown-key",
   "acf.resolve.capability-selector-direct-source",
   "acf.resolve.capability-selector-unmatched",
   "acf.lock.digest-mismatch",
@@ -118,17 +119,22 @@ export function makeDiagnostic(input: {
   return diagnostic;
 }
 
+/**
+ * Pushes one `error` per zod issue in `error`, coded by the issue: `unknownKeyCode` names the
+ * code for a key the file's schema does not allow, since only the caller knows which file and
+ * location it parsed; `baseCode` is the code for an issue no more specific code covers.
+ */
 export function pushZodIssues(
   diagnostics: Diagnostic[],
   error: ZodError,
   filePath?: string,
-  options: { baseCode?: string; family?: FacetFamily } = {},
+  options: { baseCode?: string; unknownKeyCode?: string; family?: FacetFamily } = {},
 ): void {
   for (const issue of error.issues) {
     diagnostics.push(
       makeDiagnostic({
         severity: "error",
-        code: deriveZodCode(issue, options.baseCode),
+        code: deriveZodCode(issue, options),
         message: issue.message,
         path: filePath,
         family: options.family,
@@ -138,7 +144,10 @@ export function pushZodIssues(
   }
 }
 
-function deriveZodCode(issue: ZodIssue, baseCode?: string): string {
+function deriveZodCode(
+  issue: ZodIssue,
+  { baseCode, unknownKeyCode }: { baseCode?: string; unknownKeyCode?: string },
+): string {
   const message = issue.message.toLowerCase();
   const path = issue.path.map(String).join(".");
   if (message.includes("only and except")) return "acf.manifest.only-and-except";
@@ -150,7 +159,7 @@ function deriveZodCode(issue: ZodIssue, baseCode?: string): string {
   if (message.includes("requires url")) return "acf.mcp.transport.missing-url";
   if (message.includes("unknown source scheme"))
     return "acf.capabilities-yml.source.unknown-scheme";
-  if (issue.code === "unrecognized_keys") return "acf.capabilities-yml.unknown-key";
+  if (issue.code === "unrecognized_keys" && unknownKeyCode !== undefined) return unknownKeyCode;
   if (path === "name" || path.endsWith(".name")) return "acf.manifest.invalid-name";
   if (path === "acf") return "acf.manifest.acf-version-unknown";
   return baseCode ?? `acf.schema.${path.length > 0 ? path.replaceAll(".", "-") : "invalid"}`;
