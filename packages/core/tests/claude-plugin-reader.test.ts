@@ -268,6 +268,21 @@ test("a skill or server with a native value its host rejects is left out with a 
   ]);
 });
 
+test("a non-boolean invocation key leaves the skill out instead of becoming an extra", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "skills/manual/SKILL.md":
+      '---\nname: manual\ndescription: Manual\ndisable-model-invocation: "yes"\n---\n',
+    "skills/hidden/SKILL.md": "---\nname: hidden\ndescription: Hidden\nuser-invocable: 0\n---\n",
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\nuser-invocable: false\n---\n",
+  });
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["fine"]);
+  expect(diagnostics.map((d) => [d.severity, d.code, d.message.split(":")[0]])).toEqual([
+    ["warn", "acf.source.component-invalid", "skill hidden is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill manual is not loaded"],
+  ]);
+});
+
 test("a placeholder named like an Object.prototype property keeps the server native", async () => {
   const { capability } = await read({
     ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),

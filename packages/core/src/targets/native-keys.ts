@@ -49,15 +49,17 @@ export const pendingCoreFields: Readonly<Record<string, string>> = {
 };
 
 /**
- * One registry entry. A key the writer generates from a core field (`generatedFrom`) has no value
- * schema: authoring it is `acf.extras.conflict` whatever the value. Every other key declares the
- * native value domain its host documents, which validation checks (`nativeValueProblem`).
+ * One registry entry. Authoring a key the writer generates from a core field (`generatedFrom`) is
+ * `acf.extras.conflict` whatever the value; such a key may still declare its host's value domain,
+ * so a foreign reader that leaves a malformed value unprojected rejects it (`nativeValueProblem`)
+ * instead of keeping it as an extra. Every other key declares the native value domain its host
+ * documents.
  */
 type KeySpec = {
   class: SafetyClass;
   valueClasses?: readonly { value: boolean; class: SafetyClass }[];
   pending?: string;
-} & ({ generatedFrom: string; value?: never } | { generatedFrom?: never; value: z.ZodType });
+} & ({ generatedFrom: string; value?: z.ZodType } | { generatedFrom?: never; value: z.ZodType });
 
 // Value domains shared by many keys, as the research inventories record them.
 const str = z.string();
@@ -75,9 +77,10 @@ const descriptive = (value: z.ZodType): KeySpec => ({ class: "descriptive", valu
 const functional = (value: z.ZodType): KeySpec => ({ class: "functional", value });
 const granting = (value: z.ZodType): KeySpec => ({ class: "granting", value });
 const restricting = (value: z.ZodType): KeySpec => ({ class: "restricting", value });
-const gen = (safety: SafetyClass, field: string): KeySpec => ({
+const gen = (safety: SafetyClass, field: string, value?: z.ZodType): KeySpec => ({
   class: safety,
   generatedFrom: field,
+  ...(value === undefined ? {} : { value }),
 });
 const pend = (safety: SafetyClass, field: string, value: z.ZodType): KeySpec => ({
   class: safety,
@@ -106,8 +109,8 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
     when_to_use: descriptive(str),
     "argument-hint": gen("descriptive", "skill.argument-hint"),
     arguments: pend("functional", "skill.arguments", strOrList),
-    "disable-model-invocation": gen("restricting", "skill.invocation.model=false"),
-    "user-invocable": gen("restricting", "skill.invocation.user=false"),
+    "disable-model-invocation": gen("restricting", "skill.invocation.model=false", bool),
+    "user-invocable": gen("restricting", "skill.invocation.user=false", bool),
     "allowed-tools": granting(strOrList),
     "disallowed-tools": restricting(strOrList),
     model: functional(str),
@@ -130,7 +133,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
     "interface.icon_large": descriptive(str),
     "interface.brand_color": descriptive(str),
     "interface.default_prompt": descriptive(str),
-    "policy.allow_implicit_invocation": gen("restricting", "skill.invocation.model=false"),
+    "policy.allow_implicit_invocation": gen("restricting", "skill.invocation.model=false", bool),
     "dependencies.tools": pend("functional", "skill.requires.mcp", z.array(object)),
   },
   // cursor.md, SKILL.md YAML frontmatter.
@@ -138,7 +141,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
     ...AGENT_SKILLS_KEYS,
     paths: pend("restricting", "skill.paths", strOrList),
     globs: pend("restricting", "skill.paths", strOrList),
-    "disable-model-invocation": gen("restricting", "skill.invocation.model=false"),
+    "disable-model-invocation": gen("restricting", "skill.invocation.model=false", bool),
     icon: descriptive(str),
     color: descriptive(
       z.enum([
@@ -161,7 +164,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
   pi: {
     ...AGENT_SKILLS_KEYS,
     "allowed-tools": granting(strOrList),
-    "disable-model-invocation": gen("restricting", "skill.invocation.model=false"),
+    "disable-model-invocation": gen("restricting", "skill.invocation.model=false", bool),
   },
 };
 
@@ -416,9 +419,9 @@ export function nativeKeyInfo(
 
 /**
  * Why `value` is outside the native value domain of a known key, or undefined when it is inside
- * (capability-model-layers, Inline native extras). Unknown keys and keys a writer generates
- * from a core field have no domain here: the first are accepted as written, the second are
- * conflicts whatever their value.
+ * (capability-model-layers, Inline native extras). Unknown keys have no domain and are accepted as
+ * written; a generated key is checked only when it declares a domain (the invocation booleans),
+ * and authoring one in native ACF stays a conflict whatever its value.
  */
 export function nativeValueProblem(
   target: TargetId,
