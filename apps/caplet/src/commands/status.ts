@@ -29,12 +29,11 @@ export const statusCommand = defineCommand({
       process.chdir(cwd);
       const json = readJson(context.args);
       const out = reporter(context.args);
-      const diagnostics: Diagnostic[] = [];
       const scopes = await resolveScopeRoots(readScope(context.args), cwd);
       const capabilityNames = new Map<string, string[]>();
       for (const scopeRoot of scopes) {
+        // The plan resolves each scope again and reports its diagnostics.
         const resolved = await resolveScopeCapabilities(scopeRoot);
-        diagnostics.push(...resolved.diagnostics);
         capabilityNames.set(
           scopeRoot.scope,
           resolved.capabilities.map((capability) => capability.manifest.name).sort(),
@@ -45,11 +44,11 @@ export const statusCommand = defineCommand({
       const verbose = readVerbose(context.args);
       const footprint = verbose ? await collectFootprint(plan) : null;
       const claude = await previewClaude(plan);
-      diagnostics.push(...(claude?.diagnostics ?? []));
-      if (!json) printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
+      const diagnostics: Diagnostic[] = [...plan.diagnostics, ...(claude?.diagnostics ?? [])];
+      if (!json) printDiagnostics(diagnostics, context.args);
       const view = buildPlanView(plan.diffs);
       if (json) {
-        printJson("status", true, [...diagnostics, ...plan.diagnostics], {
+        printJson("status", true, diagnostics, {
           pending: view.fileCount,
           ...reachToJson(reach),
           ...(footprint === null ? {} : { footprint: footprintToJson(footprint) }),

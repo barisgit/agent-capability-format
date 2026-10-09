@@ -455,3 +455,18 @@ test("a project registers at Claude local scope from the project root", async ()
   expect(result.stdout).toContain("registered for this checkout only, at Claude local scope");
   expect(result.stdout).toContain(".claude/settings.local.json");
 });
+
+test("status prints each diagnostic once", async () => {
+  const scope = await reviewScope("user");
+  await writeText(
+    path.join(scope.home, ".agents", "capabilities.yml"),
+    `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, NAME)}\n    exclude: { mcp: [missing] }\n`,
+  );
+  await applyWithoutCli(scope);
+  const host = await userHost(scope, ["list-json-empty", "marketplace-list-json-empty"]);
+
+  const result = await runCaplet(scope, ["status", ...userArgs(scope).slice(0, 4)], host.env);
+
+  const output = `${result.stdout}${result.stderr}`;
+  expect(output.split("missing").length - 1).toBe(1);
+});
