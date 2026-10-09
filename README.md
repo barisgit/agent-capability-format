@@ -140,6 +140,11 @@ A source that has bare skills and a `.claude-plugin/plugin.json` used to be
 read as skills; it is now read as a Claude plugin. Add `format: skills` to
 keep the old result.
 
+An imported skill whose frontmatter gives a host-native key a value that
+host rejects (for example `effort: extreme`) used to load as written; it is
+now left out for every target with the warning
+`acf.source.component-invalid`, and the rest of the source still loads.
+
 Select one capability directly from GitHub with the add-only `@name`
 shorthand:
 
@@ -252,6 +257,17 @@ agents, commands, hooks, or instructions for Claude stays loose as a whole
 (`acf.claude.legacy-carrier`). Set `targets.claude.carrier: loose` in
 `caplet.yml` to use loose files for everything; caplet then uninstalls its
 Claude plugins.
+
+Deselecting a capability or `caplet remove` uninstalls its plugin and, like
+`claude plugin uninstall`, deletes what Claude saved for it: its data
+directory and the options and secrets you entered. A capability that stays
+selected but no longer needs a plugin (it switched to loose files, or
+nothing of it is left for Claude) keeps that data. When Claude would still
+delete saved options, caplet keeps the plugin installed and warns
+(`acf.claude.uninstall-held`); Claude keeps loading the plugin, so a
+capability now in loose files loads twice, until you run `claude plugin uninstall <id> --scope <scope> --keep-data`. A capability
+whose only Claude content is a component left out as invalid keeps its
+installed plugin unchanged (`acf.claude.plugin-kept`).
 
 `caplet status` reports each plugin's host state (`registered`, `disabled by
 user`, `not installed`, `registration required`, `blocked by host policy`,

@@ -25,6 +25,12 @@ caplet                                        # status summary
 caplet check --frozen --strict                # CI: fail on stale or lossy output
 ```
 
+Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
+uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
+it. When a still-selected capability no longer needs its plugin but Claude would delete saved
+options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`); it loads twice until you
+run `claude plugin uninstall <id> --scope <scope> --keep-data`.
+
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
