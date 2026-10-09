@@ -1718,7 +1718,12 @@ expansion in canonical MCP fields. The placeholders above are the only
 `${...}` references a canonical MCP `command`, `args`, `env`, `cwd`,
 `url`, or `headers` value may hold; any other, such as `${API_KEY}`, is a
 pending host reference (§13a.4.2) and an error
-(`acf.mcp.placeholder.pending`), so no host expands it after emission. A
+(`acf.mcp.placeholder.pending`), so no host expands it after emission. The
+same holds for the other reference syntaxes a writer target expands in the
+config caplet writes: `{env:NAME}` and `{file:PATH}` (OpenCode, anywhere in
+`opencode.json`) and `$env:NAME` (pi-mcp-adapter). A reader keeps a server
+whose source value holds such text whole as native remainder, because the
+text is literal only to its source host. A
 server whose meaning depends on a host
 environment reference, `${user_config.*}`, `headersHelper`, or OAuth has no
 canonical form in `acf: 1`: a reader keeps such a server whole as native

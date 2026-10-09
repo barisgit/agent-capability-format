@@ -4,6 +4,7 @@
  * when it relies on a meaning core cannot express, or is invalid under its format's rules.
  */
 import { withNativeExtras } from "../extras/index.js";
+import { hostReferences } from "../reader/mcp-rules.js";
 import type { McpServer } from "../types/index.js";
 import {
   CAPABILITY_DIR,
@@ -154,6 +155,11 @@ export function projectClaudeServer(name: string, raw: unknown): ServerProjectio
 
 function named(name: string, server: McpServer, executable: boolean): ServerProjection {
   if (!isSlug(name)) return pending("name is not an ACF slug", executable);
+  // Literal text to the source host, such as `{env:X}` in a Claude server, would be expanded
+  // by another target's host; only the source format keeps that meaning.
+  const [reference] = hostReferences(server);
+  if (reference !== undefined)
+    return pending(`${reference[0]} holds ${reference[1]}, which another host expands`, executable);
   return { kind: "server", server };
 }
 

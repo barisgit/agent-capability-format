@@ -231,3 +231,26 @@ test("a host environment reference in a canonical MCP field is an error naming i
       ]),
   );
 });
+
+test("a reference another target's host expands is an error in every canonical MCP field", async () => {
+  // OpenCode substitutes {env:...} and {file:...} anywhere in opencode.json; pi-mcp-adapter
+  // expands $env:NAME. Each would turn a literal canonical value into a host reference.
+  await withCapability(
+    mcpFile(
+      `    transport: stdio\n    command: node\n    args: ["--key={env:API_KEY}", "{file:./secret}"]\n    env:\n      TOKEN: "$env:TOKEN"\n      PLAIN: "{env}"\n`,
+    ),
+    (cap) =>
+      expect(cap.diagnostics.map((d) => [d.code, d.message.split(", which ")[0]])).toEqual([
+        ["acf.mcp.placeholder.pending", "server srv: args[0] references {env:API_KEY}"],
+        ["acf.mcp.placeholder.pending", "server srv: args[1] references {file:./secret}"],
+        ["acf.mcp.placeholder.pending", "server srv: env.TOKEN references $env:TOKEN"],
+      ]),
+  );
+  await withCapability(
+    mcpFile(
+      `    transport: http\n    url: "https://example.com/{env:REGION}"\n    headers:\n      Authorization: "Bearer {file:~/.token}"\n`,
+    ),
+    (cap) =>
+      expect(errors(cap)).toEqual(["acf.mcp.placeholder.pending", "acf.mcp.placeholder.pending"]),
+  );
+});
