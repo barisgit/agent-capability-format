@@ -395,9 +395,7 @@ test("caplet apply fetches and writes native artifacts", async () => {
 
 test("a capability blocked for one shared-root reader keeps every writer off the shared root", async () => {
   const scope = await makeScope();
-  const saved = { cwd: process.cwd(), home: process.env.HOME };
-  // In-process plans resolve scopes through os.homedir(); never touch the real home.
-  process.env.HOME = scope.home;
+  const savedCwd = process.cwd();
   try {
     const alpha = path.join(scope.sourceRoot, "alpha");
     await writeText(
@@ -421,9 +419,7 @@ test("a capability blocked for one shared-root reader keeps every writer off the
       [],
     );
   } finally {
-    process.chdir(saved.cwd);
-    if (saved.home === undefined) delete process.env.HOME;
-    else process.env.HOME = saved.home;
+    process.chdir(savedCwd);
     await cleanup(scope);
   }
 });

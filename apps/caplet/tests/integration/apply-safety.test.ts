@@ -16,19 +16,15 @@ import {
 } from "../helpers";
 
 let scope: TestScope;
-const saved = { cwd: process.cwd(), home: process.env.HOME };
+const savedCwd = process.cwd();
 
 beforeEach(async () => {
   scope = await makeScope();
   await forceCanonicalSkills(scope);
-  // In-process plans resolve scopes through os.homedir(); never touch the real home.
-  process.env.HOME = scope.home;
 });
 
 afterEach(async () => {
-  process.chdir(saved.cwd);
-  if (saved.home === undefined) delete process.env.HOME;
-  else process.env.HOME = saved.home;
+  process.chdir(savedCwd);
   await cleanup(scope);
 });
 
