@@ -245,11 +245,6 @@ export async function buildEmitPlan(
       { lock },
     );
     diagnostics.push(...resolved.diagnostics);
-    // A capability's own validation errors gate the plan like any other error (SPEC.md §14.2);
-    // its warnings and info stay on the capability for check and show.
-    for (const capability of resolved.capabilities) {
-      diagnostics.push(...capability.diagnostics.filter((item) => item.severity === "error"));
-    }
     if (lock !== null) {
       const manifestDir = path.dirname(scopeRoot.manifestPath);
       const manifestSources = new Set(
@@ -272,6 +267,17 @@ export async function buildEmitPlan(
         (capability) =>
           selected.has(capability.manifest.name) || !lockedNames.has(capability.manifest.name),
       );
+    }
+    // Each planned capability's own diagnostics reach the plan (SPEC.md §14.2): its errors gate
+    // apply and its warnings are shown. Discovery diagnostics are the same objects on the scope
+    // and on every capability it found, so each object is reported once.
+    const reported = new Set(diagnostics);
+    for (const capability of resolved.capabilities) {
+      for (const item of capability.diagnostics) {
+        if (reported.has(item)) continue;
+        reported.add(item);
+        diagnostics.push(item);
+      }
     }
     resolvedNames.set(
       scopeRoot.scope,

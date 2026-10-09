@@ -1363,7 +1363,9 @@ caplet then marks the capability blocked for that target in `EmitPlan.blocked`
 nothing of it there. Other capabilities and targets apply, and the command
 exits 2 (`blockingExitCode` in `apps/caplet/src/internal/output.ts`). Any
 error other than a refusal, including a resolved capability's own validation
-errors, stops apply, add, and update before writing.
+errors, stops apply, add, and update before writing. The plan carries every
+diagnostic of each planned capability, so these commands also show its
+warnings and lossy notes, each once.
 
 ### 4.7 Native extras
 

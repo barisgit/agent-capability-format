@@ -185,6 +185,31 @@ test("removing a capability's regions from shared files reads as an update", asy
   }
 });
 
+test("apply and update report a capability's warning once", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(
+      path.join(scope.sourceRoot, "alpha", "skills", "probe", "SKILL.md"),
+      "---\nname: probe\ndescription: Probe skill.\nwhen_to_use: Always.\n---\nBody.\n",
+    );
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+
+    const applied = await runCaplet(scope, ["apply", ...args]);
+    expect(applied.exitCode).toBe(0);
+    const shown = applied.stdout + applied.stderr;
+    expect(shown.split("acf.skill.native-key-not-core")).toHaveLength(2);
+    expect(shown).toContain("1 problem (1 warning)");
+
+    const updated = await runCaplet(scope, ["update", "alpha-cap", "--json", ...args]);
+    const json = JSON.parse(updated.stdout) as { diagnostics: Array<{ code: string }> };
+    expect(
+      json.diagnostics.filter((item) => item.code === "acf.skill.native-key-not-core"),
+    ).toHaveLength(1);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("add confirms the source and manifest it changed", async () => {
   const scope = await makeScope();
   try {
