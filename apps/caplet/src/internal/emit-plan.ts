@@ -472,15 +472,7 @@ async function planCapability(
     scope.blockedReaders.get(name) ?? [],
   );
   state.diagnostics.push(...validation, ...result.diagnostics);
-  for (const outcome of componentOutcomes({
-    capability: filtered,
-    target: targetId,
-    diagnostics: [...filtered.diagnostics, ...validation, ...result.diagnostics],
-    reported: result.outcomes,
-  })) {
-    const key = `${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
-    if (!state.outcomes.has(key)) state.outcomes.set(key, outcome);
-  }
+  recordOutcomes(state, filtered, targetId, { validation, result });
   if (capabilityBlocked([...validation, ...result.diagnostics], targetId)) {
     state.blocked.push({ scope: scopeRoot.scope, target: targetId, capability: name });
     state.keptOutput.add(`${installRoot}\u0000${name}`);
@@ -491,6 +483,39 @@ async function planCapability(
     return;
   }
   state.executables.push(...capabilityExecutables);
+  planDiffs(scope, targetId, installRoot, name, result);
+}
+
+/** Records the capability's component outcomes on the target, keeping the first of each. */
+function recordOutcomes(
+  state: PlanState,
+  capability: AcfCapability,
+  targetId: TargetId,
+  { validation, result }: CapabilityEmission,
+): void {
+  for (const outcome of componentOutcomes({
+    capability,
+    target: targetId,
+    diagnostics: [...capability.diagnostics, ...validation, ...result.diagnostics],
+    reported: result.outcomes,
+  })) {
+    const key = `${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
+    if (!state.outcomes.has(key)) state.outcomes.set(key, outcome);
+  }
+}
+
+/**
+ * Adds a writer's plugins and diffs to the plan. A file under the shared skills root is planned
+ * once per scope and capability, by the first of its readers.
+ */
+function planDiffs(
+  scope: ScopePlanning,
+  targetId: TargetId,
+  installRoot: string,
+  name: string,
+  result: EmitResult,
+): void {
+  const { scopeRoot, state } = scope;
   const pluginDirs = new Set<string>();
   for (const plugin of result.plugins ?? []) {
     state.plugins.push({ ...plugin, scopeRoot, installRoot });
@@ -499,7 +524,7 @@ async function planCapability(
   for (const diff of result.diffs) {
     const canonical = isInsideOrEqual(diff.path, path.join(scopeRoot.agentsDir, "skills"));
     if (canonical) {
-      // Every reader of the shared skills root emits the same files; the first one plans them.
+      // Every reader of the shared skills root emits the same files.
       const key = `${scopeRoot.scope}\0${name}\0${path.resolve(diff.path)}`;
       if (state.canonicalDiffs.has(key)) continue;
       state.canonicalDiffs.add(key);

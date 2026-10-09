@@ -351,44 +351,36 @@ export async function collectReach(plan: EmitPlan): Promise<Reach> {
 export async function collectFootprint(plan: EmitPlan): Promise<FootprintEntry[]> {
   const footprint: FootprintEntry[] = [];
   for (const root of await managedRoots(plan)) {
-    const dirs = new Map<string, { capability: string; kind: "dir" }>();
-    const files: Array<{ path: string; kind: "file" | "region"; capability: string }> = [];
-    for (const entry of root.entries) {
-      const facet = entry.facet;
-      if (facet !== undefined && facet.family === "skill") {
-        const dir = `skills/${facet.name}/`;
-        if (!dirs.has(dir)) dirs.set(dir, { capability: entry.capability, kind: "dir" });
-        continue;
-      }
-      const region = entry.owns.some((own) => own.kind !== "file");
-      files.push({
-        path: entry.path,
-        kind: region ? "region" : "file",
-        capability: entry.capability,
-      });
-    }
-    for (const [dir, info] of [...dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      footprint.push({
-        scope: root.scope,
-        target: root.destination,
-        installRoot: root.installRoot,
-        path: dir,
-        kind: info.kind,
-        capability: info.capability,
-      });
-    }
-    for (const file of files.sort((a, b) => a.path.localeCompare(b.path))) {
-      footprint.push({
-        scope: root.scope,
-        target: root.destination,
-        installRoot: root.installRoot,
-        path: file.path,
-        kind: file.kind,
-        capability: file.capability,
-      });
-    }
+    const location = { scope: root.scope, target: root.destination, installRoot: root.installRoot };
+    for (const item of rootFootprint(root.entries)) footprint.push({ ...location, ...item });
   }
   return footprint;
+}
+
+type FootprintItem = Pick<FootprintEntry, "path" | "kind" | "capability">;
+
+/**
+ * One item per skill directory, attributed to the first entry in it, then each other managed
+ * file, both sorted by path.
+ */
+function rootFootprint(entries: readonly ManagedEntry[]): FootprintItem[] {
+  const dirs = new Map<string, FootprintItem>();
+  const files: FootprintItem[] = [];
+  for (const entry of entries) {
+    if (entry.facet?.family === "skill") {
+      const dir = `skills/${entry.facet.name}/`;
+      if (!dirs.has(dir)) dirs.set(dir, { path: dir, kind: "dir", capability: entry.capability });
+      continue;
+    }
+    const region = entry.owns.some((own) => own.kind !== "file");
+    files.push({
+      path: entry.path,
+      kind: region ? "region" : "file",
+      capability: entry.capability,
+    });
+  }
+  const byPath = (a: FootprintItem, b: FootprintItem) => a.path.localeCompare(b.path);
+  return [...[...dirs.values()].sort(byPath), ...files.sort(byPath)];
 }
 
 type ManagedRoot = {
