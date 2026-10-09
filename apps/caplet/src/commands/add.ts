@@ -11,6 +11,7 @@ import {
   validationError,
 } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { fetchScopes, installedExecutables } from "../internal/fetch-scopes.js";
 import { printJson, readJson } from "../internal/json.js";
 import {
   addManifestEntry,
@@ -23,7 +24,6 @@ import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { chooseSourceCapabilities } from "../internal/source-selection.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { fetchScopes, installedExecutables } from "../internal/workflow.js";
 
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import { buildEmitPlan } from "../../src/internal/workflow";
+import { buildEmitPlan } from "../../src/internal/emit-plan";
 import {
   applyProject,
   cleanup,

@@ -8,9 +8,16 @@ import {
   reportEmptyPlan,
   settleEmptyPlan,
 } from "../internal/apply-flow.js";
+import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
+import { buildEmitPlan } from "../internal/emit-plan.js";
+import {
+  fetchScopes,
+  installedExecutables,
+  plannedExecutableChanges,
+} from "../internal/fetch-scopes.js";
 import { printJson, readJson } from "../internal/json.js";
 import {
   blockingExitCode,
@@ -20,14 +27,7 @@ import {
 } from "../internal/output.js";
 import { buildPlanView, planToJson, reachBlock, reachToJson } from "../internal/plan-view.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import {
-  applyEmitPlan,
-  buildEmitPlan,
-  collectReach,
-  fetchScopes,
-  installedExecutables,
-  plannedExecutableChanges,
-} from "../internal/workflow.js";
+import { collectReach } from "../internal/workflow.js";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },

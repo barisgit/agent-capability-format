@@ -1,7 +1,9 @@
 import {
   type AcfCapability,
+  applyApplicability,
   type ComponentOutcome,
   type Diagnostic,
+  hookEntries,
   resolveScopeCapabilities,
   type TargetId,
   targetIds,
@@ -10,12 +12,12 @@ import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { readCwd, readScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { buildEmitPlan } from "../internal/emit-plan.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
 import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { buildEmitPlan, capabilitySummary, hookEvents } from "../internal/workflow.js";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
@@ -52,7 +54,7 @@ export const showCommand = defineCommand({
         const code = exitCodeForDiagnostics(diagnostics, context.args);
         const payload = matches.map((match) => ({
           scope: match.scope,
-          ...(capabilitySummary(match.capability, targetIds) as Record<string, unknown>),
+          ...capabilitySummary(match.capability),
           support: Object.fromEntries(
             targetIds.map((target) => [
               target,
@@ -76,16 +78,7 @@ export const showCommand = defineCommand({
         );
         out.log(colors.dim(`  ${match.scope} scope \u00b7 ${capability.root}`));
         out.log("");
-        const facets: Array<[string, string[]]> = [
-          ["skills", capability.skills.map((facet) => facet.name)],
-          ["agents", capability.agents.map((facet) => facet.name)],
-          ["commands", capability.commands.map((facet) => facet.name)],
-          ["instructions", capability.instructions.map((facet) => facet.name)],
-          ["hooks", hookEvents(capability)],
-          // Servers for different targets may share a name (SPEC.md §13a.5).
-          ["mcp", [...new Set(capability.mcp?.servers.map((server) => server.name))]],
-        ];
-        const rows = facets
+        const rows = Object.entries(facetNames(capability))
           .filter(([, names]) => names.length > 0)
           .map(([family, names]) => [`  ${colors.dim(family)}`, names.join(", ")]);
         for (const line of columns(rows)) out.log(line);
@@ -103,6 +96,45 @@ export const showCommand = defineCommand({
     });
   },
 });
+
+/** The `show --json` description of a capability, before its scope and support. */
+function capabilitySummary(capability: AcfCapability) {
+  return {
+    name: capability.manifest.name,
+    version: capability.manifest.version,
+    synthesized: capability.synthesized === true,
+    root: capability.root,
+    facets: facetNames(capability),
+    applicability: Object.fromEntries(
+      targetIds.map((targetId) => [targetId, applyApplicability(capability, targetId) !== null]),
+    ),
+    diagnostics: capability.diagnostics,
+  };
+}
+
+/** The names a capability declares in each facet family, in display order. */
+function facetNames(capability: AcfCapability): Record<string, string[]> {
+  return {
+    skills: capability.skills.map((facet) => facet.name),
+    agents: capability.agents.map((facet) => facet.name),
+    commands: capability.commands.map((facet) => facet.name),
+    instructions: capability.instructions.map((facet) => facet.name),
+    hooks: hookEvents(capability),
+    // Servers for different targets may share a name (SPEC.md §13a.5).
+    mcp: [...new Set(capability.mcp?.servers.map((server) => server.name))],
+  };
+}
+
+/**
+ * The hook events a capability declares, in file order: canonical hook types, then each
+ * target-native event as `<target>:<event>` (SPEC.md §13.9).
+ */
+function hookEvents(capability: AcfCapability): string[] {
+  const events = hookEntries(capability.hooks).map(({ event, target }) =>
+    target === undefined ? event : `${target}:${event}`,
+  );
+  return [...new Set(events)];
+}
 
 /**
  * How fully `target` carries capability `name`, from the plan's compatibility outcomes: `no` when

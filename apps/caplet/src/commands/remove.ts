@@ -3,6 +3,7 @@ import { readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { ownedPathViolations, readSidecar } from "../apply/sidecar.js";
 import { appliedCounts, claudeJson, printClaude } from "../internal/apply-flow.js";
+import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readCwd, readExplicitScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
@@ -11,7 +12,7 @@ import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/
 import { planRemoval, removalRoots } from "../internal/removal.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { applyEmitPlan, requestedTargets } from "../internal/workflow.js";
+import { requestedTargets } from "../internal/target-selection.js";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },

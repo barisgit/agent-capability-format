@@ -3,11 +3,11 @@ import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/inst
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { buildEmitPlan } from "../internal/emit-plan.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { buildEmitPlan } from "../internal/workflow.js";
 
 export const checkCommand = defineCommand({
   meta: {

@@ -4,11 +4,11 @@ import { type ArgsDef, defineCommand } from "citty";
 import { planAndApply } from "../internal/apply-flow.js";
 import { readCwd, readScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { fetchScopes, installedExecutables } from "../internal/fetch-scopes.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { fetchScopes, installedExecutables } from "../internal/workflow.js";
 
 export const updateCommand = defineCommand({
   meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },

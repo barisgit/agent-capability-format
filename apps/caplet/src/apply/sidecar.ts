@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, removeMarkedBlock } from "@caplet/adapters/common";
@@ -92,6 +93,25 @@ export function detectDrift(sidecar: AcfManagedSidecar, fs: DriftFs): Diagnostic
     });
   }
   return diagnostics;
+}
+
+/** A {@link DriftFs} reading paths relative to `installRoot` from disk; a missing file reads as `null`. */
+export function diskDriftFs(installRoot: string): Required<DriftFs> {
+  return {
+    readText: (relativePath) =>
+      readSyncIfExists(() => readFileSync(path.resolve(installRoot, relativePath), "utf8")),
+    readBytes: (relativePath) =>
+      readSyncIfExists(() => readFileSync(path.resolve(installRoot, relativePath))),
+  };
+}
+
+function readSyncIfExists<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return null;
+    throw error;
+  }
 }
 
 /**

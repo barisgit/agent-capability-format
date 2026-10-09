@@ -6,6 +6,7 @@ import { claudeJson, printClaude } from "../internal/apply-flow.js";
 import { readCwd, readScope, readVerbose } from "../internal/args.js";
 import { previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
 import { runCommandSafely } from "../internal/command.js";
+import { buildEmitPlan } from "../internal/emit-plan.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import {
@@ -19,7 +20,7 @@ import {
 import { columns } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { buildEmitPlan, collectFootprint, collectReach } from "../internal/workflow.js";
+import { collectFootprint, collectReach } from "../internal/workflow.js";
 
 export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },

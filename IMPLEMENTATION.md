@@ -1506,7 +1506,7 @@ Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 | `claude-host-flow.ts` | `claudeGate` marks a planned change that waits on the host: `registered` (retiring loose Claude files of a capability that is now a plugin), `uninstalled` (deleting a removed plugin's files), `retired` (deleting `marketplace.json`). `gateOpen` decides from the host report; `registered` opens on `registered` or `disabled by user`. `gatedChange` applies an open change, and in place of a closed `retired` deletion whose marketplace stays registered writes an empty catalog; `previewedDiffs` makes the same substitution for `status` and dry runs from the host preview. `reconcileClaude` and `previewClaude` call the host port and add each plugin's file state (`current`, `drifted`, `missing`) from its `carrier: plugin` sidecar entries; `claudeLines` renders the host block. |
 | `claude-migration.ts` | `planClaudeMigration` turns gated retirements of drifted loose artifacts into releases (reported by `driftedWarning` as `acf.migration.drifted`) and each retired skill into a `/<skill> -> /<capability>:<skill>` rename. Renames are not recorded: retirement happens once, so the apply that performs it is the only one that announces them. |
 
-`applyPlan` (`workflow.ts`) runs in this order: write every change without a
+`applyEmitPlan` (`apply-plan.ts`) runs in this order: write every change without a
 gate (plugin files, `marketplace.json`, loose files); reconcile each Claude
 install root with the host; apply each gated change whose gate opened and
 hold back the rest with their sidecar entries; drop the stale sidecar entries
@@ -2916,7 +2916,7 @@ applicability filtering and per-capability adapter calls. Adapters return
 applies them via a writer that updates `.acf-managed.json`.
 
 Caplet owns the orchestration (`buildEmitPlan` in
-`apps/caplet/src/internal/workflow.ts`); core exports the pieces, not an
+`apps/caplet/src/internal/emit-plan.ts`); core exports the pieces, not an
 orchestrator. For each scope root it:
 
 1. resolves the scope's capabilities (`resolveScopeCapabilities`) and adds
