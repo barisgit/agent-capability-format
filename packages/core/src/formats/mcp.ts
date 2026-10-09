@@ -6,7 +6,7 @@
 import { withNativeExtras } from "../extras/index.js";
 import { hostReferences, urlProblem } from "../reader/mcp-rules.js";
 import type { McpServer } from "../types/index.js";
-import { isRecord, isSlug } from "../utils/guards.js";
+import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 import {
   CAPABILITY_DIR,
   DATA_DIR,
@@ -203,12 +203,4 @@ function unknownKey(raw: Record<string, unknown>, known: readonly string[]): str
 
 function hasCaseInsensitiveDuplicate(names: string[]): boolean {
   return new Set(names.map((name) => name.toLowerCase())).size !== names.length;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isStringMap(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }

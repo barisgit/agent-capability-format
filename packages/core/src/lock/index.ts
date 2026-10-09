@@ -12,7 +12,7 @@ import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
-import { isRecord, isSlug } from "../utils/guards.js";
+import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -339,13 +339,7 @@ function isSelector(value: unknown): value is NonNullable<CapabilityEntry["inclu
 }
 
 function isRename(value: unknown): value is NonNullable<CapabilityEntry["rename"]> {
-  if (typeof value === "string") return true;
-  if (!isRecord(value)) return false;
-  return Object.values(value).every((item) => typeof item === "string");
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return typeof value === "string" || isStringMap(value);
 }
 
 function isCapabilityNameArray(value: unknown): value is string[] {
