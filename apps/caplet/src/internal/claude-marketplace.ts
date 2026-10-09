@@ -186,7 +186,7 @@ function pluginKeptDiagnostic(held: HeldClaudePlugin, id: string): Diagnostic {
     severity: "warn",
     code: "acf.claude.plugin-kept",
     targetId: "claude",
-    message: `Claude plugin \`${id}\` stays installed as it is: its reader left out an invalid component of ${held.capability}, and nothing else of it reaches Claude. Caplet uninstalls a plugin, deleting what Claude saved for it, only when its capability is deselected or removed. Fix the source, or run \`caplet remove ${held.capability}\` to uninstall it.`,
+    message: `Claude plugin \`${id}\` stays installed as it is: its reader left out an invalid component of ${held.capability}, and nothing else of it reaches Claude. Caplet uninstalls a plugin, deleting what Claude saved for it, only when its capability is deselected or removed. Fix the source, or run \`${removeCommand(held.capability, held.scope)}\` to uninstall it.`,
     data: { plugin: id },
   };
 }

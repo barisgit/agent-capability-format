@@ -132,6 +132,9 @@ test("apply keeps the installed plugin of an imported skill its reader now leave
     ["info", "acf.claude.plugin-empty"],
     ["warn", "acf.claude.plugin-kept"],
   ]);
+  // Inside a project `caplet remove` defaults to project scope, so the advice names the scope.
+  const kept = json.diagnostics.find((d) => d.code === "acf.claude.plugin-kept");
+  expect(kept?.message).toContain("`caplet remove fast --scope user`");
   expect(existsSync(installed)).toBe(true);
 });
 
