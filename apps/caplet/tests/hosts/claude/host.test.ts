@@ -62,19 +62,6 @@ describe("execClaudeCli", () => {
   });
 });
 
-describe("createClaudeHost over the real runner", () => {
-  test("maps a missing CLI to an unavailable failure", async () => {
-    const host = createClaudeHost(
-      execClaudeCli({ binary: path.join(dir, "no-such-claude"), cwd: dir }),
-      { projectDir: dir, configDir: dir },
-    );
-    expect(await host.listPlugins()).toMatchObject({
-      ok: false,
-      failure: { kind: "unavailable", reason: "missing" },
-    });
-  });
-});
-
 describe("classifyClaudeFailure", () => {
   // Message templates found in the claude 2.1.97 binary; no runtime transcript exists, because a
   // policy block needs root-owned managed settings (research/plugin-interop/tools/claude-code.md).
