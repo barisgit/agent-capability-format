@@ -37,6 +37,7 @@ import type { ClaudeRootPlan } from "./claude-marketplace.js";
 import type { ClaudeMigration } from "./claude-migration.js";
 import { displayPath } from "./plan-view.js";
 
+/** A planned file change with the scope, target, output root and capability it belongs to. */
 export type EmittedDiff = {
   scopeRoot: ScopeRoot;
   targetId: TargetId;
@@ -70,6 +71,7 @@ export type StaleSidecarEntry = {
 /** A capability a refusal blocks on one target in one scope (`capabilityBlocked`). */
 export type BlockedCapability = { scope: Scope; target: TargetId; capability: string };
 
+/** Everything one plan holds for reporting and applying ({@link ApplicablePlan}). */
 export type EmitPlan = {
   /** Directory relative target paths resolve against (the process cwd while planning). */
   cwd: string;

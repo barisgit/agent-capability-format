@@ -17,6 +17,7 @@ import {
 import { hasJsonPointer } from "../apply/json-pointer.js";
 import { readSidecar, relativeSidecarPath, SIDECAR_FILENAME } from "../apply/sidecar.js";
 
+/** The scope and target whose MCP servers are checked, and how their files are read. */
 export type McpConflictContext = {
   target: TargetId;
   scope: Scope;

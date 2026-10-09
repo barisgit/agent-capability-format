@@ -26,6 +26,7 @@ import {
   writeSidecar,
 } from "./sidecar.js";
 
+/** What {@link applyDiffs} did, as sorted absolute paths, and the sidecar it wrote. */
 export type ApplyResult = {
   written: string[];
   deleted: string[];
@@ -36,6 +37,7 @@ export type ApplyResult = {
   sidecar: AcfManagedSidecar;
 };
 
+/** The output root, capability and sidecar one {@link applyDiffs} call writes for. */
 export type ApplyDiffsOptions = {
   installRoot: string;
   capabilityName: string;

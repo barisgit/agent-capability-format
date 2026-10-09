@@ -19,13 +19,16 @@ import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-po
 /** The sidecar's file name directly under each output root it describes. */
 export const SIDECAR_FILENAME = ".acf-managed.json";
 
+/** One sidecar record: a path, the regions of it one capability owns and their hash. */
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
 /** Target and carrier recorded on entries written for one output root. */
 export type SidecarOwner = { target: SidecarTarget; carrier: Carrier };
+/** How {@link detectDrift} reads managed files; `readBytes`, when present, reads whole files. */
 export type DriftFs = {
   readText(filePath: string): string | null;
   readBytes?(filePath: string): Uint8Array | null;
 };
+/** What {@link removeOwnedRegions} changed, as sorted paths, and the sidecar left behind. */
 export type RemoveOwnedRegionsResult = {
   written: string[];
   deleted: string[];
@@ -33,6 +36,7 @@ export type RemoveOwnedRegionsResult = {
   sidecar: AcfManagedSidecar;
 };
 
+/** Reads and validates a sidecar; a missing file is an empty sidecar, an invalid one throws. */
 export async function readSidecar(sidecarPath: string): Promise<AcfManagedSidecar> {
   let raw: string;
   try {
@@ -63,6 +67,7 @@ export async function writeSidecar(
   await writeFile(sidecarPath, `${JSON.stringify(canonicalSidecar(sidecar), null, 2)}\n`, "utf8");
 }
 
+/** Records `entry`, replacing the entry with the same identity, and keeps entries sorted. */
 export function mergeSidecarEntry(
   sidecar: AcfManagedSidecar,
   entry: ManagedEntry,
@@ -74,6 +79,7 @@ export function mergeSidecarEntry(
   return sidecar;
 }
 
+/** `acf.emit.drift` (info) for each entry whose owned regions no longer hash to its record. */
 export function detectDrift(sidecar: AcfManagedSidecar, fs: DriftFs): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   for (const entry of sidecar.managed) {
@@ -180,6 +186,7 @@ export async function removeOwnedRegions(
   return { written: written.sort(), deleted: deleted.sort(), unchanged: unchanged.sort(), sidecar };
 }
 
+/** `text` without the JSON-pointer and marker regions in `owns`; other kinds are left in place. */
 export function removeOwnedRegionsFromText(text: string, owns: readonly AcfOwnership[]): string {
   let after = text;
   for (const own of owns) {
@@ -189,6 +196,7 @@ export function removeOwnedRegionsFromText(text: string, owns: readonly AcfOwner
   return after;
 }
 
+/** The `sha256-` hash of the regions `owns` names in `content`, independent of their order. */
 export function hashOwnedRegions(
   content: FileContent | null,
   owns: readonly AcfOwnership[],
@@ -203,6 +211,7 @@ export function hashOwnedRegions(
   return `sha256-${hash.digest("hex")}`;
 }
 
+/** A path as the sidecar under `installRoot` records it: relative, with `/` separators. */
 export function relativeSidecarPath(installRoot: string, filePath: string): string {
   const absolute = path.isAbsolute(filePath) ? filePath : path.resolve(installRoot, filePath);
   return path.relative(installRoot, absolute).split(path.sep).join("/") || ".";

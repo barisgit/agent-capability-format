@@ -35,6 +35,7 @@ import {
 /** The facet keys of each capability planned in one scope, from {@link capabilityFacetKeys}. */
 export type ScopeFacets = ReadonlyMap<string, ReadonlySet<string>>;
 
+/** The plan's scopes, targets and desired diffs the sweep compares the sidecars against. */
 export type SweepInput = {
   scopes: readonly ScopeRoot[];
   targets: readonly TargetId[];
@@ -49,6 +50,7 @@ export type SweepInput = {
   claudeRoots: readonly ClaudeRootPlan[];
 };
 
+/** The removals and bookkeeping the sweep adds to the plan. */
 export type SweepResult = {
   deletes: EmittedDiff[];
   /** `acf.apply.drift` for each removal kept because the user changed its owned regions. */
