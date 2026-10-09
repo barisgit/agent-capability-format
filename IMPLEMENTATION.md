@@ -3195,6 +3195,9 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   `caplet update --no-apply` before ambiguous collection narrowing.
 - `caplet update [name] [--scope …] [--no-apply]` re-resolves matching sources
   and applies by default.
+- When `add` and `update` apply, they report the plan as `apply` does: the
+  compatibility report, the file plan and the executable changes, and
+  `outcomes` in `--json`.
 
 ### 14.2 Reconcile commands
 

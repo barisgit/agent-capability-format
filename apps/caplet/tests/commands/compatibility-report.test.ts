@@ -197,3 +197,35 @@ describe("caplet apply --dry-run compatibility report", () => {
     );
   });
 });
+
+test("add and update report compatibility like apply, also for a plan without files", async () => {
+  const scope = await makeScope();
+  try {
+    const gamma = path.join(scope.sourceRoot, "gamma");
+    await writeText(path.join(gamma, "acf.yml"), "acf: 1\nname: gamma-cap\nversion: 1.0.0\n");
+    await writeText(
+      path.join(gamma, "mcp", "mcp.yml"),
+      "servers:\n  - name: events\n    transport: sse\n    url: https://mcp.example.com/events\n",
+    );
+    const flags = ["--cwd", scope.cwd, "--scope", "project", "--target", "codex"];
+    const blocked = "events (gamma-cap) / codex - blocked: ";
+
+    const added = await runCaplet(scope, ["add", `path:${gamma}`, ...flags]);
+    expect(added.exitCode).toBe(2);
+    expect(added.stdout.indexOf(blocked)).toBeGreaterThan(-1);
+    expect(added.stdout.indexOf(blocked)).toBeLessThan(added.stdout.indexOf("Plan:"));
+
+    const updated = await runCaplet(scope, ["update", ...flags]);
+    expect(updated.exitCode).toBe(2);
+    expect(updated.stdout).toContain(blocked);
+    const json = await runCaplet(scope, ["update", ...flags, "--json"]);
+    const parsed = JSON.parse(json.stdout) as {
+      outcomes: Array<{ component: string; outcome: string }>;
+    };
+    expect(parsed.outcomes).toContainEqual(
+      expect.objectContaining({ component: "events", outcome: "blocked" }),
+    );
+  } finally {
+    await cleanup(scope);
+  }
+});

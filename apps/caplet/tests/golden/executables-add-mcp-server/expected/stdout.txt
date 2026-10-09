@@ -3,6 +3,10 @@ ok Added path source (project scope)
     Source        <tmp>/sources/tools
     Capabilities  tools
 
+Compatibility
+  docs / claude - translated: ${ACF_CAPABILITY_DIR} becomes ${CLAUDE_PLUGIN_ROOT} (mcp.args=${ACF_CAPABILITY_DIR})
+  claude - native: 1 MCP server
+
 Plan: 5 changes
 
 project  .
