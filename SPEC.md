@@ -530,8 +530,9 @@ Implementations MUST:
   current family or location, and treat the payload as invalid;
 - emit a diagnostic when extension fields are unknown to the schema;
 - validate and classify the keys inside `native` that the registry knows,
-  and accept unknown keys with the `info` diagnostic
-  `acf.extras.unclassified`;
+  reporting a value outside the key's native value domain as the `error`
+  `acf.extras.native-value-invalid`, and accept unknown keys with the
+  `info` diagnostic `acf.extras.unclassified`;
 - report `acf.core.pending` (`info`) for a `native` key whose meaning is
   pending core, naming the future core field (§7.8).
 
@@ -1898,7 +1899,8 @@ levels (`full`, `partial`, `none`) apply only to agents, commands,
 instructions, and hooks, which have no field table in `acf: 1`.
 
 Every core field, distinct value condition, and known native key has one
-safety class:
+safety class; a native key value with a distinct effect, such as Codex MCP
+`enabled: false`, is a value condition with its own class:
 
 | Class         | Meaning                                                                 | Example                          |
 | ------------- | ----------------------------------------------------------------------- | -------------------------------- |

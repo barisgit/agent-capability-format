@@ -73,6 +73,10 @@ The consumer's explicit act of adding a source or updating it, which pins the re
 - **WHEN** an update adds a stdio MCP server to an installed Claude plugin and apply runs non-interactively
 - **THEN** apply installs the update, and its output lists the new server's command under executable changes for Claude
 
+#### Scenario: Native executable configuration
+- **WHEN** an update changes `native/claude/hooks/hooks.json` or `targets.claude.native.lspServers` of a native ACF capability installed as a Claude plugin
+- **THEN** the output lists the changed hook or LSP server component for Claude, as it would for the same change in a foreign Claude plugin
+
 #### Scenario: Unchanged executables
 - **WHEN** apply runs with no executable component added, changed or removed
 - **THEN** the output contains no executable-change section

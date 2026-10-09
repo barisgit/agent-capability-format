@@ -65,8 +65,8 @@ export function reportForeignExtras(
 ): void {
   for (const dialect of extrasDialects(targets)) {
     if (dialect === subject.target) continue;
-    for (const key of Object.keys(nativeExtras(targets, dialect))) {
-      const diagnostic = extraDropped(subject, { owner: dialect, key });
+    for (const [key, value] of Object.entries(nativeExtras(targets, dialect))) {
+      const diagnostic = extraDropped(subject, { owner: dialect, key, value });
       report.diagnostics.push(diagnostic);
       if (diagnostic.code === "acf.support.refused") report.refused = true;
     }

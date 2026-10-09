@@ -37,7 +37,7 @@ async function readConfigFile(file: string, diagnostics: Diagnostic[]): Promise<
     const raw = parseYaml(await readText(file));
     const parsed = capletConfigSchema.safeParse(raw);
     if (!parsed.success) {
-      pushZodIssues(diagnostics, parsed.error, file);
+      pushZodIssues(diagnostics, parsed.error, file, { baseCode: "acf.caplet-yml.invalid" });
       return {};
     }
     return parsed.data;

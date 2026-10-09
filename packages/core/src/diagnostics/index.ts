@@ -20,13 +20,16 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.instruction.invalid-regex",
   "acf.applicability.empty",
   "acf.markdown.unknown-frontmatter-field",
+  "acf.markdown.invalid-frontmatter-field",
   "acf.hooks.duplicate-file",
+  "acf.hooks.invalid-field",
   "acf.hook.match.required",
   "acf.hook.effect.not-allowed",
   "acf.hook.run.args-and-shell",
   "acf.hook.target-native-event.unknown-schema",
   "acf.mcp.transport.missing-url",
   "acf.mcp.transport.missing-command",
+  "acf.mcp.invalid-field",
   "acf.mcp.cwd.invalid",
   "acf.mcp.url.insecure",
   "acf.mcp.url.credential-in-url",
@@ -58,6 +61,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.capabilities-yml.source.unknown-scheme",
   "acf.capabilities-yml.duplicate-entry",
   "acf.capabilities-yml.unknown-key",
+  "acf.capabilities-yml.invalid",
+  "acf.caplet-yml.invalid",
   "acf.resolve.capability-selector-direct-source",
   "acf.resolve.capability-selector-unmatched",
   "acf.lock.digest-mismatch",
@@ -90,6 +95,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.extras.conflict",
   "acf.extras.unclassified",
   "acf.extras.package-value-invalid",
+  "acf.extras.native-value-invalid",
   "acf.native.unknown-target",
   "acf.native.unsupported-entry",
   "acf.native.collision",
@@ -121,21 +127,22 @@ export function makeDiagnostic(input: {
 }
 
 /**
- * Pushes one `error` per zod issue in `error`, coded by the issue: `unknownKeyCode` names the
- * code for a key the file's schema does not allow, since only the caller knows which file and
- * location it parsed; `baseCode` is the code for an issue no more specific code covers; `codeFor`
- * decides an issue's code ahead of every generic rule when it returns one.
+ * Pushes one `error` per zod issue in `error`, coded by the issue. Only the caller knows which
+ * file it parsed, so it names the file's codes: `baseCode` for an issue no more specific code
+ * covers, `unknownKeyCode` for a key the file's schema does not allow, and `codeFor`, which
+ * decides an issue's code ahead of every generic rule when it returns one. Typing them as
+ * registered codes keeps every emitted code in {@link ACF_DIAGNOSTIC_CODES}.
  */
 export function pushZodIssues(
   diagnostics: Diagnostic[],
   error: ZodError,
-  filePath?: string,
+  filePath: string | undefined,
   options: {
-    baseCode?: string;
-    unknownKeyCode?: string;
+    baseCode: AcfDiagnosticCode;
+    unknownKeyCode?: AcfDiagnosticCode;
     family?: FacetFamily;
-    codeFor?: (issue: ZodIssue) => string | undefined;
-  } = {},
+    codeFor?: (issue: ZodIssue) => AcfDiagnosticCode | undefined;
+  },
 ): void {
   for (const issue of error.issues) {
     diagnostics.push(
@@ -153,10 +160,9 @@ export function pushZodIssues(
 
 function deriveZodCode(
   issue: ZodIssue,
-  { baseCode, unknownKeyCode }: { baseCode?: string; unknownKeyCode?: string },
-): string {
+  { baseCode, unknownKeyCode }: { baseCode: AcfDiagnosticCode; unknownKeyCode?: AcfDiagnosticCode },
+): AcfDiagnosticCode {
   const message = issue.message.toLowerCase();
-  const path = issue.path.map(String).join(".");
   if (message.includes("only and except")) return "acf.manifest.only-and-except";
   if (message.includes("debounce requires"))
     return "acf.instruction.debounce.requires-repeat-always";
@@ -167,7 +173,5 @@ function deriveZodCode(
   if (message.includes("unknown source scheme"))
     return "acf.capabilities-yml.source.unknown-scheme";
   if (issue.code === "unrecognized_keys" && unknownKeyCode !== undefined) return unknownKeyCode;
-  if (path === "name" || path.endsWith(".name")) return "acf.manifest.invalid-name";
-  if (path === "acf") return "acf.manifest.acf-version-unknown";
-  return baseCode ?? `acf.schema.${path.length > 0 ? path.replaceAll(".", "-") : "invalid"}`;
+  return baseCode;
 }

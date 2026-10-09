@@ -1364,7 +1364,7 @@ carrier, not per family. The tables live in `packages/core/src/targets/`:
 | Module | Exports | Role |
 | --- | --- | --- |
 | `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
-| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `pendingCoreFields` | Known native keys per target and attachment point, with class, `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
+| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
 | `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field. |
 | `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data.field`, consequence, and recovery stay uniform. |
 | `remainder-support.ts` | `remainderTargets`, `remainderSupport`, `remainderRefuses` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
@@ -1426,7 +1426,13 @@ generates from a core field is an `acf.extras.conflict` error.
 - **Executables.** `executableComponents` and `executableChanges`
   (`packages/core/src/emit/executables.ts`) list added or changed MCP stdio
   commands, hooks, LSP servers, monitors, executable files, and Claude
-  `bin/` entries for the change report and `--json` `executables`.
+  `bin/` entries for the change report and `--json` `executables`. The
+  plugin carrier's executable configuration from `native/claude/` files and
+  `targets.claude.native` keys is classified and fingerprinted like the same
+  component in a foreign Claude plugin, so both report alike. A stdio server's
+  fingerprint covers the packaged files its command and arguments name through
+  an ACF path placeholder or by a relative path under its `cwd` (exact files
+  only, inside the snapshot).
 
 ### 4.9 Claude plugin carrier and host port
 
@@ -2740,16 +2746,19 @@ acf.instruction.invalid-regex                # `paths` or `conditions` regex doe
 acf.applicability.empty                      # facet+capability applicability intersection is empty
 
 acf.markdown.unknown-frontmatter-field       # ACF.md or facet frontmatter has unknown key (info)
+acf.markdown.invalid-frontmatter-field       # ACF.md or facet frontmatter value fails its schema (error)
 
 # Hooks
 acf.hook.match.required                      # match required for pre_tool/post_tool/permission_request
 acf.hook.effect.not-allowed                  # effect not in hook type's matrix
 acf.hook.run.args-and-shell                  # `args` and `shell` are mutually exclusive
 acf.hook.target-native-event.unknown-schema  # `targets.<target>.hooks.<event>` shape unknown
+acf.hooks.invalid-field                      # any other hooks file value fails its schema (error)
 
 # MCP
 acf.mcp.transport.missing-url                # http/sse without `url`
 acf.mcp.transport.missing-command            # stdio without `command`
+acf.mcp.invalid-field                        # any other MCP file value fails its schema (error)
 
 # Asset references
 acf.path.absolute
@@ -2785,6 +2794,8 @@ acf.taxonomy.operation.unmapped              # internal alias used in adapter-si
 acf.capabilities-yml.source.unknown-scheme
 acf.capabilities-yml.duplicate-entry
 acf.capabilities-yml.unknown-key             # key capabilities.yml does not define (error)
+acf.capabilities-yml.invalid                 # any other capabilities.yml value fails its schema (error)
+acf.caplet-yml.invalid                       # caplet.yml value fails its schema (error)
 acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version
@@ -2818,6 +2829,7 @@ acf.extras.dropped                           # native extra not carried by this 
 acf.extras.conflict                          # extra sets a key the writer generates (error)
 acf.extras.unclassified                      # native key unknown to the registry (info)
 acf.extras.package-value-invalid             # invalid targets.<target>.package value (error)
+acf.extras.native-value-invalid              # known targets.<target>.native key with a value outside its native domain (error)
 acf.core.pending                             # extra for a pending core meaning (info)
 acf.native.unknown-target                    # native/<dir> is not a target id (error)
 acf.native.unsupported-entry                 # symlink or special file under native/ (error)
