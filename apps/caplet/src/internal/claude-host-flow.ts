@@ -288,7 +288,8 @@ export function claudeLines(report: ClaudeReport, mode: "applied" | "planned"): 
 
 function claudeHost(roots: readonly ClaudeRootPlan[], cwd: string) {
   // Claude resolves `local` scope from the working directory, so project-scope commands run in
-  // the project root; user-scope commands work from anywhere.
+  // the project root; user-scope commands work from anywhere. A run has at most one project scope
+  // (resolveScopeRoots finds one `.agents` from the working directory), so one root serves all.
   const project = roots.find((root) => root.target.scope === "project")?.target;
   const projectRoot = project?.scope === "project" ? project.projectRoot : cwd;
   // Claude reads user settings from `CLAUDE_CONFIG_DIR` when it is set.
