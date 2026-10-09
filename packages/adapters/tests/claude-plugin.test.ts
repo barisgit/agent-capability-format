@@ -37,6 +37,24 @@ test("an ACF capability with a skill and a server becomes one Claude plugin", as
   ]);
 });
 
+test("a stdio command under the data directory runs from Claude's plugin data directory", async () => {
+  // Built from parts: biome forbids `${...}` inside plain string literals.
+  const dataDir = `${"$"}{ACF_DATA_DIR}`;
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "store", description: "Store" })],
+    servers: [{ name: "store", transport: "stdio", command: `${dataDir}/bin/store` }],
+  });
+  const result = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
+  const mcp = result.diffs.find((diff) => diff.path.endsWith("/.mcp.json"));
+  const config = JSON.parse(String(mcp?.after)) as {
+    mcpServers: Record<string, { command: string }>;
+  };
+  expect(config.mcpServers.store?.command).toBe(`${"$"}{CLAUDE_PLUGIN_DATA}/bin/store`);
+  expect(result.outcomes).toContainEqual(
+    expect.objectContaining({ outcome: "translated", source: `mcp.command=${dataDir}` }),
+  );
+});
+
 test("a loose target reports package-level Claude keys and native/claude/ files as dropped", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "review", description: "Review" })],
