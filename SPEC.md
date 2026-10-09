@@ -1775,7 +1775,9 @@ behavior is unknown and refused.
 
 `targets.<target>.servers` allows native-only MCP server entries that
 have no canonical equivalent. Native entries reuse the canonical entry
-shape and are validated by the target's MCP extension schema.
+shape and get the same checks as canonical servers (§13a.3, §13a.4),
+including their own `targets` extension data; an unknown `<target>` is
+an error (§7.3).
 
 A server name MUST be unique among the servers caplet writes to one native
 MCP file. When two capabilities declare the same name, or a user-defined

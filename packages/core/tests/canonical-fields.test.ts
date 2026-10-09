@@ -265,3 +265,27 @@ test("a server's target extension holds only native extras", async () => {
     );
   }
 });
+
+test("a family-level native server gets the canonical server checks", async () => {
+  const native = (target: string, server: string) => ({
+    "mcp/mcp.yml": `targets:\n  ${target}:\n    servers:\n      - name: native\n${server}`,
+  });
+  const stdio = "        transport: stdio\n        command: srv\n";
+  for (const [file, code] of [
+    [
+      native("codex", '        transport: http\n        url: "http://example.com/mcp"\n'),
+      "acf.mcp.url.insecure",
+    ],
+    [
+      native("codex", `${stdio}        env:\n          KEY: "\${HOST_KEY}"\n`),
+      "acf.mcp.placeholder.pending",
+    ],
+    [
+      native("codex", `${stdio}        targets:\n          codex:\n            bogus: 1\n`),
+      "acf.target.extension.unknown-field",
+    ],
+    [native("nope", stdio), "acf.target.unknown-id"],
+  ] as const) {
+    await withCapability(file, (cap) => expect(errors(cap)).toEqual([code]));
+  }
+});
