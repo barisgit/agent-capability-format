@@ -157,6 +157,23 @@ test("a native ACF capability with a skill and a hook stays whole on loose Claud
   expect(paths.some((p) => p.includes(".acf/marketplace"))).toBe(false);
 });
 
+test("skills placement options a Claude plugin cannot honor raise a warning", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "review", description: "Review a change" })],
+  });
+  for (const skills of [{ canonical: true }, { native: false }]) {
+    const result = await emitModel(claudeAdapter, capability, INSTALL_ROOT, { skills });
+    expect(result.plugins).toHaveLength(1);
+    expect(result.diagnostics.filter((d) => d.code === "acf.claude.skills-option-ignored")).toEqual(
+      [expect.objectContaining({ severity: "warn", targetId: "claude" })],
+    );
+  }
+  const honored = await emitModel(claudeAdapter, capability, INSTALL_ROOT, {
+    skills: { canonical: false, native: true },
+  });
+  expect(honored.diagnostics.map((d) => d.code)).not.toContain("acf.claude.skills-option-ignored");
+});
+
 test("Agent Plugins remainder is omitted from a Claude plugin, or refuses it when restricting", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "write", description: "Write docs" })],

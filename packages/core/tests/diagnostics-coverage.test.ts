@@ -92,6 +92,7 @@ const exportedOnly = new Set([
   // Built by the Claude plugin writer; packages/adapters/tests/claude-plugin.test.ts covers them.
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
+  "acf.claude.skills-option-ignored",
   // Built by the Codex MCP writer; adapters/tests/native-mcp.test.ts covers it.
   "acf.mcp.config-conflict",
 ]);

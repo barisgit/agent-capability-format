@@ -2547,7 +2547,10 @@ discovers `.agents/skills` (Codex, Cursor, OpenCode, Pi), so a scope gets a
 shared copy only when a selected target reads it. `native` defaults to
 `false` for those targets unless the shared copy falls back (§4.8); Claude
 Code defaults to its native skills directory. Explicit values override both
-defaults.
+defaults. They place loose skill files only: a capability Claude receives as a
+plugin carries its skills inside the package, so `canonical: true` or
+`native: false` under `targets.claude` has no effect on it and raises
+`acf.claude.skills-option-ignored` (warn).
 
 `targets.<id>.carrier` picks the carrier (SPEC §22.8). Only `claude` offers
 `plugin` (its default) and `loose`; naming `plugin` for any other target is a
@@ -2804,6 +2807,7 @@ acf.mcp.config-conflict                      # server name claimed twice or user
 # Claude carrier and host
 acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
 acf.claude.plugin-file-ignored               # Claude config in a native ACF root left out of its plugin (info)
+acf.claude.skills-option-ignored             # targets.claude.skills cannot place a plugin's skills (warn)
 acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
 acf.claude.state-unreadable                  # plugin list unreadable (warn)
 acf.claude.command-failed                    # claude plugin command failed (error)
