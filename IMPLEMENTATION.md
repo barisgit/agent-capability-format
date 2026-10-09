@@ -2311,7 +2311,7 @@ over this unfiltered snapshot (§7.5).
 
 ```ts
 export type CapabilitiesLock = {
-  acf: 1
+  acf: number // as read; caplet writes 1, drift reports any other version
   entries: LockEntry[]
 }
 

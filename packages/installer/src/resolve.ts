@@ -19,7 +19,6 @@ import {
   canonicalizePathLocation,
   entrySourceId,
   type LockEntry,
-  lockVersion,
   readLockfile,
   sourceString,
   writeLockfile,
@@ -172,7 +171,7 @@ async function resolveCapabilitiesStaged(
 ): Promise<ResolveResult> {
   const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
-  const usableLock = existingLock !== null && lockVersion(existingLock) === 1 ? existingLock : null;
+  const usableLock = existingLock !== null && existingLock.acf === 1 ? existingLock : null;
   const drift = detectLockDrift(yml, existingLock);
   const frozenDrift = opts.frozen === true && drift.length > 0;
   diagnostics.push(

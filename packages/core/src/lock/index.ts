@@ -60,7 +60,12 @@ export type LockEntry = {
   synthesized?: true | undefined;
 };
 
-export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
+/**
+ * A parsed `capabilities.lock`. `acf` is the version the file declares: `readLockfile` passes a
+ * future version through so drift detection can report `acf.lock.unsupported-version`, and
+ * every lock caplet writes declares `1`.
+ */
+export type CapabilitiesLock = { acf: number; entries: LockEntry[] };
 
 type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
 
@@ -255,7 +260,7 @@ function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
   }
   const entries = value.entries.map((entry) => parseLockEntry(entry, lockPath));
   // A future version is reported by drift detection (`acf.lock.unsupported-version`).
-  return { acf: value.acf as 1, entries };
+  return { acf: value.acf, entries };
 }
 
 function parseLockEntry(value: unknown, lockPath: string): LockEntry {
