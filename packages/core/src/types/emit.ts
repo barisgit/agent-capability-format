@@ -76,6 +76,13 @@ export type EmitOptions = {
    */
   canonicalSkillReaders?: readonly TargetId[] | undefined;
   /**
+   * Readers of the shared root for which a refusal blocks this capability, as the whole plan
+   * found them. A writer sees only the components that apply to its own target, so it cannot
+   * detect a refusal of a component that applies only to another reader; no writer puts the
+   * capability's skills in the shared root while one of these readers would discover them.
+   */
+  blockedSkillReaders?: readonly TargetId[] | undefined;
+  /**
    * The carrier configured for the target. Absent means the target's default (`carriersOf`).
    * A writer may still use another carrier the target offers when the capability is not
    * eligible for this one (Claude keeps capabilities with agents, commands, hooks or

@@ -13,7 +13,9 @@ import {
   capabilityBlocked,
   componentOutcomes,
   type Diagnostic,
+  type EmitInput,
   type EmitOptions,
+  type EmitResult,
   type EmittedPlugin,
   type ExecutableChange,
   type ExecutableComponent,
@@ -22,10 +24,12 @@ import {
   type FileDiff,
   hookEntries,
   MANAGEMENT_NOTICE_FILENAME,
+  type ReadOnlyFs,
   readCapletConfig,
   resolveScopeCapabilities,
   type Scope,
   type ScopeRoot,
+  type TargetAdapter,
   type TargetId,
   targetIds,
   targetMap,
@@ -299,18 +303,14 @@ export async function buildEmitPlan(
         targetMap[targetId]?.discoversCanonicalSkills === true &&
         installRootFor(targetId, scopeRoot, configResult.config, cwd) !== null,
     );
+    // Each target's applicable capabilities, conflicting MCP servers withheld.
+    const applicableByTarget = new Map<
+      TargetId,
+      { installRoot: string; capabilities: AcfCapability[]; diagnostics: Diagnostic[] }
+    >();
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, configResult.config, cwd);
-      if (installRoot === null) {
-        diagnostics.push({
-          severity: "lossy",
-          code: "acf.adapter.scope-unsupported",
-          message: `${targetId} does not support ${scopeRoot.scope} scope`,
-          targetId,
-        });
-        continue;
-      }
-      diagnostics.push(...(await driftDiagnostics(installRoot)));
+      if (installRoot === null) continue;
       const applicable = await withholdConflictingMcpServers(
         resolved.capabilities.flatMap(
           (capability) => applyApplicability(capability, targetId) ?? [],
@@ -323,6 +323,73 @@ export async function buildEmitPlan(
           fs,
         },
       );
+      applicableByTarget.set(targetId, { installRoot, ...applicable });
+    }
+    // Emissions by target, capability and blocked shared-root readers, so a writer that has to
+    // learn about blocked readers re-emits while every other writer emits once.
+    const emissions = new Map<string, Promise<CapabilityEmission>>();
+    const emitFor = (
+      targetId: TargetId,
+      adapter: TargetAdapter,
+      capability: AcfCapability,
+      installRoot: string,
+      blockedSkillReaders: readonly TargetId[],
+    ): Promise<CapabilityEmission> => {
+      const key = [targetId, capability.manifest.name, ...blockedSkillReaders].join("\0");
+      let emission = emissions.get(key);
+      if (emission === undefined) {
+        emission = emitCapability(adapter, fs, {
+          capability,
+          scope: scopeRoot.scope,
+          installRoot,
+          options: emitOptionsForTarget(
+            targetId,
+            configResult.config,
+            canonicalSkillReaders,
+            blockedSkillReaders,
+          ),
+        });
+        emissions.set(key, emission);
+      }
+      return emission;
+    };
+    // A refusal that blocks a capability for one reader of the shared skills root keeps the
+    // capability off that root for every writer: each writer sees only the components that apply
+    // to its own target, so it cannot tell that another reader refuses one.
+    const blockedReadersByCapability = new Map<string, TargetId[]>();
+    for (const reader of canonicalSkillReaders) {
+      const adapter = targetMap[reader]?.adapter;
+      const applicable = applicableByTarget.get(reader);
+      if (adapter === undefined || applicable === undefined) continue;
+      for (const capability of applicable.capabilities) {
+        const { validation, result } = await emitFor(
+          reader,
+          adapter,
+          capability,
+          applicable.installRoot,
+          [],
+        );
+        if (!capabilityBlocked([...validation, ...result.diagnostics], reader)) continue;
+        const name = capability.manifest.name;
+        blockedReadersByCapability.set(name, [
+          ...(blockedReadersByCapability.get(name) ?? []),
+          reader,
+        ]);
+      }
+    }
+    for (const targetId of targets) {
+      const applicable = applicableByTarget.get(targetId);
+      if (applicable === undefined) {
+        diagnostics.push({
+          severity: "lossy",
+          code: "acf.adapter.scope-unsupported",
+          message: `${targetId} does not support ${scopeRoot.scope} scope`,
+          targetId,
+        });
+        continue;
+      }
+      const { installRoot } = applicable;
+      diagnostics.push(...(await driftDiagnostics(installRoot)));
       diagnostics.push(...applicable.diagnostics);
       const emitted = new Map(
         applicable.capabilities.map((capability) => [capability.manifest.name, capability]),
@@ -349,15 +416,14 @@ export async function buildEmitPlan(
           executables.push(...capabilityExecutables);
           continue;
         }
-        const input = {
-          capability: filtered,
-          scope: scopeRoot.scope,
+        const { validation, result } = await emitFor(
+          targetId,
+          adapter,
+          filtered,
           installRoot,
-          options: emitOptionsForTarget(targetId, configResult.config, canonicalSkillReaders),
-        };
-        const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
+          blockedReadersByCapability.get(filtered.manifest.name) ?? [],
+        );
         diagnostics.push(...validation);
-        const result = await adapter.emit(input, fs);
         diagnostics.push(...result.diagnostics);
         for (const outcome of componentOutcomes({
           capability: filtered,
@@ -1163,14 +1229,28 @@ function emitOptionsForTarget(
   targetId: TargetId,
   config: CapletConfig,
   canonicalSkillReaders: readonly TargetId[],
+  blockedSkillReaders: readonly TargetId[],
 ): EmitOptions {
   // Absent `targets.<t>.carrier` leaves the target's default carrier (`carriersOf`).
   const options: EmitOptions = { canonicalSkillReaders };
+  if (blockedSkillReaders.length > 0) options.blockedSkillReaders = blockedSkillReaders;
   const carrier = config.targets?.[targetId]?.carrier;
   if (carrier !== undefined) options.carrier = carrier;
   const skills = config.targets?.[targetId]?.skills;
   if (skills !== undefined) options.skills = skills;
   return options;
+}
+
+/** What a writer reports for one capability: its validation and emit results. */
+type CapabilityEmission = { validation: Diagnostic[]; result: EmitResult };
+
+async function emitCapability(
+  adapter: TargetAdapter,
+  fs: ReadOnlyFs,
+  input: EmitInput,
+): Promise<CapabilityEmission> {
+  const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
+  return { validation, result: await adapter.emit(input, fs) };
 }
 
 async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {

@@ -853,6 +853,9 @@ export type EmitOptions = {
   // Selected targets in this scope that discover .agents/skills. The shared
   // copy must satisfy all of them; absent = this writer is the only reader.
   canonicalSkillReaders?: readonly TargetId[]
+  // Readers the whole plan found blocked by a refusal for this capability,
+  // including refusals of components this writer's target does not see.
+  blockedSkillReaders?: readonly TargetId[]
   // Configured carrier; absent = the target default (carriersOf). Claude still
   // writes loose for a capability with legacy families (§4.9).
   carrier?: Carrier
@@ -1407,8 +1410,11 @@ generates from a core field is an `acf.extras.conflict` error.
 
 - **Skills.** The shared `.agents/skills` copy is written only when
   `canonicalSkillReaders` is non-empty (or `skills.canonical` forces it), and
-  only when every reader applies the skill, none refuses it, and their
-  renderings merge without conflict. Otherwise each discovering target falls
+  only when every reader applies the skill, none refuses it, none is in
+  `blockedSkillReaders` or blocked by a refusal the writer sees, and their
+  renderings merge without conflict. Caplet derives `blockedSkillReaders`
+  from each reader's own emit, since a component limited to one reader is
+  invisible to the others. Otherwise each discovering target falls
   back to its native skill root; Cursor, which has none, reports
   `acf.support.component-omitted`. A target that does not discover the
   shared root (Claude) writes its native root.

@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import { buildEmitPlan } from "../../src/internal/workflow";
 import {
   applyProject,
   cleanup,
+  fetchProject,
   forceCanonicalSkills,
   makeScope,
   readText,
@@ -387,6 +389,41 @@ test("caplet apply fetches and writes native artifacts", async () => {
       ).exists(),
     ).toBe(false);
   } finally {
+    await cleanup(scope);
+  }
+});
+
+test("a capability blocked for one shared-root reader keeps every writer off the shared root", async () => {
+  const scope = await makeScope();
+  const saved = { cwd: process.cwd(), home: process.env.HOME };
+  // In-process plans resolve scopes through os.homedir(); never touch the real home.
+  process.env.HOME = scope.home;
+  try {
+    const alpha = path.join(scope.sourceRoot, "alpha");
+    await writeText(
+      path.join(alpha, "skills", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review a change\n---\nReview.\n",
+    );
+    // Only Pi sees the SSE server, and Pi refuses it, so alpha-cap is blocked for Pi alone.
+    await writeText(
+      path.join(alpha, "mcp", "mcp.yml"),
+      "servers:\n  - name: alpha-server\n    transport: stdio\n    command: node\n  - name: events\n    transport: sse\n    url: https://mcp.example.com/events\n    only: [pi]\n",
+    );
+    await fetchProject(scope);
+    const plan = await buildEmitPlan({ cwd: scope.cwd, scope: "project", target: "codex,pi" });
+
+    expect(plan.blocked).toEqual([{ scope: "project", target: "pi", capability: "alpha-cap" }]);
+    const skillPaths = plan.diffs
+      .filter((item) => item.capabilityName === "alpha-cap" && item.diff.facet?.family === "skill")
+      .map((item) => path.relative(scope.cwd, path.resolve(item.diff.path)));
+    expect(skillPaths).toContain(path.join(".codex", "skills", "review", "SKILL.md"));
+    expect(skillPaths.filter((item) => item.startsWith(path.join(".agents", "skills")))).toEqual(
+      [],
+    );
+  } finally {
+    process.chdir(saved.cwd);
+    if (saved.home === undefined) delete process.env.HOME;
+    else process.env.HOME = saved.home;
     await cleanup(scope);
   }
 });

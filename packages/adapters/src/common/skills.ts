@@ -35,7 +35,8 @@ type SkillCopy = { root: string; rendering: NativeSkill };
  * reader of that root (`options.canonicalSkillReaders`); otherwise, and for targets that do not
  * discover it, skills go to the target's native skill root. `options.skills` overrides both
  * defaults. Refused skills are not written anywhere for the target, and no skill goes to the
- * shared root while a refusal blocks the capability for one of its readers.
+ * shared root while a refusal blocks the capability for one of its readers, whether this writer
+ * sees the refused component or the plan reports it (`options.blockedSkillReaders`).
  */
 export async function emitSkills(
   input: EmitInput,
@@ -49,7 +50,12 @@ export async function emitSkills(
   const readers = sharedRootReaders(input, target);
   // A reader blocked by any refusal writes nothing of the capability, so a shared copy would
   // still reach it through discovery; every discovering target then uses its native root.
-  const sharedReaders = readers.some((reader) => blocksCapability(cap, reader)) ? null : readers;
+  const blocked = new Set(input.options.blockedSkillReaders);
+  const sharedReaders = readers.some(
+    (reader) => blocked.has(reader) || blocksCapability(cap, reader),
+  )
+    ? null
+    : readers;
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
     const copies = renderedCopies(input, target, skill, sharedReaders, report);
