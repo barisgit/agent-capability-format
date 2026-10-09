@@ -1,9 +1,7 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
 import { componentPaths } from "../formats/shared.js";
-import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
   capabilityCarrier,
@@ -21,8 +19,19 @@ import type {
   SourceFormat,
   TargetId,
 } from "../types/index.js";
-import { acfCapabilityDirPlaceholder, hookEntries } from "../types/index.js";
+import { hookEntries } from "../types/index.js";
 import { applyApplicability } from "./index.js";
+import {
+  filesUnder,
+  fingerprint,
+  readSnapshot,
+  referencedFiles,
+  relativeEntrypoints,
+  relativeTo,
+  type Snapshot,
+  underAny,
+  union,
+} from "./snapshot.js";
 
 /** What kind of executing code a component is: a remainder kind, or a file with the executable bit. */
 export type ExecutableKind = NativeRemainderKind | "file";
@@ -86,13 +95,6 @@ const pluginExecutables: Partial<
     ],
     binDir: CLAUDE_PLUGIN_BIN_DIR,
   },
-};
-
-const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
-
-type Snapshot = {
-  root: string;
-  files: readonly TreeFile[];
 };
 
 /**
@@ -379,26 +381,6 @@ function kindRank(kind: ExecutableKind): number {
   return index === -1 ? kindOrder.length : index;
 }
 
-async function readSnapshot(root: string): Promise<Snapshot> {
-  return { root: path.resolve(root), files: await listTreeFiles(root) };
-}
-
-/** Files of the snapshot that `values` name through an ACF path placeholder. */
-function referencedFiles(
-  snapshot: Snapshot,
-  placeholderDir: string,
-  values: readonly string[],
-): TreeFile[] {
-  const prefixes: string[] = [];
-  for (const value of values) {
-    for (const match of value.matchAll(PLACEHOLDER_PATH)) {
-      const base = match[1] === "ACF_HOOK_DIR" ? placeholderDir : snapshot.root;
-      prefixes.push(relativeTo(snapshot.root, path.join(base, match[2] ?? "")));
-    }
-  }
-  return filesUnder(snapshot, prefixes);
-}
-
 type PluginConfigComponent = {
   kind: NativeRemainderKind;
   name: string;
@@ -483,81 +465,6 @@ function configPaths(
     if (!paths.includes(normalized)) paths.push(normalized);
   }
   return paths;
-}
-
-/**
- * Snapshot files a stdio server's `command` or `args` name by a relative path, resolved under a
- * working directory inside the capability (`${ACF_CAPABILITY_DIR}[/dir]` or `./dir`). Only exact
- * files count, so a directory argument does not pull in a tree; `--option=value` contributes its
- * value. A command without `/` runs from PATH, not the working directory, and an omitted or
- * data-directory `cwd` resolves nothing because the server then assumes no packaged directory.
- */
-function relativeEntrypoints(
-  snapshot: Snapshot,
-  cwd: string | undefined,
-  command: string,
-  args: readonly string[],
-): TreeFile[] {
-  const dir =
-    cwd === undefined
-      ? undefined
-      : cwd === acfCapabilityDirPlaceholder || cwd.startsWith(`${acfCapabilityDirPlaceholder}/`)
-        ? `.${cwd.slice(acfCapabilityDirPlaceholder.length)}`
-        : cwd === "." || cwd.startsWith("./")
-          ? cwd
-          : undefined;
-  if (dir === undefined) return [];
-  const values = [
-    ...(command.includes("/") ? [command] : []),
-    ...args.map((arg) =>
-      arg.startsWith("-") && arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg,
-    ),
-  ];
-  const named = new Set(
-    values
-      .filter((value) => value !== "" && !value.includes("${") && !path.isAbsolute(value))
-      .map((value) => relativeTo(snapshot.root, path.resolve(snapshot.root, dir, value))),
-  );
-  return snapshot.files.filter((file) => named.has(file.rel));
-}
-
-/** Files in any of `lists`, once each, in snapshot order. */
-function union(snapshot: Snapshot, ...lists: readonly (readonly TreeFile[])[]): TreeFile[] {
-  const chosen = new Set(lists.flat());
-  return snapshot.files.filter((file) => chosen.has(file));
-}
-
-function filesUnder(snapshot: Snapshot, prefixes: readonly string[]): TreeFile[] {
-  return snapshot.files.filter((file) => underAny(file.rel, prefixes));
-}
-
-function underAny(rel: string, prefixes: readonly string[]): boolean {
-  return prefixes.some(
-    (prefix) =>
-      prefix === "" ||
-      rel === prefix ||
-      rel.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
-  );
-}
-
-function relativeTo(root: string, absolute: string): string {
-  const relative = path.relative(root, absolute).split(path.sep).join("/").normalize("NFC");
-  // A path outside the snapshot can match no snapshot file.
-  return relative.startsWith("..") ? "\u0000outside" : relative === "." ? "" : relative;
-}
-
-async function fingerprint(definition: unknown, files: readonly TreeFile[]): Promise<string> {
-  const hash = createHash("sha256");
-  hash.update(JSON.stringify(definition ?? null));
-  for (const file of files) {
-    hash.update(`\u0000${file.rel}\u0000${file.executable ? "x" : "-"}\u0000`);
-    hash.update(
-      createHash("sha256")
-        .update(await readFile(file.absPath))
-        .digest("hex"),
-    );
-  }
-  return `sha256:${hash.digest("hex")}`;
 }
 
 /** Values of the component's manifest keys; a manifest that is not JSON counts as a whole. */
