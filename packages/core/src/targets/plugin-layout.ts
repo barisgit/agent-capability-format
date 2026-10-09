@@ -3,8 +3,9 @@
  * (claude-plugin-output, Claude plugin writer): validation uses them to reject
  * `native/<target>/` files that would overwrite generated output (capability-model-layers,
  * File-level native extras). The Claude writer builds its paths separately, so a layout change
- * must update both. Also the Claude plugin components that live beside the projected ones, so the
- * Claude plugin reader and the executable-change report record them alike.
+ * must update both. Also the Claude plugin components that live beside the projected ones: how
+ * Claude discovers each and whether it runs code, so the Claude plugin reader, the executable-change
+ * report and the Claude writer record and recognize them alike.
  */
 import path from "node:path";
 import type { NativeRemainderKind } from "../types/interop.js";
@@ -63,23 +64,45 @@ function fold(value: string): string {
   return value.normalize("NFC").toLowerCase();
 }
 
-/**
- * A Claude plugin component that ACF does not project: the default `file`, when there is one,
- * merges with the paths and value of manifest key `key` into one component.
- */
-export type PluginComponentSpec = {
+type PluginComponentBase = {
   kind: NativeRemainderKind;
-  name: string;
+  /** The manifest key that declares the component. */
   key: string;
-  file?: string;
-  /** Whether the component starts code on the host. */
+  /** Whether the component starts code on the host, whatever its files' modes. */
   executes: boolean;
+};
+
+/**
+ * A Claude plugin component that ACF does not project and that is one component per package: the
+ * default `file`, when there is one, merges with the paths and value of manifest key `key`.
+ */
+export type MergedComponentSpec = PluginComponentBase & {
+  name: string;
+  file?: string;
   /** Limits the key to values that hold this component; without it every value does. */
   holds?: (value: unknown) => boolean;
 };
 
-/** Claude plugin components outside the projected skills and MCP servers, in record order. */
+/**
+ * A Claude plugin component kind of which every file is one component, named by
+ * {@link perFileComponentName}: the files under the default directory `dir`, or, when the manifest
+ * sets `key`, the files at or under the paths it names instead, since such a key replaces default
+ * discovery.
+ */
+export type PerFileComponentSpec = PluginComponentBase & { dir: string };
+
+export type PluginComponentSpec = MergedComponentSpec | PerFileComponentSpec;
+
+/**
+ * Claude plugin components outside the projected skills and MCP servers, in record order: the
+ * per-file kinds first, then the merged ones.
+ */
 export const claudePluginComponents: readonly PluginComponentSpec[] = [
+  { kind: "agent", key: "agents", dir: "agents", executes: false },
+  { kind: "command", key: "commands", dir: "commands", executes: false },
+  { kind: "output-style", key: "outputStyles", dir: "output-styles", executes: false },
+  // JavaScript modules Claude's workflow runtime runs (research/plugin-interop/tools/claude-code.md).
+  { kind: "workflow", key: "workflows", dir: "workflows", executes: true },
   { kind: "hook", name: "hooks", key: "hooks", file: "hooks/hooks.json", executes: true },
   { kind: "lsp-server", name: "lsp-servers", key: "lspServers", file: ".lsp.json", executes: true },
   { kind: "settings", name: "settings", key: "settings", file: "settings.json", executes: false },
@@ -96,6 +119,16 @@ export const claudePluginComponents: readonly PluginComponentSpec[] = [
       value.monitors !== undefined,
   },
 ];
+
+/** Whether `spec` makes one component of every file it discovers. */
+export function isPerFileComponent(spec: PluginComponentSpec): spec is PerFileComponentSpec {
+  return "dir" in spec;
+}
+
+/** The name of the per-file component package file `file` is: its file name without extension. */
+export function perFileComponentName(file: string): string {
+  return path.posix.basename(file).replace(/\.[^.]*$/, "");
+}
 
 /** The Claude plugin directory whose every file is one executable `bin` component. */
 export const CLAUDE_PLUGIN_BIN_DIR = "bin";

@@ -16,7 +16,7 @@ Caplet SHALL compute a payload digest `acf-tree-2:sha256:<hex>` over a capabilit
 - **THEN** their payload digests differ
 
 ### Requirement: One lock schema with per-capability provenance
-The core and installer lock definitions SHALL be unified into one schema. Each lock entry SHALL additionally record, per capability: `name`, `format` (`acf`, `agent-plugins`, `claude-plugin`, `skills`), `formatVersion` where the format has one, the selected source path, and `payloadDigest`. The new fields are additive under `acf: 1`; readers SHALL accept lockfiles without them and write them on the next resolution. An entry's requested `format` SHALL be recorded apart from the detected per-capability `format`, so a changed or removed `format`, like a changed `rename`, is `acf.lock.drift`.
+The core and installer lock definitions SHALL be unified into one schema. Each lock entry SHALL additionally record, per capability: `name`, `format` (`acf`, `agent-plugins`, `claude-plugin`, `skills`), `formatVersion` where the format has one, the selected source path, and `payloadDigest`. The new fields are additive under `acf: 1`; readers SHALL accept lockfiles without them and write them on the next resolution. An entry's requested `format` SHALL be recorded apart from the detected per-capability `format`, so a changed or removed `format`, like a changed `rename`, is `acf.lock.drift`. A lock entry whose source `capabilities.yml` no longer declares SHALL be `acf.lock.drift` too, so drift is compared in both directions.
 
 #### Scenario: Multi-capability source
 - **WHEN** a source provides two capabilities
@@ -26,8 +26,12 @@ The core and installer lock definitions SHALL be unified into one schema. Each l
 - **WHEN** an entry's `rename` or `format` changes, or its `format` is removed, and a frozen or offline install runs
 - **THEN** it fails with `acf.lock.drift` and changes neither the lock nor the installed snapshots
 
+#### Scenario: Source removed under a frozen install
+- **WHEN** a locked source is removed from `capabilities.yml` and a frozen or offline install runs
+- **THEN** it fails with `acf.lock.drift` naming that source and changes neither the lock nor the installed snapshots
+
 ### Requirement: Verify before emission and frozen restore
-Before emitting from a lock, caplet SHALL recompute each capability's payload digest from the snapshot and SHALL fail with `acf.lock.digest-mismatch` when it differs from the lock. A frozen or locked restore SHALL fetch the recorded `resolvedSha`, not the moving `ref`. An installed capability SHALL count as present only when its digest verifies, not merely when its directory exists.
+Before emitting from a lock, caplet SHALL recompute each capability's payload digest from the snapshot and SHALL fail with `acf.lock.digest-mismatch` when it differs from the lock. A frozen or locked restore SHALL fetch the recorded `resolvedSha`, not the moving `ref`, and SHALL reproduce exactly the locked capability names and payload digests; otherwise it SHALL fail with `acf.lock.digest-mismatch` and install nothing from that entry. An installed capability SHALL count as present only when its digest verifies, not merely when its directory exists.
 
 #### Scenario: Tampered cache
 - **WHEN** a cached snapshot file is modified after locking and apply runs
@@ -36,6 +40,18 @@ Before emitting from a lock, caplet SHALL recompute each capability's payload di
 #### Scenario: Branch moved upstream
 - **WHEN** the locked `ref` is `main`, upstream `main` has moved, and a frozen install runs
 - **THEN** caplet installs the content at the locked `resolvedSha`
+
+#### Scenario: Forced refetch under a frozen install
+- **WHEN** the locked `ref` is `main`, upstream `main` has moved, and a frozen install runs with `--mode force`
+- **THEN** caplet fetches only the locked `resolvedSha`, verifies it against the lock, and changes neither the lock nor the installed snapshots
+
+#### Scenario: Missing snapshot beside a modified one
+- **WHEN** one capability of a locked source is missing and a sibling from the same source was modified after locking
+- **THEN** the restore installs only the missing capability, leaves the modified sibling unchanged, and the sibling is excluded and reported with `acf.lock.digest-mismatch`
+
+#### Scenario: Restore finds a capability the lock does not name
+- **WHEN** a locked snapshot is missing and its source now also provides a capability the lock entry does not name
+- **THEN** the restore fails with `acf.lock.digest-mismatch` naming that capability, and neither snapshot is installed nor the lock changed
 
 ### Requirement: Credential-free sources
 Source URLs containing userinfo, and query parameters or fragments that look like credentials, SHALL be rejected when added or resolved, and SHALL never be written to `capabilities.yml`, the lockfile, sidecars or diagnostics. Authentication SHALL use the configured auth mechanism (SPEC.md §18).
@@ -71,7 +87,7 @@ Every write and delete SHALL resolve, after following existing parent directorie
 - **THEN** apply and remove update the server entries in the linked file and leave the link in place
 
 ### Requirement: Executable change report
-The consumer's explicit act of adding a source or updating it, which pins the resolved revision and payload digest in `capabilities.lock`, SHALL be the approval of that content; caplet SHALL NOT add its own acceptance prompt, acceptance store or activation gate for executable components. `caplet add`, `caplet update` and `caplet apply` (human and `--json` output, including `--dry-run`) SHALL list, per capability and target, every executable component added, changed or removed relative to the previously locked or installed content: MCP stdio commands, hooks, LSP servers, monitors, files with the executable bit, Claude `bin/` entries and other code modules the registry classifies as executing code. The list SHALL be shown whenever it is non-empty, including in non-interactive runs, and SHALL NOT prompt or block. Caplet SHALL NOT pre-approve tools, permissions or MCP servers in any host, and SHALL NOT write or bypass a host's own trust, approval or enterprise-policy state.
+The consumer's explicit act of adding a source or updating it, which pins the resolved revision and payload digest in `capabilities.lock`, SHALL be the approval of that content; caplet SHALL NOT add its own acceptance prompt, acceptance store or activation gate for executable components. `caplet add`, `caplet update` and `caplet apply` (human and `--json` output, including `--dry-run`) SHALL list, per capability and target, every executable component added, changed or removed relative to the previously locked or installed content: MCP stdio commands, hooks, LSP servers, monitors, Claude workflows, files with the executable bit, Claude `bin/` entries and other code modules the registry classifies as executing code. The list SHALL be shown whenever it is non-empty, including in non-interactive runs, and SHALL NOT prompt or block. Caplet SHALL NOT pre-approve tools, permissions or MCP servers in any host, and SHALL NOT write or bypass a host's own trust, approval or enterprise-policy state.
 
 #### Scenario: New server in an update
 - **WHEN** an update adds a stdio MCP server to an installed Claude plugin and apply runs non-interactively
@@ -80,6 +96,10 @@ The consumer's explicit act of adding a source or updating it, which pins the re
 #### Scenario: Native executable configuration
 - **WHEN** an update changes `native/claude/hooks/hooks.json` or `targets.claude.native.lspServers` of a native ACF capability installed as a Claude plugin
 - **THEN** the output lists the changed hook or LSP server component for Claude, as it would for the same change in a foreign Claude plugin
+
+#### Scenario: Workflow module without the executable bit
+- **WHEN** an update changes a JavaScript module under a Claude plugin's `workflows/` directory whose file mode is 0644
+- **THEN** the output lists the changed workflow component for Claude, whether the plugin is a foreign Claude plugin or comes from `native/claude/workflows/`
 
 #### Scenario: Unchanged executables
 - **WHEN** apply runs with no executable component added, changed or removed

@@ -326,6 +326,7 @@ export type CapabilitySource = {
   renamedFrom?: string       // manifest name when the entry's rename replaced it
   projected?: {              // foreign packages only, as read before rename,
     skills: string[]         // selection, and applicability (§4.9)
+    skillDirs: string[]      // package-relative directories of those skills
     servers: string[]
     remainder: NativeRemainderComponent[]
   }
@@ -333,12 +334,12 @@ export type CapabilitySource = {
 
 export type NativeRemainderComponent = {
   format: "agent-plugins" | "claude-plugin"
-  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, bin, mcp-server, ...
+  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, workflow, bin, mcp-server, ...
   name: string
   paths: string[]            // snapshot-relative files or directories
   manifestKeys?: string[]    // manifest keys the component occupies
   class: SafetyClass
-  executable: boolean        // stdio server, hook, LSP, monitor, bin
+  executable: boolean        // stdio server, hook, LSP, monitor, workflow, bin
 }
 
 export type NativeFileExtra = {
@@ -735,8 +736,10 @@ refuses the server on every target. No other interpolation is performed by
 ACF, and validation rejects any other reference a writer target would expand
 in those MCP values (`acf.mcp.placeholder.pending`): `${...}` (Claude,
 Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode), and
-`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths. The
-Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
+`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths, also
+in a project's `.codex/config.toml`, because Codex resolves no relative MCP
+path against the config file (`plugin-interop-foundation` design.md D27.2).
+The Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
 `${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
 `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
 directory of the MCP file inside the capability (hooks keep a capability
@@ -1397,8 +1400,12 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   `<install-root>/.acf/data/<capability>/.keep`.
 - **Executables.** `executableComponents` and `executableChanges`
   (`packages/core/src/emit/executables.ts`) list added, removed, or changed MCP stdio
-  commands, hooks, LSP servers, monitors, executable files, and Claude
-  `bin/` entries for the change report and `--json` `executables`. The
+  commands, hooks, LSP servers, monitors, Claude workflows, executable files,
+  and Claude `bin/` entries for the change report and `--json` `executables`.
+  How Claude discovers each plugin component and whether it runs code is
+  registered once in `claudePluginComponents`
+  (`packages/core/src/targets/plugin-layout.ts`), which the Claude plugin
+  reader, this inventory and the Claude writer all read. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
   component in a foreign Claude plugin, so both report alike; MCP servers from
@@ -2308,7 +2315,9 @@ bookkeeping, so older lockfiles keep reading.
 The resolver recomputes each snapshot's payload digest when it reads the
 capability and fails with `acf.lock.digest-mismatch` before anything is
 emitted from a snapshot that no longer matches its record. Restoring a missing
-snapshot refetches `resolvedSha` and must reproduce the locked digests.
+snapshot refetches `resolvedSha` and must reproduce exactly the locked
+capability names and digests; a capability the lock does not name fails the
+restore like a changed digest, so no snapshot is installed without a record.
 
 `capabilityHash` uses the v1 algorithm of SPEC §19.5 over the whole
 snapshot, before selection, so a selection change never invalidates a hash
@@ -2337,12 +2346,15 @@ Drift handling:
 - `detectLockDrift` (`packages/installer/src/drift.ts`) reports a
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
   and a changed ref, capabilities selector, `rename`, requested `format`, or
-  selection as `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
+  selection, or a lock entry `capabilities.yml` no longer declares, as
+  `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
   as an error; other modes resolve it in the same run (a changed ref,
   selector, rename or format refetches through `sameResolution`, a changed
-  selection rewrites the lock). `caplet apply --frozen` resolves with
+  selection rewrites the lock, a removed source leaves it). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
+  Every fetch a frozen resolution makes, including one `--mode force` asks
+  for, is such a restore at the locked `resolvedSha`.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit

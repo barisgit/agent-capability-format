@@ -29,8 +29,13 @@ const formatNames: Readonly<Record<NativeRemainderComponent["format"], string>> 
   "agent-plugins": "Agent Plugins",
 };
 
-/** Remainder kinds that are a component of an ACF family, and so appear in the plan report. */
-const remainderFamilies: Partial<Record<NativeRemainderKind, FacetFamily>> = {
+/**
+ * Remainder kinds that are a component of an ACF family: entry selection (`include`/`exclude`)
+ * reaches them by that family's selector, and the support report files them under it. Every
+ * other kind is selected only with the whole package and reported under the `remainder`
+ * outcome family.
+ */
+export const remainderFamilies: Readonly<Partial<Record<NativeRemainderKind, FacetFamily>>> = {
   agent: "agent",
   command: "command",
   hook: "hook",

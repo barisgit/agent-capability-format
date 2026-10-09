@@ -2348,9 +2348,9 @@ in the lockfile; that explicit act is the approval of the content. `caplet
 add`, `caplet update`, and `caplet apply` (human and `--json` output,
 including `--dry-run`) list, per capability and target, every executable
 component added, changed, or removed relative to the previously locked or
-installed content: MCP stdio commands, hooks, LSP servers, monitors, files
-with the executable bit, Claude `bin/` entries, and other code the registry
-classifies as executing. The list is shown whenever it is non-empty,
+installed content: MCP stdio commands, hooks, LSP servers, monitors, Claude
+workflows, files with the executable bit, Claude `bin/` entries, and other
+code the registry classifies as executing. The list is shown whenever it is non-empty,
 including in non-interactive runs, and never prompts or blocks. Caplet keeps
 no acceptance store, pre-approves no tool, permission, or MCP server, and
 never writes or bypasses a host's own trust, approval, or policy state.
@@ -2438,7 +2438,9 @@ the lock, an implementation recomputes each capability's payload digest
 from its snapshot and fails with `acf.lock.digest-mismatch`, writing nothing
 for that capability, when it differs. A capability counts as installed only
 when its digest verifies. A frozen restore fetches the recorded
-`resolvedSha`, never the moving `ref`.
+`resolvedSha`, never the moving `ref`. A restore MUST reproduce exactly
+the locked capability names and their payload digests; otherwise it fails
+with `acf.lock.digest-mismatch` and installs nothing from that entry.
 
 ### 19.5 Hash computation
 
@@ -2508,9 +2510,12 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   refetching.
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
-  lock entry), and emission does not run.
+  lock entry), and emission does not run. A lock entry whose source
+  `capabilities.yml` no longer declares is a disagreement too.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
-  diagnostic is present.
+  diagnostic is present. Every fetch it makes, including one `--mode force`
+  requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it
+  never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.
@@ -2667,7 +2672,8 @@ Readers project into the canonical model:
   `skills` paths, and MCP servers from `.mcp.json` and manifest
   `mcpServers` (inline or a relative path). Agents, commands (each file or
   manifest `commands` map entry is one component), hooks, output styles,
-  LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`,
+  workflows (each module is one component), LSP servers, monitors, `bin/`,
+  plugin `settings.json`, `userConfig`,
   channels, dependencies, and listing metadata are kept as
   Claude native remainder with their safety class. Pending keys are read as
   Claude extras.
@@ -2923,7 +2929,10 @@ user scope. It contains `.claude-plugin/plugin.json` (`name` is the
 capability slug; metadata per §4.2.2 plus package-level native extras),
 `skills/<name>/`, `.mcp.json` when a server is emitted, preserved Claude
 remainder, the `native/claude/` files, and the capability's other files
-outside ACF-defined paths (such as a server script), copied unchanged.
+outside ACF-defined paths (such as a server script), copied unchanged. Of
+those files, only the directories of skills the plugin regenerates or that
+selection or applicability removed are left out; a directory holding a
+`SKILL.md` that is no projected skill (documentation, an example) is copied.
 Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is

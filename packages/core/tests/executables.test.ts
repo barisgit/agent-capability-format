@@ -228,6 +228,64 @@ describe("native ACF executable configuration", () => {
   });
 });
 
+describe("Claude plugin workflows", () => {
+  const workflow = (step: string): string => `export default { steps: ["${step}"] }\n`;
+
+  async function foreignPlugin(step: string): Promise<AcfCapability> {
+    const dir = await tempDir();
+    dirs.push(dir);
+    await makeCapability(dir, {
+      ".claude-plugin/plugin.json": JSON.stringify({ name: "test-cap", version: "1.0.0" }),
+      "workflows/release.js": workflow(step),
+    });
+    const { capability: cap } = await readClaudePluginPackage(dir, {
+      scope: "project",
+      origin: { kind: "local", directory: dir },
+      revision: null,
+    });
+    if (cap === undefined) throw new Error("the plugin did not read as a capability");
+    return cap;
+  }
+
+  const inventory = async (cap: AcfCapability) =>
+    (await executableComponents(cap, "claude")).map(({ kind, name, fingerprint }) => ({
+      kind,
+      name,
+      fingerprint,
+    }));
+
+  test("a workflow module without the executable bit is an executing component", async () => {
+    const before = await foreignPlugin("build");
+    expect((await inventory(before)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "workflow release",
+    ]);
+    const changes = executableChanges(
+      await executableComponents(before, "claude"),
+      await executableComponents(await foreignPlugin("deploy"), "claude"),
+    );
+    expect(changes.map(({ change, kind, name }) => `${change} ${kind} ${name}`)).toEqual([
+      "changed workflow release",
+    ]);
+  });
+
+  test("a native workflow is listed as the same foreign plugin lists it", async () => {
+    const native = await capability({
+      "acf.yml": baseManifest,
+      "native/claude/workflows/release.js": workflow("build"),
+    });
+    expect(await inventory(native)).toEqual(await inventory(await foreignPlugin("build")));
+    const declared = await capability({
+      "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      workflows: ./flows\n`,
+      "native/claude/workflows/ignored.js": workflow("x"),
+      "native/claude/flows/ship.js": workflow("y"),
+    });
+    expect(
+      (await executableComponents(declared, "claude")).map((item) => `${item.kind} ${item.name}`),
+    ).toEqual(["workflow ship"]);
+    expect(await executableComponents(native, "claude", "loose")).toEqual([]);
+  });
+});
+
 describe("native Claude MCP servers", () => {
   const mcpJson = `{"mcpServers":{"files":{"command":"node","args":["${pluginRoot}/server.js"]},"web":{"type":"http","url":"https://example.com/mcp"}}}\n`;
   const inventory = async (cap: AcfCapability) =>
