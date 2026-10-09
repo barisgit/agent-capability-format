@@ -9,13 +9,15 @@
  * native keys in that dialect's own spelling), and at the package level of `acf.yml` also as
  * `targets.<target>.package` (native manifest values that replace the mapped core value for
  * that target). A dialect is a target id, or `agent-plugins` for Agent Plugins 1.0 keys that
- * no target in this change receives; only format readers write the `agent-plugins` dialect.
+ * no target receives; only format readers and the bare-skill import write the `agent-plugins`
+ * dialect.
  *
  * Writers, readers and the plan read extras only through these functions so the storage
  * shape stays in one place.
  */
 import type { NativeFileExtra } from "../types/interop.js";
 import type { AcfCapability, Manifest, TargetExtensions, TargetId } from "../types/model.js";
+import { isRecord } from "../utils/guards.js";
 
 /** Owner of a set of native keys: a target id, or the Agent Plugins 1.0 dialect. */
 export type ExtrasDialect = TargetId | "agent-plugins";
@@ -23,10 +25,6 @@ export const AGENT_PLUGINS_DIALECT = "agent-plugins" as const;
 
 /** A map of native keys to values in one dialect's own spelling. */
 export type NativeExtras = Readonly<Record<string, unknown>>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function section(
   targets: TargetExtensions | undefined,
@@ -108,7 +106,7 @@ export function withNativeExtras(
 /** Directory of a capability that holds per-target file extras, one subdirectory per target. */
 export const NATIVE_FILES_DIR = "native";
 
-/** Files under `native/<target>/` of the capability, sorted by path; empty when none. */
+/** Files under `native/<target>/` of the capability, in reader order; empty when none. */
 export function nativeFiles(
   capability: Pick<AcfCapability, "nativeFiles">,
   target: TargetId,

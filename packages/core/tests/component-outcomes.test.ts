@@ -11,25 +11,49 @@ import {
 } from "../src/index.js";
 
 function capability(): AcfCapability {
-  const prose = (name: string) => ({
-    name,
+  const source = (name: string) => ({
+    kind: "file" as const,
     path: `${name}.md`,
-    frontmatter: { name, description: name },
-    body: "",
+    primary: `${name}.md`,
   });
   return {
     root: "/caps/tools",
     scope: "project",
-    origin: { kind: "local" },
+    origin: { kind: "local", directory: "/caps/tools" },
     manifest: { acf: 1, name: "tools", version: "1.0.0" },
-    skills: [prose("review")],
-    agents: [prose("helper")],
+    skills: [
+      {
+        family: "skill",
+        name: "review",
+        dir: "skills/review",
+        primaryFile: "skills/review/SKILL.md",
+        frontmatter: { name: "review", description: "review" },
+        body: "",
+      },
+    ],
+    agents: [
+      {
+        family: "agent",
+        name: "helper",
+        source: source("helper"),
+        frontmatter: { name: "helper", description: "helper" },
+        body: "",
+      },
+    ],
     commands: [],
-    instructions: [prose("always")],
+    instructions: [
+      {
+        family: "instruction",
+        name: "always",
+        source: source("always"),
+        frontmatter: { name: "always", description: "always", activation: "always" },
+        body: "",
+      },
+    ],
     hooks: {
       path: "hooks/hooks.yml",
       buckets: {
-        before_tool: [{ name: "guard", run: { command: "guard" }, effect: "block" }],
+        pre_tool: [{ name: "guard", run: { command: "guard" }, effect: "block" }],
       },
     },
     mcp: {
@@ -38,7 +62,7 @@ function capability(): AcfCapability {
     },
     assets: [],
     diagnostics: [],
-  } as unknown as AcfCapability;
+  };
 }
 
 function byComponent(outcomes: readonly ComponentOutcome[]): Record<string, string> {
@@ -188,7 +212,7 @@ describe("component outcomes", () => {
         message: "cursor only partially supports hook effects; block emitted as observe",
         targetId: "cursor",
         family: "hook",
-        data: { hook: "guard", hookType: "before_tool", effect: "block" },
+        data: { hook: "guard", hookType: "pre_tool", effect: "block" },
       },
       {
         severity: "lossy",
@@ -233,10 +257,10 @@ describe("component outcomes", () => {
         {
           severity: "lossy",
           code: "acf.adapter.hook-event-unsupported",
-          message: "codex does not support hook event before_tool",
+          message: "codex does not support hook event pre_tool",
           targetId: "codex",
           family: "hook",
-          data: { hookType: "before_tool" },
+          data: { hookType: "pre_tool" },
         },
       ],
     });

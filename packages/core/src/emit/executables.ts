@@ -1,9 +1,7 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
 import { componentPaths } from "../formats/shared.js";
-import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
   capabilityCarrier,
@@ -21,8 +19,19 @@ import type {
   SourceFormat,
   TargetId,
 } from "../types/index.js";
-import { acfCapabilityDirPlaceholder, hookEntries } from "../types/index.js";
+import { hookEntries } from "../types/index.js";
 import { applyApplicability } from "./index.js";
+import {
+  filesUnder,
+  fingerprint,
+  readSnapshot,
+  referencedFiles,
+  relativeEntrypoints,
+  relativeTo,
+  type Snapshot,
+  underAny,
+  union,
+} from "./snapshot.js";
 
 /** What kind of executing code a component is: a remainder kind, or a file with the executable bit. */
 export type ExecutableKind = NativeRemainderKind | "file";
@@ -88,14 +97,6 @@ const pluginExecutables: Partial<
   },
 };
 
-const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
-
-type Snapshot = {
-  root: string;
-  files: readonly TreeFile[];
-  digests: Map<string, string>;
-};
-
 /**
  * Lists the components of `capability` that execute code on `target`, after the capability's
  * applicability (`only`/`except`) for that target: stdio MCP servers, hooks on targets that run
@@ -119,13 +120,52 @@ export async function executableComponents(
 ): Promise<ExecutableComponent[]> {
   const filtered = applyApplicability(capability, target);
   if (filtered === null) return [];
-  const pluginCarried = capabilityCarrier(filtered, target, carrier) === "plugin";
-  const snapshot = await readSnapshot(filtered.root);
-  const base = { scope: filtered.scope, capability: filtered.manifest.name, target };
-  const components: ExecutableComponent[] = [];
+  const inventory: Inventory = {
+    capability: filtered,
+    target,
+    pluginCarried: capabilityCarrier(filtered, target, carrier) === "plugin",
+    snapshot: await readSnapshot(filtered.root),
+    base: { scope: filtered.scope, capability: filtered.manifest.name, target },
+  };
+  const servers = await stdioServerExecutables(inventory);
+  const hooks = await hookExecutables(inventory);
+  const remainder = await remainderExecutables(inventory);
+  const pluginConfig = inventory.pluginCarried
+    ? await pluginConfigExecutables(inventory)
+    : { components: [], claimed: [] };
+  const components = [
+    ...servers,
+    ...hooks,
+    ...remainder.components,
+    ...pluginConfig.components,
+    ...(await executableFiles(inventory, capability.skills, [
+      ...remainder.claimed,
+      ...pluginConfig.claimed,
+    ])),
+  ];
+  return components.sort(byKindThenName);
+}
 
-  const mcpDir = filtered.mcp === undefined ? filtered.root : path.dirname(filtered.mcp.path);
-  for (const server of filtered.mcp?.servers ?? []) {
+/** What every collector of {@link executableComponents} reads: the capability after applicability. */
+type Inventory = {
+  capability: AcfCapability;
+  target: TargetId;
+  pluginCarried: boolean;
+  snapshot: Snapshot;
+  base: Pick<ExecutableComponent, "scope" | "capability" | "target">;
+};
+
+/** Components plus the snapshot-relative paths they own, which no longer count as loose files. */
+type ClaimingComponents = { components: ExecutableComponent[]; claimed: string[] };
+
+async function stdioServerExecutables({
+  capability,
+  snapshot,
+  base,
+}: Inventory): Promise<ExecutableComponent[]> {
+  const components: ExecutableComponent[] = [];
+  const mcpDir = capability.mcp === undefined ? capability.root : path.dirname(capability.mcp.path);
+  for (const server of capability.mcp?.servers ?? []) {
     if (server.transport !== "stdio") continue;
     components.push({
       ...base,
@@ -142,34 +182,54 @@ export async function executableComponents(
       ),
     });
   }
+  return components;
+}
 
-  if (targetMap[target]?.support.hook !== "none") {
-    const hookDir =
-      filtered.hooks === undefined ? filtered.root : path.dirname(filtered.hooks.path);
-    for (const { event, entry } of hookEntries(filtered.hooks)) {
-      const { description: _description, ...executing } = entry;
-      components.push({
-        ...base,
-        kind: "hook",
-        name: `${event}/${entry.name}`,
-        detail: commandLine(entry.run.command, entry.run.args),
-        fingerprint: await fingerprint(
-          { event, ...executing },
-          referencedFiles(snapshot, hookDir, [entry.run.command, ...(entry.run.args ?? [])]),
-        ),
-      });
-    }
+async function hookExecutables({
+  capability,
+  target,
+  snapshot,
+  base,
+}: Inventory): Promise<ExecutableComponent[]> {
+  if (targetMap[target]?.support.hook === "none") return [];
+  const components: ExecutableComponent[] = [];
+  const hookDir =
+    capability.hooks === undefined ? capability.root : path.dirname(capability.hooks.path);
+  for (const { event, entry } of hookEntries(capability.hooks)) {
+    const { description: _description, ...executing } = entry;
+    components.push({
+      ...base,
+      kind: "hook",
+      name: `${event}/${entry.name}`,
+      detail: commandLine(entry.run.command, entry.run.args),
+      fingerprint: await fingerprint(
+        { event, ...executing },
+        referencedFiles(snapshot, hookDir, [entry.run.command, ...(entry.run.args ?? [])]),
+      ),
+    });
   }
+  return components;
+}
 
-  const packageRoot = filtered.source?.snapshotRoot ?? filtered.root;
-  const claimed: string[] = [];
-  for (const component of filtered.remainder ?? []) {
+/**
+ * Executable native remainder of a format `target` writes. Every remainder component claims its
+ * paths, executable or not, so its files are not reported again as loose files.
+ */
+async function remainderExecutables({
+  capability,
+  target,
+  snapshot,
+  base,
+}: Inventory): Promise<ClaimingComponents> {
+  const packageRoot = capability.source?.snapshotRoot ?? capability.root;
+  const result: ClaimingComponents = { components: [], claimed: [] };
+  for (const component of capability.remainder ?? []) {
     const prefixes = component.paths.map((item) =>
       relativeTo(snapshot.root, path.resolve(packageRoot, item)),
     );
-    claimed.push(...prefixes);
+    result.claimed.push(...prefixes);
     if (!component.executable || !remainderTargets[component.format].includes(target)) continue;
-    components.push({
+    result.components.push({
       ...base,
       kind: component.kind,
       name: component.name,
@@ -183,55 +243,88 @@ export async function executableComponents(
       ),
     });
   }
+  return result;
+}
 
-  if (pluginCarried) {
-    for (const component of pluginConfigComponents(filtered, target)) {
-      claimed.push(...component.prefixes);
-      components.push({
-        ...base,
-        kind: component.kind,
-        name: component.name,
-        detail: component.detail,
-        fingerprint: await fingerprint(
-          component.definition,
-          filesUnder(snapshot, component.prefixes).map((file) => ({
-            ...file,
-            // Package-relative, as the same file in a foreign package is fingerprinted.
-            rel: file.rel.slice(component.dir.length + 1),
-          })),
-        ),
-      });
-    }
-  }
-
-  const foreign = filtered.source !== undefined && foreignFormats.has(filtered.source.format);
-  const foreignTargets =
-    filtered.source === undefined || !foreign
-      ? []
-      : remainderTargets[filtered.source.format as NativeRemainderComponent["format"]];
-  const skillDirs = new Map(
-    capability.skills.map((skill) => [relativeTo(snapshot.root, skill.dir), skill.name]),
-  );
-  const keptSkills = new Set(filtered.skills.map((skill) => skill.name));
-  for (const file of snapshot.files) {
-    if (!file.executable || underAny(file.rel, claimed)) continue;
-    const skill = [...skillDirs].find(([dir]) => underAny(file.rel, [dir]));
-    if (skill !== undefined && !keptSkills.has(skill[1])) continue;
-    const nativeTarget = /^native\/([^/]+)\//.exec(file.rel)?.[1];
-    if (nativeTarget !== undefined && (nativeTarget !== target || !pluginCarried)) continue;
-    if (foreign && skill === undefined && !foreignTargets.includes(target) && !pluginCarried) {
-      continue;
-    }
-    components.push({
+/** The executing configuration a plugin carrier writes (see {@link pluginConfigComponents}). */
+async function pluginConfigExecutables({
+  capability,
+  target,
+  snapshot,
+  base,
+}: Inventory): Promise<ClaimingComponents> {
+  const result: ClaimingComponents = { components: [], claimed: [] };
+  for (const component of pluginConfigComponents(capability, target)) {
+    result.claimed.push(...component.prefixes);
+    result.components.push({
       ...base,
+      kind: component.kind,
+      name: component.name,
+      detail: component.detail,
+      fingerprint: await fingerprint(
+        component.definition,
+        filesUnder(snapshot, component.prefixes).map((file) => ({
+          ...file,
+          // Package-relative, as the same file in a foreign package is fingerprinted.
+          rel: file.rel.slice(component.dir.length + 1),
+        })),
+      ),
+    });
+  }
+  return result;
+}
+
+/**
+ * Files with the executable bit that no other component claims and that reach `target`. A file
+ * under a skill follows that skill's applicability, so `allSkills` are the skills before it was
+ * applied; a file under `native/<t>/` reaches only `t` through its plugin carrier; and a file of
+ * a foreign package reaches only the target of its format or a plugin carrier.
+ */
+async function executableFiles(
+  inventory: Inventory,
+  allSkills: AcfCapability["skills"],
+  claimed: readonly string[],
+): Promise<ExecutableComponent[]> {
+  const reaches = reachesTarget(inventory, allSkills);
+  const components: ExecutableComponent[] = [];
+  for (const file of inventory.snapshot.files) {
+    if (!file.executable || underAny(file.rel, claimed) || !reaches(file.rel)) continue;
+    components.push({
+      ...inventory.base,
       kind: "file",
       name: file.rel,
       detail: file.rel,
       fingerprint: await fingerprint({ executable: true }, [file]),
     });
   }
+  return components;
+}
 
-  return components.sort(byKindThenName);
+/**
+ * Whether a snapshot-relative file reaches the inventory's target, by the rules of
+ * {@link executableFiles}.
+ */
+function reachesTarget(
+  { capability, target, pluginCarried, snapshot }: Inventory,
+  allSkills: AcfCapability["skills"],
+): (rel: string) => boolean {
+  const source = capability.source;
+  const foreign = source !== undefined && foreignFormats.has(source.format);
+  const foreignTargets =
+    source === undefined || !foreign
+      ? []
+      : remainderTargets[source.format as NativeRemainderComponent["format"]];
+  const skillDirs = new Map(
+    allSkills.map((skill) => [relativeTo(snapshot.root, skill.dir), skill.name]),
+  );
+  const keptSkills = new Set(capability.skills.map((skill) => skill.name));
+  return (rel) => {
+    const skill = [...skillDirs].find(([dir]) => underAny(rel, [dir]));
+    if (skill !== undefined && !keptSkills.has(skill[1])) return false;
+    const nativeTarget = /^native\/([^/]+)\//.exec(rel)?.[1];
+    if (nativeTarget !== undefined && (nativeTarget !== target || !pluginCarried)) return false;
+    return !foreign || skill !== undefined || foreignTargets.includes(target) || pluginCarried;
+  };
 }
 
 /**
@@ -288,26 +381,6 @@ function kindRank(kind: ExecutableKind): number {
   return index === -1 ? kindOrder.length : index;
 }
 
-async function readSnapshot(root: string): Promise<Snapshot> {
-  return { root: path.resolve(root), files: await listTreeFiles(root), digests: new Map() };
-}
-
-/** Files of the snapshot that `values` name through an ACF path placeholder. */
-function referencedFiles(
-  snapshot: Snapshot,
-  placeholderDir: string,
-  values: readonly string[],
-): TreeFile[] {
-  const prefixes: string[] = [];
-  for (const value of values) {
-    for (const match of value.matchAll(PLACEHOLDER_PATH)) {
-      const base = match[1] === "ACF_HOOK_DIR" ? placeholderDir : snapshot.root;
-      prefixes.push(relativeTo(snapshot.root, path.join(base, match[2] ?? "")));
-    }
-  }
-  return filesUnder(snapshot, prefixes);
-}
-
 type PluginConfigComponent = {
   kind: NativeRemainderKind;
   name: string;
@@ -327,34 +400,15 @@ function pluginConfigComponents(
   capability: AcfCapability,
   target: TargetId,
 ): PluginConfigComponent[] {
+  const plugin = pluginExecutables[target];
+  if (plugin === undefined) return [];
   const dir = `${NATIVE_FILES_DIR}/${target}`;
   const files = nativeFiles(capability, target).map((file) => file.path);
   const extras = nativeExtras(capability.manifest.targets, target);
   const components: PluginConfigComponent[] = [];
-  const plugin = pluginExecutables[target];
-  if (plugin === undefined) return [];
   for (const spec of plugin.components) {
-    const value = extras[spec.key];
-    if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) continue;
-    const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
-    for (const relative of value === undefined ? [] : componentPaths(value)) {
-      const normalized = path.posix.normalize(relative);
-      if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
-      if (!paths.includes(normalized)) paths.push(normalized);
-    }
-    if (paths.length === 0 && value === undefined) continue;
-    const prefixes = paths.map((item) => `${dir}/${item}`);
-    components.push({
-      kind: spec.kind,
-      name: spec.name,
-      detail: [
-        ...prefixes,
-        ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
-      ].join(", "),
-      dir,
-      prefixes,
-      definition: value === undefined ? null : { [spec.key]: value },
-    });
+    const component = configComponent(spec, extras[spec.key], files, dir, target);
+    if (component !== undefined) components.push(component);
   }
   for (const file of files.filter((item) => item.startsWith(`${plugin.binDir}/`))) {
     const prefix = `${dir}/${file}`;
@@ -371,78 +425,46 @@ function pluginConfigComponents(
 }
 
 /**
- * Snapshot files a stdio server's `command` or `args` name by a relative path, resolved under a
- * working directory inside the capability (`${ACF_CAPABILITY_DIR}[/dir]` or `./dir`). Only exact
- * files count, so a directory argument does not pull in a tree; `--option=value` contributes its
- * value. A command without `/` runs from PATH, not the working directory, and an omitted or
- * data-directory `cwd` resolves nothing because the server then assumes no packaged directory.
+ * The component `spec` describes when the package has its default file or a
+ * `targets.<target>.native` value `value` that holds it; undefined otherwise.
  */
-function relativeEntrypoints(
-  snapshot: Snapshot,
-  cwd: string | undefined,
-  command: string,
-  args: readonly string[],
-): TreeFile[] {
-  const dir =
-    cwd === undefined
-      ? undefined
-      : cwd === acfCapabilityDirPlaceholder || cwd.startsWith(`${acfCapabilityDirPlaceholder}/`)
-        ? `.${cwd.slice(acfCapabilityDirPlaceholder.length)}`
-        : cwd === "." || cwd.startsWith("./")
-          ? cwd
-          : undefined;
-  if (dir === undefined) return [];
-  const values = [
-    ...(command.includes("/") ? [command] : []),
-    ...args.map((arg) =>
-      arg.startsWith("-") && arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg,
-    ),
-  ];
-  const named = new Set(
-    values
-      .filter((value) => value !== "" && !value.includes("${") && !path.isAbsolute(value))
-      .map((value) => relativeTo(snapshot.root, path.resolve(snapshot.root, dir, value))),
-  );
-  return snapshot.files.filter((file) => named.has(file.rel));
+function configComponent(
+  spec: PluginComponentSpec,
+  value: unknown,
+  files: readonly string[],
+  dir: string,
+  target: TargetId,
+): PluginConfigComponent | undefined {
+  if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) return undefined;
+  const paths = configPaths(spec, value, files);
+  if (paths.length === 0 && value === undefined) return undefined;
+  const prefixes = paths.map((item) => `${dir}/${item}`);
+  return {
+    kind: spec.kind,
+    name: spec.name,
+    detail: [
+      ...prefixes,
+      ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
+    ].join(", "),
+    dir,
+    prefixes,
+    definition: value === undefined ? null : { [spec.key]: value },
+  };
 }
 
-/** Files in any of `lists`, once each, in snapshot order. */
-function union(snapshot: Snapshot, ...lists: readonly (readonly TreeFile[])[]): TreeFile[] {
-  const chosen = new Set(lists.flat());
-  return snapshot.files.filter((file) => chosen.has(file));
-}
-
-function filesUnder(snapshot: Snapshot, prefixes: readonly string[]): TreeFile[] {
-  return snapshot.files.filter((file) => underAny(file.rel, prefixes));
-}
-
-function underAny(rel: string, prefixes: readonly string[]): boolean {
-  return prefixes.some(
-    (prefix) =>
-      prefix === "" ||
-      rel === prefix ||
-      rel.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
-  );
-}
-
-function relativeTo(root: string, absolute: string): string {
-  const relative = path.relative(root, absolute).split(path.sep).join("/").normalize("NFC");
-  // A path outside the snapshot can match no snapshot file.
-  return relative.startsWith("..") ? "\u0000outside" : relative === "." ? "" : relative;
-}
-
-async function fingerprint(definition: unknown, files: readonly TreeFile[]): Promise<string> {
-  const hash = createHash("sha256");
-  hash.update(JSON.stringify(definition ?? null));
-  for (const file of files) {
-    hash.update(`\u0000${file.rel}\u0000${file.executable ? "x" : "-"}\u0000`);
-    hash.update(
-      createHash("sha256")
-        .update(await readFile(file.absPath))
-        .digest("hex"),
-    );
+/** The spec's default file when present, then each package-relative path `value` names. */
+function configPaths(
+  spec: PluginComponentSpec,
+  value: unknown,
+  files: readonly string[],
+): string[] {
+  const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
+  for (const relative of value === undefined ? [] : componentPaths(value)) {
+    const normalized = path.posix.normalize(relative);
+    if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
+    if (!paths.includes(normalized)) paths.push(normalized);
   }
-  return `sha256:${hash.digest("hex")}`;
+  return paths;
 }
 
 /** Values of the component's manifest keys; a manifest that is not JSON counts as a whole. */

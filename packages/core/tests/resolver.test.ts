@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import path from "node:path";
 import {
   type CapabilitiesLock,
-  computePayloadDigest,
+  computeCapabilityDigests,
   deduplicateCapabilities,
   discoverCapabilityRoots,
   readRepositoryCapabilities,
@@ -99,12 +99,12 @@ test("foreign snapshots are read with the reader their lock record names", async
       path.join(snapshot, "skills", "review", "SKILL.md"),
       "---\nname: review\ndescription: Review code\n---\n",
     );
-    const payloadDigest = await computePayloadDigest(snapshot);
+    const { capabilityHash, payloadDigest } = await computeCapabilityDigests(snapshot);
     const lock: CapabilitiesLock = {
       acf: 1,
       entries: [
         {
-          capabilityHash: payloadDigest,
+          capabilityHash,
           capabilityNames: ["review-kit"],
           source: "path:../plugin",
           sourceId: "path:/plugin",
@@ -115,7 +115,7 @@ test("foreign snapshots are read with the reader their lock record names", async
               format: "claude-plugin",
               path: "plugins/review",
               payloadDigest,
-              capabilityHash: payloadDigest,
+              capabilityHash,
             },
           ],
         },
@@ -153,12 +153,12 @@ test("installed capabilities carry the selection their lock entry mirrors", asyn
         path.join(snapshot, "skills", name, "SKILL.md"),
         `---\nname: ${name}\ndescription: ${name}\n---\n`,
       );
-    const payloadDigest = await computePayloadDigest(snapshot);
+    const { capabilityHash, payloadDigest } = await computeCapabilityDigests(snapshot);
     const lock: CapabilitiesLock = {
       acf: 1,
       entries: [
         {
-          capabilityHash: payloadDigest,
+          capabilityHash,
           capabilityNames: ["review-kit"],
           exclude: { skills: ["draft"] },
           source: "path:../plugin",
@@ -169,7 +169,7 @@ test("installed capabilities carry the selection their lock entry mirrors", asyn
               format: "claude-plugin",
               path: ".",
               payloadDigest,
-              capabilityHash: payloadDigest,
+              capabilityHash,
             },
           ],
         },
@@ -191,12 +191,12 @@ test("a renamed native snapshot resolves under its locked name", async () => {
     const scope = scopeRoot("project", dir);
     const snapshot = path.join(scope.capabilitiesDir, "kit-one");
     await writeText(path.join(snapshot, "acf.yml"), "acf: 1\nname: review-kit\nversion: 1.0.0\n");
-    const payloadDigest = await computePayloadDigest(snapshot);
+    const { capabilityHash, payloadDigest } = await computeCapabilityDigests(snapshot);
     const lock: CapabilitiesLock = {
       acf: 1,
       entries: [
         {
-          capabilityHash: payloadDigest,
+          capabilityHash,
           capabilityNames: ["kit-one"],
           rename: "kit-one",
           source: "path:../pkg",
@@ -207,7 +207,7 @@ test("a renamed native snapshot resolves under its locked name", async () => {
               format: "acf",
               path: ".",
               payloadDigest,
-              capabilityHash: payloadDigest,
+              capabilityHash,
             },
           ],
         },

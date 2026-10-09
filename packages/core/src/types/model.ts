@@ -7,6 +7,7 @@ import {
   provisionalOperations,
 } from "@caplet/runtime-taxonomy";
 import type { LockEntry } from "../lock/index.js";
+import { placeholder } from "../utils/placeholder.js";
 import type {
   CapabilitySource,
   NativeFileExtra,
@@ -277,10 +278,9 @@ export type AssetRef = {
   facet: { family: FacetFamily; name: string } | { family: "capability" };
 };
 
-const PLACEHOLDER_OPEN = "$";
-const ACF_CAPABILITY_DIR_PLACEHOLDER = `${PLACEHOLDER_OPEN}{ACF_CAPABILITY_DIR}`;
-const ACF_PACKAGE_DIR_PLACEHOLDER = `${PLACEHOLDER_OPEN}{ACF_PACKAGE_DIR}`;
-const ACF_HOOK_DIR_PLACEHOLDER = `${PLACEHOLDER_OPEN}{ACF_HOOK_DIR}`;
+const ACF_CAPABILITY_DIR_PLACEHOLDER = placeholder("ACF_CAPABILITY_DIR");
+const ACF_PACKAGE_DIR_PLACEHOLDER = placeholder("ACF_PACKAGE_DIR");
+const ACF_HOOK_DIR_PLACEHOLDER = placeholder("ACF_HOOK_DIR");
 export const acfPathPlaceholders = [
   ACF_CAPABILITY_DIR_PLACEHOLDER,
   ACF_PACKAGE_DIR_PLACEHOLDER,
@@ -294,7 +294,7 @@ export const acfCapabilityDirPlaceholder = ACF_CAPABILITY_DIR_PLACEHOLDER;
  * `cwd`; writers map it to `${CLAUDE_PLUGIN_DATA}` in Claude plugins and to
  * `<install-root>/.acf/data/<capability>/` for loose carriers.
  */
-export const acfDataDirPlaceholder = `${PLACEHOLDER_OPEN}{ACF_DATA_DIR}`;
+export const acfDataDirPlaceholder = placeholder("ACF_DATA_DIR");
 
 export type Diagnostic = {
   severity: "error" | "warn" | "info" | "lossy";

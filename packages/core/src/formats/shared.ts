@@ -10,39 +10,21 @@ import type {
   CapabilityEntry,
   Diagnostic,
   InteropFamily,
+  Manifest,
   NativeRemainderComponent,
   PackageAuthor,
   SafetyClass,
   TargetId,
 } from "../types/index.js";
+import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 
-/** True for a plain JSON object (not null, not an array). */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** `${NAME}`, spelled without a template literal so the placeholder stays literal. */
-export function placeholder(name: string): string {
-  return `$${"{"}${name}}`;
-}
-
-/** Canonical placeholders for the installed capability directory and its data directory. */
-export const CAPABILITY_DIR = placeholder("ACF_CAPABILITY_DIR");
-export const DATA_DIR = placeholder("ACF_DATA_DIR");
-
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // SemVer 2.0.0, the regular expression published at semver.org.
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
-/** True when `value` is an ACF slug. */
-export function isSlug(value: string): boolean {
-  return SLUG.test(value);
-}
-
 /** True when `value` is a SemVer 2.0.0 version. */
-export function isSemVer(value: string): boolean {
+function isSemVer(value: string): boolean {
   return SEMVER.test(value);
 }
 
@@ -125,12 +107,12 @@ export async function filesUnder(root: string, dir: string): Promise<string[]> {
 }
 
 /** `file` relative to `root` with POSIX separators; `.` for the root itself. */
-export function posixRelative(root: string, file: string): string {
+function posixRelative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/") || ".";
 }
 
 /** True when any of `paths` (relative to `root`) is a file with an executable bit. */
-export async function anyExecutable(root: string, paths: readonly string[]): Promise<boolean> {
+async function anyExecutable(root: string, paths: readonly string[]): Promise<boolean> {
   for (const relative of paths) {
     for (const file of (await isDirectory(path.join(root, relative)))
       ? await filesUnder(root, path.join(root, relative))
@@ -248,8 +230,60 @@ export function packageAuthor(author: PackageAuthor): PackageAuthor {
   return entry;
 }
 
+/** Manifest fields both plugin formats hold as strings when present. */
+const MANIFEST_STRING_KEYS = ["version", "description", "homepage", "repository", "license"];
+
+/** Author fields that `PackageAuthor` holds. */
+export const AUTHOR_KEYS: ReadonlySet<string> = new Set(["name", "email", "url"]);
+
+/**
+ * The first type violation in the metadata both plugin formats share: the string fields,
+ * `keywords` and `author`. `closedAuthor` also rejects author keys outside {@link AUTHOR_KEYS}.
+ */
+export function metadataProblem(
+  raw: Record<string, unknown>,
+  closedAuthor: boolean,
+): string | undefined {
+  for (const key of MANIFEST_STRING_KEYS) {
+    if (raw[key] !== undefined && typeof raw[key] !== "string") return `${key} must be a string`;
+  }
+  if (raw.keywords !== undefined && !isStringArray(raw.keywords))
+    return "keywords must be a list of strings";
+  return raw.author === undefined ? undefined : authorProblem(raw.author, closedAuthor);
+}
+
+function authorProblem(author: unknown, closed: boolean): string | undefined {
+  if (!isRecord(author) || typeof author.name !== "string")
+    return "author must be an object with a name";
+  const unknown = closed ? Object.keys(author).find((key) => !AUTHOR_KEYS.has(key)) : undefined;
+  if (unknown !== undefined) return `author has unknown key ${unknown}`;
+  for (const key of ["email", "url"]) {
+    if (author[key] !== undefined && typeof author[key] !== "string")
+      return `author.${key} must be a string`;
+  }
+  return undefined;
+}
+
+/**
+ * The core manifest of a foreign plugin whose metadata passed {@link metadataProblem}: its
+ * identity plus the description, license, homepage, repository, keywords and author it declares.
+ */
+export function coreManifest(
+  raw: Record<string, unknown>,
+  identity: { name: string; version: string },
+): Manifest {
+  const manifest: Manifest = { acf: 1, name: identity.name, version: identity.version };
+  if (typeof raw.description === "string") manifest.description = raw.description;
+  if (typeof raw.license === "string") manifest.license = raw.license;
+  if (typeof raw.homepage === "string") manifest.homepage = raw.homepage;
+  if (typeof raw.repository === "string") manifest.repository = raw.repository;
+  if (isStringArray(raw.keywords)) manifest.keywords = raw.keywords;
+  if (isRecord(raw.author)) manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
+  return manifest;
+}
+
 /** Inner text of every `${...}` placeholder in `value` (`NAME`, or `NAME:-default`). */
-export function placeholderNames(value: string): string[] {
+function placeholderNames(value: string): string[] {
   return [...value.matchAll(/\$\{([^}]*)\}/g)].map((match) => match[1] ?? "");
 }
 

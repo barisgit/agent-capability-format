@@ -12,7 +12,10 @@ import { AGENT_PLUGINS_DIALECT, NATIVE_FILES_DIR } from "../extras/index.js";
 import { isTargetId } from "../targets/index.js";
 import type { Diagnostic, NativeFileExtra } from "../types/index.js";
 
-/** Files under `<root>/native/<target>/`, sorted by target then path; pushes errors for the rest. */
+/**
+ * Files under `<root>/native/<target>/`, by target and then depth-first in entry-name order;
+ * pushes errors for the rest.
+ */
 export async function readNativeFiles(
   root: string,
   diagnostics: Diagnostic[],

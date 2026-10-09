@@ -15,7 +15,12 @@ import type {
   SafetyClass,
   SupportCell,
 } from "../types/interop.js";
-import type { TargetId } from "../types/model.js";
+import {
+  acfCapabilityDirPlaceholder,
+  acfDataDirPlaceholder,
+  type TargetId,
+} from "../types/model.js";
+import { placeholder } from "../utils/placeholder.js";
 
 /** Carriers a target offers and the one used when the configuration names none. */
 export type TargetCarriers = { available: readonly Carrier[]; default: Carrier };
@@ -225,11 +230,6 @@ function sameKeyCells(
   });
 }
 
-// Built from parts so the source holds no `${...}` string literal (biome noTemplateCurlyInString).
-const PLACEHOLDER_OPEN = "$";
-const placeholder = (name: string): string => `${PLACEHOLDER_OPEN}{${name}}`;
-const CAPABILITY_DIR = placeholder("ACF_CAPABILITY_DIR");
-const DATA_DIR = placeholder("ACF_DATA_DIR");
 const CLAUDE_PLUGIN_ROOT = placeholder("CLAUDE_PLUGIN_ROOT");
 const CLAUDE_PLUGIN_DATA = placeholder("CLAUDE_PLUGIN_DATA");
 
@@ -240,7 +240,7 @@ const CLAUDE_PLUGIN_DATA = placeholder("CLAUDE_PLUGIN_DATA");
  */
 const PATH_PLACEHOLDERS = [
   {
-    name: CAPABILITY_DIR,
+    name: acfCapabilityDirPlaceholder,
     plugin: CLAUDE_PLUGIN_ROOT,
     directory: "the installed capability directory",
   },
@@ -261,7 +261,7 @@ const absoluteDir = (placeholder: PathPlaceholder) => (source: string) =>
   translated(`${placeholder.name} becomes the absolute path of ${placeholder.directory}`, source);
 const capletDataDir = (source: string) =>
   translated(
-    `${DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates`,
+    `${acfDataDirPlaceholder} becomes <install-root>/.acf/data/<capability>/, which caplet creates`,
     source,
   );
 
@@ -382,8 +382,8 @@ const mcpFields: FieldSupport[] = [
     ),
   ),
   placeholderRow(
-    `mcp.command=${DATA_DIR}`,
-    `${DATA_DIR}/x becomes ${CLAUDE_PLUGIN_DATA}/x`,
+    `mcp.command=${acfDataDirPlaceholder}`,
+    `${acfDataDirPlaceholder}/x becomes ${CLAUDE_PLUGIN_DATA}/x`,
     capletDataDir,
   ),
   sameKey("mcp", "mcp.command=absolute", "functional", "command", {
@@ -409,7 +409,7 @@ const mcpFields: FieldSupport[] = [
       `${path.name} becomes ${path.plugin}`,
       absoluteDir(path),
       // Only the capability directory in args ran on a real Claude host.
-      path.name === CAPABILITY_DIR ? CLAUDE_END_TO_END_EVIDENCE : undefined,
+      path.name === acfCapabilityDirPlaceholder ? CLAUDE_END_TO_END_EVIDENCE : undefined,
     ),
   ),
   ...PATH_PLACEHOLDERS.map((path) =>
@@ -423,12 +423,16 @@ const mcpFields: FieldSupport[] = [
   ...PATH_PLACEHOLDERS.map((path) => remotePlaceholderRow(`mcp.url=${path.name}`, path)),
   ...PATH_PLACEHOLDERS.map((path) => remotePlaceholderRow(`mcp.headers=${path.name}`, path)),
   placeholderRow(
-    `mcp.args=${DATA_DIR}`,
-    `${DATA_DIR} becomes ${CLAUDE_PLUGIN_DATA}`,
+    `mcp.args=${acfDataDirPlaceholder}`,
+    `${acfDataDirPlaceholder} becomes ${CLAUDE_PLUGIN_DATA}`,
     capletDataDir,
   ),
-  placeholderRow(`mcp.env=${DATA_DIR}`, `${DATA_DIR} becomes ${CLAUDE_PLUGIN_DATA}`, capletDataDir),
-  cwdPlaceholderRow(`mcp.cwd=${DATA_DIR}`, capletDataDir),
+  placeholderRow(
+    `mcp.env=${acfDataDirPlaceholder}`,
+    `${acfDataDirPlaceholder} becomes ${CLAUDE_PLUGIN_DATA}`,
+    capletDataDir,
+  ),
+  cwdPlaceholderRow(`mcp.cwd=${acfDataDirPlaceholder}`, capletDataDir),
 ];
 
 /** Package metadata has one destination in this change: the Claude plugin manifest. */

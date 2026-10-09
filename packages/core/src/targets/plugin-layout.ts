@@ -2,8 +2,8 @@
  * Plugin package layout. Paths a plugin-carrier writer generates inside a package
  * (claude-plugin-output, Claude plugin writer): validation uses them to reject
  * `native/<target>/` files that would overwrite generated output (capability-model-layers,
- * File-level native extras), and the writer uses the same list so both agree on what is
- * generated. Also the Claude plugin components that live beside the projected ones, so the
+ * File-level native extras). The Claude writer builds its paths separately, so a layout change
+ * must update both. Also the Claude plugin components that live beside the projected ones, so the
  * Claude plugin reader and the executable-change report record them alike.
  */
 import path from "node:path";

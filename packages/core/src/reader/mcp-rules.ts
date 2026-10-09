@@ -2,8 +2,8 @@
  * Value rules for canonical MCP servers that the schema cannot express (canonical-mcp,
  * Canonical MCP server fields, Data directory placeholder and Pending MCP meanings): the stdio
  * working directory, the URL scheme and userinfo rule, where `${ACF_DATA_DIR}` may appear, and
- * that no value references anything but an ACF placeholder. Messages never echo a URL, so a
- * credential in it cannot reach plans or logs.
+ * that no value references anything but an ACF placeholder. Messages echo a URL only redacted,
+ * so a credential in it cannot reach plans or logs.
  */
 import { findUrlCredentials } from "../credentials/index.js";
 import { pendingCoreFields } from "../targets/native-keys.js";

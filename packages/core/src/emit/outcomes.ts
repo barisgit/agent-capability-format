@@ -157,8 +157,8 @@ function supportChanges(diagnostic: Diagnostic, components: readonly Component[]
 }
 
 /**
- * Outcomes implied by the `acf.adapter.*` diagnostics that writers emitted before the
- * field-level registry. Group-4 writers replace them with the support helpers.
+ * Outcomes implied by the family-level `acf.adapter.*` diagnostics, which cover the families
+ * and hook or instruction behaviors the field-level support registry does not.
  */
 function legacyChanges(
   diagnostic: Diagnostic,
@@ -221,31 +221,19 @@ function legacyChanges(
 type Component = { family: OutcomeFamily; component: string };
 
 function listComponents(capability: AcfCapability): Component[] {
-  const of = (family: OutcomeFamily, names: readonly string[]): Component[] =>
-    names.map((component) => ({ family, component }));
-  const hooks = hookEntries(capability.hooks).map(({ entry }) => entry.name);
+  const of = (family: OutcomeFamily, named: readonly { name: string }[]): Component[] =>
+    [...new Set(named.map((item) => item.name))].map((component) => ({ family, component }));
   return [
+    ...of("skill", capability.skills),
+    ...of("agent", capability.agents),
+    ...of("command", capability.commands),
+    ...of("instruction", capability.instructions),
+    // A hook name may repeat across events; the report lists it once.
     ...of(
-      "skill",
-      capability.skills.map((facet) => facet.name),
+      "hook",
+      hookEntries(capability.hooks).map(({ entry }) => entry),
     ),
-    ...of(
-      "agent",
-      capability.agents.map((facet) => facet.name),
-    ),
-    ...of(
-      "command",
-      capability.commands.map((facet) => facet.name),
-    ),
-    ...of(
-      "instruction",
-      capability.instructions.map((facet) => facet.name),
-    ),
-    ...of("hook", [...new Set(hooks)]),
-    ...of(
-      "mcp",
-      (capability.mcp?.servers ?? []).map((server) => server.name),
-    ),
+    ...of("mcp", capability.mcp?.servers ?? []),
   ];
 }
 

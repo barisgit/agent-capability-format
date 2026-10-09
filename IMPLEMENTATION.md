@@ -1371,9 +1371,9 @@ carrier, not per family. The tables live in `packages/core/src/targets/`:
 | --- | --- | --- |
 | `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
 | `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
-| `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field. |
-| `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data.field`, consequence, and recovery stay uniform. |
-| `remainder-support.ts` | `remainderTargets`, `remainderSupport`, `remainderRefuses` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
+| `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field, or a datum a foreign reader preserves has no native authoring form. |
+| `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data`, consequence, and recovery stay uniform. |
+| `remainder-support.ts` | `remainderTargets`, `remainderSupport` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
 | `package-values.ts` | `packageValueSchemas`, `packageValueProblem` | Validates `targets.<target>.package` values (`acf.extras.package-value-invalid`). |
 | `plugin-layout.ts` | `generatedPluginPaths`, `generatedPathCollision` | Paths the plugin writer generates, so `native/<target>/` files that collide fail with `acf.native.collision`. |
 
@@ -1398,7 +1398,9 @@ warnings and lossy notes, each once.
 
 - `nativeExtras(targets, dialect)` returns the `targets.<dialect>.native`
   map at package, skill, or MCP-server level; `withNativeExtras` writes one.
-  The `agent-plugins` dialect exists only for the Agent Plugins reader.
+  Only format readers and the bare-skill import write the `agent-plugins`
+  dialect; validation reports it in an authored capability as
+  `acf.target.unknown-id`.
 - `packageValues` and `withPackageValues` read and write
   `targets.<target>.package`, which is valid only in `acf.yml`.
 - `extrasDialects` lists the dialects a `targets` map carries.
@@ -1440,7 +1442,7 @@ instructions), and `hooks.ts`. The Claude plugin writer is
 - **Data directory.** A loose writer that emits `${ACF_DATA_DIR}` also emits
   `<install-root>/.acf/data/<capability>/.keep`.
 - **Executables.** `executableComponents` and `executableChanges`
-  (`packages/core/src/emit/executables.ts`) list added or changed MCP stdio
+  (`packages/core/src/emit/executables.ts`) list added, removed, or changed MCP stdio
   commands, hooks, LSP servers, monitors, executable files, and Claude
   `bin/` entries for the change report and `--json` `executables`. The
   plugin carrier's executable configuration from `native/claude/` files and
@@ -1564,48 +1566,36 @@ export async function readCapability(
   origin: CapabilityOrigin,
 ): Promise<AcfCapability> {
   const diagnostics: Diagnostic[] = []
+  // A bare skill import writes `.acf-import.json`; its skills keep every
+  // frontmatter key and their whole directory as assets.
+  const imported = await exists(path.join(root, ".acf-import.json"))
 
-  const manifest = await readManifest(root, diagnostics)
-  if (!manifest) return failed(root, scope, origin, diagnostics)
-
+  await validateSingularFolders(root, diagnostics)
+  const manifest = (await readManifest(root, diagnostics)) ?? fallbackManifest(root)
   const capabilityMarkdown = await readAcfMd(root, diagnostics)
 
-  const [skills, agents, commands, instructions, hooks, mcp] = await Promise.all([
-    readSkills(root, diagnostics),
+  const [skills, agents, commands, instructions, hooks, mcp, nativeFiles] = await Promise.all([
+    readSkills(root, diagnostics, imported),
     readAgents(root, diagnostics),
     readCommands(root, diagnostics),
     readInstructions(root, diagnostics),
     readHooks(root, diagnostics),
     readMcp(root, diagnostics),
+    readNativeFiles(root, diagnostics), // native/<target>/
   ])
 
   const capability: AcfCapability = {
-    root,
-    scope,
-    origin,
-    manifest,
-    capabilityMarkdown,
-    skills,
-    agents,
-    commands,
-    instructions,
-    hooks,
-    mcp,
-    assets: collectReferencedAssets({
-      root,
-      capabilityMarkdown,
-      skills,
-      agents,
-      commands,
-      instructions,
-      hooks,
-      mcp,
-      diagnostics,
-    }),
+    root, scope, origin, manifest, capabilityMarkdown,
+    skills, agents, commands, instructions, hooks, mcp, nativeFiles,
+    assets: [],
     diagnostics,
   }
+  if (imported) capability.synthesized = true
+  capability.assets = await collectReferencedAssets(capability)
+  if (imported) capability.assets = mergeByPath(capability.assets, await collectImportedSkillAssets(skills))
 
   validateCapability(capability)
+  sortDiagnostics(capability.diagnostics)
   return capability
 }
 ```
@@ -1644,7 +1634,8 @@ export const manifestSchema = z
     name: slugSchema,
     version: z.string(),
     description: z.string().optional(),
-    authors: z.array(z.string()).optional(),
+    // A structured { name, email?, url? } author, or a legacy string kept verbatim.
+    authors: z.array(z.union([z.string(), authorObjectSchema])).optional(),
     license: z.string().optional(),
     homepage: z.string().url().optional(),
     repository: z.string().optional(),
@@ -1665,6 +1656,10 @@ export const skillFrontmatterSchema = z
         model: z.boolean().optional(),
       })
       .optional(),
+    license: z.string().optional(),
+    compatibility: z.string().max(500).optional(),
+    metadata: z.record(z.string(), z.string()).optional(),
+    "argument-hint": z.string().optional(),
     assets: z.array(z.string()).optional(),
     only: z.array(slugSchema).optional(),
     except: z.array(slugSchema).optional(),
@@ -1812,6 +1807,7 @@ const mcpStdioSchema = mcpServerBaseSchema.extend({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  cwd: z.string().min(1).optional(),
 })
 
 const mcpHttpSchema = mcpServerBaseSchema.extend({
@@ -1839,11 +1835,13 @@ capability:
 function validateCapability(cap: AcfCapability): void {
   validateUniqueFacetNames(cap)
   validateHookFile(cap)
+  validateMcpServers(cap) // values, cwd, credentials in URLs
   validateOnlyExceptTargets(cap)
   validateTargetExtensions(cap)
+  validateInlineExtras(cap) // targets.<t>.native / .package
+  validateNativeFileCollisions(cap) // acf.native.collision
   validateActivationConstraints(cap)
-  validateAgentReferences(cap)
-  validateAssetReferences(cap)
+  validateApplicability(cap)
 }
 ```
 
@@ -1855,31 +1853,29 @@ function validateHookFile(cap: AcfCapability): void {
   const hooks = cap.hooks
   if (!hooks) return
 
-  for (const [bucket, entries] of Object.entries(hooks.buckets)) {
-    if (!entries) continue
-    const type = bucket as CanonicalHookType
-
-    for (const entry of entries) {
-      if (!hookEffectMatrix[type].includes(entry.effect)) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.hook.effect.not-allowed",
-          message: `effect "${entry.effect}" is not allowed for hook type "${type}"`,
-          path: hooks.path,
-        })
-      }
-
-      if (hookMatchRequired.has(type)) {
-        if (!entry.match || isEmptyMatch(entry.match)) {
-          cap.diagnostics.push({
-            severity: "error",
-            code: "acf.hook.match.required",
-            message: `${type} entries require a non-empty match`,
-            path: hooks.path,
-          })
-        }
-      }
+  // Canonical buckets and native events; `type` is undefined for a native event,
+  // which gets only the entry-shape checks (match syntax, args and shell exclusive).
+  for (const { type, entry } of hookEntries(hooks)) {
+    if (type !== undefined && !hookEffectMatrix[type].includes(entry.effect)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.effect.not-allowed",
+        message: `effect ${entry.effect} is not allowed for ${type}`,
+        path: hooks.path,
+        family: "hook",
+      })
     }
+    if (type !== undefined && hookMatchRequired.has(type) && isEmptyMatch(entry.match)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.match.required",
+        message: `${type} entries require a non-empty match`,
+        path: hooks.path,
+        family: "hook",
+      })
+    }
+    validateMatch(entry.match, hooks.path, cap.diagnostics)
+    // args together with shell: acf.hook.run.args-and-shell
   }
 }
 ```
@@ -1968,7 +1964,13 @@ Each family has explicit discovery rules.
 ### 6.1 Skills
 
 ```ts
-async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<SkillFacet[]> {
+// `imported`: a bare skill import keeps every frontmatter key (core, a target's
+// extra, or an agent-plugins extra) instead of reporting unknown keys.
+async function readSkills(
+  root: string,
+  diagnostics: Diagnostic[],
+  imported = false,
+): Promise<SkillFacet[]> {
   const dir = path.join(root, "skills")
   if (!(await exists(dir))) return []
 
@@ -1976,6 +1978,7 @@ async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<Skil
   const skills: SkillFacet[] = []
 
   for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue
     if (!entry.isDirectory()) {
       diagnostics.push({
         severity: "error",
@@ -1985,11 +1988,11 @@ async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<Skil
       })
       continue
     }
-    const skill = await readSkillDir(path.join(dir, entry.name), diagnostics)
+    const skill = await readSkill(path.join(dir, entry.name), entry.name, imported, diagnostics)
     if (skill) skills.push(skill)
   }
 
-  return skills
+  return skills.sort(byName)
 }
 ```
 
@@ -2087,7 +2090,11 @@ async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookF
   const raw = await readYaml(file)
   const parsed = hookFileSchema.safeParse(raw)
   if (!parsed.success) {
-    pushZodIssues(diagnostics, parsed.error, file)
+    pushZodIssues(diagnostics, parsed.error, file, {
+      baseCode: "acf.hooks.invalid-field",
+      family: "hook",
+      unknownKeyCode: "acf.target.extension.unknown-field",
+    })
     return undefined
   }
 
@@ -2101,7 +2108,11 @@ async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookF
 
 ### 6.4 MCP
 
-`readMcp` mirrors `readHooks` against `mcp/mcp.yml` and `mcp/mcp.yaml`.
+`readMcp` reads `mcp/mcp.yml` or `mcp/mcp.yaml` like `readHooks`, then merges
+the family-level `targets.<target>.servers` into the canonical list as servers
+that apply to that target only. A target server whose name repeats a canonical
+server or another entry of the same target, and a block with an unknown target
+id, are reported and left out.
 
 ## 7. Resolver (capabilities.yml, sources, lockfile)
 
@@ -2331,7 +2342,7 @@ export type LockedCapability = {
 ```
 
 The lockfile is JSON written canonically by `packages/core/src/lock/`:
-entries sorted by `sourceId`, keys alphabetical, selector values sorted.
+entries sorted by `sourceId`, keys in a fixed order, selector values sorted.
 Parsing is strict for names and digests and lenient for optional
 bookkeeping, so older lockfiles keep reading.
 
@@ -2428,9 +2439,10 @@ export function deduplicateCapabilities(
 - **Legacy bare `skills/` at root**: synthesizes a minimal manifest at fetch
   time when `acf.yml` is absent and `skills/` is present.
 
-Detection takes the first match in that order (SPEC §20.6); `format:`
-overrides it and the choice is reported as `acf.source.format-selected`
-(info). Formats are never merged. A recognized but invalid manifest fails
+Detection takes the first match in that order (SPEC §20.6) and reports the
+choice as `acf.source.format-selected` (info) when several manifests are
+recognized. `format:` overrides it; a requested format the source lacks fails
+with `acf.source.format-not-found`. Formats are never merged. A recognized but invalid manifest fails
 the source rather than falling back to a lower format, and a
 marketplace-only source fails with `acf.source.marketplace-unsupported`,
 suggesting `path:`. Readers live in `packages/core/src/formats/`

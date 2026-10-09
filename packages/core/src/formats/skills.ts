@@ -11,7 +11,8 @@ import { parseMarkdown } from "../reader/helpers.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
-import { filesUnder, isFile, isRecord, isSlug, nativeValuesProblem } from "./shared.js";
+import { isRecord, isSlug, isStringMap } from "../utils/guards.js";
+import { filesUnder, isFile, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
 export type SkillRules = "agent-plugins" | "claude";
@@ -208,10 +209,6 @@ function firstLine(body: string): string | undefined {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0);
-}
-
-function isStringMap(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
 /** Skill directories `<dir>/<name>/SKILL.md` directly below `dir`, sorted. */

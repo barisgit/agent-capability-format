@@ -73,6 +73,11 @@ function attachmentPoints(cap: AcfCapability): AttachmentPoint[] {
  * `acf.extras.package-value-invalid`.
  */
 export function validateInlineExtras(cap: AcfCapability): void {
+  validateNativeKeys(cap);
+  validatePackageValues(cap);
+}
+
+function validateNativeKeys(cap: AcfCapability): void {
   for (const point of attachmentPoints(cap)) {
     for (const target of Object.keys(point.targets ?? {}).filter(isTargetId)) {
       for (const [key, value] of Object.entries(nativeExtras(point.targets, target))) {
@@ -81,6 +86,9 @@ export function validateInlineExtras(cap: AcfCapability): void {
       }
     }
   }
+}
+
+function validatePackageValues(cap: AcfCapability): void {
   const manifestFile = path.join(cap.root, "acf.yml");
   for (const target of Object.keys(cap.manifest.targets ?? {}).filter(isTargetId)) {
     for (const [key, value] of Object.entries(packageValues(cap.manifest, target))) {

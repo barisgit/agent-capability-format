@@ -5,13 +5,15 @@
  * Parsing is strict for the fields integrity depends on (names become snapshot
  * directories, digests gate emission) and lenient for optional bookkeeping, so
  * lockfiles written before a field existed keep reading. Writing is canonical:
- * entries sorted by `sourceId`, keys alphabetical, selector values sorted.
+ * entries sorted by `sourceId`, keys in the fixed order of `canonicalizeEntry`, selector values
+ * sorted.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
+import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -62,7 +64,6 @@ export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
 
 type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
 
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const V1_HASH = /^sha256-[a-f0-9]{64}$/;
 
 /** Reads and parses a lockfile; `null` when it does not exist. Throws on malformed content. */
@@ -244,7 +245,7 @@ function sortStringRecord(record: Record<string, string>): Record<string, string
 }
 
 /** Validates parsed JSON as a lockfile; `lockPath` only labels errors. */
-export function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
+function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
   if (!isRecord(value)) throw new Error(`invalid capabilities.lock at ${lockPath}`);
   if (typeof value.acf !== "number") {
     throw new Error(`invalid capabilities.lock acf at ${lockPath}`);
@@ -264,7 +265,22 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   if (!isCapabilityNameArray(capabilityNames)) throw new Error("invalid lock capabilityNames");
   if (typeof source !== "string") throw new Error("invalid lock source");
   if (typeof sourceId !== "string") throw new Error("invalid lock sourceId");
-  const entry: MutableLockEntry = { capabilityHash, capabilityNames, source, sourceId };
+  const entry: MutableLockEntry = {
+    capabilityHash,
+    capabilityNames,
+    source,
+    sourceId,
+    ...optionalEntryFields(value, capabilityNames),
+  };
+  return entry as LockEntry;
+}
+
+/** The optional fields of a lock entry that hold a valid value; others are dropped. */
+function optionalEntryFields(
+  value: Record<string, unknown>,
+  capabilityNames: readonly string[],
+): MutableLockEntry {
+  const entry: MutableLockEntry = {};
   if (isStringArray(value.capabilities) && value.capabilities.length > 0) {
     entry.capabilities = value.capabilities;
   }
@@ -287,7 +303,7 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   }
   if (typeof value.resolvedSha === "string") entry.resolvedSha = value.resolvedSha;
   if (value.synthesized === true) entry.synthesized = true;
-  return entry as LockEntry;
+  return entry;
 }
 
 // Records gate emission, so a malformed record fails the read instead of being dropped.
@@ -305,7 +321,7 @@ function parseLockedCapabilities(value: unknown, names: readonly string[]): Lock
 function parseLockedCapability(value: unknown): LockedCapability {
   if (!isRecord(value)) throw new Error("invalid lock resolvedCapabilities entry");
   const { name, format, formatVersion, path: sourcePath, payloadDigest, capabilityHash } = value;
-  if (typeof name !== "string" || !SLUG.test(name)) throw new Error("invalid lock capability name");
+  if (typeof name !== "string" || !isSlug(name)) throw new Error("invalid lock capability name");
   if (!isSourceFormat(format)) throw new Error(`invalid lock capability format for ${name}`);
   if (formatVersion !== undefined && typeof formatVersion !== "string") {
     throw new Error(`invalid lock capability formatVersion for ${name}`);
@@ -339,30 +355,20 @@ function isSelector(value: unknown): value is NonNullable<CapabilityEntry["inclu
 }
 
 function isRename(value: unknown): value is NonNullable<CapabilityEntry["rename"]> {
-  if (typeof value === "string") return true;
-  if (!isRecord(value)) return false;
-  return Object.values(value).every((item) => typeof item === "string");
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return typeof value === "string" || isStringMap(value);
 }
 
 function isCapabilityNameArray(value: unknown): value is string[] {
-  return isStringArray(value) && value.every((item) => SLUG.test(item));
+  return isStringArray(value) && value.every(isSlug);
 }
 
 function isCapabilitySelectorMap(value: unknown): value is Record<string, string> {
   return (
     isRecord(value) &&
     Object.entries(value).every(
-      ([name, selector]) => SLUG.test(name) && typeof selector === "string" && selector.length > 0,
+      ([name, selector]) => isSlug(name) && typeof selector === "string" && selector.length > 0,
     )
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isErrno(error: unknown, code: string): error is { code: string } {

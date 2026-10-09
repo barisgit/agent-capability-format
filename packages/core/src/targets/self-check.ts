@@ -5,7 +5,7 @@
  * and on what each foreign reader preserves, and the caplet negative fixture suite runs it with
  * the fixture ids.
  */
-import type { FieldSupport, NativeKeyInfo, SafetyClass } from "../types/interop.js";
+import type { FieldSupport, NativeKeyInfo, SafetyClass, SupportCell } from "../types/interop.js";
 import type { TargetId } from "../types/model.js";
 import { targetCarriers } from "./field-support.js";
 import { pendingCoreFields } from "./native-keys.js";
@@ -81,33 +81,47 @@ function checkFields(
   for (const entry of fields) {
     if (seen.has(entry.field)) problems.push(`field ${entry.field} is declared twice`);
     seen.add(entry.field);
-    if (requireComplete && entry.family !== "package") {
-      for (const [target, carriers] of Object.entries(targetCarriers)) {
-        for (const carrier of carriers.available) {
-          if (entry.cells[target]?.[carrier] === undefined) {
-            problems.push(`${entry.field} has no cell for ${target}/${carrier}`);
-          }
-        }
-      }
-    }
+    if (requireComplete && entry.family !== "package") problems.push(...missingCells(entry));
     for (const [target, byCarrier] of Object.entries(entry.cells)) {
       for (const [carrier, cell] of Object.entries(byCarrier ?? {})) {
-        const where = `${entry.field} (${entry.class}) on ${target}/${carrier}`;
-        const strict = entry.class === "restricting" || entry.class === "functional";
-        if (strict && cell.kind === "degraded") {
-          problems.push(
-            `${where} is degraded; ${entry.class} fields are native, translated or refused`,
-          );
-        }
-        if (entry.class === "restricting" && cell.kind === "refused" && !cell.negativeFixture) {
-          problems.push(`${where} is refused without a negativeFixture`);
-        }
-        const fixture = cell.kind === "refused" ? cell.negativeFixture : undefined;
-        if (fixture && negativeFixtures !== undefined && !negativeFixtures.has(fixture)) {
-          problems.push(`${where} names negativeFixture ${fixture}, which does not exist`);
-        }
+        problems.push(...cellProblems(entry, `${target}/${carrier}`, cell, negativeFixtures));
       }
     }
+  }
+  return problems;
+}
+
+/** One problem per built-in target carrier that `entry` has no cell for. */
+function missingCells(entry: FieldSupport): string[] {
+  return Object.entries(targetCarriers).flatMap(([target, carriers]) =>
+    carriers.available
+      .filter((carrier) => entry.cells[target]?.[carrier] === undefined)
+      .map((carrier) => `${entry.field} has no cell for ${target}/${carrier}`),
+  );
+}
+
+/**
+ * Restricting and functional cells are never degraded; a refused restricting cell names a
+ * negative fixture, and a named fixture must exist when the fixture ids are known.
+ */
+function cellProblems(
+  entry: FieldSupport,
+  place: string,
+  cell: SupportCell,
+  negativeFixtures: ReadonlySet<string> | undefined,
+): string[] {
+  const problems: string[] = [];
+  const where = `${entry.field} (${entry.class}) on ${place}`;
+  const strict = entry.class === "restricting" || entry.class === "functional";
+  if (strict && cell.kind === "degraded") {
+    problems.push(`${where} is degraded; ${entry.class} fields are native, translated or refused`);
+  }
+  if (entry.class === "restricting" && cell.kind === "refused" && !cell.negativeFixture) {
+    problems.push(`${where} is refused without a negativeFixture`);
+  }
+  const fixture = cell.kind === "refused" ? cell.negativeFixture : undefined;
+  if (fixture && negativeFixtures !== undefined && !negativeFixtures.has(fixture)) {
+    problems.push(`${where} names negativeFixture ${fixture}, which does not exist`);
   }
   return problems;
 }
@@ -127,24 +141,28 @@ function checkKeys(fields: readonly FieldSupport[], keys: readonly NativeKeyInfo
     if (seen.has(id)) problems.push(`${label} is listed twice`);
     seen.add(id);
     if (!SAFETY_CLASSES.has(info.class)) problems.push(`${label} has no safety class`);
-    if (info.generatedFrom !== undefined) {
-      const source = info.generatedFrom;
-      const matching = fields.filter(
-        (entry) => entry.field === source || baseField(entry.field) === source,
-      );
-      if (matching.length === 0) {
-        problems.push(`${label} is generatedFrom unknown field ${source}`);
-      } else if (!matching.some((entry) => hasUsableCell(entry, info.target))) {
-        problems.push(
-          `${label} is generatedFrom ${source}, which has no non-refused cell for ${info.target}`,
-        );
-      }
-    }
+    const generated = generatedFromProblem(fields, info);
+    if (generated !== undefined) problems.push(`${label} ${generated}`);
     if (info.pending !== undefined && !(info.pending.coreField in pendingCoreFields)) {
       problems.push(`${label} is pending unknown core field ${info.pending.coreField}`);
     }
   }
   return problems;
+}
+
+/** Why the field a key is `generatedFrom` cannot produce it on the key's target, if it cannot. */
+function generatedFromProblem(
+  fields: readonly FieldSupport[],
+  info: NativeKeyInfo,
+): string | undefined {
+  const source = info.generatedFrom;
+  if (source === undefined) return undefined;
+  const matching = fields.filter(
+    (entry) => entry.field === source || baseField(entry.field) === source,
+  );
+  if (matching.length === 0) return `is generatedFrom unknown field ${source}`;
+  if (matching.some((entry) => hasUsableCell(entry, info.target))) return undefined;
+  return `is generatedFrom ${source}, which has no non-refused cell for ${info.target}`;
 }
 
 function hasUsableCell(entry: FieldSupport, target: string): boolean {
@@ -162,45 +180,40 @@ function checkPreserved(keys: readonly NativeKeyInfo[], data: PreservedForeignDa
   const reader = `${target} reader`;
   const packageKey = (key: string): NativeKeyInfo | undefined =>
     keys.find((info) => info.target === target && info.family === "package" && info.key === key);
-  const problems: string[] = [];
-  for (const [key, field] of Object.entries(data.projectedKeys)) {
-    const generatedFrom = packageKey(key)?.generatedFrom;
-    if (generatedFrom !== field) {
+  const generated = generatedPluginPaths(target, { skills: [], mcp: true });
+  return [
+    ...Object.entries(data.projectedKeys).flatMap(([key, field]) => {
+      const generatedFrom = packageKey(key)?.generatedFrom;
+      if (generatedFrom === field) return [];
       const actual =
         generatedFrom === undefined
           ? "does not generate it"
           : `writes ${key} from ${generatedFrom}`;
-      problems.push(
-        `${reader} projects manifest key ${key} into ${field}, but ${target} ${actual}`,
-      );
-    }
-  }
-  for (const key of data.manifestKeys) {
-    const info = packageKey(key);
-    const why =
-      info === undefined
-        ? "the key is unclassified"
-        : info.generatedFrom === undefined
-          ? undefined
+      return [`${reader} projects manifest key ${key} into ${field}, but ${target} ${actual}`];
+    }),
+    ...data.manifestKeys.flatMap((key) => {
+      const info = packageKey(key);
+      if (info !== undefined && info.generatedFrom === undefined) return [];
+      const why =
+        info === undefined
+          ? "the key is unclassified"
           : `${target} writes it from ${info.generatedFrom}`;
-    if (why !== undefined)
-      problems.push(
+      return [
         `${reader} preserves manifest key ${key}, which targets.${target}.native cannot author: ${why}`,
-      );
-  }
-  const generated = generatedPluginPaths(target, { skills: [], mcp: true });
-  for (const file of data.files) {
-    const collision = generatedPathCollision(generated, file);
-    if (collision !== undefined)
-      problems.push(
+      ];
+    }),
+    ...data.files.flatMap((file) => {
+      const collision = generatedPathCollision(generated, file);
+      if (collision === undefined) return [];
+      return [
         `${reader} preserves ${file}, which native/${target}/ cannot author: the plugin writer generates ${collision}`,
-      );
-  }
-  for (const key of data.packageValues) {
-    if (packageValueSchemas[target]?.[key] === undefined)
-      problems.push(
-        `${reader} preserves package value ${key}, which targets.${target}.package does not accept`,
-      );
-  }
-  return problems;
+      ];
+    }),
+    ...data.packageValues
+      .filter((key) => packageValueSchemas[target]?.[key] === undefined)
+      .map(
+        (key) =>
+          `${reader} preserves package value ${key}, which targets.${target}.package does not accept`,
+      ),
+  ];
 }

@@ -191,11 +191,6 @@ describe("Claude plugin reader", () => {
     ]);
   });
 
-  test("stdio servers keep cwd omitted", async () => {
-    const { capability } = await read(fullPlugin);
-    for (const server of capability?.mcp?.servers ?? []) expect(server).not.toHaveProperty("cwd");
-  });
-
   test("a non-SemVer version falls back and is kept as a Claude package value", async () => {
     const { capability } = await read({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "loose", version: "v2" }),

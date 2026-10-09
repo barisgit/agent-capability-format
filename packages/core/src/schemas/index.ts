@@ -1,11 +1,10 @@
-import type { CanonicalTriggerName } from "@caplet/runtime-taxonomy";
-import { canonicalTriggerNames } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
 import { carriersOf } from "../targets/field-support.js";
 import { sourceFormats } from "../types/interop.js";
 import type { SelectorKey } from "../types/model.js";
+import { SLUG_PATTERN } from "../utils/guards.js";
 
-export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+export const slugSchema = z.string().regex(SLUG_PATTERN);
 export const targetIdSchema = slugSchema;
 export const targetsSchema = z.record(z.string(), z.unknown());
 
@@ -101,41 +100,6 @@ const triggerCommonSchema = z
 
 const regexTriggerSchema = triggerCommonSchema.extend({ conditions: z.array(z.string()).min(1) });
 const fileContextTriggerSchema = triggerCommonSchema.extend({ paths: z.array(z.string()).min(1) });
-
-function addTriggerChecks(value: unknown, ctx: z.RefinementCtx): void {
-  if (typeof value !== "object" || value === null) return;
-  const act = value as { activation?: unknown };
-  if (act.activation === "always" || typeof act.activation !== "object" || act.activation === null)
-    return;
-  const when = (act.activation as { when?: unknown }).when;
-  if (typeof when !== "object" || when === null) return;
-  for (const name of canonicalTriggerNames) {
-    const trigger = (when as Partial<Record<CanonicalTriggerName, unknown>>)[name];
-    if (typeof trigger !== "object" || trigger === null) continue;
-    const block = trigger as { conditions?: unknown; debounce?: unknown; repeat?: unknown };
-    if (block.debounce !== undefined && block.repeat !== "always") {
-      ctx.addIssue({
-        code: "custom",
-        message: "debounce requires repeat: always",
-        path: ["activation", "when", name, "debounce"],
-      });
-    }
-    if (Array.isArray(block.conditions)) {
-      for (const [index, pattern] of block.conditions.entries()) {
-        if (typeof pattern !== "string") continue;
-        try {
-          new RegExp(pattern);
-        } catch {
-          ctx.addIssue({
-            code: "custom",
-            message: `invalid regex: ${pattern}`,
-            path: ["activation", "when", name, "conditions", index],
-          });
-        }
-      }
-    }
-  }
-}
 
 export const instructionFrontmatterSchema = withOnlyExcept({
   name: slugSchema,

@@ -1,20 +1,13 @@
 /**
- * Shared interop contracts for the plugin-interop-foundation change.
- *
- * These types are the settled boundary between format readers (installer/core),
- * the field-level support registry (core/targets), writers (adapters) and caplet's
- * plan/apply. Changing a shape here is a cross-lane decision, not a local one.
+ * Interop contracts shared by the format readers (core/formats), the field-level support
+ * registry (core/targets), the writers (adapters) and caplet's plan/apply. A shape change here
+ * reaches every one of them.
  */
 import type { TargetId } from "./model.js";
 
 /** Source package formats caplet can read (SPEC.md §20, source-format-readers). */
-export type SourceFormat = "acf" | "agent-plugins" | "claude-plugin" | "skills";
-export const sourceFormats: readonly SourceFormat[] = [
-  "acf",
-  "agent-plugins",
-  "claude-plugin",
-  "skills",
-];
+export const sourceFormats = ["acf", "agent-plugins", "claude-plugin", "skills"] as const;
+export type SourceFormat = (typeof sourceFormats)[number];
 
 /**
  * Safety class of a field, value condition or native key (capability-model-layers,
