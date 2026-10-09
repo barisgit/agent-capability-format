@@ -1,3 +1,46 @@
+## Context
+
+Caplet resolves native ACF capabilities and bare skill repositories (SPEC.md §18, §20.3) and emits loose native files per target (SPEC.md §22). The plugin-interop research (`research/plugin-interop/`) inventories fifteen tools and two package standards field by field (`tools/*.md`), derives a canonical model per facet (`facets/*.md`), and records five advisor reviews (`advice.md`) plus an earlier critique of the core-versus-extras idea (`advice-core-vs-extras.md`).
+
+The user's decisions frame this change and its follow-ups:
+
+- Caplet accepts native ACF, bare skills, Agent Plugins 1.0 and Claude plugins, and later other plugin formats, marketplaces and transitive imports, all mapped into one canonical model.
+- Output is a real Claude plugin for Claude, Agent Plugins packages for Codex, Copilot, VS Code and Cursor, and loose files for tools without a plugin system (OpenCode, Pi). This change delivers the Claude part; Agent Plugins output is the follow-up `agent-plugins-output`.
+- Native ACF is the most capable format through a two-layer model: a portable core that is the union of meanings at least two tools share with proved equivalence (sacrificing nothing; one meaning per field; every writer maps natively or declares a per-field degradation or refusal), plus per-target raw extras emitted verbatim to the matching tool and dropped with a diagnostic elsewhere.
+- Same-format round trips are lossless.
+- Caplet does not own approval of executable content: adding or updating a source is the approval; caplet only reports what executable content changed.
+
+Current code constraints that shape the design (from the code survey): `AcfCapability` has no source format or snapshot; the core and installer define competing lock types and the lock records only the first capability's hash; `computeContentHash` frames entries ambiguously and ignores modes; the registry declares support per facet family (`full`/`partial`); `inspectSource` ignores plugin manifests; materialization drops hidden files and links in skill trees; Claude output is loose (`.claude/skills`, `.agents/skills`, `.claude/agents`, `.claude/commands`, `CLAUDE.md` blocks, `.claude/hooks` plus `settings.json`, `.mcp.json`); skills are emitted with canonical frontmatter passed through; sidecar sweeping keeps stale paths while their capability and facet exist; `applyOneDiff` has no precondition on current content; tests are Bun assertion tests with no golden-tree harness.
+
+Known defect, out of scope here: loose Claude hook output is not loadable. `hookSettingsEntry` (`packages/adapters/src/common/emitter.ts:549-574`) writes caplet's canonical hook object (`acfMarker`, `name`, `type`, `event`, `effect`, `timeoutMs`, `run`) into `.claude/settings.json`, but Claude reads `{"hooks": {"<Event>": [{"matcher": ..., "hooks": [{"type": "command", "command": ...}]}]}}` with `timeout` in seconds (`research/plugin-interop/tools/claude-code.md`, Hooks). `packages/core/src/targets/registry.ts:83` maps `permission_request` to `PreToolUse` for Claude, although Claude has a separate `PermissionRequest` event. Mixed capabilities stay on loose Claude output (D9), so the defect remains reachable after this change; the follow-up `claude-loose-hooks-repair` fixes it and is independent of this change.
+
+Host facts rest on documentation evidence recorded in the research inventories (Claude Code docs as of 2026-10-08, local Claude 2.1.97; Agent Plugins 1.0 pinned at `ff8ab5e392cc87bd88d87c060815a87490e51003`). The exact flags of `claude plugin update|uninstall|list` and what Claude writes for a project-scope marketplace are not verified; the design gates each on a verification task.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Make the two-layer model, the promotion rule, safety classes and the field-level support table normative for skills and MCP.
+- Read Agent Plugins 1.0 packages and Claude plugins as one capability each, preserve them completely, and write Claude plugins back losslessly.
+- Translate skills and basic MCP servers between formats with native serialization for Claude, Codex, Cursor, OpenCode and Pi; refuse what a target cannot honor safely, with a negative fixture for every refusing restriction.
+- Emit a real Claude plugin registered through a caplet-owned local marketplace, with scope mapping, host state and a safe migration from loose output.
+- Close the integrity gaps that foreign packages expose (digest, lock, verification, frozen restore, ownership, containment, credentials) and report executable changes.
+
+**Non-Goals (each is a follow-up; see Follow-up changes):**
+
+- Agent Plugins writers, client profiles and the `copilot` and `vscode` targets.
+- A native ACF repository root as an Agent Plugins package.
+- Core display names, MCP enablement, MCP tool filters, MCP timeouts and path-scoped activation as core fields.
+- Hooks in any form, including the loose Claude hook defect.
+- Marketplace and catalog inputs; `.codex-plugin`, `.cursor-plugin` and Gemini readers; Agent Plugins 1.1; transitive imports and plugin dependencies.
+- Translating agents, commands, instructions, permissions, LSP servers, output styles, themes, monitors or model and effort settings across formats; a portable hook runner, permission language or template and argument dialect.
+- Publishing an ACF extension namespace; `caplet convert`.
+
+## Decisions
+
+### D1. First milestone: four readers, one plugin writer
+
+All four source formats are read; the only new writer is the Claude plugin carrier with automated registration through the `claude` CLI, pinned against the locally installed Claude by a verification spike before it ships. Agent Plugins sources reach Claude as translated Claude plugins and every other target as loose files. Codex, Cursor, OpenCode and Pi keep loose output with native skill and MCP serialization. Tasks run in seven groups: harness and registry, integrity, readers, canonical fields and serialization, Claude carrier, documentation, verification.
 
 Alternative: four readers and two plugin writers (the earlier draft). Rejected because every Agent Plugins route is unverified, the user wants Codex verified first and Copilot second, and the Agent Plugins writer adds five profiles, two targets and three host ports that do not block the Claude outcome. It moves to `agent-plugins-output` unchanged in intent.
 
