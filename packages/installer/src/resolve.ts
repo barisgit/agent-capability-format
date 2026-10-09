@@ -348,6 +348,10 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
   };
 }
 
+/**
+ * Moves staged snapshots into `capabilitiesDir`, replacing any installed copy. Records not
+ * inside staging (read from an installed lock) already live at their final root and pass through.
+ */
 async function commitStagedRecords(
   records: CapabilityRecord[],
   stagingDir: string,
@@ -391,6 +395,7 @@ function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
   return diagnostics;
 }
 
+/** Deletes installed snapshots the previous lock owned and the next lock no longer names. */
 async function removeStaleSnapshots(
   previous: CapabilitiesLock | null,
   next: CapabilitiesLock,
