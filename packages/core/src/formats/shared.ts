@@ -10,12 +10,13 @@ import type {
   CapabilityEntry,
   Diagnostic,
   InteropFamily,
+  Manifest,
   NativeRemainderComponent,
   PackageAuthor,
   SafetyClass,
   TargetId,
 } from "../types/index.js";
-import { isSlug } from "../utils/guards.js";
+import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 
 /** `${NAME}`, spelled without a template literal so the placeholder stays literal. */
@@ -236,6 +237,58 @@ export function packageAuthor(author: PackageAuthor): PackageAuthor {
   if (author.email !== undefined) entry.email = author.email;
   if (author.url !== undefined) entry.url = author.url;
   return entry;
+}
+
+/** Manifest fields both plugin formats hold as strings when present. */
+const MANIFEST_STRING_KEYS = ["version", "description", "homepage", "repository", "license"];
+
+/** Author fields that `PackageAuthor` holds. */
+export const AUTHOR_KEYS: ReadonlySet<string> = new Set(["name", "email", "url"]);
+
+/**
+ * The first type violation in the metadata both plugin formats share: the string fields,
+ * `keywords` and `author`. `closedAuthor` also rejects author keys outside {@link AUTHOR_KEYS}.
+ */
+export function metadataProblem(
+  raw: Record<string, unknown>,
+  closedAuthor: boolean,
+): string | undefined {
+  for (const key of MANIFEST_STRING_KEYS) {
+    if (raw[key] !== undefined && typeof raw[key] !== "string") return `${key} must be a string`;
+  }
+  if (raw.keywords !== undefined && !isStringArray(raw.keywords))
+    return "keywords must be a list of strings";
+  return raw.author === undefined ? undefined : authorProblem(raw.author, closedAuthor);
+}
+
+function authorProblem(author: unknown, closed: boolean): string | undefined {
+  if (!isRecord(author) || typeof author.name !== "string")
+    return "author must be an object with a name";
+  const unknown = closed ? Object.keys(author).find((key) => !AUTHOR_KEYS.has(key)) : undefined;
+  if (unknown !== undefined) return `author has unknown key ${unknown}`;
+  for (const key of ["email", "url"]) {
+    if (author[key] !== undefined && typeof author[key] !== "string")
+      return `author.${key} must be a string`;
+  }
+  return undefined;
+}
+
+/**
+ * The core manifest of a foreign plugin whose metadata passed {@link metadataProblem}: its
+ * identity plus the description, license, homepage, repository, keywords and author it declares.
+ */
+export function coreManifest(
+  raw: Record<string, unknown>,
+  identity: { name: string; version: string },
+): Manifest {
+  const manifest: Manifest = { acf: 1, name: identity.name, version: identity.version };
+  if (typeof raw.description === "string") manifest.description = raw.description;
+  if (typeof raw.license === "string") manifest.license = raw.license;
+  if (typeof raw.homepage === "string") manifest.homepage = raw.homepage;
+  if (typeof raw.repository === "string") manifest.repository = raw.repository;
+  if (isStringArray(raw.keywords)) manifest.keywords = raw.keywords;
+  if (isRecord(raw.author)) manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
+  return manifest;
 }
 
 /** Inner text of every `${...}` placeholder in `value` (`NAME`, or `NAME:-default`). */

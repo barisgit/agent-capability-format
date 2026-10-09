@@ -19,11 +19,10 @@ import type {
   Manifest,
   McpFile,
   NativeRemainderComponent,
-  PackageAuthor,
   SafetyClass,
   SkillFacet,
 } from "../types/index.js";
-import { isRecord, isStringArray } from "../utils/guards.js";
+import { isRecord } from "../utils/guards.js";
 import { readClaudeMcp } from "./claude-mcp.js";
 import {
   type ForeignReadOptions,
@@ -32,14 +31,16 @@ import {
   invalidManifest,
 } from "./package.js";
 import {
+  AUTHOR_KEYS,
   CLAUDE_MANIFEST,
   componentPaths,
   contained,
+  coreManifest,
   filesUnder,
   isDirectory,
   isFile,
+  metadataProblem,
   outsidePackage,
-  packageAuthor,
   packageIdentity,
   readJson,
   remainderComponent,
@@ -58,7 +59,6 @@ const PROJECTED_PACKAGE_KEYS: Readonly<Record<string, string>> = {
   keywords: "package.keywords",
 };
 const METADATA_KEYS = new Set([...Object.keys(PROJECTED_PACKAGE_KEYS), "skills", "mcpServers"]);
-const STRING_KEYS = ["version", "description", "homepage", "repository", "license"] as const;
 
 /** Reads the Claude plugin at `root` as one capability. */
 export async function readClaudePluginPackage(
@@ -104,22 +104,7 @@ export async function readClaudePluginPackage(
 
 function manifestProblem(raw: Record<string, unknown>): string | undefined {
   if (typeof raw.name !== "string" || raw.name.length === 0) return "name is required";
-  for (const key of STRING_KEYS) {
-    if (raw[key] !== undefined && typeof raw[key] !== "string") return `${key} must be a string`;
-  }
-  if (raw.keywords !== undefined && !isStringArray(raw.keywords))
-    return "keywords must be a list of strings";
-  return raw.author === undefined ? undefined : authorProblem(raw.author);
-}
-
-function authorProblem(author: unknown): string | undefined {
-  if (!isRecord(author) || typeof author.name !== "string")
-    return "author must be an object with a name";
-  for (const key of ["email", "url"]) {
-    if (author[key] !== undefined && typeof author[key] !== "string")
-      return `author.${key} must be a string`;
-  }
-  return undefined;
+  return metadataProblem(raw, false);
 }
 
 /** Core metadata; values core cannot hold exactly become `targets.claude.package` values. */
@@ -127,16 +112,10 @@ function projectManifest(
   raw: Record<string, unknown>,
   identity: { name: string; version: string; foreignVersion?: string | undefined },
 ): Manifest {
-  const manifest: Manifest = { acf: 1, name: identity.name, version: identity.version };
-  if (typeof raw.description === "string") manifest.description = raw.description;
-  if (typeof raw.license === "string") manifest.license = raw.license;
-  if (typeof raw.homepage === "string") manifest.homepage = raw.homepage;
-  if (typeof raw.repository === "string") manifest.repository = raw.repository;
-  if (Array.isArray(raw.keywords)) manifest.keywords = raw.keywords as string[];
+  const manifest = coreManifest(raw, identity);
   const values: Record<string, unknown> = {};
   if (identity.foreignVersion !== undefined) values.version = identity.foreignVersion;
   if (isRecord(raw.author)) {
-    manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
     // Claude allows author keys PackageAuthor has no field for; keep the whole author then.
     if (Object.keys(raw.author).some((key) => !AUTHOR_KEYS.has(key))) values.author = raw.author;
   }
@@ -144,8 +123,6 @@ function projectManifest(
   if (Object.keys(targets).length > 0) manifest.targets = targets;
   return manifest;
 }
-
-const AUTHOR_KEYS = new Set(["name", "email", "url"]);
 
 /**
  * Skills from `skills/` plus manifest `skills` paths. A path holding `SKILL.md` is one

@@ -14,7 +14,6 @@ import type {
   Manifest,
   McpFile,
   NativeRemainderComponent,
-  PackageAuthor,
   SkillFacet,
 } from "../types/index.js";
 import { isRecord } from "../utils/guards.js";
@@ -26,9 +25,10 @@ import {
   invalidManifest,
 } from "./package.js";
 import {
+  coreManifest,
   isDirectory,
   isFile,
-  packageAuthor,
+  metadataProblem,
   packageIdentity,
   readJson,
   remainderComponent,
@@ -63,7 +63,6 @@ const KNOWN_KEYS = new Set([
   "keywords",
   "extensions",
 ]);
-const STRING_KEYS = ["version", "description", "homepage", "repository", "license"] as const;
 const NAME = /^(?!.*--)(?!.*\.\.)[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/;
 const NAMESPACE = /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
 
@@ -138,25 +137,7 @@ export async function readAgentPluginsPackage(
 function manifestProblem(raw: Record<string, unknown>): string | undefined {
   if (typeof raw.name !== "string" || !NAME.test(raw.name))
     return "name must be 1-64 characters of a-z, 0-9, . and -, starting and ending alphanumeric";
-  for (const key of STRING_KEYS) {
-    if (raw[key] !== undefined && typeof raw[key] !== "string") return `${key} must be a string`;
-  }
-  if (
-    raw.keywords !== undefined &&
-    !(Array.isArray(raw.keywords) && raw.keywords.every((item) => typeof item === "string"))
-  )
-    return "keywords must be a list of strings";
-  if (raw.author !== undefined) {
-    if (!isRecord(raw.author) || typeof raw.author.name !== "string")
-      return "author must be an object with a name";
-    const unknown = Object.keys(raw.author).find((key) => !["name", "email", "url"].includes(key));
-    if (unknown !== undefined) return `author has unknown key ${unknown}`;
-    for (const key of ["email", "url"]) {
-      if (raw.author[key] !== undefined && typeof raw.author[key] !== "string")
-        return `author.${key} must be a string`;
-    }
-  }
-  return undefined;
+  return metadataProblem(raw, true);
 }
 
 function projectManifest(
@@ -165,16 +146,10 @@ function projectManifest(
   manifestPath: string,
   diagnostics: Diagnostic[],
 ): Manifest {
-  const manifest: Manifest = { acf: 1, name: identity.name, version: identity.version };
-  if (typeof raw.description === "string") manifest.description = raw.description;
-  if (typeof raw.license === "string") manifest.license = raw.license;
-  if (typeof raw.homepage === "string") manifest.homepage = raw.homepage;
-  if (typeof raw.repository === "string") manifest.repository = raw.repository;
-  if (Array.isArray(raw.keywords)) manifest.keywords = raw.keywords as string[];
+  const manifest = coreManifest(raw, identity);
 
   const packageValues: Record<string, unknown> = {};
   if (identity.foreignVersion !== undefined) packageValues.version = identity.foreignVersion;
-  if (raw.author !== undefined) manifest.authors = [packageAuthor(raw.author as PackageAuthor)];
 
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
