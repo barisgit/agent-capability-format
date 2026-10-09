@@ -192,6 +192,9 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Root-level plugin skill copies its package root as support files.** `packages/adapters/src/claude/plugin.ts` `supportFiles`: a foreign skill at the package root (manifest `skills: "."`) maps to an empty relative path, so the package root's files are copied again next to the regenerated `skills/<name>/`. Predates the review round.
+- **Removed paths derived outside the component table.** `packages/adapters/src/claude/plugin-source.ts` decides removed paths and manifest keys from remainder components rather than from `claudePluginComponents`; no defect seen, but a second place that can drift from the table.
+
 - **Frozen restore rewrites lock entries written before per-capability records.** `packages/installer/src/resolve.ts` `fetchEntry`: under `--frozen`, restoring such an entry writes the fresh entry, so the lock gains `resolvedCapabilities` at the same sha, and an entry keyed by a legacy source id keeps that id. Provenance is unchanged, but it is a lock write under frozen. Suspected fix: under frozen keep the locked entry (`withSelection(locked)`).
 - **Hand-resolved path sources before drift detection.** `apps/caplet/src/internal/emit-plan.ts` (~275-282) resolves relative `path:` sources itself before `detectLockDrift`; pass `manifestDir` instead, as `commands/check.ts` now does.
 
