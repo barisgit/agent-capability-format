@@ -14,6 +14,7 @@ import {
   marketplaceKeptDiagnostic,
   otherScopeDiagnostic,
   stateReadDiagnostic,
+  uninstallHeldDiagnostic,
   versionMismatchDiagnostic,
 } from "./diagnostics.js";
 import type { ClaudeHost, ClaudeHostFailure } from "./host.js";
@@ -274,6 +275,9 @@ function scopeReport(
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
   if (plan.keptBy.length > 0) {
     diagnostics.push(marketplaceKeptDiagnostic(plan, installed !== undefined));
+  }
+  for (const plugin of plan.plugins) {
+    if (plugin.action === "kept") diagnostics.push(uninstallHeldDiagnostic(plan, plugin));
   }
 
   const plugins = plan.plugins.map((plugin) => {

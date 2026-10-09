@@ -255,7 +255,7 @@ async function switchToLoose(scope: TestScope, version: string) {
   const host = await claudeScenarioShim(scope, "project", NAME, [
     localPluginList(version),
     "marketplace-list-json",
-    "uninstall-local",
+    "uninstall-local-keep-data",
     "list-json-empty",
     "marketplace-remove",
   ]);
@@ -283,6 +283,58 @@ test("switching Claude to the loose carrier uninstalls the plugin and writes loo
   expect(sidecar.marketplace).toBeUndefined();
   expect(sidecar.managed.some((entry) => entry.carrier === "plugin")).toBe(false);
 });
+
+for (const [label, seed] of [
+  [
+    "Claude saved options for it",
+    async (scope: TestScope, id: string) =>
+      await writeText(
+        path.join(scope.home, ".claude", "settings.json"),
+        JSON.stringify({ pluginConfigs: { [id]: { options: { region: "eu" } } } }),
+      ),
+  ],
+  [
+    "its manifest declares user configuration",
+    async (scope: TestScope) => {
+      const manifest = path.join(
+        scope.cwd,
+        ".claude/.acf/marketplace/plugins",
+        NAME,
+        ".claude-plugin/plugin.json",
+      );
+      const parsed = JSON.parse(await readText(manifest)) as Record<string, unknown>;
+      parsed.userConfig = { token: { type: "string", sensitive: true } };
+      await writeText(manifest, JSON.stringify(parsed));
+    },
+  ],
+] as const) {
+  test(`switching to loose keeps the plugin installed when ${label}`, async () => {
+    const scope = await looseProject();
+    const { version } = await migrate(scope, "ok");
+    const id = `${NAME}@${await claudeMarketplace(scope, "project")}`;
+    await seed(scope, id);
+    await writeText(
+      path.join(scope.agentsDir, "caplet.yml"),
+      "targets:\n  claude:\n    carrier: loose\n",
+    );
+    const host = await claudeScenarioShim(scope, "project", NAME, [
+      localPluginList(version),
+      "marketplace-list-json",
+    ]);
+
+    const applied = await runCaplet(scope, [...args(scope), "--json"], host.env);
+
+    expect(await host.unused()).toEqual([]);
+    expect(await host.unexpected()).toEqual([]);
+    expect(applied.exitCode).toBe(0);
+    const held = (JSON.parse(applied.stdout) as ApplyJson).diagnostics.find(
+      (d) => d.code === "acf.claude.uninstall-held",
+    );
+    expect(held?.message).toContain(`claude plugin uninstall ${id} --scope local --keep-data`);
+    const plugin = path.join(scope.cwd, ".claude/.acf/marketplace/plugins", NAME);
+    expect(existsSync(plugin)).toBe(true);
+  });
+}
 
 test("a capability that migrates again later in the same install root announces its rename again", async () => {
   const scope = await looseProject();

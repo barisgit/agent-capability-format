@@ -28,6 +28,15 @@ function installed(
   return { id, name, marketplace, version, scope, enabled, installPath, projectPath };
 }
 
+function settingsFile(
+  scope: ClaudeSettingsFile["scope"],
+  file: string,
+  marketplaces: string[],
+  configuredPlugins: string[] = [],
+): ClaudeSettingsFile {
+  return { scope, path: file, settings: { marketplaces, configuredPlugins } };
+}
+
 function commands(plan: ReturnType<typeof planClaudeScope>): string[] {
   return plan.steps.map((step) => formatClaudeCommand(step.command));
 }
@@ -275,6 +284,70 @@ describe("planClaudeScope", () => {
   });
 });
 
+describe("uninstalling for a carrier change", () => {
+  const userSettings = "/home/u/.claude/settings.json";
+
+  function moveToLoose(
+    declaresConfig: boolean,
+    settings: ClaudeSettingsFile[],
+    plugins: ClaudeInstalledPlugin[] = [installed("moved@acf-user", "1.0.0", "user")],
+  ) {
+    return planClaudeScope(
+      {
+        target: { scope: "user" },
+        marketplaceDir: userDir,
+        plugins: [],
+        carrierChanged: [{ name: "moved", declaresConfig }],
+      },
+      {
+        plugins,
+        marketplaces: [{ name: "acf-user", source: "directory" }],
+        projectDir: projectRoot,
+        settings,
+      },
+    );
+  }
+
+  test("keeps Claude's plugin data, unlike a removal", () => {
+    const plan = moveToLoose(
+      false,
+      [settingsFile("user", userSettings, [])],
+      [installed("moved@acf-user", "1.0.0", "user"), installed("gone@acf-user", "1.0.0", "user")],
+    );
+    expect(commands(plan)).toEqual([
+      "claude plugin uninstall moved@acf-user --scope user --keep-data",
+      "claude plugin uninstall gone@acf-user --scope user",
+      "claude plugin marketplace remove acf-user",
+    ]);
+  });
+
+  test("holds the last install when uninstalling would delete options Claude saved for it", () => {
+    for (const plan of [
+      moveToLoose(false, [settingsFile("user", userSettings, [], ["moved@acf-user"])]),
+      moveToLoose(true, [settingsFile("user", userSettings, [])]),
+      moveToLoose(false, [{ scope: "user", path: userSettings, settings: undefined }]),
+    ]) {
+      expect(commands(plan)).toEqual([]);
+      expect(plan.plugins.map((p) => [p.id, p.action])).toEqual([["moved@acf-user", "kept"]]);
+      expect(plan.keptBy).toEqual([]);
+    }
+  });
+
+  test("uninstalls with --keep-data while another install keeps the saved options", () => {
+    const plan = moveToLoose(
+      true,
+      [settingsFile("user", userSettings, [], ["moved@acf-user"])],
+      [
+        installed("moved@acf-user", "1.0.0", "user"),
+        installed("moved@acf-user", "1.0.0", "local", true, "/home/u/other"),
+      ],
+    );
+    expect(commands(plan)).toEqual([
+      "claude plugin uninstall moved@acf-user --scope user --keep-data",
+    ]);
+  });
+});
+
 describe("removing caplet's marketplace", () => {
   const userSettings = "/home/u/.claude/settings.json";
   const projectSettings = `${projectRoot}/.claude/settings.json`;
@@ -298,9 +371,9 @@ describe("removing caplet's marketplace", () => {
 
   test("runs when only caplet's own settings file declares it", () => {
     const plan = retire({ scope: "project", projectRoot }, [
-      { scope: "user", path: userSettings, marketplaces: ["acf-user"] },
-      { scope: "project", path: projectSettings, marketplaces: [] },
-      { scope: "local", path: localSettings, marketplaces: [projectMarketplace] },
+      settingsFile("user", userSettings, ["acf-user"]),
+      settingsFile("project", projectSettings, []),
+      settingsFile("local", localSettings, [projectMarketplace]),
     ]);
     expect(commands(plan)).toEqual([`claude plugin marketplace remove ${projectMarketplace}`]);
     expect(plan.keptBy).toEqual([]);
@@ -308,9 +381,9 @@ describe("removing caplet's marketplace", () => {
 
   test("is not run when another settings file it edits declares the marketplace", () => {
     const plan = retire({ scope: "user" }, [
-      { scope: "user", path: userSettings, marketplaces: ["acf-user"] },
-      { scope: "project", path: projectSettings, marketplaces: ["acf-user"] },
-      { scope: "local", path: localSettings, marketplaces: [] },
+      settingsFile("user", userSettings, ["acf-user"]),
+      settingsFile("project", projectSettings, ["acf-user"]),
+      settingsFile("local", localSettings, []),
     ]);
     expect(commands(plan)).toEqual([]);
     expect(plan.keptBy).toEqual([`${projectSettings} declares it`]);
@@ -318,9 +391,9 @@ describe("removing caplet's marketplace", () => {
 
   test("is not run when a settings file it edits cannot be read", () => {
     const plan = retire({ scope: "project", projectRoot }, [
-      { scope: "user", path: userSettings, marketplaces: undefined },
-      { scope: "project", path: projectSettings, marketplaces: [] },
-      { scope: "local", path: localSettings, marketplaces: [projectMarketplace] },
+      { scope: "user", path: userSettings, settings: undefined },
+      settingsFile("project", projectSettings, []),
+      settingsFile("local", localSettings, [projectMarketplace]),
     ]);
     expect(commands(plan)).toEqual([]);
     expect(plan.keptBy).toEqual([`${userSettings} cannot be read`]);

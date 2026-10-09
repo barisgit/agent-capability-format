@@ -16,7 +16,12 @@ export type ClaudeCommand =
   | { op: "marketplace add"; dir: string; scope: ClaudeScope }
   | { op: "marketplace update"; marketplace: string }
   | { op: "marketplace remove"; marketplace: string }
-  | { op: "install" | "update" | "uninstall"; plugin: string; scope: ClaudeScope };
+  | { op: "install" | "update"; plugin: string; scope: ClaudeScope }
+  /**
+   * `keepData` passes `--keep-data`, which keeps the plugin's data directory. Claude still deletes
+   * the options and secrets it saved for the plugin when this is the id's last install.
+   */
+  | { op: "uninstall"; plugin: string; scope: ClaudeScope; keepData: boolean };
 
 /** Arguments after the program name for `command`; scoped commands always pass `--scope`. */
 export function claudeArgs(command: ClaudeCommand): string[] {
@@ -29,8 +34,11 @@ export function claudeArgs(command: ClaudeCommand): string[] {
       return ["plugin", "marketplace", "remove", command.marketplace];
     case "install":
     case "update":
-    case "uninstall":
       return ["plugin", command.op, command.plugin, "--scope", command.scope];
+    case "uninstall": {
+      const args = ["plugin", "uninstall", command.plugin, "--scope", command.scope];
+      return command.keepData ? [...args, "--keep-data"] : args;
+    }
   }
 }
 

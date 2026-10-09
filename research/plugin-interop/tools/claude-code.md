@@ -812,6 +812,15 @@ Any CLI run also creates `~/.claude/.claude.json` and a backup; `install` fetche
 
 Consequence for open question 7: Claude records a machine-specific absolute path in a committed file, so under `claude-plugin-output` "Scope mapping" default project registration stays off and project host state is `registration required` until the user answers the team-sharing question.
 
+### Saved plugin state on uninstall (phase `retention`, 2026-10-09)
+
+Verified with `claude-spike.sh retention` and by reading the 2.1.97 binary. Claude keeps three kinds of per-plugin state outside the cache: a data directory `~/.claude/plugins/data/<id with characters outside [A-Za-z0-9_-] replaced by ->`, non-sensitive options from the manifest `userConfig` (and channel `userConfig`, MCP bundle user configuration) in the user settings `pluginConfigs[<id>]`, and sensitive values in secure storage `pluginSecrets[<id>]` and `pluginSecrets[<id>/<server>]` (the plaintext `$CLAUDE_CONFIG_DIR/.credentials.json` on Linux, the keychain on macOS).
+
+- `plugin uninstall <id> --scope <s>` of the id's last install (no install left at any scope or directory) deletes the options, the secrets and the data directory (`retention/05`).
+- With `--keep-data` the data directory survives, but the options and secrets are still deleted (`retention/03`): the flag only skips the directory. An uninstall that leaves another install of the id deletes nothing.
+- `--keep-data` works at local scope too (`retention/21`), and a later `plugin marketplace remove` of the plugin's marketplace leaves the kept directory in place (`retention/22`); the remove deletes the state of the plugins it uninstalls itself.
+- A disable recorded only in settings (`enabledPlugins["probe@spike-mkt"] = false` with the plugin not installed; the CLI refuses `disable` for an uninstalled plugin) is invisible to `plugin list --json` (`[]`, `retention/10`), and `plugin install` exits 0 and rewrites it to `true` (`retention/11`, `retention/12`): install overrides a settings-only disable.
+
 ### Implications for the plugin interop change
 
 - `+acf.<digest>` versions (D8) are required and sufficient: `claude plugin update <p>@<m> --scope <s>` picks up a build-metadata-only change, while a content change under an unchanged version is ignored by `update`.

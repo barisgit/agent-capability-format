@@ -140,6 +140,29 @@ export function marketplaceKeptDiagnostic(plan: ClaudeScopePlan, emptied: boolea
   };
 }
 
+/**
+ * `plugin` moved to loose files but stays installed (action `kept`), because uninstalling it would
+ * delete the options and secrets Claude may have saved for it.
+ */
+export function uninstallHeldDiagnostic(
+  plan: ClaudeScopePlan,
+  plugin: PlannedClaudePlugin,
+): Diagnostic {
+  const command = formatClaudeCommand({
+    op: "uninstall",
+    plugin: plugin.id,
+    scope: plan.claudeScope,
+    keepData: true,
+  });
+  return {
+    severity: "warn",
+    code: "acf.claude.uninstall-held",
+    targetId: "claude",
+    message: `\`${plugin.id}\` stays installed at Claude ${plan.claudeScope} scope although ${plugin.name} now uses loose Claude files, because uninstalling it would delete the options and secrets Claude may have saved for it. Until it is uninstalled, Claude loads ${plugin.name} from both. To uninstall it and drop them, run \`${command}\`, then re-run \`caplet apply\`.`,
+    data: { plugin: plugin.id, command },
+  };
+}
+
 function indent(lines: string[]): string {
   return lines.map((line) => `  ${line}`).join("\n");
 }

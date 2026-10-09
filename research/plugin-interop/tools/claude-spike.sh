@@ -13,9 +13,9 @@
 # fetches official-marketplace install counts over the network on install.
 #
 # Usage: research/plugin-interop/tools/claude-spike.sh [phase...]
-#   phases: help core session names project failures policy (default: all)
-#   FIXTURE_DIR=<dir> also writes normalized fake-CLI fixtures (needs all phases
-#   except help), e.g. FIXTURE_DIR=apps/caplet/tests/fixtures/claude-cli
+#   phases: help core session names project failures policy retention (default: all)
+#   FIXTURE_DIR=<dir> also writes the normalized fake-CLI fixtures of the phases
+#   that ran, e.g. FIXTURE_DIR=apps/caplet/tests/fixtures/claude-cli
 # Output: transcripts in $SPIKE_ROOT/transcripts/<phase>/<step>.json and
 #         snapshots in $SPIKE_ROOT/snaps/<phase>-<label>.txt
 set -uo pipefail
@@ -363,10 +363,51 @@ phase_policy() {
   snap 06
 }
 
+# What uninstall keeps of a plugin's saved state (persistent data, saved
+# options, secrets), and whether install overrides a disable that exists only
+# in settings. Options and secrets are seeded where Claude 2.1.97 keeps them:
+# settings.json pluginConfigs and, on Linux, the plaintext secure storage
+# $CLAUDE_CONFIG_DIR/.credentials.json pluginSecrets. The secret is a dummy.
+phase_retention() {
+  fresh retention
+  local M=$ROOT/retention/mkt data=$H/.claude/plugins/data/probe-spike-mkt
+  make_marketplace "$M" spike-mkt probe local1
+  cc 01-marketplace-add plugin marketplace add "$M" --scope user
+  cc 02-install plugin install probe@spike-mkt --scope user
+  seed_saved_state() {
+    mkdir -p "$data" && echo kept >"$data/state.txt"
+    jq '.pluginConfigs["probe@spike-mkt"] = {options: {region: "eu"}}' "$H/.claude/settings.json" >"$H/.s" && mv "$H/.s" "$H/.claude/settings.json"
+    echo '{"pluginSecrets": {"probe@spike-mkt": {"token": "dummy"}}}' >"$H/.claude/.credentials.json"
+  }
+  seed_saved_state
+  snap 02-seeded
+  cc 03-uninstall-keep-data plugin uninstall probe@spike-mkt --scope user --keep-data
+  snap 03-after-uninstall-keep-data
+  cc 04-reinstall plugin install probe@spike-mkt --scope user
+  seed_saved_state
+  cc 05-uninstall plugin uninstall probe@spike-mkt --scope user
+  snap 05-after-uninstall
+  # A disable recorded only in settings (the plugin is not installed; the CLI
+  # refuses to disable an uninstalled plugin), then an install.
+  jq '.enabledPlugins["probe@spike-mkt"] = false' "$H/.claude/settings.json" >"$H/.s" && mv "$H/.s" "$H/.claude/settings.json"
+  cc 10-list-json-settings-disabled plugin list --json
+  cc 11-install-while-settings-disabled plugin install probe@spike-mkt --scope user
+  cc 12-list-json plugin list --json
+  snap 12-after-install
+  cc 20-install-local plugin install local1@spike-mkt --scope local
+  mkdir -p "$H/.claude/plugins/data/local1-spike-mkt" && echo kept >"$H/.claude/plugins/data/local1-spike-mkt/state.txt"
+  cc 21-uninstall-local-keep-data plugin uninstall local1@spike-mkt --scope local --keep-data
+  # Data kept by --keep-data, then the marketplace removed (as caplet retires it).
+  cc 22-marketplace-remove plugin marketplace remove spike-mkt
+  snap 22-after-marketplace-remove
+}
+
 # fixture <scenario> <phase/step> <notes>: fake-CLI fixture from a transcript
 # with throwaway paths replaced by placeholders (longest path first).
 fixture() {
   local name=$1 src=$2 notes=$3 phase=${2%%/*}
+  # A phase that did not run leaves its fixtures as they are.
+  [ -f "$ROOT/transcripts/$src.json" ] || return 0
   jq --arg notes "$notes" --arg r "$ROOT" --arg ph "$phase" '
     def norm: reduce (
         [$r + "/" + $ph + "/home-teammate", "<HOME>"], [$r + "/" + $ph + "/project-teammate", "<PROJECT>"],
@@ -425,6 +466,7 @@ write_fixtures() {
   fixture uninstall-user core/70-uninstall "$c. Removes the install record and the enabledPlugins key; cache directories stay with an .orphaned_at marker."
   fixture uninstall-not-installed failures/07-uninstall-not-installed "$c."
   fixture uninstall-local project/32-uninstall-local "$c. Plugin installed at local scope."
+  fixture uninstall-local-keep-data retention/21-uninstall-local-keep-data "$c. Last install of the plugin, at local scope: keeps <HOME>/.claude/plugins/data/<id with non [A-Za-z0-9_-] as ->/, but still deletes its saved options (settings.json pluginConfigs.<id>) and secrets (secure storage pluginSecrets.<id> and <id>/<server>)."
   fixture uninstall-wrong-scope project/31-uninstall-wrong-scope "$c. Plugin installed at local scope."
   fixture disable-user core/60-disable "$c. Writes enabledPlugins.<id> false in the scope's settings file."
   fixture disable-already-disabled core/62-disable-again "$c."
@@ -444,7 +486,7 @@ BEFORE=$(real_state)
 CLAUDE_JSON_BEFORE=$(stat -c %y "$REAL_HOME/.claude.json" 2>/dev/null)
 
 phases=("$@")
-[ ${#phases[@]} -gt 0 ] || phases=(help core session names project failures policy)
+[ ${#phases[@]} -gt 0 ] || phases=(help core session names project failures policy retention)
 for ph in "${phases[@]}"; do "phase_$ph"; done
 [ -z "${FIXTURE_DIR:-}" ] || write_fixtures
 echo "SPIKE_ROOT=$ROOT"

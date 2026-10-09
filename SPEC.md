@@ -2889,6 +2889,16 @@ other `acf: 1` target accepts only `loose`, and setting `plugin` for one is
 a configuration error naming the target. Switching Claude to `loose`
 writes the capabilities' loose files and uninstalls caplet's Claude
 plugins; each plugin's files are deleted once Claude no longer lists it.
+That uninstall passes `--keep-data`, so the plugin's data directory
+survives. Claude still deletes the options and secrets it saved for a
+plugin when its last install is uninstalled, so while the plugin is the
+id's last install and Claude may hold them (the user settings have
+`pluginConfigs` for it or cannot be read, or its manifest declares
+`userConfig`, a channel `userConfig`, or an MCP bundle), caplet keeps it
+installed and the warning `acf.claude.uninstall-held` gives the uninstall
+command to run by hand; until then Claude loads the capability from both
+the plugin and the loose files. Removing a capability uninstalls its
+plugin without `--keep-data`, as a native uninstall does.
 
 The Claude plugin carrier holds skills, MCP servers, Claude native
 remainder, and `native/claude/` files. A native ACF capability that also
@@ -2932,12 +2942,12 @@ through the `claude` CLI only, as an argument vector rather than a shell
 command and always with `--scope`: `claude plugin marketplace add <dir>`
 (idempotent), `claude plugin install` for a new plugin, `claude plugin
 update` for a changed version, and `claude plugin uninstall` for a removed
-one, reading state with `claude plugin list --json`. It never runs
+one (with `--keep-data` after a carrier switch, §22.8.1), reading state with `claude plugin list --json`. It never runs
 `install` for a plugin Claude already has, because that re-enables a plugin
 the user disabled. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
 `extraKnownMarketplaces`. It removes the marketplace only when no plugin
-in it is desired and the removal touches nothing but caplet's registration,
+in it is desired or held and the removal touches nothing but caplet's registration,
 because `claude plugin marketplace remove` uninstalls the marketplace's
 plugins in every scope and directory and drops its declarations from the
 user settings and the working directory's project and local settings. When

@@ -107,6 +107,7 @@ describe("createClaudeHost settings", () => {
       JSON.stringify({
         extraKnownMarketplaces: { "acf-user": {} },
         enabledPlugins: { "review@team-mkt": true },
+        pluginConfigs: { "review@team-mkt": { options: { region: "eu" } } },
       }),
     );
     await writeFile(path.join(projectDir, ".claude", "settings.json"), "{ not json");
@@ -115,17 +116,20 @@ describe("createClaudeHost settings", () => {
       {
         scope: "user",
         path: path.join(configDir, "settings.json"),
-        marketplaces: ["acf-user", "team-mkt"],
+        settings: {
+          marketplaces: ["acf-user", "team-mkt"],
+          configuredPlugins: ["review@team-mkt"],
+        },
       },
       {
         scope: "project",
         path: path.join(projectDir, ".claude", "settings.json"),
-        marketplaces: undefined,
+        settings: undefined,
       },
       {
         scope: "local",
         path: path.join(projectDir, ".claude", "settings.local.json"),
-        marketplaces: [],
+        settings: { marketplaces: [], configuredPlugins: [] },
       },
     ]);
   });

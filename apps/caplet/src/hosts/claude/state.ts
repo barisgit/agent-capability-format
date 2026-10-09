@@ -27,6 +27,17 @@ export type ClaudeKnownMarketplace = {
   path?: string | undefined;
 };
 
+/** What caplet reads from one Claude settings file. */
+export type ClaudeSettings = {
+  /** Marketplaces declared in `extraKnownMarketplaces` or named in an `enabledPlugins` key. */
+  marketplaces: string[];
+  /**
+   * Plugin ids with options saved in `pluginConfigs`. Claude deletes them, with the plugin's
+   * secrets, when the id's last install is uninstalled (Claude 2.1.97).
+   */
+  configuredPlugins: string[];
+};
+
 /**
  * A Claude settings file that `claude plugin marketplace remove` edits when run from
  * `projectDir`: the user file and that directory's project and local files (verified with
@@ -35,11 +46,8 @@ export type ClaudeKnownMarketplace = {
 export type ClaudeSettingsFile = {
   scope: ClaudeScope;
   path: string;
-  /**
-   * Marketplaces the file declares in `extraKnownMarketplaces` or names in an `enabledPlugins`
-   * key; `undefined` when the file exists but cannot be read as settings.
-   */
-  marketplaces: string[] | undefined;
+  /** `undefined` when the file exists but cannot be read as settings. */
+  settings: ClaudeSettings | undefined;
 };
 
 /** What the host reported before planning. */
@@ -55,11 +63,8 @@ export type ObservedClaudeState = {
   settings: ClaudeSettingsFile[];
 };
 
-/**
- * Parses a Claude settings file into the marketplaces it declares or names in `enabledPlugins`
- * (`<plugin>@<marketplace>` keys). Throws when the text is not a JSON object.
- */
-export function parseSettingsMarketplaces(text: string): string[] {
+/** Parses the text of a Claude settings file. Throws when it is not a JSON object. */
+export function parseClaudeSettings(text: string): ClaudeSettings {
   const settings: unknown = JSON.parse(text);
   if (!isRecord(settings)) throw new Error("settings are not a JSON object");
   const declared = isRecord(settings.extraKnownMarketplaces)
@@ -71,7 +76,10 @@ export function parseSettingsMarketplaces(text: string): string[] {
         return separator > 0 ? [id.slice(separator + 1)] : [];
       })
     : [];
-  return [...new Set([...declared, ...enabled])];
+  return {
+    marketplaces: [...new Set([...declared, ...enabled])],
+    configuredPlugins: isRecord(settings.pluginConfigs) ? Object.keys(settings.pluginConfigs) : [],
+  };
 }
 
 /**

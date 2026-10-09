@@ -8,6 +8,7 @@ import {
   ACF_SYSTEM_OWNER,
   CLAUDE_PLUGIN_MANIFEST,
   type ClaudeMarketplaceRecord,
+  isRecord,
   pluginMarketplaceDir,
   pluginPackageDir,
   type ScopeRoot,
@@ -43,6 +44,8 @@ export type ClaudeRootPlan = {
   plugins: DesiredClaudePlugin[];
   /** Plugins whose generated files the sidecar still records but the plan no longer lists. */
   leftover: string[];
+  /** The left-over plugins whose capability the plan now writes as loose Claude files. */
+  carrierChanged: { name: string; declaresConfig: boolean }[];
 };
 
 /** `<install-root>/.acf/marketplace/.claude-plugin/marketplace.json`. */
@@ -55,12 +58,14 @@ export function marketplaceFile(installRoot: string): string {
  * generates there, plus the installed plugin of each capability a refusal blocks on Claude in that
  * scope, because a blocked capability keeps its earlier install. `marketplace.json` is owned by
  * the reserved `acf-system` owner; it is deleted only when nothing is listed and the sidecar shows
- * caplet wrote it.
+ * caplet wrote it. `desired` are the plan's file changes; a left-over plugin whose capability has
+ * loose Claude output among them changed carrier.
  */
 export async function planClaudeMarketplaces(input: {
   roots: ReadonlyArray<{ scopeRoot: ScopeRoot; installRoot: string }>;
   plugins: readonly PlannedPlugin[];
   blocked: readonly BlockedCapability[];
+  desired?: readonly EmittedDiff[];
 }): Promise<{ roots: ClaudeRootPlan[]; diffs: EmittedDiff[] }> {
   const roots: ClaudeRootPlan[] = [];
   const diffs: EmittedDiff[] = [];
@@ -84,6 +89,19 @@ export async function planClaudeMarketplaces(input: {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([plugin, version]) => ({ name: plugin, version }));
     const marketplaceDir = pluginMarketplaceDir(installRoot);
+    const carrierChanged: ClaudeRootPlan["carrierChanged"] = [];
+    for (const plugin of leftover) {
+      const loose = (input.desired ?? []).some(
+        (item) =>
+          item.targetId === "claude" &&
+          item.carrier === "loose" &&
+          item.installRoot === installRoot &&
+          item.capabilityName === plugin,
+      );
+      if (!loose) continue;
+      const declaresConfig = await declaresUserConfig(pluginPackageDir(installRoot, plugin));
+      carrierChanged.push({ name: plugin, declaresConfig });
+    }
     roots.push({
       scopeRoot,
       installRoot,
@@ -92,6 +110,7 @@ export async function planClaudeMarketplaces(input: {
       marketplaceDir,
       plugins,
       leftover,
+      carrierChanged,
     });
     const after = plugins.length === 0 ? null : renderMarketplace(name, plugins);
     if (after === null && !owned) continue;
@@ -180,6 +199,32 @@ function ownsMarketplaceFile(
 ): boolean {
   const relative = relativeSidecarPath(installRoot, marketplaceFile(installRoot));
   return managed.some((entry) => entry.capability === ACF_SYSTEM_OWNER && entry.path === relative);
+}
+
+/**
+ * Whether the generated plugin in `dir` declares configuration Claude prompts for and saves
+ * per plugin: `userConfig`, a channel's `userConfig`, or an MCP bundle (HTTPS or `.mcpb`), whose
+ * user configuration Claude saves too. A manifest that cannot be read counts as declaring it.
+ */
+async function declaresUserConfig(dir: string): Promise<boolean> {
+  const text = await readTextIfExists(path.join(dir, CLAUDE_PLUGIN_MANIFEST));
+  let manifest: unknown;
+  try {
+    manifest = text === null ? undefined : JSON.parse(text);
+  } catch {
+    return true;
+  }
+  if (!isRecord(manifest)) return true;
+  const configured = (value: unknown) => isRecord(value) && Object.keys(value).length > 0;
+  const channels = Array.isArray(manifest.channels) ? manifest.channels : [];
+  const bundles = [manifest.mcpServers]
+    .flat()
+    .some((ref) => typeof ref === "string" && (/^https:\/\//.test(ref) || ref.endsWith(".mcpb")));
+  return (
+    configured(manifest.userConfig) ||
+    channels.some((channel) => isRecord(channel) && configured(channel.userConfig)) ||
+    bundles
+  );
 }
 
 /** The `version` an existing generated plugin declares, or undefined when there is none. */

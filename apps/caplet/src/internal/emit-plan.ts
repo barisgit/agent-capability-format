@@ -110,6 +110,7 @@ export async function buildEmitPlan(
       : [],
     plugins,
     blocked,
+    desired: desiredDiffs,
   });
   desiredDiffs.push(...claude.diffs);
   const sweep = await sweepStaleSidecarEntries({

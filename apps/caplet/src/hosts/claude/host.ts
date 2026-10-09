@@ -11,9 +11,9 @@ import {
   type ClaudeInstalledPlugin,
   type ClaudeKnownMarketplace,
   type ClaudeSettingsFile,
+  parseClaudeSettings,
   parseMarketplaceList,
   parsePluginList,
-  parseSettingsMarketplaces,
 } from "./state.js";
 
 /**
@@ -44,7 +44,10 @@ export interface ClaudeHost {
   listPlugins(): Promise<ClaudeHostResult<ClaudeInstalledPlugin[]>>;
   listMarketplaces(): Promise<ClaudeHostResult<ClaudeKnownMarketplace[]>>;
   run(command: ClaudeCommand): Promise<ClaudeHostResult<undefined>>;
-  /** The settings files `marketplace remove` edits from `projectDir`; a missing file declares nothing. */
+  /**
+   * The settings files `marketplace remove` edits from `projectDir`, the user file first; a
+   * missing file declares nothing.
+   */
   readSettings(): Promise<ClaudeSettingsFile[]>;
 }
 
@@ -95,12 +98,12 @@ async function readSettingsFile(
     text = await readFile(file, "utf8");
   } catch (error) {
     const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
-    return { scope, path: file, marketplaces: missing ? [] : undefined };
+    return { scope, path: file, settings: missing ? parseClaudeSettings("{}") : undefined };
   }
   try {
-    return { scope, path: file, marketplaces: parseSettingsMarketplaces(text) };
+    return { scope, path: file, settings: parseClaudeSettings(text) };
   } catch {
-    return { scope, path: file, marketplaces: undefined };
+    return { scope, path: file, settings: undefined };
   }
 }
 

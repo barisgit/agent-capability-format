@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "uninstall",
+    "local1@spike-mkt",
+    "--scope",
+    "local",
+    "--keep-data"
+  ],
+  "exitCode": 0,
+  "stdout": "✔ Successfully uninstalled plugin: local1 (scope: local)\n",
+  "stderr": "",
+  "notes": "cwd <PROJECT>, fresh <HOME>. Last install of the plugin, at local scope: keeps <HOME>/.claude/plugins/data/<id with non [A-Za-z0-9_-] as ->/, but still deletes its saved options (settings.json pluginConfigs.<id>) and secrets (secure storage pluginSecrets.<id> and <id>/<server>)."
+}

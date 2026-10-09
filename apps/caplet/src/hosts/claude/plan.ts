@@ -16,20 +16,35 @@ export type DesiredClaudeScope = {
    * read, they are assumed installed so the recovery commands include their uninstall.
    */
   leftover?: string[] | undefined;
+  /**
+   * Left-over plugins whose capability now writes loose Claude files in this scope: the carrier
+   * changed, so their uninstall keeps what Claude saved for them (`--keep-data`).
+   * `declaresConfig`: the plugin's manifest declares configuration Claude prompts for, so Claude
+   * may hold options or secrets for it that caplet cannot see.
+   */
+  carrierChanged?: ReadonlyArray<{ name: string; declaresConfig: boolean }> | undefined;
 };
 
 /**
  * What happens to one plugin. `other-scope`: the id is installed only at another Claude scope that
- * applies here, so caplet leaves it alone instead of installing over it.
+ * applies here, so caplet leaves it alone instead of installing over it. `kept`: its carrier
+ * changed, but uninstalling it would delete the options and secrets Claude saved for it, so it
+ * stays installed until the user uninstalls it.
  */
-export type ClaudePluginAction = "install" | "update" | "unchanged" | "uninstall" | "other-scope";
+export type ClaudePluginAction =
+  | "install"
+  | "update"
+  | "unchanged"
+  | "uninstall"
+  | "other-scope"
+  | "kept";
 
 /** The planned action for one plugin of the scope, desired or left over at caplet's identity. */
 export type PlannedClaudePlugin = {
   name: string;
   id: string;
   action: ClaudePluginAction;
-  /** Absent for `uninstall`. */
+  /** Absent for `uninstall` and `kept`. */
   desiredVersion?: string | undefined;
   /** The entry at caplet's managed identity, when installed there. */
   observed?: ClaudeInstalledPlugin | undefined;
@@ -104,9 +119,10 @@ export function partitionInstalls(
  * Plans the `claude plugin` commands for one ACF scope (D8, D25): an unconditional, idempotent
  * `marketplace add` when any plugin is desired, `install` for plugins not installed at caplet's
  * managed identity, `update` for changed versions (also for disabled plugins, which stay disabled),
- * and `uninstall` for plugins no longer desired. It never plans `install` for an installed plugin,
- * because install re-enables a plugin the user disabled (D15). The marketplace is removed only
- * when no plugin is desired and the removal touches nothing but caplet's registration:
+ * and `uninstall` for plugins no longer desired, keeping Claude's data for a carrier change
+ * ({@link planUninstall}). It never plans `install` for an installed plugin, because install
+ * re-enables a plugin the user disabled (D15). The marketplace is removed only when no plugin is
+ * desired or kept and the removal touches nothing but caplet's registration:
  * `marketplace remove` uninstalls its plugins at every scope and directory and drops its
  * declarations from every settings file it edits (`ObservedClaudeState.settings`).
  */
@@ -164,16 +180,17 @@ export function planClaudeScope(
   const uninstalls: number[] = [];
   for (const current of atScope.values()) {
     if (desiredNames.has(current.name)) continue;
-    plugins.push({ name: current.name, id: current.id, action: "uninstall", observed: current });
+    const command = planUninstall(current, claudeScope, desired, observed);
+    const action = command === undefined ? "kept" : "uninstall";
+    plugins.push({ name: current.name, id: current.id, action, observed: current });
+    if (command === undefined) continue;
     uninstalls.push(steps.length);
-    steps.push({
-      command: { op: "uninstall", plugin: current.id, scope: claudeScope },
-      plugin: current.id,
-      after: [],
-    });
+    steps.push({ command, plugin: current.id, after: [] });
   }
   const known = observed.marketplaces.some((m) => m.name === marketplace);
-  const retiring = desired.plugins.length === 0 && known;
+  // `marketplace remove` would uninstall a kept plugin and delete what Claude saved for it.
+  const retiring =
+    desired.plugins.length === 0 && known && plugins.every((p) => p.action !== "kept");
   const keptBy = retiring
     ? marketplaceKeptBy({ target, claudeScope, marketplace, projectDir }, installs, observed)
     : [];
@@ -192,6 +209,33 @@ export function planClaudeScope(
     marketplaceKnown: known,
     keptBy,
   };
+}
+
+/**
+ * The uninstall of `current`, a plugin no longer desired at caplet's identity, or undefined to
+ * keep it installed. A removed capability's uninstall deletes what Claude saved for the plugin, as
+ * a native uninstall does. A carrier change keeps the plugin's data directory (`--keep-data`), but
+ * Claude still deletes its saved options and secrets when no other install of the id remains, so
+ * the plugin stays installed when it may have any: user settings hold options for it or cannot be
+ * read, or its manifest declares configuration (secrets live outside the settings files).
+ */
+function planUninstall(
+  current: ClaudeInstalledPlugin,
+  scope: ClaudeScope,
+  desired: DesiredClaudeScope,
+  observed: ObservedClaudeState,
+): ClaudeCommand | undefined {
+  const moved = desired.carrierChanged?.find((plugin) => plugin.name === current.name);
+  const command = { op: "uninstall" as const, plugin: current.id, scope };
+  if (moved === undefined) return { ...command, keepData: false };
+  const lastInstall = !observed.plugins.some((p) => p.id === current.id && p !== current);
+  const user = observed.settings.find((file) => file.scope === "user");
+  const configured =
+    user !== undefined &&
+    (user.settings === undefined || user.settings.configuredPlugins.includes(current.id));
+  return lastInstall && (moved.declaresConfig || configured)
+    ? undefined
+    : { ...command, keepData: true };
 }
 
 /**
@@ -214,8 +258,10 @@ function marketplaceKeptBy(
     const own =
       file.scope === claudeScope && (target.scope === "user" || target.projectRoot === projectDir);
     if (own) continue;
-    if (file.marketplaces === undefined) keptBy.push(`${file.path} cannot be read`);
-    else if (file.marketplaces.includes(marketplace)) keptBy.push(`${file.path} declares it`);
+    if (file.settings === undefined) keptBy.push(`${file.path} cannot be read`);
+    else if (file.settings.marketplaces.includes(marketplace)) {
+      keptBy.push(`${file.path} declares it`);
+    }
   }
   return keptBy;
 }
