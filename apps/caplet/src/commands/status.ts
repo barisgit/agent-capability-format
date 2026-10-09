@@ -6,7 +6,7 @@ import { readCwd, readScope, readVerbose } from "../internal/args.js";
 import { previewClaude } from "../internal/claude-host-flow.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
-import { printDiagnostics, reporter } from "../internal/output.js";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
 import {
   buildPlanView,
   displayPath,
@@ -46,9 +46,11 @@ export const statusCommand = defineCommand({
       const claude = await previewClaude(plan);
       const diagnostics: Diagnostic[] = [...plan.diagnostics, ...(claude?.diagnostics ?? [])];
       if (!json) printDiagnostics(diagnostics, context.args);
+      const code = exitCodeForDiagnostics(diagnostics, context.args);
+      process.exitCode = code;
       const view = buildPlanView(plan.diffs);
       if (json) {
-        printJson("status", true, diagnostics, {
+        printJson("status", code === 0, diagnostics, {
           pending: view.fileCount,
           ...reachToJson(reach),
           ...(footprint === null ? {} : { footprint: footprintToJson(footprint) }),
