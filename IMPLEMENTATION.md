@@ -3224,7 +3224,8 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - `caplet show <name>` — show one capability's facets, scope root, and
   target support; `--json` gives machine output.
 - `caplet check [--target …] [--frozen]` — validate without writing. Exits
-  1 when emitted outputs are stale, 2 on validation errors, and 3 with
+  1 when emitted outputs are stale, 2 on validation errors or an `error`
+  the plan reports (such as a component apply refuses), and 3 with
   `--frozen` when the lockfile is stale.
 - `caplet doctor` — checks git availability, `.agents/` readability, the
   target registry, and lockfiles; each check reports pass/warn/fail.
