@@ -11,7 +11,7 @@ import { parseMarkdown } from "../reader/helpers.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
-import { filesUnder, isFile, isRecord, isSlug } from "./shared.js";
+import { filesUnder, isFile, isRecord, isSlug, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
 export type SkillRules = "agent-plugins" | "claude";
@@ -192,8 +192,12 @@ function withExtras(
   raw: Record<string, unknown>,
   consumed: ReadonlySet<string>,
   dialect: ExtrasDialect,
-): Frontmatter {
+): Frontmatter | string {
   const extras = Object.fromEntries(Object.entries(raw).filter(([key]) => !consumed.has(key)));
+  if (dialect !== AGENT_PLUGINS_DIALECT) {
+    const problem = nativeValuesProblem(dialect, "skill", extras);
+    if (problem !== undefined) return problem;
+  }
   if (Object.keys(extras).length > 0)
     frontmatter.targets = withNativeExtras(frontmatter.targets, dialect, extras);
   return frontmatter;

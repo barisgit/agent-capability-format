@@ -71,7 +71,11 @@ The Agent Plugins reader SHALL accept packages whose `plugin.json` `$schema` is 
 - **THEN** resolution fails with `acf.source.format-version-unsupported`
 
 ### Requirement: Claude plugin reader
-The Claude plugin reader SHALL project manifest metadata, skills from `skills/` and from additional manifest `skills` paths, and MCP servers from `.mcp.json` and manifest `mcpServers` (inline map or relative path) into the canonical model. Components it does not project in this change (agents, commands, hooks, output styles, LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`, channels, dependencies, and listing metadata) SHALL be recorded as Claude native remainder with their safety class. An MCP server whose values use a mechanism the canonical schema cannot express (host environment references, `headersHelper`, `${user_config.*}`) SHALL remain a Claude native remainder component rather than be partially projected.
+The Claude plugin reader SHALL project manifest metadata, skills from `skills/` and from additional manifest `skills` paths, and MCP servers from `.mcp.json` and manifest `mcpServers` (inline map or relative path) into the canonical model. Components it does not project in this change (agents, commands, hooks, output styles, LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`, channels, dependencies, and listing metadata) SHALL be recorded as Claude native remainder with their safety class. An MCP server whose values use a mechanism the canonical schema cannot express (host environment references, `headersHelper`, `${user_config.*}`) SHALL remain a Claude native remainder component rather than be partially projected. A skill or MCP server whose Claude native key holds a value outside the domain Claude documents SHALL be excluded with a warning, because Claude rejects it and native ACF rejects the same value.
+
+#### Scenario: Server with a value Claude rejects
+- **WHEN** `.mcp.json` declares a server with `timeout: 500`, below Claude's minimum
+- **THEN** the server is not projected and the reader warns that it is not loaded
 
 #### Scenario: Server with an environment reference
 - **WHEN** `.mcp.json` declares a server whose header is `Bearer ${API_TOKEN}`
