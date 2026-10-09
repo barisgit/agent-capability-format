@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
 import { componentPaths } from "../formats/shared.js";
+import type { TreeFile } from "../hash/tree.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
   capabilityCarrier,
@@ -23,8 +24,11 @@ import { hookEntries } from "../types/index.js";
 import { leavesBase } from "../utils/paths.js";
 import { applyApplicability } from "./index.js";
 import {
+  byRel,
+  componentStrings,
   filesUnder,
   fingerprint,
+  packageRootReferences,
   readSnapshot,
   referencedFiles,
   relativeEntrypoints,
@@ -238,7 +242,9 @@ async function remainderExecutables({
         ...component.paths,
         ...(component.manifestKeys ?? []).map((key) => `${manifestPaths[component.format]}#${key}`),
       ].join(", "),
-      fingerprint: await fingerprint(
+      fingerprint: await runningFingerprint(
+        snapshot,
+        [relativeTo(snapshot.root, packageRoot)],
         await manifestValues(packageRoot, component),
         filesUnder(snapshot, prefixes),
       ),
@@ -262,17 +268,49 @@ async function pluginConfigExecutables({
       kind: component.kind,
       name: component.name,
       detail: component.detail,
-      fingerprint: await fingerprint(
+      fingerprint: await runningFingerprint(
+        snapshot,
+        // The plugin carrier copies native/<target>/ over the capability's own files.
+        [component.dir, ""],
         component.definition,
-        filesUnder(snapshot, component.prefixes).map((file) => ({
-          ...file,
-          // Package-relative, as the same file in a foreign package is fingerprinted.
-          rel: file.rel.slice(component.dir.length + 1),
-        })),
+        filesUnder(snapshot, component.prefixes),
+        component.dir,
       ),
     });
   }
   return result;
+}
+
+/** Placeholders that name a plugin package's root in each remainder format. */
+const packageRootPlaceholders: readonly string[] = ["CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT"];
+
+/**
+ * Fingerprint of a plugin configuration component: its definition, its own files, and the files
+ * its definition or files run through a package-root placeholder (`${CLAUDE_PLUGIN_ROOT}/...`),
+ * resolved in `bases` ({@link packageRootReferences}). With `packageDir`, the package is a native
+ * ACF capability's `native/<target>/` directory over the capability's own files: files are hashed
+ * package-relative, as the same files of a foreign package are, and the other targets'
+ * `native/` directories, which the package does not copy, resolve nothing.
+ */
+async function runningFingerprint(
+  snapshot: Snapshot,
+  bases: readonly string[],
+  definition: unknown,
+  files: readonly TreeFile[],
+  packageDir?: string,
+): Promise<string> {
+  const strings = await componentStrings(definition, files);
+  const referenced = packageRootReferences(snapshot, bases, packageRootPlaceholders, strings);
+  if (packageDir === undefined)
+    return await fingerprint(definition, union(snapshot, files, referenced));
+  const prefix = `${packageDir}/`;
+  const copied = referenced.filter(
+    (file) => !underAny(file.rel, [NATIVE_FILES_DIR]) || file.rel.startsWith(prefix),
+  );
+  const packageFiles = union(snapshot, files, copied).map((file) =>
+    file.rel.startsWith(prefix) ? { ...file, rel: file.rel.slice(prefix.length) } : file,
+  );
+  return await fingerprint(definition, byRel(packageFiles));
 }
 
 /**

@@ -128,6 +128,31 @@ describe("executableComponents", () => {
   });
 });
 
+/** The Claude plugin package `files` read as a foreign capability. */
+async function foreignPlugin(files: Record<string, string>): Promise<AcfCapability> {
+  const dir = await tempDir();
+  dirs.push(dir);
+  await makeCapability(dir, {
+    ".claude-plugin/plugin.json": '{"name":"test-cap","version":"1.0.0"}\n',
+    ...files,
+  });
+  const { capability: cap } = await readClaudePluginPackage(dir, {
+    scope: "project",
+    origin: { kind: "local", directory: dir },
+    revision: null,
+  });
+  if (cap === undefined) throw new Error("the plugin did not read as a capability");
+  return cap;
+}
+
+/** `change kind name` for every component that differs between the two Claude inventories. */
+async function claudeChanges(before: AcfCapability, after: AcfCapability): Promise<string[]> {
+  return executableChanges(
+    await executableComponents(before, "claude"),
+    await executableComponents(after, "claude"),
+  ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+}
+
 describe("native ACF executable configuration", () => {
   const hooksJson = (script: string): string =>
     `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/${script}"}]}]}}\n`;
@@ -200,6 +225,62 @@ describe("native ACF executable configuration", () => {
     // Loose writers drop native/<target>/ files and package extras, so nothing of them runs there.
     expect(await executableComponents(before, "claude", "loose")).toEqual([]);
     expect(await executableComponents(before, "codex")).toEqual([]);
+  });
+});
+
+describe("files a plugin configuration runs through CLAUDE_PLUGIN_ROOT", () => {
+  const hookValue = {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: "command", command: `node ${pluginRoot}/scripts/start.js` }] },
+      ],
+    },
+  };
+  const hooks = `${JSON.stringify(hookValue)}\n`;
+
+  test("a changed script a foreign plugin hook runs changes the hook", async () => {
+    const plugin = async (code: string) =>
+      await foreignPlugin({ "hooks/hooks.json": hooks, "scripts/start.js": code });
+    expect(await claudeChanges(await plugin("one()\n"), await plugin("two()\n"))).toEqual([
+      "changed hook hooks",
+    ]);
+  });
+
+  test("a changed script a native hook runs changes the hook, wherever the plugin takes it from", async () => {
+    for (const script of ["native/claude/scripts/start.js", "scripts/start.js"]) {
+      const native = async (code: string) =>
+        await capability({
+          "acf.yml": baseManifest,
+          "native/claude/hooks/hooks.json": hooks,
+          [script]: code,
+        });
+      expect(await claudeChanges(await native("one()\n"), await native("two()\n"))).toEqual([
+        "changed hook hooks",
+      ]);
+    }
+    const foreign = await foreignPlugin({
+      "hooks/hooks.json": hooks,
+      "scripts/start.js": "one()\n",
+    });
+    const native = await capability({
+      "acf.yml": baseManifest,
+      "native/claude/hooks/hooks.json": hooks,
+      "scripts/start.js": "one()\n",
+    });
+    const fingerprints = async (cap: AcfCapability) =>
+      (await executableComponents(cap, "claude")).map((item) => item.fingerprint);
+    expect(await fingerprints(native)).toEqual(await fingerprints(foreign));
+  });
+
+  test("a script a native manifest-key hook runs counts toward the hook", async () => {
+    const native = async (code: string) =>
+      await capability({
+        "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      hooks: ${JSON.stringify(hookValue)}\n`,
+        "native/claude/scripts/start.js": code,
+      });
+    expect(await claudeChanges(await native("one()\n"), await native("two()\n"))).toEqual([
+      "changed hook hooks",
+    ]);
   });
 });
 

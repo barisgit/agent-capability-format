@@ -1451,7 +1451,11 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   component in a foreign Claude plugin, so both report alike. A stdio server's
   fingerprint covers the packaged files its command and arguments name through
   an ACF path placeholder or by a relative path under its `cwd` (exact files
-  only, inside the snapshot).
+  only, inside the snapshot). A plugin configuration component's fingerprint
+  (a Claude hook, LSP server, monitor or pending server, foreign or from
+  `native/claude/`) also covers the files its definition or files name
+  through `${CLAUDE_PLUGIN_ROOT}/<path>`, resolved in the generated package:
+  `native/claude/<path>` first, then the capability's own `<path>`.
 
 ### 4.9 Claude plugin carrier and host port
 
