@@ -118,7 +118,7 @@ describe("planClaudeScope", () => {
           installed("gone@acf-user", "1.0.0+acf.ddd", "user"),
           installed("other@someone-else", "1.0.0", "user"),
         ],
-        marketplaces: [{ name: "acf-user", source: "directory" }],
+        marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -167,10 +167,10 @@ describe("planClaudeScope", () => {
 
   test("no desired plugins: uninstalls, then removes the known marketplace after them", () => {
     const plan = planClaudeScope(
-      { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
+      { target: { scope: "user" }, marketplaceDir: userDir, plugins: [], recorded: true },
       {
         plugins: [installed("gone@acf-user", "1.0.0", "user")],
-        marketplaces: [{ name: "acf-user", source: "directory" }],
+        marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -202,7 +202,7 @@ describe("planClaudeScope", () => {
           installed(`shared@${projectMarketplace}`, "0.9.0", "project", false),
           installed(`manual@${projectMarketplace}`, "1.0.0", "project"),
         ],
-        marketplaces: [{ name: projectMarketplace, source: "directory" }],
+        marketplaces: [{ name: projectMarketplace, source: "directory", path: projectDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -221,7 +221,7 @@ describe("planClaudeScope", () => {
       { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
       {
         plugins: [installed("manual@acf-user", "1.0.0", "project")],
-        marketplaces: [{ name: "acf-user", source: "directory" }],
+        marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -239,7 +239,7 @@ describe("planClaudeScope", () => {
       },
       {
         plugins: [installed(`review@${projectMarketplace}`, "1.0.0", "local", true, other)],
-        marketplaces: [{ name: projectMarketplace, source: "directory" }],
+        marketplaces: [{ name: projectMarketplace, source: "directory", path: projectDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -269,7 +269,7 @@ describe("planClaudeScope", () => {
       { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
       {
         plugins: [elsewhere],
-        marketplaces: [{ name: "acf-user", source: "directory" }],
+        marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
         projectDir: projectRoot,
         settings: [],
       },
@@ -281,6 +281,57 @@ describe("planClaudeScope", () => {
     expect(
       formatClaudeCommand({ op: "marketplace add", dir: "/home/u/my proj/m", scope: "local" }),
     ).toBe("claude plugin marketplace add '/home/u/my proj/m' --scope local");
+  });
+});
+
+describe("a marketplace of caplet's name that caplet did not register", () => {
+  const desired = (plugins: { name: string; version: string }[], recorded = true) => ({
+    target: { scope: "user" as const },
+    marketplaceDir: userDir,
+    plugins,
+    recorded,
+  });
+  const observed = (marketplace: { source: string; path?: string }) => ({
+    plugins: [installed("tool@acf-user", "1.0.0", "user")],
+    marketplaces: [{ name: "acf-user", ...marketplace }],
+    projectDir: projectRoot,
+    settings: [],
+  });
+
+  test("runs nothing when it comes from another source or directory", () => {
+    for (const marketplace of [{ source: "github" }, { source: "directory", path: "/srv/team" }]) {
+      const install = planClaudeScope(
+        desired([{ name: "review", version: "1.0.0" }]),
+        observed(marketplace),
+      );
+      expect(commands(install)).toEqual([]);
+      expect(install.foreign).toMatchObject(marketplace);
+      expect(install.plugins.map((p) => [p.name, p.action])).toEqual([["review", "blocked"]]);
+      expect(install.otherScopeInstalls).toEqual([]);
+      // Retiring would uninstall tool@acf-user and remove the other marketplace.
+      const retire = planClaudeScope(desired([]), observed(marketplace));
+      expect(commands(retire)).toEqual([]);
+      expect(retire.plugins).toEqual([]);
+    }
+  });
+
+  test("is caplet's own when its directory is caplet's through a symlink", () => {
+    const link = "/home/u/dotfiles/claude/.acf/marketplace";
+    const plan = planClaudeScope(desired([{ name: "tool", version: "1.0.0" }]), {
+      ...observed({ source: "directory", path: link }),
+      realPaths: new Map([[link, userDir]]),
+    });
+    expect(plan.foreign).toBeUndefined();
+    expect(commands(plan)).toEqual([`claude plugin marketplace add ${userDir} --scope user`]);
+  });
+
+  test("is not removed when the sidecar does not record caplet's registration", () => {
+    const plan = planClaudeScope(desired([], false), {
+      ...observed({ source: "directory", path: userDir }),
+      plugins: [],
+    });
+    expect(commands(plan)).toEqual([]);
+    expect(plan.keptBy).toEqual(["caplet's sidecar has no record of it"]);
   });
 });
 
@@ -297,11 +348,12 @@ describe("uninstalling for a carrier change", () => {
         target: { scope: "user" },
         marketplaceDir: userDir,
         plugins: [],
+        recorded: true,
         carrierChanged: [{ name: "moved", declaresConfig }],
       },
       {
         plugins,
-        marketplaces: [{ name: "acf-user", source: "directory" }],
+        marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
         projectDir: projectRoot,
         settings,
       },
@@ -358,11 +410,12 @@ describe("removing caplet's marketplace", () => {
     settings: ClaudeSettingsFile[],
   ) {
     const marketplace = claudeMarketplaceName(target);
+    const marketplaceDir = target.scope === "user" ? userDir : projectDir;
     return planClaudeScope(
-      { target, marketplaceDir: target.scope === "user" ? userDir : projectDir, plugins: [] },
+      { target, marketplaceDir, plugins: [], recorded: true },
       {
         plugins: [],
-        marketplaces: [{ name: marketplace, source: "directory" }],
+        marketplaces: [{ name: marketplace, source: "directory", path: marketplaceDir }],
         projectDir: projectRoot,
         settings,
       },

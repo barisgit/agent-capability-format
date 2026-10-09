@@ -1,6 +1,11 @@
+import path from "node:path";
 import type { ClaudeCommand, ClaudeScope } from "./commands.js";
 import { type ClaudeScopeTarget, claudeMarketplaceName, claudeScopeFor } from "./scope.js";
-import type { ClaudeInstalledPlugin, ObservedClaudeState } from "./state.js";
+import type {
+  ClaudeInstalledPlugin,
+  ClaudeKnownMarketplace,
+  ObservedClaudeState,
+} from "./state.js";
 
 /** A generated Claude plugin caplet wants installed: capability slug and its `+acf.<d>` version. */
 export type DesiredClaudePlugin = { name: string; version: string };
@@ -11,6 +16,11 @@ export type DesiredClaudeScope = {
   /** Absolute path of the scope's marketplace directory (`<install-root>/.acf/marketplace`). */
   marketplaceDir: string;
   plugins: DesiredClaudePlugin[];
+  /**
+   * Whether the scope's sidecar records the marketplace as caplet's (caplet owns its
+   * `marketplace.json`). Caplet removes only a marketplace it recorded.
+   */
+  recorded?: boolean | undefined;
   /**
    * Plugins caplet generated in this scope earlier and no longer wants. When host state cannot be
    * read, they are assumed installed so the recovery commands include their uninstall.
@@ -29,7 +39,8 @@ export type DesiredClaudeScope = {
  * What happens to one plugin. `other-scope`: the id is installed only at another Claude scope that
  * applies here, so caplet leaves it alone instead of installing over it. `kept`: its carrier
  * changed, but uninstalling it would delete the options and secrets Claude saved for it, so it
- * stays installed until the user uninstalls it.
+ * stays installed until the user uninstalls it. `blocked`: Claude lists caplet's marketplace name
+ * from another source, so caplet runs nothing for the scope (`ClaudeScopePlan.foreign`).
  */
 export type ClaudePluginAction =
   | "install"
@@ -37,7 +48,8 @@ export type ClaudePluginAction =
   | "unchanged"
   | "uninstall"
   | "other-scope"
-  | "kept";
+  | "kept"
+  | "blocked";
 
 /** The planned action for one plugin of the scope, desired or left over at caplet's identity. */
 export type PlannedClaudePlugin = {
@@ -77,6 +89,12 @@ export type ClaudeScopePlan = {
    * scope, so the planned `marketplace add` still runs, as a no-op when it is registered.
    */
   marketplaceKnown: boolean;
+  /**
+   * The marketplace Claude lists under caplet's name from another source or directory. Then the
+   * plan has no step: `marketplace add` would repoint it to caplet's directory, and uninstall or
+   * `marketplace remove` would change plugins caplet did not install.
+   */
+  foreign: ClaudeKnownMarketplace | undefined;
   /**
    * Why the marketplace stays registered although no plugin is desired: what
    * `marketplace remove` would also change (another settings file declaring it, one caplet
@@ -124,7 +142,8 @@ export function partitionInstalls(
  * re-enables a plugin the user disabled (D15). The marketplace is removed only when no plugin is
  * desired or kept and the removal touches nothing but caplet's registration:
  * `marketplace remove` uninstalls its plugins at every scope and directory and drops its
- * declarations from every settings file it edits (`ObservedClaudeState.settings`).
+ * declarations from every settings file it edits (`ObservedClaudeState.settings`). When Claude
+ * lists the marketplace name from anywhere but caplet's directory, the plan runs nothing.
  */
 export function planClaudeScope(
   desired: DesiredClaudeScope,
@@ -138,6 +157,27 @@ export function planClaudeScope(
     { target, claudeScope, marketplace, projectDir },
     observed.plugins,
   );
+  const listed = observed.marketplaces.find((m) => m.name === marketplace);
+  if (listed !== undefined && !isDirectory(listed, desired.marketplaceDir, observed)) {
+    return {
+      target,
+      claudeScope,
+      marketplace,
+      marketplaceDir: desired.marketplaceDir,
+      projectDir,
+      steps: [],
+      plugins: desired.plugins.map((plugin) => ({
+        name: plugin.name,
+        id: `${plugin.name}@${marketplace}`,
+        action: "blocked",
+        desiredVersion: plugin.version,
+      })),
+      otherScopeInstalls: [],
+      marketplaceKnown: true,
+      foreign: listed,
+      keptBy: [],
+    };
+  }
   const atScope = new Map(installs.managed.map((p) => [p.name, p]));
   const otherScopeInstalls = installs.otherScope;
   const steps: PlannedClaudeStep[] = [];
@@ -187,12 +227,15 @@ export function planClaudeScope(
     uninstalls.push(steps.length);
     steps.push({ command, plugin: current.id, after: [] });
   }
-  const known = observed.marketplaces.some((m) => m.name === marketplace);
+  const known = listed !== undefined;
   // `marketplace remove` would uninstall a kept plugin and delete what Claude saved for it.
   const retiring =
     desired.plugins.length === 0 && known && plugins.every((p) => p.action !== "kept");
   const keptBy = retiring
-    ? marketplaceKeptBy({ target, claudeScope, marketplace, projectDir }, installs, observed)
+    ? [
+        ...(desired.recorded === true ? [] : ["caplet's sidecar has no record of it"]),
+        ...marketplaceKeptBy({ target, claudeScope, marketplace, projectDir }, installs, observed),
+      ]
     : [];
   if (retiring && keptBy.length === 0) {
     steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
@@ -207,8 +250,23 @@ export function planClaudeScope(
     plugins,
     otherScopeInstalls,
     marketplaceKnown: known,
+    foreign: undefined,
     keptBy,
   };
+}
+
+/** Whether Claude lists `marketplace` from the directory `dir`, compared by real path. */
+function isDirectory(
+  marketplace: ClaudeKnownMarketplace,
+  dir: string,
+  observed: ObservedClaudeState,
+): boolean {
+  const real = (file: string) => observed.realPaths?.get(file) ?? path.resolve(file);
+  return (
+    marketplace.source === "directory" &&
+    marketplace.path !== undefined &&
+    real(marketplace.path) === real(dir)
+  );
 }
 
 /**

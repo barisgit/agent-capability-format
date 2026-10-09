@@ -44,6 +44,8 @@ export type ClaudeRootPlan = {
   plugins: DesiredClaudePlugin[];
   /** Plugins whose generated files the sidecar still records but the plan no longer lists. */
   leftover: string[];
+  /** Whether the sidecar records this marketplace as caplet's. */
+  recorded: boolean;
   /** The left-over plugins whose capability the plan now writes as loose Claude files. */
   carrierChanged: { name: string; declaresConfig: boolean }[];
 };
@@ -109,6 +111,7 @@ export async function planClaudeMarketplaces(input: {
       record: { name, scope: claudeScopeFor(scopeRoot.scope) },
       marketplaceDir,
       plugins,
+      recorded: sidecar.marketplace?.name === name,
       leftover,
       carrierChanged,
     });

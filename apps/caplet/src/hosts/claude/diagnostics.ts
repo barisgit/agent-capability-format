@@ -141,6 +141,31 @@ export function marketplaceKeptDiagnostic(plan: ClaudeScopePlan, emptied: boolea
 }
 
 /**
+ * Claude lists the scope's marketplace name from another source (`plan.foreign`), so caplet ran
+ * nothing for the scope.
+ */
+export function marketplaceForeignDiagnostic(plan: ClaudeScopePlan): Diagnostic {
+  const foreign = plan.foreign;
+  const where =
+    foreign?.path === undefined
+      ? `a ${foreign?.source} source`
+      : `${foreign.source} ${foreign.path}`;
+  const command = formatClaudeCommand({ op: "marketplace remove", marketplace: plan.marketplace });
+  return {
+    severity: "error",
+    code: "acf.claude.marketplace-foreign",
+    targetId: "claude",
+    message: `Claude marketplace \`${plan.marketplace}\` is registered from ${where}, not from caplet's ${plan.marketplaceDir}, so caplet ran no Claude command for ${plan.target.scope} scope: adding caplet's directory would repoint it, and uninstalling or removing would change plugins caplet did not install. Remove or rename that marketplace (\`${command}\` also uninstalls its plugins), then re-run \`caplet apply\`.`,
+    data: {
+      marketplace: plan.marketplace,
+      source: foreign?.source,
+      path: foreign?.path,
+      expected: plan.marketplaceDir,
+    },
+  };
+}
+
+/**
  * `plugin` moved to loose files but stays installed (action `kept`), because uninstalling it would
  * delete the options and secrets Claude may have saved for it.
  */

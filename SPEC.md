@@ -2937,6 +2937,12 @@ first 8 hex digits of the SHA-256 of the project root's real path, because
 Claude keeps one marketplace record per name for the whole user. The
 install root's sidecar records the marketplace name and Claude scope, so a
 later apply can retire the registration after the last plugin is gone.
+When Claude lists the marketplace name from another source, or from a
+directory whose real path is not caplet's marketplace directory, caplet
+runs no `claude` command for that scope, because `marketplace add` would
+repoint the name and an uninstall or `marketplace remove` would change
+plugins caplet did not install; the scope's plugins are `unknown` and the
+error `acf.claude.marketplace-foreign` names the registered source.
 Caplet registers
 through the `claude` CLI only, as an argument vector rather than a shell
 command and always with `--scope`: `claude plugin marketplace add <dir>`
@@ -2947,7 +2953,7 @@ one (with `--keep-data` after a carrier switch, §22.8.1), reading state with `c
 the user disabled. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
 `extraKnownMarketplaces`. It removes the marketplace only when no plugin
-in it is desired or held and the removal touches nothing but caplet's registration,
+in it is desired or held, the sidecar records it as caplet's, and the removal touches nothing but caplet's registration,
 because `claude plugin marketplace remove` uninstalls the marketplace's
 plugins in every scope and directory and drops its declarations from the
 user settings and the working directory's project and local settings. When
@@ -3001,7 +3007,8 @@ state:
   than caplet generated: after its commands succeeded, or in a dry run or
   status before apply updates it (`acf.claude.version-mismatch`), or after
   its update or install failed (the `acf.claude.command-failed` error
-  explains it).
+  explains it), or caplet's marketplace name is registered from another
+  source (`acf.claude.marketplace-foreign`).
 
 Any other failed `claude` command is the error `acf.claude.command-failed`
 carrying Claude's message. The commands that depend on it are skipped,

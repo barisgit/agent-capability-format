@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import type { Diagnostic, Scope } from "@caplet/core";
 import {
@@ -11,6 +12,7 @@ import {
 import {
   cliUnavailableDiagnostic,
   commandFailedDiagnostic,
+  marketplaceForeignDiagnostic,
   marketplaceKeptDiagnostic,
   otherScopeDiagnostic,
   stateReadDiagnostic,
@@ -104,9 +106,13 @@ type ClaudeStateRead =
 
 /**
  * Reads `claude plugin list --json`, then `claude plugin marketplace list --json`, then the
- * settings files `marketplace remove` would edit.
+ * settings files `marketplace remove` would edit, and resolves the real paths of the listed and
+ * `desired` marketplace directories.
  */
-async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
+async function readClaudeHostState(
+  host: ClaudeHost,
+  desired: readonly DesiredClaudeScope[],
+): Promise<ClaudeStateRead> {
   const plugins = await host.listPlugins();
   if (!plugins.ok) return { ...plugins, command: formatClaudeArgs(LIST_PLUGINS_ARGS) };
   const marketplaces = await host.listMarketplaces();
@@ -120,8 +126,26 @@ async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
       marketplaces: marketplaces.value,
       projectDir: host.projectDir,
       settings: await host.readSettings(),
+      realPaths: await realPaths([
+        ...marketplaces.value.flatMap((m) => (m.path === undefined ? [] : [m.path])),
+        ...desired.map((scope) => scope.marketplaceDir),
+      ]),
     },
   };
+}
+
+/** Each path's real path, or its `path.resolve` form when it cannot be resolved (missing). */
+async function realPaths(paths: readonly string[]): Promise<Map<string, string>> {
+  const entries = await Promise.all(
+    paths.map(async (file) => {
+      try {
+        return [file, await realpath(file)] as const;
+      } catch {
+        return [file, path.resolve(file)] as const;
+      }
+    }),
+  );
+  return new Map(entries);
 }
 
 /** `not run` with an `unavailable` failure: the CLI stopped starting at or before this step. */
@@ -145,7 +169,7 @@ export async function reconcileClaudeHost(
   host: ClaudeHost,
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
-  const before = await readClaudeHostState(host);
+  const before = await readClaudeHostState(host, desired);
   if (!before.ok) return await notRun(desired, before, host);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
@@ -199,7 +223,7 @@ export async function previewClaudeHost(
   host: ClaudeHost,
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
-  const state = await readClaudeHostState(host);
+  const state = await readClaudeHostState(host, desired);
   if (!state.ok) return await notRun(desired, state, host, { preview: true });
   const diagnostics: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
@@ -271,7 +295,10 @@ function scopeReport(
   const installs = partitionInstalls(plan, installed ?? []);
   const managed =
     installed === undefined ? undefined : new Map(installs.managed.map((p) => [p.id, p]));
-  const others = installs.otherScope;
+  // Under a foreign marketplace the installs of caplet's name are not caplet's to report.
+  const foreign = plan.foreign !== undefined;
+  if (foreign) diagnostics.push(marketplaceForeignDiagnostic(plan));
+  const others = foreign ? [] : installs.otherScope;
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
   if (plan.keptBy.length > 0) {
     diagnostics.push(marketplaceKeptDiagnostic(plan, installed !== undefined));
@@ -313,7 +340,7 @@ function scopeReport(
     marketplaceKnown: plan.marketplaceKnown,
     stateRead: installed !== undefined,
   };
-  if (plan.target.scope === "project" && managed !== undefined) {
+  if (plan.target.scope === "project" && managed !== undefined && !foreign) {
     report.local = {
       projectRoot: plan.target.projectRoot,
       settingsFile: path.join(plan.target.projectRoot, ".claude", "settings.local.json"),
@@ -358,6 +385,7 @@ function listedPluginReport(
   // Installed only at another Claude scope: `otherScopeInstalls` and `acf.claude.other-scope`
   // report that install; caplet's own registration does not exist.
   if (plugin.action === "other-scope") return pluginReport(plugin, "not installed");
+  if (plugin.action === "blocked") return pluginReport(plugin, "unknown");
   if (preview) {
     if (entry === undefined) return pluginReport(plugin, "not installed");
   } else if (plugin.action === "uninstall") {
@@ -480,7 +508,7 @@ function assumedState(
       installPath: "",
       projectPath: target.scope === "project" ? target.projectRoot : undefined,
     })),
-    marketplaces: [{ name: marketplace, source: "directory" }],
+    marketplaces: [{ name: marketplace, source: "directory", path: scope.marketplaceDir }],
     projectDir,
     settings,
   };

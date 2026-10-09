@@ -61,6 +61,11 @@ export type ObservedClaudeState = {
    */
   projectDir: string;
   settings: ClaudeSettingsFile[];
+  /**
+   * Real paths of the listed marketplace directories and the desired ones, keyed by the path as
+   * listed or desired. A path missing here is compared as `path.resolve` gives it.
+   */
+  realPaths?: ReadonlyMap<string, string> | undefined;
 };
 
 /** Parses the text of a Claude settings file. Throws when it is not a JSON object. */

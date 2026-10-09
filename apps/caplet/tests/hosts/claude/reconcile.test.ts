@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCli } from "../../../src/hosts/claude/cli.js";
@@ -42,7 +42,7 @@ function userFake(transcripts: FakeTranscript[]) {
 }
 
 function userScope(plugins: { name: string; version: string }[]) {
-  return [{ target: { scope: "user" as const }, marketplaceDir: userDir, plugins }];
+  return [{ target: { scope: "user" as const }, marketplaceDir: userDir, plugins, recorded: true }];
 }
 
 function commandLines(calls: string[][]): string[] {
@@ -174,6 +174,55 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
       ["acf.claude.command-failed", "error"],
     ]);
+  });
+
+  test("a marketplace of caplet's name in another directory is left alone, as an error", async () => {
+    const fake = userFake([
+      "list-json-installed",
+      { fixture: "marketplace-list-json", replace: { "<MARKETPLACE_DIR>": "/srv/team" } },
+    ]);
+    const report = await reconcileClaudeHost(
+      host(fake.cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.bbb" }]),
+    );
+    expect(commandLines(fake.calls)).toEqual([
+      "claude plugin list --json",
+      "claude plugin marketplace list --json",
+    ]);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.marketplace-foreign", "error"],
+    ]);
+    expect(report.diagnostics[0]?.message).toContain("/srv/team");
+    expect(report.scopes[0]?.plugins).toEqual([
+      {
+        name: "probe",
+        id: "probe@acf-user",
+        action: "blocked",
+        state: "unknown",
+        desiredVersion: "1.0.0+acf.bbb",
+      },
+    ]);
+  });
+
+  test("caplet's marketplace listed through a symlink to its directory is its own", async () => {
+    await mkdir(userDir, { recursive: true });
+    const link = path.join(dir, "link");
+    await symlink(userDir, link);
+    const fake = userFake([
+      "list-json-installed",
+      { fixture: "marketplace-list-json", replace: { "<MARKETPLACE_DIR>": link } },
+      "marketplace-add-already-known",
+    ]);
+    const report = await reconcileClaudeHost(
+      host(fake.cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.diagnostics).toEqual([]);
+    expect(report.scopes[0]?.plugins[0]).toMatchObject({
+      action: "unchanged",
+      state: "registered",
+    });
   });
 
   test("an unchanged plugin gets only the idempotent marketplace add", async () => {
