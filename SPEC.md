@@ -2929,8 +2929,9 @@ state:
   loose output.
 - `unknown` — Claude's state could not be read
   (`acf.claude.state-unreadable`), or Claude still lists another version
-  than caplet generated after its commands succeeded
-  (`acf.claude.version-mismatch`).
+  than caplet generated: after its commands succeeded
+  (`acf.claude.version-mismatch`), or after its update or install failed
+  (the `acf.claude.command-failed` error explains it).
 
 Any other failed `claude` command is the error `acf.claude.command-failed`
 carrying Claude's message. The commands that depend on it are skipped,

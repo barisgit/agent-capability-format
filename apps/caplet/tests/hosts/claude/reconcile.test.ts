@@ -133,6 +133,41 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(report.diagnostics[0]?.message).toContain("1.0.0+acf.bbb");
   });
 
+  test("a failed update that leaves the old version is unknown, like one Claude ignores", async () => {
+    // Synthetic: Claude fails the update and still lists the old version afterwards.
+    const fake = userFake([
+      "list-json-installed",
+      "marketplace-list-json",
+      "marketplace-add-already-known",
+      "list-json-installed",
+    ]);
+    const cli: ClaudeCli = async (args) =>
+      args[1] === "update"
+        ? {
+            kind: "exited",
+            exitCode: 1,
+            stdout: "",
+            stderr: '✘ Failed to update plugin "probe@acf-user": disk full\n',
+          }
+        : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      createClaudeHost(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.bbb" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.plugins[0]).toMatchObject({
+      action: "update",
+      state: "unknown",
+      version: "1.0.0+acf.aaa",
+      desiredVersion: "1.0.0+acf.bbb",
+    });
+    expect(report.scopes[0]?.plugins[0]?.message).toContain("disk full");
+    // The failure explains the stale version; no second warning repeats it.
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.command-failed", "error"],
+    ]);
+  });
+
   test("an unchanged plugin gets only the idempotent marketplace add", async () => {
     const fake = userFake([
       "list-json-installed",

@@ -203,9 +203,11 @@ function scopeReport(
       if (result.failure.kind === "policy-blocked" || installed === undefined) {
         return pluginReport(plugin, failureState(result.failure), undefined, message);
       }
-      // The command failed but the host state was read after it: report what Claude has.
+      // The command failed but the host state was read after it: report what Claude has. The
+      // failure diagnostic already explains a version left behind.
       const entry = atScope.get(plugin.id);
-      if (entry !== undefined) return pluginReport(plugin, enabledState(entry), entry, message);
+      if (entry !== undefined)
+        return pluginReport(plugin, listedState(plugin, entry), entry, message);
       const absent = plugin.action === "uninstall" ? "not installed" : "registration required";
       return pluginReport(plugin, absent, undefined, message);
     }
@@ -228,11 +230,9 @@ function scopeReport(
       return pluginReport(plugin, entry === undefined ? "not installed" : "unknown", entry);
     }
     if (entry === undefined) return pluginReport(plugin, "unknown");
-    if (entry.version !== plugin.desiredVersion) {
-      diagnostics.push(versionMismatchDiagnostic(plugin, entry));
-      return pluginReport(plugin, "unknown", entry);
-    }
-    return pluginReport(plugin, enabledState(entry), entry);
+    const state = listedState(plugin, entry);
+    if (state === "unknown") diagnostics.push(versionMismatchDiagnostic(plugin, entry));
+    return pluginReport(plugin, state, entry);
   });
 
   const report: ClaudeScopeReport = {
@@ -290,6 +290,17 @@ function commandReport(
   if (plugin !== undefined) report.plugin = plugin;
   if (result !== undefined && "failure" in result) report.message = result.failure.message;
   return report;
+}
+
+/**
+ * State of a plugin Claude lists at caplet's scope: `unknown` while it lists another version than
+ * caplet generated, because Claude still serves the old content.
+ */
+function listedState(plugin: PlannedClaudePlugin, entry: ClaudeInstalledPlugin): ClaudeHostState {
+  if (plugin.desiredVersion !== undefined && entry.version !== plugin.desiredVersion) {
+    return "unknown";
+  }
+  return enabledState(entry);
 }
 
 function enabledState(entry: ClaudeInstalledPlugin): ClaudeHostState {
