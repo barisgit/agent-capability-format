@@ -92,7 +92,7 @@ export function claudeGate(
 
 /** Whether the host report lets a change behind `gate` proceed. */
 export function gateOpen(gate: ClaudeGate, report: ClaudeReport): boolean {
-  const scope = report.scopes.find((item) => item.marketplaceDir === gate.marketplaceDir);
+  const scope = gateScope(gate, report);
   if (scope === undefined || !scope.stateRead) return false;
   if (gate.kind === "registered") {
     const state = scope.plugins.find((item) => item.name === gate.plugin)?.state;
@@ -123,7 +123,7 @@ export function gatedChange(
 ): EmittedDiff | undefined {
   if (gateOpen(gate, report)) return item;
   if (gate.kind !== "retired") return undefined;
-  const scope = report.scopes.find((candidate) => candidate.marketplaceDir === gate.marketplaceDir);
+  const scope = gateScope(gate, report);
   if (scope === undefined) return undefined;
   const kept = marketplaceKept(scope, (plugin) => plugin.state === "not installed");
   return kept ? emptyCatalog(item, scope) : undefined;
@@ -143,9 +143,7 @@ export function previewedDiffs(
   return plan.diffs.flatMap((item) => {
     const gate = claudeGate(item, plan.claude);
     if (gate?.kind !== "retired") return [item];
-    const scope = report.scopes.find(
-      (candidate) => candidate.marketplaceDir === gate.marketplaceDir,
-    );
+    const scope = gateScope(gate, report);
     // The plugins the plan uninstalls are gone by the time apply settles the marketplace.
     const kept =
       scope !== undefined &&
@@ -179,6 +177,11 @@ function marketplaceKept(
 /** `item` (the retired `marketplace.json`) rewritten as the marketplace's empty catalog. */
 function emptyCatalog(item: EmittedDiff, scope: ClaudeScopeStatus): EmittedDiff {
   return { ...item, diff: { ...item.diff, after: renderMarketplace(scope.marketplace, []) } };
+}
+
+/** The scope of the marketplace `gate` belongs to. */
+function gateScope(gate: ClaudeGate, report: ClaudeReport): ClaudeScopeStatus | undefined {
+  return report.scopes.find((scope) => scope.marketplaceDir === gate.marketplaceDir);
 }
 
 function marketplaceRemove(scope: ClaudeScopeStatus): ClaudeCommandReport | undefined {
