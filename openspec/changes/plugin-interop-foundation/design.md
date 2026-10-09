@@ -253,7 +253,4 @@ Shared boundaries between the readers, the registry, the writers and caplet. Cha
 - Resolved by task 5.2: project-scope marketplaces record an absolute path in committed settings (D25).
 - Still unknown: the policy-block exit code and output at runtime (needs root or a managed account; caplet matches the policy messages found in the 2.1.97 binary), the interactive trust prompt for project-declared marketplaces, and, because they need an authenticated model session (task 5.9), whether a model session invokes the plugin's skill and MCP tool and reloads the skill body after update.
 - Whether Cursor resolves a `./` command and the default working directory of an Agent Plugins package against the plugin root, and whether Codex connects plugin SSE servers (`agent-plugins-output` tasks 1.5 and 2.1); both are refused until verified.
-
-[Showing lines 1-240 of 243 (50.0KB limit). Use offset=241 to continue.]
-
-[Showing lines 71-262 of 262 (50.0KB limit). Full output: /tmp/pi-bash-d3caf0eb804a40c2.log]
+- Codex headless plugin install and `agents/openai.yaml` handling inside plugin skills, and Copilot directory-marketplace live loading (`agent-plugins-output` tasks 2.1 and 3.1).
