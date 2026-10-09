@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -146,6 +146,30 @@ describe("executable change report", () => {
     expect(first.stdout).not.toContain("Applied");
     const second = await runCaplet(scope, scoped(scope, ["apply", "--json"]));
     expect((JSON.parse(second.stdout) as ExecutableJson).executables).toEqual([]);
+  });
+
+  test("a server a refusal kept from being installed is not listed as removed", async () => {
+    const scope = await makeScope();
+    scopes.push(scope);
+    // An Agent Plugins stdio server without cwd is refused for Claude (D22), blocking the package.
+    const source = path.join(scope.sourceRoot, "files-kit");
+    await cp(path.join(testsDir, "negative", "agent-plugins-cwd"), source, { recursive: true });
+    await mkdir(path.join(source, "skills", "hello"), { recursive: true });
+    await writeFile(
+      path.join(source, "skills", "hello", "SKILL.md"),
+      "---\nname: hello\ndescription: Say hello\n---\nHello.\n",
+    );
+    await writeFile(path.join(scope.agentsDir, "capabilities.yml"), "acf: 1\ncapabilities: []\n");
+    const refused = await runCaplet(scope, scoped(scope, ["add", source]));
+    expect(refused.stdout + refused.stderr).toContain("acf.support.refused");
+
+    await writeFile(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${source}\n    exclude:\n      mcp: [files]\n`,
+    );
+    const applied = await runCaplet(scope, scoped(scope, ["apply", "--json"]));
+    expect(applied.exitCode).toBe(0);
+    expect((JSON.parse(applied.stdout) as ExecutableJson).executables).toEqual([]);
   });
 });
 

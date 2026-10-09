@@ -453,6 +453,8 @@ export async function buildEmitPlan(
  * plan would select. Call it before a command fetches: resolution replaces snapshots in place,
  * so this is the only point where the previously locked content is still readable. Snapshots
  * that no longer match the lock are skipped, so their components count as added afterwards.
+ * A capability counts on a target only when that target has managed output for it, so one a
+ * refusal kept from ever being written there contributes nothing.
  */
 export async function installedExecutables(
   args: Record<string, unknown>,
@@ -463,9 +465,24 @@ export async function installedExecutables(
   const executables: ExecutableComponent[] = [];
   for (const scopeRoot of await resolveScopeRoots(readScope(args), cwd)) {
     const { capabilities } = await resolveScopeCapabilities(scopeRoot);
+    const canonical = await readSidecar(path.join(scopeRoot.agentsDir, ".acf-managed.json"));
     for (const targetId of targets) {
-      if (installRootFor(targetId, scopeRoot, config, cwd) === null) continue;
+      const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
+      if (installRoot === null) continue;
+      const written = new Set(
+        [
+          ...(await readSidecar(path.join(installRoot, ".acf-managed.json"))).managed.filter(
+            (entry) => entry.target === undefined || entry.target === targetId,
+          ),
+          ...(targetMap[targetId]?.discoversCanonicalSkills === true
+            ? canonical.managed.filter(
+                (entry) => entry.target === undefined || entry.target === "canonical",
+              )
+            : []),
+        ].map((entry) => entry.capability),
+      );
       for (const capability of capabilities) {
+        if (!written.has(capability.manifest.name)) continue;
         executables.push(
           ...(await executableComponents(
             capability,
