@@ -18,7 +18,7 @@ export const doctorCommand = defineCommand({
   meta: { name: "doctor", description: "check caplet environment and setup" },
   args: specToCittyArgs("doctor") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("doctor", context.args, async () => {
       const diagnostics: Diagnostic[] = [];
       const checks: DoctorCheck[] = [];
       await checkGit(checks, diagnostics);

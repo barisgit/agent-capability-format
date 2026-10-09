@@ -13,7 +13,7 @@ export const initCommand = defineCommand({
   meta: { name: "init", description: "create .agents/capabilities.yml for this project" },
   args: specToCittyArgs("init") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("init", context.args, async () => {
       const cwd = readCwd(context.args);
       const agentsDir = path.join(cwd, ".agents");
       const manifestPath = path.join(agentsDir, "capabilities.yml");

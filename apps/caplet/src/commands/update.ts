@@ -14,7 +14,7 @@ export const updateCommand = defineCommand({
   meta: { name: "update", description: "re-resolve sources to their latest refs and apply" },
   args: specToCittyArgs("update") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("update", context.args, async () => {
       const name = typeof context.args.name === "string" ? context.args.name : undefined;
       if (name !== undefined) await ensureKnownName(context.args, name);
       const installed = await installedExecutables(context.args);

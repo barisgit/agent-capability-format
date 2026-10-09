@@ -85,6 +85,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.claude.plugin-file-ignored",
   "acf.claude.skills-option-ignored",
   "acf.cli.partial-implementation",
+  "acf.cli.usage",
   "acf.support.refused",
   "acf.support.degraded",
   "acf.support.component-omitted",

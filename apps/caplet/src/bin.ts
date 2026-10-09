@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { runMain } from "citty";
+import { runCommand } from "citty";
 import { rewriteAlias, rootCommand } from "./cli.js";
 import { renderCommandHelp, renderRootHelp } from "./help.js";
+import { reportCommandFailure } from "./internal/command.js";
 import { CAPLET_VERSION } from "./internal/json.js";
 import { commandSpec, unknownFlagError } from "./internal/spec.js";
 
@@ -24,16 +25,27 @@ if (argv.includes("--help") || argv.includes("-h")) {
     process.exit(0);
   }
 }
-if (command !== undefined && commandSpec(command) === undefined) {
-  process.stderr.write(
-    `unknown command: ${command}\n  See caplet --help for available commands.\n`,
-  );
+const helpTarget = command === undefined ? "caplet --help" : `caplet ${command} --help`;
+
+/** Ends a run the command line itself got wrong: exit 2, with a JSON envelope under `--json`. */
+function usageFailure(message: string, hint: string): never {
+  if (argv.includes("--json")) reportCommandFailure(command ?? "caplet", { json: true }, message);
+  else process.stderr.write(`${message}\n  ${hint}\n`);
   process.exit(2);
+}
+
+if (command !== undefined && commandSpec(command) === undefined) {
+  usageFailure(`unknown command: ${command}`, "See caplet --help for available commands.");
 }
 const flagError = unknownFlagError(command, command === undefined ? argv : argv.slice(1));
-if (flagError !== undefined) {
-  const helpTarget = command === undefined ? "caplet --help" : `caplet ${command} --help`;
-  process.stderr.write(`${flagError}\n  See ${helpTarget} for available flags.\n`);
-  process.exit(2);
+if (flagError !== undefined) usageFailure(flagError, `See ${helpTarget} for available flags.`);
+try {
+  await runCommand(rootCommand, { rawArgs: argv });
+} catch (error) {
+  // citty rejects arguments it cannot parse, such as a missing required positional, with a
+  // CLIError, which it does not export.
+  if (error instanceof Error && error.name === "CLIError") {
+    usageFailure(error.message, `See ${helpTarget} for usage.`);
+  }
+  throw error;
 }
-await runMain(rootCommand, { rawArgs: argv });

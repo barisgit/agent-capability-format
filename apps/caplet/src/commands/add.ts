@@ -29,7 +29,7 @@ export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },
   args: specToCittyArgs("add") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("add", context.args, async () => {
       const rawSource = context.args.source;
       if (typeof rawSource !== "string" || rawSource.length === 0)
         throw validationError("source is required");

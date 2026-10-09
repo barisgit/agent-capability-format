@@ -2870,6 +2870,7 @@ acf.migration.drifted                        # edited loose artifact left in pla
 
 # CLI
 acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
+acf.cli.usage                                # bad command input: flag value, name, missing argument (error, exit 2)
 ```
 
 Codes SHOULD be stable across versions. New codes are additive.
@@ -3182,7 +3183,10 @@ Global flags: `-s/--scope`, `-C/--cwd`, `-q/--quiet`, `-v/--verbose`,
 `-y/--yes`, `--json`, `--strict`, `-V/--version`, `-h/--help`. Commands that
 accept `-t/--target` select exactly the targets it names; it may repeat and
 takes comma-separated ids, and an unknown id exits 2. Unknown commands and flags exit 2 with a
-did-you-mean hint when one is close.
+did-you-mean hint when one is close, and so does a missing required argument. Under `--json`
+every such usage error prints the command's envelope on stdout with `ok: false` and one
+`acf.cli.usage` error diagnostic (`reportCommandFailure` in
+`apps/caplet/src/internal/command.ts`).
 
 Stubs that exit 0 without doing anything are forbidden — the first audit
 caught this and it lets agents fake-pass. A command that cannot do its job

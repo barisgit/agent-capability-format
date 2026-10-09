@@ -16,7 +16,7 @@ export const checkCommand = defineCommand({
   },
   args: specToCittyArgs("check") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("check", context.args, async () => {
       const cwd = readCwd(context.args);
       process.chdir(cwd);
       const diagnostics: Diagnostic[] = [];

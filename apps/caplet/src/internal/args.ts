@@ -1,5 +1,6 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
+import type { CommandError } from "./command.js";
 
 export type ScopeSelection = "user" | "project" | "all";
 export type FetchMode = "auto" | "never" | "force";
@@ -63,8 +64,13 @@ export function readOptionalString(args: Record<string, unknown>, key: string): 
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-export function validationError(message: string): Error & { exitCode: 2 } {
-  const error = new Error(message) as Error & { exitCode: 2 };
+/**
+ * A command error that exits 2. `code` is the diagnostic code `--json` reports for it; the
+ * default marks bad command input (`acf.cli.usage`).
+ */
+export function validationError(message: string, code?: string): CommandError & { exitCode: 2 } {
+  const error = new Error(message) as CommandError & { exitCode: 2 };
   error.exitCode = 2;
+  if (code !== undefined) error.code = code;
   return error;
 }

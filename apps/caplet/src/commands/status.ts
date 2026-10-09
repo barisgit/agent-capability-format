@@ -24,7 +24,7 @@ export const statusCommand = defineCommand({
   meta: { name: "status", description: "summarize scopes, capabilities, and pending changes" },
   args: specToCittyArgs("status") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("status", context.args, async () => {
       const cwd = readCwd(context.args);
       process.chdir(cwd);
       const json = readJson(context.args);

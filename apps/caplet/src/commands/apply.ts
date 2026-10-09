@@ -33,7 +33,7 @@ export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
   args: specToCittyArgs("apply") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("apply", context.args, async () => {
       const json = readJson(context.args);
       const dryRun = context.args["dry-run"] === true;
       const frozen = context.args.frozen === true;

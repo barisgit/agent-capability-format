@@ -20,7 +20,7 @@ export const listCommand = defineCommand({
   meta: { name: "list", description: "list installed capabilities (alias: ls)" },
   args: specToCittyArgs("list") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("list", context.args, async () => {
       const cwd = readCwd(context.args);
       process.chdir(cwd);
       const diagnostics: Diagnostic[] = [];

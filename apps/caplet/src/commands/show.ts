@@ -21,7 +21,7 @@ export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
   args: specToCittyArgs("show") as ArgsDef,
   async run(context) {
-    await runCommandSafely(context.args, async () => {
+    await runCommandSafely("show", context.args, async () => {
       const name = context.args.name;
       if (typeof name !== "string" || name.length === 0) throw validationError("name is required");
       const cwd = readCwd(context.args);

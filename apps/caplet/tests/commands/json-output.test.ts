@@ -165,3 +165,46 @@ test("caplet status --json is not ok and exits 2 with an error diagnostic", asyn
     await cleanup(scope);
   }
 });
+
+test("usage errors under --json print the command's envelope with an error diagnostic", async () => {
+  const scope = await makeScope();
+  try {
+    const cases: Array<{ args: string[]; command: string; message: string }> = [
+      { args: ["apply", "--target", "bogus"], command: "apply", message: "bogus" },
+      { args: ["show"], command: "show", message: "NAME" },
+      { args: ["apply", "--bogus"], command: "apply", message: "--bogus" },
+    ];
+    for (const item of cases) {
+      const result = await runCaplet(scope, [...item.args, "--json", "--cwd", scope.cwd]);
+
+      expect(result.exitCode).toBe(2);
+      const envelope = parseEnvelope(result.stdout);
+      expect(envelope.command).toBe(item.command);
+      expect(envelope.ok).toBe(false);
+      const diagnostics = envelope.diagnostics as Array<{
+        severity: string;
+        code: string;
+        message: string;
+      }>;
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toMatchObject({ severity: "error", code: "acf.cli.usage" });
+      expect(diagnostics[0]?.message).toContain(item.message);
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("a missing required positional argument is a usage error that exits 2", async () => {
+  const scope = await makeScope();
+  try {
+    const result = await runCaplet(scope, ["show", "--cwd", scope.cwd]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("NAME");
+    expect(result.stderr).toContain("caplet show --help");
+  } finally {
+    await cleanup(scope);
+  }
+});
