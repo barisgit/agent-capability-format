@@ -28,7 +28,7 @@ agent-capability-format/
   apps/
     caplet/               # reference CLI binary
   packages/
-    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission orchestrator, per-target extension schemas, canonical EmitOptions
+    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission helpers (applicability, outcomes, executables), per-target extension schemas, canonical EmitOptions
     adapters/             # per-target emit functions + shared file utilities
     installer/            # git + network fetch (capabilities.yml resolution, lockfile writes)
     sdk/                  # convenience helpers for direct consumers; re-exports core + adapters + installer
@@ -2765,87 +2765,31 @@ applicability filtering and per-capability adapter calls. Adapters return
 `FileDiff[]`. Caplet collects, optionally shows (`apply --dry-run`), and
 applies them via a writer that updates `.acf-managed.json`.
 
-```ts
-export type EmitRequest = {
-  scopes: ScopeRoot[]                  // from resolver §7.1, filtered by --scope
-  targets: TargetId[]                  // from caplet config or --target
-  options: EmitOptions
-}
+Caplet owns the orchestration (`buildEmitPlan` in
+`apps/caplet/src/internal/workflow.ts`); core exports the pieces, not an
+orchestrator. For each scope root it:
 
-export type EmitReport = {
-  perScopeTarget: Record<string, EmitResult>   // key = `${scope}:${target}`
-}
-
-export async function emit(
-  req: EmitRequest,
-  fs: ReadOnlyFs,
-): Promise<EmitReport> {
-  const report: EmitReport = { perScopeTarget: {} }
-
-  for (const scopeRoot of req.scopes) {
-    const capabilities = await resolveScopeCapabilities(scopeRoot)
-
-    for (const targetId of req.targets) {
-      const target = targetMap[targetId]
-      const installRoot = resolveInstallRoot(target, scopeRoot.scope)
-      if (installRoot === null) {
-        report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          diffs: [],
-          diagnostics: [{
-            severity: "lossy",
-            code: "acf.adapter.scope-unsupported",
-            message: `${targetId} does not support scope=${scopeRoot.scope}`,
-          }],
-        }
-        continue
-      }
-
-      const allDiffs: FileDiff[] = []
-      const allDiags: Diagnostic[] = []
-
-      for (const cap of capabilities) {
-        const filtered = applyApplicability(cap, targetId)
-        if (filtered === null) continue   // capability fully excluded
-        const result = await target.adapter.emit(
-          {
-            capability: filtered,
-            scope: scopeRoot.scope,
-            installRoot,
-            options: req.options,
-          },
-          fs,
-        )
-        allDiffs.push(...result.diffs)
-        allDiags.push(...result.diagnostics)
-      }
-
-      report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-        diffs: allDiffs,
-        diagnostics: allDiags,
-      }
-    }
-  }
-
-  return report
-}
-
-function resolveInstallRoot(target: TargetDefinition<TargetId>, scope: Scope): string | null {
-  // caplet.yml override beats adapter default.
-  const override = getCapletOverride(target.id, scope)
-  if (override) return override
-  return target.installPaths[scope]
-}
-```
+1. resolves the scope's capabilities (`resolveScopeCapabilities`) and adds
+   every capability's own `error` diagnostics to the plan, so a capability
+   that fails validation blocks apply (SPEC.md §14.2);
+2. for each target, reports `acf.adapter.scope-unsupported` when the target
+   has no install root for the scope, otherwise filters each capability with
+   `applyApplicability` and withholds conflicting MCP server names;
+3. calls the target adapter's `validate` and `emit` per capability; a
+   capability whose diagnostics block it on that target
+   (`capabilityBlocked`) contributes diagnostics but no diffs, and its
+   previous output is kept.
 
 `applyApplicability(cap, targetId)`:
 
 1. checks capability `only`/`except` against `targetId`; returns `null` if excluded,
-2. drops each facet not applicable to `targetId` via §10 cascade,
-3. validates each remaining facet's `targets.<target>` payload against the
-   target's extension schema,
-4. emits `lossy` diagnostics for unsupported facet families based on the
+2. drops each facet not applicable to `targetId` via the SPEC.md §6.4 cascade,
+3. emits `lossy` diagnostics for unsupported facet families based on the
    support matrix,
-5. returns the filtered capability.
+4. returns the filtered capability.
+
+The reader, not this step, validates `targets.<target>` payloads against the
+target's extension schema.
 
 ### 12.1 Diff application
 
