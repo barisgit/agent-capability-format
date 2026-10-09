@@ -47,8 +47,31 @@ export async function validateSingularFolders(
 export async function parseMarkdown(
   file: string,
 ): Promise<{ frontmatter: Record<string, unknown>; body: string }> {
-  const parsed = matter(await readText(file));
+  // Passing options bypasses gray-matter's content cache, which keeps an entry even when parsing
+  // throws: a second file with the same broken text would read back as empty frontmatter.
+  const parsed = matter(await readText(file), {});
   return { frontmatter: parsed.data, body: parsed.content };
+}
+
+/**
+ * {@link parseMarkdown}, with malformed frontmatter YAML reported as `acf.schema.invalid-yaml`
+ * and `undefined` returned, so one broken file does not abort the capability read.
+ */
+export async function parseMarkdownFile(
+  file: string,
+  diagnostics: Diagnostic[],
+): Promise<{ frontmatter: Record<string, unknown>; body: string } | undefined> {
+  try {
+    return await parseMarkdown(file);
+  } catch (error) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.schema.invalid-yaml",
+      message: error instanceof Error ? error.message : "invalid frontmatter YAML",
+      path: file,
+    });
+    return undefined;
+  }
 }
 
 export async function parseYamlFile(file: string, diagnostics: Diagnostic[]): Promise<unknown> {

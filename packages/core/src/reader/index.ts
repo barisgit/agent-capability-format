@@ -42,7 +42,7 @@ import {
   counts,
   fallbackManifest,
   isRecord,
-  parseMarkdown,
+  parseMarkdownFile,
   parseYamlFile,
   pickFamilyYaml,
   pushUnknownFields,
@@ -211,7 +211,8 @@ export async function readAcfMd(
 ): Promise<CapabilityMarkdown | undefined> {
   const file = path.join(root, "ACF.md");
   if (!(await exists(file))) return undefined;
-  const parsed = await parseMarkdown(file);
+  const parsed = await parseMarkdownFile(file, diagnostics);
+  if (parsed === undefined) return undefined;
   pushUnknownFields(parsed.frontmatter, markdownKeys, diagnostics, file);
   const result = capabilityMarkdownFrontmatterSchema.safeParse(parsed.frontmatter);
   if (!result.success) {
@@ -253,7 +254,8 @@ export async function readSkills(
       });
       continue;
     }
-    const parsed = await parseMarkdown(primary);
+    const parsed = await parseMarkdownFile(primary, diagnostics);
+    if (parsed === undefined) continue;
     // A bare imported skill keeps every key as core, a target's extra or an agent-plugins
     // extra; an authored skill reports unknown keys.
     const mapped = imported ? mapBareSkill(parsed.frontmatter, coreSkillKeys) : undefined;
@@ -615,7 +617,8 @@ async function discoverProse(
     if (entry.name.startsWith(".")) continue;
     const full = path.join(dir, entry.name);
     if (entry.isFile() && entry.name.endsWith(".md")) {
-      const parsed = await parseMarkdown(full);
+      const parsed = await parseMarkdownFile(full, diagnostics);
+      if (parsed === undefined) continue;
       discovered.push({
         name: path.basename(entry.name, ".md"),
         source: { kind: "file", path: full, primary: full },
@@ -636,7 +639,8 @@ async function discoverProse(
       });
       continue;
     }
-    const parsed = await parseMarkdown(primary);
+    const parsed = await parseMarkdownFile(primary, diagnostics);
+    if (parsed === undefined) continue;
     discovered.push({
       name: entry.name,
       source: { kind: "directory", path: full, primary },

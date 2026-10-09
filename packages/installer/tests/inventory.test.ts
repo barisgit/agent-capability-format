@@ -104,3 +104,20 @@ test("inventory reports invalid layouts and duplicate declared names with source
     await cleanup(duplicate);
   }
 });
+
+test("inventory reports a bare skill with malformed frontmatter YAML", async () => {
+  const dir = await tempDir("acf-inventory-broken-");
+  try {
+    await writeText(
+      path.join(dir, "skills", "pdf", "SKILL.md"),
+      "---\nname: pdf\ndescription: [unclosed\n---\nBody.\n",
+    );
+    const inventory = await inspectSource(dir);
+    expect(inventory.candidates).toEqual([]);
+    expect(inventory.diagnostics.map((item) => item.code)).toEqual([
+      "acf.import.skill-frontmatter-invalid",
+    ]);
+  } finally {
+    await cleanup(dir);
+  }
+});

@@ -85,3 +85,21 @@ test("authored capabilities do not gain implicit skill assets", async () => {
     await cleanup(dir);
   }
 });
+
+test("malformed frontmatter YAML is reported per file instead of aborting the read", async () => {
+  const broken = "---\nname: x\ndescription: [unclosed\n---\nbody\n";
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": baseManifest,
+    "ACF.md": broken,
+    "skills/review/SKILL.md": broken,
+    "agents/helper.md": broken,
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\n---\nbody\n",
+  });
+  try {
+    expect(cap.diagnostics.filter((d) => d.code === "acf.schema.invalid-yaml").length).toBe(3);
+    expect(cap.skills.map((skill) => skill.name)).toEqual(["fine"]);
+    expect(cap.agents).toEqual([]);
+  } finally {
+    await cleanup(dir);
+  }
+});
