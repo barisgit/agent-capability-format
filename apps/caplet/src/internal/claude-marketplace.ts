@@ -13,6 +13,7 @@ import {
   type ScopeRoot,
 } from "@caplet/core";
 import {
+  type ManagedEntry,
   readSidecar,
   relativeSidecarPath,
   SIDECAR_FILENAME,
@@ -63,29 +64,11 @@ export async function planClaudeMarketplaces(input: {
   const roots: ClaudeRootPlan[] = [];
   const diffs: EmittedDiff[] = [];
   for (const { scopeRoot, installRoot } of input.roots) {
-    const listed = new Map<string, string>();
-    for (const plugin of input.plugins) {
-      if (plugin.target === "claude" && plugin.installRoot === installRoot) {
-        listed.set(plugin.name, plugin.version);
-      }
-    }
-    for (const item of input.blocked) {
-      if (item.target !== "claude" || item.scope !== scopeRoot.scope) continue;
-      if (listed.has(item.capability)) continue;
-      const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
-      if (version !== undefined) listed.set(item.capability, version);
-    }
+    const listed = await listedPlugins(scopeRoot, installRoot, input);
     const file = marketplaceFile(installRoot);
     const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
-    const leftover = [
-      ...new Set(
-        sidecar.managed
-          .filter((entry) => entry.carrier === "plugin" && entry.capability !== ACF_SYSTEM_OWNER)
-          .map((entry) => entry.capability)
-          .filter((capability) => !listed.has(capability)),
-      ),
-    ].sort();
+    const leftover = sidecarPlugins(sidecar.managed).filter((name) => !listed.has(name));
     if (listed.size === 0 && leftover.length === 0 && !owned && sidecar.marketplace === undefined) {
       continue;
     }
@@ -128,6 +111,39 @@ export async function planClaudeMarketplaces(input: {
     });
   }
   return { roots, diffs };
+}
+
+/**
+ * The plugins the marketplace of `installRoot` lists, by name with their version: those the plan
+ * generates there, and the installed one of each capability a refusal blocks on Claude in the
+ * scope, read from its `plugin.json`.
+ */
+async function listedPlugins(
+  scopeRoot: ScopeRoot,
+  installRoot: string,
+  input: { plugins: readonly PlannedPlugin[]; blocked: readonly BlockedCapability[] },
+): Promise<Map<string, string>> {
+  const listed = new Map<string, string>();
+  for (const plugin of input.plugins) {
+    if (plugin.target === "claude" && plugin.installRoot === installRoot) {
+      listed.set(plugin.name, plugin.version);
+    }
+  }
+  for (const item of input.blocked) {
+    if (item.target !== "claude" || item.scope !== scopeRoot.scope) continue;
+    if (listed.has(item.capability)) continue;
+    const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
+    if (version !== undefined) listed.set(item.capability, version);
+  }
+  return listed;
+}
+
+/** The capabilities whose generated plugin files a sidecar records, sorted, each once. */
+export function sidecarPlugins(managed: readonly ManagedEntry[]): string[] {
+  const names = managed
+    .filter((entry) => entry.carrier === "plugin" && entry.capability !== ACF_SYSTEM_OWNER)
+    .map((entry) => entry.capability);
+  return [...new Set(names)].sort();
 }
 
 /**

@@ -5,17 +5,17 @@
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
-import {
-  ACF_SYSTEM_OWNER,
-  type CapletConfig,
-  type Diagnostic,
-  type ScopeRoot,
-  type TargetId,
+import type {
+  AcfManagedSidecar,
+  CapletConfig,
+  Diagnostic,
+  ScopeRoot,
+  TargetId,
 } from "@caplet/core";
 import type { OutputBoundary } from "../apply/containment.js";
 import { readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
 import { claudeGate } from "./claude-host-flow.js";
-import { planClaudeMarketplaces } from "./claude-marketplace.js";
+import { planClaudeMarketplaces, sidecarPlugins } from "./claude-marketplace.js";
 import { planClaudeMigration } from "./claude-migration.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices } from "./managed-notices.js";
@@ -97,32 +97,7 @@ export async function planRemoval(input: {
     ),
   );
 
-  // Other plugins stay installed as they are: list them as a blocked capability is listed.
-  const claudeRoots = input.roots.filter(
-    (root) => root.context.destination === "native" && root.context.targetId === "claude",
-  );
-  const kept: BlockedCapability[] = claudeRoots.flatMap((root) =>
-    [
-      ...new Set(
-        (sidecars.get(root.installRoot)?.managed ?? [])
-          .filter(
-            (entry) =>
-              entry.carrier === "plugin" &&
-              entry.capability !== ACF_SYSTEM_OWNER &&
-              !removing.has(entry.capability),
-          )
-          .map((entry) => entry.capability),
-      ),
-    ].map((capability) => ({ scope: root.context.scopeRoot.scope, target: "claude", capability })),
-  );
-  const claude = await planClaudeMarketplaces({
-    roots: claudeRoots.map((root) => ({
-      scopeRoot: root.context.scopeRoot,
-      installRoot: root.installRoot,
-    })),
-    plugins: [],
-    blocked: kept,
-  });
+  const claude = await planClaudeAfterRemoval(input.roots, sidecars, removing);
 
   const diagnostics: Diagnostic[] = [];
   const removals: EmittedDiff[] = [];
@@ -176,4 +151,31 @@ export async function planRemoval(input: {
     staleEntries,
     diagnostics,
   };
+}
+
+/**
+ * The marketplace of each Claude root once `removing` is gone. The other plugins stay installed as
+ * they are, so they are listed as a blocked capability is: at the version installed on disk.
+ */
+async function planClaudeAfterRemoval(
+  roots: readonly RemovalRoot[],
+  sidecars: ReadonlyMap<string, AcfManagedSidecar>,
+  removing: ReadonlySet<string>,
+): ReturnType<typeof planClaudeMarketplaces> {
+  const claudeRoots = roots.filter(
+    (root) => root.context.destination === "native" && root.context.targetId === "claude",
+  );
+  const kept: BlockedCapability[] = claudeRoots.flatMap((root) =>
+    sidecarPlugins(sidecars.get(root.installRoot)?.managed ?? [])
+      .filter((capability) => !removing.has(capability))
+      .map((capability) => ({ scope: root.context.scopeRoot.scope, target: "claude", capability })),
+  );
+  return await planClaudeMarketplaces({
+    roots: claudeRoots.map((root) => ({
+      scopeRoot: root.context.scopeRoot,
+      installRoot: root.installRoot,
+    })),
+    plugins: [],
+    blocked: kept,
+  });
 }
