@@ -192,6 +192,7 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Same-name Claude plugin components in different folders share one outcome row.** `packages/core/src/targets/plugin-layout.ts` `perFileComponentName`: agents, commands and output styles keep Claude's basename name, so `agents/a/x.md` and `agents/b/x.md` are both `x` in outcome rows (workflows and `bin` entries are path-named since e3f971b). Also `targets.claude.native.workflows: .` resolves to `native/claude/.` and matches no snapshot file (`emit/plugin-executables.ts`, `emit/snapshot.ts` `layeredPath`).
 - **Caplet files in a source tree can reach a Claude plugin.** `packages/adapters/src/claude/plugin.ts`: plugin copies exclude `acf.yml` and `.acf-import.json` but not a sidecar `.acf-managed.json` or `ACF-MANAGED.md` that a source tree happens to contain (the unchanged-plugin copy in particular). Suspected fix: one caplet-owned file list in core used by every plugin copy.
 
 - **Invalid core field in a bare imported skill is an error, while Agent Plugins leaves such a skill out.** `packages/installer/src/inventory.ts` `readBareSkill` rejects the import with `acf.import.skill-frontmatter-invalid`; the Agent Plugins reader leaves the skill out with a warning. D27.4 covers native values only; decide whether core-field failures in foreign sources follow the same rule.
