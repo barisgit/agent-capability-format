@@ -286,6 +286,28 @@ describe("native Claude MCP servers", () => {
     ]);
     expect(listed[1]?.fingerprint).toBe(expected[1]?.fingerprint);
   });
+
+  test("a config a native key names comes from the capability's own files when native/claude lacks it", async () => {
+    const native = async (code: string) =>
+      await capability({
+        "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      mcpServers: ./configs/mcp.json\n      hooks: ./configs/hooks.json\n`,
+        "configs/mcp.json": mcpJson,
+        "configs/hooks.json": `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/hook.js"}]}]}}\n`,
+        "server.js": code,
+        "hook.js": code,
+      });
+    const before = await native("one()\n");
+    expect(
+      (await inventory(before)).map(({ kind, name, detail }) => `${kind} ${name} ${detail}`),
+    ).toEqual([
+      `mcp-server files node ${capabilityDir}/server.js`,
+      "hook hooks configs/hooks.json, targets.claude.native.hooks",
+    ]);
+    expect(await claudeChanges(before, await native("two()\n"))).toEqual([
+      "changed mcp-server files",
+      "changed hook hooks",
+    ]);
+  });
 });
 
 test("a native mcpServers server replaces the capability's server of the same name", async () => {

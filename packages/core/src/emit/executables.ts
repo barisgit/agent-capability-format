@@ -30,6 +30,7 @@ import {
   componentStrings,
   filesUnder,
   fingerprint,
+  layeredPath,
   packageRootReferences,
   readSnapshot,
   referencedFiles,
@@ -275,7 +276,8 @@ async function pluginConfigExecutables({
   base,
 }: Inventory): Promise<ClaimingComponents> {
   const result: ClaimingComponents = { components: [], claimed: [] };
-  for (const component of pluginConfigComponents(capability, target)) {
+  const layers = packageLayers(target);
+  for (const component of pluginConfigComponents(capability, target, snapshot)) {
     result.claimed.push(...component.prefixes);
     result.components.push({
       ...base,
@@ -284,11 +286,10 @@ async function pluginConfigExecutables({
       detail: component.detail,
       fingerprint: await runningFingerprint(
         snapshot,
-        // The plugin carrier copies native/<target>/ over the capability's own files.
-        [component.dir, ""],
+        layers,
         component.definition,
         filesUnder(snapshot, component.prefixes),
-        component.dir,
+        layers[0],
       ),
     });
   }
@@ -299,9 +300,9 @@ async function pluginConfigExecutables({
 type NativeServers = ClaimingComponents & { names: ReadonlySet<string> };
 
 /**
- * MCP servers a plugin carrier for `target` writes from the `native/<target>/` server files (the
- * default `.mcp.json` and files the key names) and the package-level `targets.<target>.native`
- * server key, read by the target's plugin reader so each server is classified and fingerprinted
+ * MCP servers a plugin carrier for `target` writes from its server files (the default
+ * `native/<target>/.mcp.json` and the package files the key names) and the package-level
+ * `targets.<target>.native` server key, read by the target's plugin reader so each server is classified and fingerprinted
  * as the same server of a foreign package: a projected stdio server by its command and the
  * package files it names, and a server the reader keeps whole by its declaration, when it
  * launches a local process. Remote servers start no code and are left out.
@@ -315,14 +316,20 @@ async function nativeServerExecutables({
   const result: ClaimingComponents = { components: [], claimed: [] };
   const plugin = pluginExecutables[target];
   if (plugin === undefined) return { ...result, names: new Set() };
-  const dir = `${NATIVE_FILES_DIR}/${target}`;
+  const layers = packageLayers(target);
+  const locate = (relative: string): string => layeredPath(snapshot, layers, relative);
   const key = plugin.mcp.key;
   const value = nativeExtras(capability.manifest.targets, target)[key];
   const manifest = value === undefined ? {} : { [key]: value };
   const remainder: NativeRemainderComponent[] = [];
   // Diagnostics belong to validation; the inventory only lists what would run.
-  const mcp = await plugin.mcp.read(path.join(snapshot.root, dir), manifest, [], remainder);
-  const bases = [dir, ""];
+  const mcp = await plugin.mcp.read(
+    path.join(snapshot.root, layers[0]),
+    manifest,
+    [],
+    remainder,
+    (relative) => path.join(snapshot.root, locate(relative)),
+  );
   for (const server of mcp?.servers ?? []) {
     if (server.transport !== "stdio") continue;
     const { command, args, env, cwd } = server;
@@ -334,17 +341,15 @@ async function nativeServerExecutables({
       // As a projected foreign server is fingerprinted: the reader maps the plugin root to
       // ${ACF_CAPABILITY_DIR} and keeps no cwd.
       fingerprint: await nativePackageFingerprint(
-        dir,
+        layers[0],
         { command, args, env, cwd },
-        packageRootReferences(snapshot, bases, ["ACF_CAPABILITY_DIR"], [command, ...(args ?? [])]),
+        packageRootReferences(snapshot, layers, ["ACF_CAPABILITY_DIR"], [command, ...(args ?? [])]),
       ),
     });
   }
   for (const component of remainder) {
     // A server declared inline under the key lives in the generated manifest, not a package file.
-    const prefixes = component.paths
-      .filter((item) => item !== CLAUDE_PLUGIN_MANIFEST)
-      .map((item) => `${dir}/${item}`);
+    const prefixes = component.paths.filter((item) => item !== CLAUDE_PLUGIN_MANIFEST).map(locate);
     result.claimed.push(...prefixes);
     if (!component.executable) continue;
     const fromKey = (component.manifestKeys ?? []).length > 0;
@@ -355,15 +360,26 @@ async function nativeServerExecutables({
       detail: [...prefixes, ...(fromKey ? [`targets.${target}.native.${key}`] : [])].join(", "),
       fingerprint: await runningFingerprint(
         snapshot,
-        bases,
+        layers,
         fromKey ? { [key]: value } : null,
         filesUnder(snapshot, prefixes),
-        dir,
+        layers[0],
       ),
     });
   }
   const names = [...(mcp?.servers ?? []), ...remainder].map((item) => item.name);
   return { ...result, names: new Set(names) };
+}
+
+/**
+ * Snapshot directories a plugin carrier for `target` builds its package from, highest precedence
+ * first: `native/<target>/` over the capability's own files (SPEC.md §22.8.2). The carrier
+ * leaves the default configuration files at the capability root out, so a default file only
+ * counts from `native/<target>/`; a path a manifest key or a configuration names resolves in
+ * these layers ({@link layeredPath}).
+ */
+function packageLayers(target: TargetId): readonly [string, string] {
+  return [`${NATIVE_FILES_DIR}/${target}`, ""];
 }
 
 /** Placeholders that name a plugin package's root in each remainder format. */
@@ -521,8 +537,6 @@ type PluginConfigComponent = {
   kind: NativeRemainderKind;
   name: string;
   detail: string;
-  /** Snapshot-relative `native/<target>` directory the package files come from. */
-  dir: string;
   /** Snapshot-relative paths of the component's files and directories. */
   prefixes: string[];
   definition: unknown;
@@ -530,29 +544,31 @@ type PluginConfigComponent = {
 
 /**
  * Executing components a plugin carrier for `target` writes into its package from the
- * capability's `native/<target>/` files and package-level `targets.<target>.native` keys.
+ * capability's `native/<target>/` files, package-level `targets.<target>.native` keys and the
+ * package files those keys name.
  */
 function pluginConfigComponents(
   capability: AcfCapability,
   target: TargetId,
+  snapshot: Snapshot,
 ): PluginConfigComponent[] {
   const plugin = pluginExecutables[target];
   if (plugin === undefined) return [];
-  const dir = `${NATIVE_FILES_DIR}/${target}`;
+  const layers = packageLayers(target);
+  const locate = (relative: string): string => layeredPath(snapshot, layers, relative);
   const files = nativeFiles(capability, target).map((file) => file.path);
   const extras = nativeExtras(capability.manifest.targets, target);
   const components: PluginConfigComponent[] = [];
   for (const spec of plugin.components) {
-    const component = configComponent(spec, extras[spec.key], files, dir, target);
+    const component = configComponent(spec, extras[spec.key], files, locate, target);
     if (component !== undefined) components.push(component);
   }
   for (const file of files.filter((item) => item.startsWith(`${plugin.binDir}/`))) {
-    const prefix = `${dir}/${file}`;
+    const prefix = `${layers[0]}/${file}`;
     components.push({
       kind: "bin",
       name: path.posix.basename(file),
       detail: prefix,
-      dir,
       prefixes: [prefix],
       definition: null,
     });
@@ -561,20 +577,21 @@ function pluginConfigComponents(
 }
 
 /**
- * The component `spec` describes when the package has its default file or a
- * `targets.<target>.native` value `value` that holds it; undefined otherwise.
+ * The component `spec` describes when the package has its default file in `native/<target>/`
+ * (`files`) or a `targets.<target>.native` value `value` that holds it; undefined otherwise.
+ * `locate` maps a package path to the snapshot path the package takes it from.
  */
 function configComponent(
   spec: PluginComponentSpec,
   value: unknown,
   files: readonly string[],
-  dir: string,
+  locate: (relative: string) => string,
   target: TargetId,
 ): PluginConfigComponent | undefined {
   if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) return undefined;
   const paths = configPaths(spec, value, files);
   if (paths.length === 0 && value === undefined) return undefined;
-  const prefixes = paths.map((item) => `${dir}/${item}`);
+  const prefixes = paths.map(locate);
   return {
     kind: spec.kind,
     name: spec.name,
@@ -582,7 +599,6 @@ function configComponent(
       ...prefixes,
       ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
     ].join(", "),
-    dir,
     prefixes,
     definition: value === undefined ? null : { [spec.key]: value },
   };

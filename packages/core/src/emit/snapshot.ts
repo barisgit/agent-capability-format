@@ -98,16 +98,28 @@ export function packageRootReferences(
       const relative = path.posix.normalize((match[2] ?? "").slice(1)).normalize("NFC");
       // The package root itself, or a path leaving it, names no file the configuration owns.
       if (relative === "." || leavesBase(relative)) continue;
-      for (const base of bases) {
-        const prefix = base === "" ? relative : `${base}/${relative}`;
-        const files = filesUnder(snapshot, [prefix]);
-        if (files.length === 0) continue;
-        chosen.push(...files);
-        break;
-      }
+      chosen.push(...filesUnder(snapshot, [layeredPath(snapshot, bases, relative)]));
     }
   }
   return union(snapshot, chosen);
+}
+
+/**
+ * Snapshot-relative path of `relative`, a path inside a package layered from the snapshot
+ * directories `bases` (highest precedence first): its path in the first base that holds a file
+ * at or under it, else its path in the first base.
+ */
+export function layeredPath(
+  snapshot: Snapshot,
+  bases: readonly string[],
+  relative: string,
+): string {
+  const candidates = bases.map((base) => (base === "" ? relative : `${base}/${relative}`));
+  return (
+    candidates.find((candidate) => filesUnder(snapshot, [candidate]).length > 0) ??
+    candidates[0] ??
+    relative
+  );
 }
 
 /**

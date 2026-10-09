@@ -30,21 +30,26 @@ const DEFAULT_CONFIG = ".mcp.json";
 /**
  * Projects the plugin's MCP servers into `McpFile`, pushing pending servers and bundles to
  * `remainder` and skipped servers to `diagnostics`; undefined when the plugin declares none.
+ * `locate` maps a config path the manifest names, normalized and relative to the package root,
+ * to the file holding it: by default the file under `root`, and for a package a plugin carrier
+ * assembles from layers, the file in the layer that provides it.
  */
 export async function readClaudeMcp(
   root: string,
   manifest: Record<string, unknown>,
   diagnostics: Diagnostic[],
   remainder: NativeRemainderComponent[],
+  locate: (relative: string) => string = (relative) => path.join(root, relative),
 ): Promise<McpFile | undefined> {
   const sink: Sink = { diagnostics, remainder };
   const found: Collected = { declared: new Map(), sources: [] };
-  if (await isFile(path.join(root, DEFAULT_CONFIG))) {
-    await readConfig(root, DEFAULT_CONFIG, false, found, sink);
+  const defaultConfig = path.join(root, DEFAULT_CONFIG);
+  if (await isFile(defaultConfig)) {
+    await readConfig(defaultConfig, DEFAULT_CONFIG, false, found, sink);
   }
   const value = manifest.mcpServers;
   const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
-  for (const entry of entries) await readManifestEntry(root, entry, found, sink);
+  for (const entry of entries) await readManifestEntry(root, locate, entry, found, sink);
   if (found.declared.size === 0 && found.sources.length === 0 && value === undefined)
     return undefined;
 
@@ -66,16 +71,18 @@ function merge(
     found.declared.set(name, { raw, file, manifestKey });
 }
 
-/** Records `relative` as a source and merges its servers; an unreadable or invalid file warns. */
+/**
+ * Records package-relative `relative`, held by `file`, as a source and merges its servers; an
+ * unreadable or invalid file warns.
+ */
 async function readConfig(
-  root: string,
+  file: string,
   relative: string,
   manifestKey: boolean,
   found: Collected,
   sink: Sink,
 ): Promise<void> {
   found.sources.push(relative);
-  const file = path.join(root, relative);
   const read = await readJson(file, "acf.source.component-invalid", "warn");
   if (!read.ok) {
     sink.diagnostics.push({ ...read.diagnostic, family: "mcp" });
@@ -92,6 +99,7 @@ async function readConfig(
 /** One `mcpServers` entry: an inline map, or paths to config files and bundles. */
 async function readManifestEntry(
   root: string,
+  locate: (relative: string) => string,
   entry: unknown,
   found: Collected,
   sink: Sink,
@@ -106,7 +114,8 @@ async function readManifestEntry(
     } else if (contained(root, relative) === undefined) {
       sink.diagnostics.push(outsidePackage(root, "mcpServers", relative));
     } else {
-      await readConfig(root, path.posix.normalize(relative), true, found, sink);
+      const normalized = path.posix.normalize(relative);
+      await readConfig(locate(normalized), normalized, true, found, sink);
     }
   }
 }
