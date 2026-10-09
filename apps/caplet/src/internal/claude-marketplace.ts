@@ -3,7 +3,6 @@
  * which plugins each Claude install root's marketplace lists, and the `marketplace.json` diff that
  * keeps the listing in line with them.
  */
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ACF_SYSTEM_OWNER,
@@ -26,6 +25,7 @@ import {
   claudeScopeFor,
   resolveClaudeScopeTarget,
 } from "../hosts/claude/scope.js";
+import { readTextIfExists } from "./fs.js";
 import type { BlockedCapability, EmittedDiff, PlannedPlugin } from "./workflow.js";
 
 /**
@@ -103,7 +103,7 @@ export async function planClaudeMarketplaces(input: {
       carrier: "plugin",
       diff: {
         path: file,
-        before: await readTextOrNull(file),
+        before: await readTextIfExists(file),
         after,
         owns: [{ kind: "file" }],
         artifactRoot: marketplaceDir,
@@ -183,7 +183,7 @@ function ownsMarketplaceFile(
 
 /** The `version` an existing generated plugin declares, or undefined when there is none. */
 async function installedPluginVersion(dir: string): Promise<string | undefined> {
-  const text = await readTextOrNull(path.join(dir, ".claude-plugin", "plugin.json"));
+  const text = await readTextIfExists(path.join(dir, ".claude-plugin", "plugin.json"));
   if (text === null) return undefined;
   try {
     const parsed: unknown = JSON.parse(text);
@@ -191,16 +191,5 @@ async function installedPluginVersion(dir: string): Promise<string | undefined> 
     return typeof parsed.version === "string" ? parsed.version : undefined;
   } catch {
     return undefined;
-  }
-}
-
-async function readTextOrNull(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
   }
 }

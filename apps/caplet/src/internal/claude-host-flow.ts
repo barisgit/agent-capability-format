@@ -3,7 +3,6 @@
  * install root with the host through the `claude` CLI, decides which host-dependent file changes
  * may proceed, and reports host and file state per plugin.
  */
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER, type Diagnostic } from "@caplet/core";
@@ -27,6 +26,7 @@ import {
 } from "../hosts/claude/reconcile.js";
 import { type ClaudeRootPlan, marketplaceFile, renderMarketplace } from "./claude-marketplace.js";
 import { type ClaudeRename, renameLines } from "./claude-migration.js";
+import { readBytesIfExists } from "./fs.js";
 import { displayPath } from "./plan-view.js";
 import { columns } from "./render.js";
 import type { EmitPlan, EmittedDiff } from "./workflow.js";
@@ -319,22 +319,11 @@ async function fileState(
   if (entries.length === 0) return "missing";
   let drifted = false;
   for (const entry of entries) {
-    const content = await readOrNull(path.resolve(installRoot, entry.path));
+    const content = await readBytesIfExists(path.resolve(installRoot, entry.path));
     if (content === null) return "missing";
     const wholeFile = entry.owns.some((own) => own.kind === "file");
     const current = wholeFile ? content : content.toString("utf8");
     if (hashOwnedRegions(current, entry.owns) !== entry.hash) drifted = true;
   }
   return drifted ? "drifted" : "current";
-}
-
-async function readOrNull(filePath: string): Promise<Buffer | null> {
-  try {
-    return await readFile(filePath);
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
 }

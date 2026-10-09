@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   extractMarkedBlock,
@@ -14,6 +14,7 @@ import {
   type FileDiff,
   isErrno,
 } from "@caplet/core";
+import { readBytesIfExists, readModeIfExists, readTextIfExists } from "../internal/fs.js";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 import {
   hashOwnedRegions,
@@ -291,33 +292,6 @@ function defaultTextFor(owns: readonly AcfOwnership[]): string {
 async function writeContent(filePath: string, content: FileContent): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content);
-}
-
-async function readTextIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-async function readBytesIfExists(filePath: string): Promise<Uint8Array | null> {
-  try {
-    return await readFile(filePath);
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
-}
-
-async function readModeIfExists(filePath: string): Promise<number | null> {
-  try {
-    return (await stat(filePath)).mode & 0o777;
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
 }
 
 function textContent(content: FileContent | null): string | null {

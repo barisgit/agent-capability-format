@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, removeMarkedBlock } from "@caplet/adapters/common";
 import {
@@ -16,6 +16,7 @@ import {
   stableJson,
   targetIds,
 } from "@caplet/core";
+import { readTextIfExists } from "../internal/fs.js";
 import { containmentViolation, fileOwnership, type OutputBoundary } from "./containment.js";
 import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 
@@ -41,13 +42,8 @@ export type RemoveOwnedRegionsResult = {
 
 /** Reads and validates a sidecar; a missing file is an empty sidecar, an invalid one throws. */
 export async function readSidecar(sidecarPath: string): Promise<AcfManagedSidecar> {
-  let raw: string;
-  try {
-    raw = await readFile(sidecarPath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return emptySidecar();
-    throw error;
-  }
+  const raw = await readTextIfExists(sidecarPath);
+  if (raw === null) return emptySidecar();
   return parseSidecar(JSON.parse(raw) as unknown, sidecarPath);
 }
 
@@ -368,15 +364,6 @@ function groupByPath(entries: ManagedEntry[]): Map<string, ManagedEntry[]> {
     grouped.set(entry.path, bucket);
   }
   return grouped;
-}
-
-async function readTextIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return null;
-    throw error;
-  }
 }
 
 function isSidecarTarget(value: unknown): value is SidecarTarget {
