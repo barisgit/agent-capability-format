@@ -40,6 +40,7 @@ import { detectDrift, diskDriftFs, readSidecar, sidecarPath } from "../apply/sid
 import { readCwd, readScope } from "./args.js";
 import { gateClaudeChanges } from "./claude-gates.js";
 import { planClaudeMarketplaces } from "./claude-marketplace.js";
+import { type ClaudeRetention, planClaudeRetention } from "./claude-retention.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
@@ -57,10 +58,8 @@ import {
   type EmitPlan,
   type EmittedDiff,
   fileDiffChanged,
-  type HeldClaudePlugin,
   installRootFor,
   type PlannedPlugin,
-  type PluginlessClaudeCapability,
 } from "./workflow.js";
 
 /** A resolution to plan against instead of the one on disk, keyed by scope (previews). */
@@ -167,19 +166,11 @@ type PlanContext = {
 };
 
 /** What planning collects across scopes before the sweep and the notices settle the plan. */
-type PlanState = {
+type PlanState = ClaudeRetention & {
   diagnostics: Diagnostic[];
   desiredDiffs: EmittedDiff[];
   plugins: PlannedPlugin[];
   blocked: BlockedCapability[];
-  /** Selected capabilities whose installed Claude plugin stays as it is. */
-  heldClaude: HeldClaudePlugin[];
-  /** Selected capabilities that get no Claude plugin; their earlier plugin keeps Claude's data. */
-  pluginlessClaude: PluginlessClaudeCapability[];
-  /**
-   * `<install root>\0<capability>` pairs whose sidecar entries a blocked or held capability keeps.
-   */
-  keptOutput: Set<string>;
   /** The first outcome per capability, target, family and component. */
   outcomes: Map<string, ComponentOutcome>;
   executables: ExecutableComponent[];
@@ -492,39 +483,9 @@ async function planCapability(
   }
   state.executables.push(...capabilityExecutables);
   planDiffs(scope, targetId, installRoot, name, result);
-  if (targetId === "claude") planPluginless(scope, installRoot, filtered, result);
-}
-
-/**
- * Records what becomes of the earlier Claude plugin of a capability the scope still selects for
- * Claude when the writer gives it none. It stays as it is when the capability's reader left out an
- * invalid component (design D27.4) and nothing else of it reaches Claude, because an invalid value
- * is no deselection; otherwise it is retired keeping what Claude saved for it.
- */
-function planPluginless(
-  scope: ScopePlanning,
-  installRoot: string,
-  capability: AcfCapability,
-  result: EmitResult,
-): void {
-  if ((result.plugins ?? []).length > 0) return;
-  const { scopeRoot, state } = scope;
-  const name = capability.manifest.name;
-  if (result.diffs.length === 0 && readerLeftOutComponent(capability)) {
-    state.heldClaude.push({ scope: scopeRoot.scope, capability: name });
-    state.keptOutput.add(`${installRoot}\u0000${name}`);
-    return;
+  if (targetId === "claude") {
+    planClaudeRetention(state, scopeRoot.scope, installRoot, filtered, result);
   }
-  const output = result.diffs.length === 0 ? "empty" : "loose";
-  state.pluginlessClaude.push({ scope: scopeRoot.scope, capability: name, output });
-}
-
-/** Whether a reader left out a component of `capability` (`acf.source.component-invalid`). */
-function readerLeftOutComponent(capability: AcfCapability): boolean {
-  return (
-    capability.source?.projected?.incomplete === true ||
-    capability.diagnostics.some((item) => item.code === "acf.source.component-invalid")
-  );
 }
 
 /** Records the capability's component outcomes on the target, keeping the first of each. */

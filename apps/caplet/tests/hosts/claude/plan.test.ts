@@ -487,6 +487,28 @@ describe("removing caplet's marketplace", () => {
     expect(plan.keptBy).toEqual([`${projectSettings} declares it`]);
   });
 
+  test("is not run while a still-selected plugin is kept as installed, installed or not", () => {
+    for (const plugins of [[installed("held@acf-user", "1.0.0+acf.aaa", "user")], []]) {
+      const plan = planClaudeScope(
+        {
+          target: { scope: "user" },
+          marketplaceDir: userDir,
+          plugins: [],
+          recorded: true,
+          kept: ["held"],
+        },
+        {
+          plugins,
+          marketplaces: [{ name: "acf-user", source: "directory", path: userDir }],
+          projectDir: projectRoot,
+          settings: [settingsFile("user", userSettings, ["acf-user"])],
+        },
+      );
+      expect(commands(plan)).toEqual([]);
+      expect(plan.plugins.map((p) => [p.id, p.action])).toEqual(plugins.map((p) => [p.id, "kept"]));
+    }
+  });
+
   test("is not run when a settings file it edits cannot be read", () => {
     const plan = retire({ scope: "project", projectRoot }, [
       { scope: "user", path: userSettings, settings: undefined },

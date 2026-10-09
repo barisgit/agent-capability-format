@@ -28,8 +28,9 @@ caplet check --frozen --strict                # CI: fail on stale or lossy outpu
 Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
 uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
 it. When a still-selected capability no longer needs its plugin but Claude would delete saved
-options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`); it loads twice until you
-run `claude plugin uninstall <id> --scope <scope> --keep-data`.
+options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`). Claude keeps loading it
+until you run `claude plugin uninstall <id> --scope <scope> --keep-data`, so a capability that
+moved to loose files loads twice meanwhile.
 
 An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
 left out for every target with the warning `acf.source.component-invalid`; caplet 0.1.0 loaded it as written.

@@ -308,7 +308,10 @@ function scopeReport(
     diagnostics.push(marketplaceKeptDiagnostic(plan, installed !== undefined));
   }
   for (const plugin of plan.plugins) {
-    if (plugin.action === "kept") diagnostics.push(uninstallHeldDiagnostic(plan, plugin));
+    // A plugin kept without `output` is reported where the plan keeps it.
+    if (plugin.action === "kept" && plugin.output !== undefined) {
+      diagnostics.push(uninstallHeldDiagnostic(plan, plugin));
+    }
   }
 
   const plugins = plan.plugins.map((plugin) => {

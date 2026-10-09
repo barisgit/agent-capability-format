@@ -265,9 +265,12 @@ selected but no longer needs a plugin (it switched to loose files, or
 nothing of it is left for Claude) keeps that data. When Claude would still
 delete saved options, caplet keeps the plugin installed and warns
 (`acf.claude.uninstall-held`); Claude keeps loading the plugin, so a
-capability now in loose files loads twice, until you run `claude plugin uninstall <id> --scope <scope> --keep-data`. A capability
+capability now in loose files loads twice, until you run
+`claude plugin uninstall <id> --scope <scope> --keep-data`. A capability
 whose only Claude content is a component left out as invalid keeps its
-installed plugin unchanged (`acf.claude.plugin-kept`).
+installed plugin unchanged (`acf.claude.plugin-kept`), as does a refused
+one, also when its generated plugin manifest is missing or damaged
+(`acf.claude.manifest-unreadable`).
 
 `caplet status` reports each plugin's host state (`registered`, `disabled by
 user`, `not installed`, `registration required`, `blocked by host policy`,
