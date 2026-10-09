@@ -1450,7 +1450,11 @@ the entries Claude discovers without a manifest (`CLAUDE_DISCOVERED`:
 `.claude-plugin/`, `.mcp.json`, `.lsp.json`, `settings.json`, `agents/`,
 `commands/`, `hooks/hooks.json`, `output-styles/`, `workflows/`) with
 `acf.claude.plugin-file-ignored` (info) and copies every other file outside
-format-owned paths. `EmitResult.plugins` reports each package:
+format-owned paths. A native ACF capability and a bare skill import, which is
+the ACF tree caplet synthesized around the skill, own the same paths
+(`ACF_OWNED`): the manifest, the facet directories, `native/` and caplet's
+import marker `.acf-import.json` (`IMPORT_MARKER_FILENAME`), so no caplet
+bookkeeping reaches the plugin. `EmitResult.plugins` reports each package:
 
 ```ts
 export type EmittedPlugin = {

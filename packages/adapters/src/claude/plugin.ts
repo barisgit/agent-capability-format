@@ -18,6 +18,7 @@ import {
   type EmitResult,
   type FileContent,
   type FileDiff,
+  IMPORT_MARKER_FILENAME,
   isExecutableMode,
   isPerFileComponent,
   MANAGEMENT_NOTICE_FILENAME,
@@ -59,8 +60,12 @@ const PLUGIN_DATA = `${PLACEHOLDER_OPEN}{CLAUDE_PLUGIN_DATA}`;
 /** The package's MCP config, which Claude reads from the plugin root. */
 const MCP_PATH = ".mcp.json";
 
-/** Paths of a native ACF capability that its reader owns; none is copied into the plugin. */
+/**
+ * Paths of a native ACF capability that its reader owns, and caplet's import marker; none is
+ * copied into the plugin.
+ */
 const ACF_OWNED = new Set([
+  IMPORT_MARKER_FILENAME,
   "acf.yml",
   "acf.yaml",
   "ACF.md",
@@ -356,7 +361,9 @@ async function supportFiles(
     ),
     ...(capability.source?.projected?.skillDirs ?? []),
   ]);
-  if (format === "acf") for (const p of ACF_OWNED) owned.add(p);
+  // A bare skill import is a native ACF tree caplet synthesized around the skill (SPEC.md §20.3),
+  // so its manifest and import marker are caplet's bookkeeping.
+  if (format === "acf" || format === "skills") for (const p of ACF_OWNED) owned.add(p);
   if (format === "claude-plugin") {
     owned.add(CLAUDE_PLUGIN_MANIFEST);
     owned.add(MCP_PATH);
