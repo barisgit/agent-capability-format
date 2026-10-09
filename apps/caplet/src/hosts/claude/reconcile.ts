@@ -104,18 +104,19 @@ export async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeState
   };
 }
 
+/** `not run` with an `unavailable` failure: the CLI stopped starting at or before this step. */
 type StepResult =
   | { status: "succeeded" }
-  | { status: "failed" | "skipped"; failure: ClaudeHostFailure }
-  | { status: "not run" };
+  | { status: "failed" | "skipped" | "not run"; failure: ClaudeHostFailure };
 
 /**
  * Brings Claude's plugin registrations in line with the desired plugins of each ACF scope: reads
  * host state, runs each scope's plan (planClaudeScope) in order, and reads state again when
  * anything ran. A failed command skips only the steps that depend on it (the scope's installs and
  * updates after a failed marketplace add; the marketplace remove after a failed uninstall), so
- * one plugin's failure does not stop the others. A missing CLI is not a failure: every plugin is
- * `registration required` and a warning lists the commands. Host failures never throw.
+ * one plugin's failure does not stop the others. A missing CLI is not a failure, even when it
+ * stops starting partway: the commands from there on are `not run`, their plugins
+ * `registration required`, and a warning lists them. Host failures never throw.
  */
 export async function reconcileClaudeHost(
   host: ClaudeHost,
@@ -125,19 +126,30 @@ export async function reconcileClaudeHost(
   if (!before.ok) return notRun(desired, before, host.projectDir);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
+  const run = { unavailable: undefined as ClaudeHostFailure | undefined };
   const results: StepResult[][] = [];
-  for (const plan of plans) results.push(await runSteps(host, plan));
+  for (const plan of plans) results.push(await runSteps(host, plan, run));
 
   const changed = plans.some((plan, i) =>
-    plan.steps.some(
-      (step, j) => changesPlugins(step.command) && results[i]?.[j]?.status !== "skipped",
-    ),
+    plan.steps.some((step, j) => {
+      const status = results[i]?.[j]?.status;
+      return changesPlugins(step.command) && (status === "succeeded" || status === "failed");
+    }),
   );
   const after = changed
     ? await host.listPlugins()
     : { ok: true as const, value: before.value.plugins };
   const diagnostics: Diagnostic[] = [];
-  if (!after.ok) {
+  if (run.unavailable !== undefined) {
+    const commands = plans.flatMap((plan, i) =>
+      plan.steps
+        .filter((_, j) => results[i]?.[j]?.status === "not run")
+        .map((step) => formatClaudeCommand(step.command)),
+    );
+    diagnostics.push(cliUnavailable(run.unavailable, commands, "finished"));
+  }
+  // A CLI that stopped starting is reported above; the read after it fails the same way.
+  if (!after.ok && !(run.unavailable !== undefined && after.failure.kind === "unavailable")) {
     diagnostics.push(stateReadFailure(listCommand(LIST_PLUGINS_ARGS), after.failure, true));
   }
   const scopes = plans.map((plan, index) =>
@@ -182,18 +194,32 @@ export async function previewClaudeHost(
   return { scopes, diagnostics };
 }
 
-async function runSteps(host: ClaudeHost, plan: ClaudeScopePlan): Promise<StepResult[]> {
+/**
+ * Runs one scope plan's steps. Once a command cannot start (`run.unavailable`, shared across
+ * scopes), it and every later step are `not run`.
+ */
+async function runSteps(
+  host: ClaudeHost,
+  plan: ClaudeScopePlan,
+  run: { unavailable: ClaudeHostFailure | undefined },
+): Promise<StepResult[]> {
   const results: StepResult[] = [];
   for (const step of plan.steps) {
+    if (run.unavailable !== undefined) {
+      results.push({ status: "not run", failure: run.unavailable });
+      continue;
+    }
     const blocker = step.after.map((i) => results[i]).find((r) => r?.status !== "succeeded");
     if (blocker !== undefined && "failure" in blocker) {
       results.push({ status: "skipped", failure: blocker.failure });
       continue;
     }
     const result = await host.run(step.command);
-    results.push(
-      result.ok ? { status: "succeeded" } : { status: "failed", failure: result.failure },
-    );
+    if (result.ok) results.push({ status: "succeeded" });
+    else if (result.failure.kind === "unavailable") {
+      run.unavailable = result.failure;
+      results.push({ status: "not run", failure: result.failure });
+    } else results.push({ status: "failed", failure: result.failure });
   }
   return results;
 }
@@ -362,17 +388,21 @@ function notRun(
   }
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
   if (commands.length === 0) return { scopes, diagnostics: [] };
+  return { scopes, diagnostics: [cliUnavailable(failure, commands, "updated")] };
+}
+
+/** The `claude` CLI is missing or does not start; `commands` are the ones left to run. */
+function cliUnavailable(
+  failure: ClaudeHostFailure,
+  commands: string[],
+  verb: "updated" | "finished",
+): Diagnostic {
   return {
-    scopes,
-    diagnostics: [
-      {
-        severity: "warn",
-        code: "acf.claude.cli-unavailable",
-        targetId: "claude",
-        message: `Claude plugin registration was not updated: ${failure.message}. Install Claude Code and re-run \`caplet apply\`, or run:\n${indent(commands)}`,
-        data: { commands },
-      },
-    ],
+    severity: "warn",
+    code: "acf.claude.cli-unavailable",
+    targetId: "claude",
+    message: `Claude plugin registration was not ${verb}: ${failure.message}. Install Claude Code and re-run \`caplet apply\`, or run:\n${indent(commands)}`,
+    data: { commands },
   };
 }
 
@@ -412,13 +442,23 @@ function listCommand(args: readonly string[]): string {
 }
 
 /**
- * A list command that failed, or printed output caplet cannot parse (`unreadable`, a warning).
+ * A list command that failed, could not start, or printed output caplet cannot parse; only a
+ * failed command is an error.
  * `ran`: the state was read after commands ran, so registration may have changed.
  */
 function stateReadFailure(command: string, failure: ClaudeHostFailure, ran: boolean): Diagnostic {
   const changed = ran
     ? "the Claude commands ran, but their result is unknown"
     : "Claude registration was not changed";
+  if (failure.kind === "unavailable") {
+    return {
+      severity: "warn",
+      code: "acf.claude.cli-unavailable",
+      targetId: "claude",
+      message: `Could not start \`${command}\` (${failure.message}); ${changed}. Install Claude Code and re-run \`caplet apply\`.`,
+      data: { commands: [] },
+    };
+  }
   if (failure.kind === "unreadable") {
     return {
       severity: "warn",

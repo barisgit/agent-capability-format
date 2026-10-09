@@ -2953,7 +2953,8 @@ state:
 - `registration required` — the `claude` CLI is missing or fails to start,
   or the install failed and Claude does not list the plugin. Without the
   CLI the package is written, the warning `acf.claude.cli-unavailable`
-  lists the exact commands, and apply exits 0.
+  lists the exact commands, and apply exits 0. A CLI that stops starting
+  partway leaves the remaining commands to the user the same way.
 - `blocked by host policy` — a command failed with a Claude policy message
   (`acf.claude.policy-blocked`, warning); caplet does not fall back to
   loose output.

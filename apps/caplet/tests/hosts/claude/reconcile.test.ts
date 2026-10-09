@@ -265,6 +265,65 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(message).toContain("claude plugin install probe@acf-user --scope user");
   });
 
+  test("a CLI that stops starting mid-run is a warning listing every command not run", async () => {
+    // Synthetic: the binary disappears after the marketplace add (spawn fails with ENOENT).
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+    ]);
+    const missing = missingClaudeCli();
+    const cli: ClaudeCli = async (args) =>
+      args[1] === "install" ? await missing(args) : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([
+        { name: "lint", version: "1.0.0+acf.aaa" },
+        { name: "probe", version: "1.0.0+acf.aaa" },
+      ]),
+    );
+    expect(fake.unused()).toEqual([]);
+    const [scope] = report.scopes;
+    expect(scope?.commands.map((c) => c.status)).toEqual(["succeeded", "not run", "not run"]);
+    expect(scope?.plugins.map((p) => p.state)).toEqual([
+      "registration required",
+      "registration required",
+    ]);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.cli-unavailable", "warn"],
+    ]);
+    expect(report.diagnostics[0]?.data).toEqual({
+      commands: [
+        "claude plugin install lint@acf-user --scope user",
+        "claude plugin install probe@acf-user --scope user",
+      ],
+    });
+  });
+
+  test("a CLI that stops starting before the final state read is a warning", async () => {
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+      "install-user",
+    ]);
+    const missing = missingClaudeCli();
+    let lists = 0;
+    const cli: ClaudeCli = async (args) =>
+      args.join(" ") === "plugin list --json" && ++lists === 2
+        ? await missing(args)
+        : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.stateRead).toBe(false);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.cli-unavailable", "warn"],
+    ]);
+  });
+
   test("an install that Claude rejects fails that plugin only", async () => {
     const fake = userFake([
       "list-json-empty",
