@@ -32,6 +32,7 @@ import type {
   TargetExtensions,
   TargetId,
 } from "../types/index.js";
+import { manifestFile } from "./helpers.js";
 
 /** A place that accepts `targets.<target>.native`: the package, one skill or one server. */
 type AttachmentPoint = {
@@ -47,7 +48,7 @@ function attachmentPoints(cap: AcfCapability): AttachmentPoint[] {
       family: "package",
       component: cap.manifest.name,
       targets: cap.manifest.targets,
-      file: path.join(cap.root, "acf.yml"),
+      file: manifestFile(cap),
     },
     ...cap.skills.map((skill) => ({
       family: "skill" as const,
@@ -89,7 +90,6 @@ function validateNativeKeys(cap: AcfCapability): void {
 }
 
 function validatePackageValues(cap: AcfCapability): void {
-  const manifestFile = path.join(cap.root, "acf.yml");
   for (const target of Object.keys(cap.manifest.targets ?? {}).filter(isTargetId)) {
     for (const [key, value] of Object.entries(packageValues(cap.manifest, target))) {
       const problem = packageValueProblem(target, key, value);
@@ -98,7 +98,7 @@ function validatePackageValues(cap: AcfCapability): void {
         severity: "error",
         code: "acf.extras.package-value-invalid",
         message: `targets.${target}.package.${key}: ${problem}`,
-        path: manifestFile,
+        path: manifestFile(cap),
         targetId: target,
       });
     }

@@ -2,11 +2,16 @@ import path from "node:path";
 import matter from "gray-matter";
 import { type ApplicabilityDecl, computeSet } from "../applicability/index.js";
 import { isTargetId } from "../targets/registry.js";
-import type { Diagnostic, FacetFamily, Manifest, TargetId } from "../types/index.js";
+import type { AcfCapability, Diagnostic, FacetFamily, Manifest, TargetId } from "../types/index.js";
 import { exists, readText } from "../utils/fs.js";
 import { isRecord } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 import { parseYaml } from "../yaml.js";
+
+/** The file diagnostics on the manifest name: the one read, else where `acf.yml` would be. */
+export function manifestFile(cap: AcfCapability): string {
+  return cap.manifestPath ?? path.join(cap.root, "acf.yml");
+}
 
 export async function pickFamilyYaml(
   dir: string,

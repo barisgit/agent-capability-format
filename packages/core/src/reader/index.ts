@@ -69,7 +69,10 @@ export async function readCapability(
   const diagnostics: Diagnostic[] = [];
   const imported = await exists(path.join(absRoot, ".acf-import.json"));
   await validateSingularFolders(absRoot, diagnostics);
-  const manifest = (await readManifest(absRoot, diagnostics)) ?? fallbackManifest(absRoot);
+  const manifestFile = await pickManifestFile(absRoot, diagnostics);
+  const manifest =
+    (manifestFile === undefined ? undefined : await parseManifest(manifestFile, diagnostics)) ??
+    fallbackManifest(absRoot);
   const capabilityMarkdown = await readAcfMd(absRoot, diagnostics);
   const [skills, agents, commands, instructions, hooks, mcp, nativeFiles] = await Promise.all([
     readSkills(absRoot, diagnostics, imported),
@@ -95,6 +98,7 @@ export async function readCapability(
     diagnostics,
   };
   if (imported) capability.synthesized = true;
+  if (manifestFile !== undefined) capability.manifestPath = manifestFile;
   if (capabilityMarkdown !== undefined) capability.capabilityMarkdown = capabilityMarkdown;
   if (nativeFiles.length > 0) capability.nativeFiles = nativeFiles;
   capability.assets = await collectReferencedAssets(capability);
@@ -118,8 +122,19 @@ export async function readManifest(
   root: string,
   diagnostics: Diagnostic[],
 ): Promise<Manifest | undefined> {
-  const file = await pickFamilyYaml(root, "acf", "acf.manifest.duplicate-file", diagnostics);
-  if (file === undefined) return undefined;
+  const file = await pickManifestFile(root, diagnostics);
+  return file === undefined ? undefined : await parseManifest(file, diagnostics);
+}
+
+/** `acf.yml`, else `acf.yaml`, at `root`; reports both existing. */
+function pickManifestFile(root: string, diagnostics: Diagnostic[]): Promise<string | undefined> {
+  return pickFamilyYaml(root, "acf", "acf.manifest.duplicate-file", diagnostics);
+}
+
+async function parseManifest(
+  file: string,
+  diagnostics: Diagnostic[],
+): Promise<Manifest | undefined> {
   const raw = await parseYamlFile(file, diagnostics);
   if (!isRecord(raw)) return undefined;
   pushUnknownFields(raw, manifestKeys, diagnostics, file);

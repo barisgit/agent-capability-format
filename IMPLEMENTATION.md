@@ -269,6 +269,7 @@ export type AcfCapability = {
   scope: Scope                         // resolved scope ("user" | "project")
   origin: CapabilityOrigin             // how this capability was obtained
   manifest: Manifest
+  manifestPath?: string                // acf.yml or acf.yaml read; absent without one
   capabilityMarkdown?: CapabilityMarkdown // ACF.md if present
   skills: SkillFacet[]
   agents: AgentFacet[]

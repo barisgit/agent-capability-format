@@ -309,3 +309,22 @@ test("a native file is executable only with the owner execute bit, as the payloa
     await cleanup(dir);
   }
 });
+
+test("manifest diagnostics name acf.yaml when the manifest is acf.yaml", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yaml": `${baseManifest}only: [nope]\ntargets:\n  claude:\n    package:\n      keywords: docs\n    bogus: 1\n`,
+  });
+  try {
+    expect(
+      cap.diagnostics
+        .filter((d) => d.severity === "error")
+        .map((d) => [d.code, path.relative(dir, d.path ?? "")]),
+    ).toEqual([
+      ["acf.extras.package-value-invalid", "acf.yaml"],
+      ["acf.target.extension.unknown-field", "acf.yaml"],
+      ["acf.target.unknown-id", "acf.yaml"],
+    ]);
+  } finally {
+    await cleanup(dir);
+  }
+});
