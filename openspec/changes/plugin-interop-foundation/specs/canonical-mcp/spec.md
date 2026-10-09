@@ -65,6 +65,7 @@ MCP writers SHALL apply this table. Columns as in the skill table; Pi refers to 
 | `transport: sse` | functional | N `type: sse` | N `type: sse` | R | R | R | R |
 | `command` (bare executable) | functional | N | N | N | N | N | N |
 | `command` under `${ACF_CAPABILITY_DIR}` | functional | T `${CLAUDE_PLUGIN_ROOT}/x` | T absolute | T absolute | T absolute | T absolute | T absolute |
+| `command` under `${ACF_DATA_DIR}` | functional | T `${CLAUDE_PLUGIN_DATA}/x` | T caplet dir | T caplet dir | T caplet dir | T caplet dir | T caplet dir |
 | `command` (absolute path) | functional | N | N | N | N | N | N |
 | `args`, `env` | functional | N | N | N | N | T `environment` | N |
 | `cwd` | functional | R | R | N | R | N | N |

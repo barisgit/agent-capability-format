@@ -1749,7 +1749,7 @@ carriers unless a cell names the plugin carrier. Pi refers to the
 | `command`, `args`, `env`, `url`, literal `headers` | N                                          | N (`http_headers`)       | N        | T `environment` for `env`    | N        |
 | `cwd`                                         | R                                               | N                        | R        | N                            | N        |
 | `${ACF_CAPABILITY_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_ROOT}` (plugin), absolute (loose) | T absolute | T absolute | T absolute             | T absolute |
-| `${ACF_DATA_DIR}` in `args`, `env`, `cwd`     | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose) | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
+| `${ACF_DATA_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose) | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
 
 The Claude `cwd` refusal is verified (Claude 2.1.97): Claude ignores the
 key and a POSIX `cd` wrapper would change the executed command and fail on

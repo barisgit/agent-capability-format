@@ -125,6 +125,17 @@ test("data directory placeholders become the caplet data dir, which apply create
   expect(result.outcomes?.map((outcome) => outcome.source)).toContain(`mcp.env=${DATA_DIR}`);
 });
 
+test("a command under the data directory reports its translation", async () => {
+  const server: McpServer = { name: "store", transport: "stdio", command: `${DATA_DIR}/bin/store` };
+  const { result, config } = await emitServers("codex", [server]);
+  expect(serverEntry("codex", config, "store")?.command).toBe(
+    "/project/.codex/.acf/data/demo/bin/store",
+  );
+  expect(result.outcomes).toContainEqual(
+    expect.objectContaining({ outcome: "translated", source: `mcp.command=${DATA_DIR}` }),
+  );
+});
+
 test("servers without a data dir reference create no data directory", async () => {
   const { result } = await emitServers("pi", [stdio]);
   expect(result.diffs.some((diff) => diff.path.includes(".acf/data"))).toBe(false);

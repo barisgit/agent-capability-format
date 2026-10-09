@@ -289,6 +289,7 @@ type Fields = {
 
 function commandField(command: string): string {
   if (command.startsWith(CAPABILITY_DIR)) return `mcp.command=${CAPABILITY_DIR}`;
+  if (command.startsWith(DATA_DIR)) return `mcp.command=${DATA_DIR}`;
   return path.isAbsolute(command) ? "mcp.command=absolute" : "mcp.command=bare";
 }
 
