@@ -40,7 +40,6 @@ import { renderTomlTable, tomlDefinesTable } from "./toml.js";
 
 // Built from parts so the source holds no `${...}` string literal (biome noTemplateCurlyInString).
 const PLACEHOLDER_OPEN = "$";
-const CAPABILITY_DIR = acfPathPlaceholders[0];
 const DATA_DIR = `${PLACEHOLDER_OPEN}{ACF_DATA_DIR}`;
 
 /** Values the server's path placeholders become in the written config. */
@@ -61,13 +60,19 @@ export type NativeMcpServer = ComponentReport & {
   usesDataDir: boolean;
 };
 
-/** Placeholders that have their own support row per field (`mcp.<field>=<placeholder>`). */
+/** Every placeholder a stdio value may hold; a command starting with one is translated. */
+const STDIO_PLACEHOLDERS = [...acfPathPlaceholders, DATA_DIR];
+
+/**
+ * Placeholders that have their own support row per field (`mcp.<field>=<placeholder>`). The
+ * reader rejects `${ACF_DATA_DIR}` in url and headers, so those fields list path placeholders only.
+ */
 const placeholderRows = {
-  args: [CAPABILITY_DIR, DATA_DIR],
-  env: [CAPABILITY_DIR, DATA_DIR],
-  cwd: [CAPABILITY_DIR, DATA_DIR],
-  url: [CAPABILITY_DIR],
-  headers: [CAPABILITY_DIR],
+  args: STDIO_PLACEHOLDERS,
+  env: STDIO_PLACEHOLDERS,
+  cwd: STDIO_PLACEHOLDERS,
+  url: acfPathPlaceholders,
+  headers: acfPathPlaceholders,
 } as const;
 
 /**
@@ -318,8 +323,8 @@ type Fields = {
 };
 
 function commandField(command: string): string {
-  if (command.startsWith(CAPABILITY_DIR)) return `mcp.command=${CAPABILITY_DIR}`;
-  if (command.startsWith(DATA_DIR)) return `mcp.command=${DATA_DIR}`;
+  const base = STDIO_PLACEHOLDERS.find((placeholder) => command.startsWith(placeholder));
+  if (base !== undefined) return `mcp.command=${base}`;
   return path.isAbsolute(command) ? "mcp.command=absolute" : "mcp.command=bare";
 }
 

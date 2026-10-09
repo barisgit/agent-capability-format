@@ -17,6 +17,8 @@ const evidence = { level: "documented", source: "test" } as const;
 const DOLLAR = "$";
 const CAP = `${DOLLAR}{ACF_CAPABILITY_DIR}`;
 const DATA = `${DOLLAR}{ACF_DATA_DIR}`;
+const PATHS = [CAP, `${DOLLAR}{ACF_PACKAGE_DIR}`, `${DOLLAR}{ACF_HOOK_DIR}`];
+const pathRows = (field: string) => PATHS.map((path) => `mcp.${field}=${path}`);
 
 const SKILL_FIELDS = [
   "skill.name",
@@ -35,7 +37,7 @@ const MCP_FIELDS = [
   "mcp.transport=http",
   "mcp.transport=sse",
   "mcp.command=bare",
-  `mcp.command=${CAP}`,
+  ...pathRows("command"),
   `mcp.command=${DATA}`,
   "mcp.command=absolute",
   "mcp.args",
@@ -43,11 +45,11 @@ const MCP_FIELDS = [
   "mcp.cwd",
   "mcp.url",
   "mcp.headers",
-  `mcp.args=${CAP}`,
-  `mcp.env=${CAP}`,
-  `mcp.cwd=${CAP}`,
-  `mcp.url=${CAP}`,
-  `mcp.headers=${CAP}`,
+  ...pathRows("args"),
+  ...pathRows("env"),
+  ...pathRows("cwd"),
+  ...pathRows("url"),
+  ...pathRows("headers"),
   `mcp.args=${DATA}`,
   `mcp.env=${DATA}`,
   `mcp.cwd=${DATA}`,

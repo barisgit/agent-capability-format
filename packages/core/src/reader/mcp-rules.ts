@@ -18,7 +18,12 @@ const CWD_BASES = [acfCapabilityDirPlaceholder, acfDataDirPlaceholder] as const;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 /** The only `${...}` references a canonical MCP value may hold (SPEC.md §13a.4.1). */
 const ACF_PLACEHOLDERS = new Set<string>([...acfPathPlaceholders, acfDataDirPlaceholder]);
-const VALUE_REFERENCE = /\$\{[^}]*\}/g;
+/**
+ * Every reference syntax a writer target expands in the MCP config caplet writes for it:
+ * `${...}` (Claude, Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode substitutes
+ * them anywhere in opencode.json) and `$env:NAME` (pi-mcp-adapter). Codex expands none.
+ */
+const HOST_REFERENCE = /\$\{[^}]*\}|\{(?:env|file):[^}]+\}|\$env:\w+/g;
 const VALUE_REFERENCES_MEANING = pendingCoreFields["mcp.valueReferences"];
 
 /** Pushes an error for every rule `server` breaks; `file` is the mcp.yml path. */
@@ -36,16 +41,11 @@ export function validateMcpServerValues(
       family: "mcp",
     });
   };
-  for (const [field, value] of valueFields(server)) {
-    for (const reference of new Set(value.match(VALUE_REFERENCE) ?? [])) {
-      if (ACF_PLACEHOLDERS.has(reference)) continue;
-      // Hosts such as Claude expand `${VAR}` in these fields, so writing it through would
-      // smuggle a host environment reference past the rule that ACF expands none.
-      push(
-        "acf.mcp.placeholder.pending",
-        `${field} references ${reference}, which is not an ACF placeholder; ${VALUE_REFERENCES_MEANING} are pending core and never expanded. Author the server natively: through targets.<target>.native on the server (for example targets.codex.native.env_vars), or for Claude as a native server under package-level targets.claude.native.mcpServers`,
-      );
-    }
+  for (const [field, reference] of hostReferences(server)) {
+    push(
+      "acf.mcp.placeholder.pending",
+      `${field} references ${reference}, which is not an ACF placeholder; ${VALUE_REFERENCES_MEANING} are pending core and never expanded. Author the server natively: through targets.<target>.native on the server (for example targets.codex.native.env_vars), or for Claude as a native server under package-level targets.claude.native.mcpServers`,
+    );
   }
   if (server.transport === "stdio") {
     if (server.cwd !== undefined) {
@@ -77,6 +77,19 @@ export function validateMcpServerValues(
       `${field} must not contain ${acfDataDirPlaceholder}; it is defined only for stdio command, args, env and cwd`,
     );
   }
+}
+
+/**
+ * Each reference in `server`'s values that some writer target would expand and that is not an
+ * ACF placeholder, as `[field, reference]` pairs. Writing one through would let a host give the
+ * server a meaning ACF never expands (SPEC.md §13a.4.1), so a canonical server must hold none.
+ */
+export function hostReferences(server: McpServer): [string, string][] {
+  return valueFields(server).flatMap(([field, value]) =>
+    [...new Set(value.match(HOST_REFERENCE) ?? [])]
+      .filter((reference) => !ACF_PLACEHOLDERS.has(reference))
+      .map((reference): [string, string] => [field, reference]),
+  );
 }
 
 /** Every string value a host may expand references in, labelled with its field path. */

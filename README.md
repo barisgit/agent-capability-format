@@ -301,7 +301,7 @@ to npm in lockstep versions:
 | Directory | npm package | Role |
 | --- | --- | --- |
 | `apps/caplet` | `@caplet/cli` | CLI binary `caplet`. |
-| `packages/core` | `@caplet/core` | Pure SPEC logic: types, schemas, reader, validator, applicability, hash, diagnostics, emission orchestrator. No network, no git, no logger, browser-safe modulo a filesystem port. |
+| `packages/core` | `@caplet/core` | Pure SPEC logic: types, schemas, reader, validator, applicability, hash, diagnostics, emission helpers (applicability, outcomes, executables). No network, no git, no logger, browser-safe modulo a filesystem port. |
 | `packages/adapters` | `@caplet/adapters` | Per-target emit functions (claude, codex, cursor, opencode, pi). Shared file utilities live under `src/common/`. |
 | `packages/installer` | `@caplet/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
 | `packages/sdk` | `@caplet/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |

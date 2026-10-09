@@ -212,8 +212,6 @@ export type ScopeRoot = {
   manifestPath: string;
   lockPath: string;
 };
-export type EmitRequest = { scopes: ScopeRoot[]; targets: TargetId[]; options: EmitOptions };
-export type EmitReport = { perScopeTarget: Record<string, EmitResult> };
 
 export type CapletConfig = {
   emit?:

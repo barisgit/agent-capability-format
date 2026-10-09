@@ -3,129 +3,31 @@ export * from "./managed-notices.js";
 export * from "./outcomes.js";
 
 import { applicableTargets } from "../applicability/index.js";
-import { resolveScopeCapabilities } from "../resolver/index.js";
-import { familySupportFamilies, targetIds, targetMap } from "../targets/index.js";
+import { familySupportFamilies, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
   Diagnostic,
-  EmitInput,
-  EmitReport,
-  EmitRequest,
   FacetFamily,
   HookEntry,
   HookFile,
   McpFile,
-  ReadOnlyFs,
-  Scope,
-  TargetDefinition,
   TargetId,
 } from "../types/index.js";
-import { capabilityBlocked } from "./outcomes.js";
 
 export type {
   AcfManagedSidecar,
   AcfOwnership,
   EmitInput,
   EmitOptions,
-  EmitReport,
-  EmitRequest,
   EmitResult,
   FileDiff,
 } from "../types/index.js";
 
 /**
- * Plans every capability of the requested scopes for each requested target. A capability a
- * refusal blocks on a target contributes its diagnostics but no diffs there
- * ({@link capabilityBlocked}).
+ * `capability` reduced to what applies to `targetId` (SPEC.md §6), or null when the capability
+ * itself does not apply. Families the target cannot carry add an `acf.adapter.facet-unsupported`
+ * diagnostic to the returned capability.
  */
-export async function emit(req: EmitRequest, fs: ReadOnlyFs): Promise<EmitReport> {
-  const report: EmitReport = { perScopeTarget: {} };
-  const requestedTargets = req.targets.length > 0 ? req.targets : [...targetIds];
-  for (const scopeRoot of req.scopes) {
-    const resolved = await resolveScopeCapabilities(scopeRoot);
-    const capabilities = resolved.capabilities.sort(byCapabilityName);
-    const canonicalSkillReaders = requestedTargets.filter((targetId) => {
-      const target = targetMap[targetId];
-      return (
-        target?.discoversCanonicalSkills === true &&
-        resolveInstallRoot(target, scopeRoot.scope) !== null
-      );
-    });
-    for (const targetId of requestedTargets) {
-      const target = targetMap[targetId];
-      if (target === undefined) {
-        report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          diffs: [],
-          diagnostics: [
-            {
-              severity: "error",
-              code: "acf.target.unknown-id",
-              message: `unknown target id: ${targetId}`,
-              targetId,
-            },
-          ],
-        };
-        continue;
-      }
-      const installRoot = resolveInstallRoot(target, scopeRoot.scope);
-      if (installRoot === null) {
-        report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          diffs: [],
-          diagnostics: [
-            {
-              severity: "lossy",
-              code: "acf.adapter.scope-unsupported",
-              message: `${targetId} does not support ${scopeRoot.scope} scope`,
-              targetId,
-            },
-          ],
-        };
-        continue;
-      }
-      const diagnostics: Diagnostic[] = [...resolved.diagnostics];
-      const diffs = [];
-      for (const cap of capabilities) {
-        const filtered = applyApplicability(cap, targetId);
-        if (filtered === null) continue;
-        const adapter = target.adapter;
-        if (adapter === undefined) {
-          diagnostics.push({
-            severity: "lossy",
-            code: "acf.adapter.not-registered",
-            message: `adapter not registered for target ${targetId}`,
-            targetId,
-          });
-          continue;
-        }
-        const input: EmitInput = {
-          capability: filtered,
-          scope: scopeRoot.scope,
-          installRoot,
-          options: { canonicalSkillReaders, ...req.options },
-        };
-        const validation = adapter.validate === undefined ? [] : await adapter.validate(input);
-        const result = await adapter.emit(input, fs);
-        diagnostics.push(...validation, ...result.diagnostics);
-        if (!capabilityBlocked([...validation, ...result.diagnostics], targetId)) {
-          diffs.push(...result.diffs);
-        }
-      }
-      report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-        diffs: diffs.sort((a, b) => a.path.localeCompare(b.path)),
-        diagnostics: diagnostics.sort(sortDiagnostics),
-      };
-    }
-  }
-  return report;
-}
-
-export function resolveInstallRoot(
-  target: TargetDefinition<TargetId>,
-  scope: Scope,
-): string | null {
-  return target.installPaths[scope];
-}
-
 export function applyApplicability(
   capability: AcfCapability,
   targetId: TargetId,
@@ -215,12 +117,4 @@ function familyHasItems(
     case "mcp":
       return (cap.mcp?.servers.length ?? 0) > 0;
   }
-}
-
-function byCapabilityName(a: AcfCapability, b: AcfCapability): number {
-  return a.manifest.name.localeCompare(b.manifest.name);
-}
-
-function sortDiagnostics(a: Diagnostic, b: Diagnostic): number {
-  return (a.path ?? "").localeCompare(b.path ?? "") || a.code.localeCompare(b.code);
 }

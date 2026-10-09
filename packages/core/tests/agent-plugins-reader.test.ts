@@ -172,6 +172,18 @@ describe("Agent Plugins 1.0 reader", () => {
     ]);
   });
 
+  test("a value another target's host expands keeps the server whole as remainder", async () => {
+    const { capability, diagnostics } = await read({
+      "plugin.json": manifest(),
+      "mcp.json": mcp({ opencoded: { type: "stdio", command: "tool", args: ["{env:TOKEN}"] } }),
+    });
+    expect(diagnostics).toEqual([]);
+    expect(capability?.mcp?.servers).toEqual([]);
+    expect(capability?.remainder).toEqual([
+      expect.objectContaining({ kind: "mcp-server", name: "opencoded", executable: true }),
+    ]);
+  });
+
   test("an invalid server is excluded and the rest load", async () => {
     const { capability, diagnostics } = await read({
       "plugin.json": manifest(),
