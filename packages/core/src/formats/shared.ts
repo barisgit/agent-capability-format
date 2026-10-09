@@ -296,8 +296,11 @@ export function mapPlaceholders(
   value: string,
   mapping: Readonly<Record<string, string>>,
 ): string | undefined {
-  if (placeholderNames(value).some((name) => mapping[name] === undefined)) return undefined;
-  return value.replace(/\$\{([^}]*)\}/g, (_whole, name: string) => mapping[name] ?? "");
+  // Own properties only: `${constructor}` must not resolve through Object.prototype.
+  const mapped = (name: string): string | undefined =>
+    Object.hasOwn(mapping, name) ? mapping[name] : undefined;
+  if (placeholderNames(value).some((name) => mapped(name) === undefined)) return undefined;
+  return value.replace(/\$\{([^}]*)\}/g, (_whole, name: string) => mapped(name) ?? "");
 }
 
 /** Manifest of a Claude plugin, relative to the plugin root. */

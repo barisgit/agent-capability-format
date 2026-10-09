@@ -267,3 +267,16 @@ test("a skill or server with a native value its host rejects is left out with a 
     ["warn", "acf.source.component-invalid", true],
   ]);
 });
+
+test("a placeholder named like an Object.prototype property keeps the server native", async () => {
+  const { capability } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    ".mcp.json": JSON.stringify({
+      mcpServers: { files: { command: "npx", args: [`${DOLLAR}{constructor}`] } },
+    }),
+  });
+  expect(capability?.mcp?.servers ?? []).toEqual([]);
+  expect(capability?.remainder?.map((item) => [item.kind, item.name])).toEqual([
+    ["mcp-server", "files"],
+  ]);
+});
