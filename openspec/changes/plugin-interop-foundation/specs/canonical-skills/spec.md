@@ -33,6 +33,10 @@ The following skill meanings SHALL be pending core in this change: tool pre-appr
 - **WHEN** a Claude plugin skill declaring `allowed-tools: Bash(git *)` is emitted for Codex
 - **THEN** the Codex skill has no `allowed-tools` key and the plan reports the grant as not carried
 
+#### Scenario: Body placeholder to another target
+- **WHEN** a skill whose body uses `$ARGUMENTS` is emitted for Codex
+- **THEN** the Codex skill body keeps `$ARGUMENTS` as written and the plan reports `acf.skill.placeholder-unexpanded` (lossy) naming the placeholder
+
 ### Requirement: Per-target skill support
 Skill writers SHALL apply this table. N = native spelling, T = translated, D = degraded with a diagnostic, R = refused (`acf.support.refused`). Columns: CC/p Claude plugin carrier, CC/l Claude loose carrier, CX Codex, CU Cursor, OC OpenCode, PI Pi (all loose except CC/p).
 

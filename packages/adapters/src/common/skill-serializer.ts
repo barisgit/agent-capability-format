@@ -10,6 +10,7 @@
  */
 import {
   type AcfCapability,
+  bodyPlaceholdersUnexpanded,
   type Carrier,
   nativeExtras,
   nativeKeyInfo,
@@ -38,6 +39,12 @@ export type NativeSkill = ComponentReport & {
 };
 
 const SKILL_FILE = "SKILL.md";
+
+/**
+ * Claude body placeholders: `$ARGUMENTS`, `$ARGUMENTS[N]` and `${CLAUDE_*}` values such as the
+ * skill directory. Bare `$N` is left out because ordinary prose uses it (`$5`).
+ */
+const CLAUDE_BODY_PLACEHOLDERS = /\$ARGUMENTS(?:\[\d+\])?(?![\w[])|\$\{CLAUDE_[A-Z_]+\}/g;
 
 /** Canonical fields written under the same key on every target that carries them. */
 const sameKeyFields = [
@@ -111,6 +118,12 @@ export function renderNativeSkill(
       const [key, value] = entry.frontmatter;
       result.frontmatter[key] = value;
     }
+  }
+
+  if (target !== "claude") {
+    const placeholders = [...new Set(skill.body.match(CLAUDE_BODY_PLACEHOLDERS))];
+    if (placeholders.length > 0)
+      result.diagnostics.push(bodyPlaceholdersUnexpanded(subject, placeholders));
   }
 
   for (const [key, value] of Object.entries(nativeExtras(skill.frontmatter.targets, target))) {

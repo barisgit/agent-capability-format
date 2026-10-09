@@ -173,3 +173,24 @@ test("argument-hint is native for Claude and degraded elsewhere", async () => {
   expect(fileText(pi, ".agents/skills/fix/SKILL.md")).not.toContain("argument-hint");
   expect(withCode(pi, "acf.support.degraded")[0]?.data?.dropped).toBe("skill.argument-hint");
 });
+
+test("Claude body placeholders are reported where the target does not expand them", async () => {
+  const skillDir = ["$", "{CLAUDE_SKILL_DIR}"].join("");
+  const placeholders = skillFacet(
+    { name: "triage", description: "Triage an issue" },
+    `Triage issue $ARGUMENTS ($ARGUMENTS[0] first) with ${skillDir}/checklist.md.\n`,
+  );
+  const plain = skillFacet({ name: "plain", description: "Plain" }, "Costs $5.\n");
+  const capability = capabilityModel({ skills: [placeholders, plain] });
+
+  const codex = await emitModel(codexAdapter, capability, "/project/.codex");
+  expect(withCode(codex, "acf.skill.placeholder-unexpanded")).toEqual([
+    expect.objectContaining({
+      severity: "lossy",
+      message: `codex does not expand the Claude placeholders $ARGUMENTS, $ARGUMENTS[0], ${skillDir} in the body of skill triage; they reach it as written`,
+    }),
+  ]);
+  expect(fileText(codex, "triage/SKILL.md")).toContain("Triage issue $ARGUMENTS");
+  const claude = await emitModel(claudeAdapter, capability, "/project/.claude");
+  expect(withCode(claude, "acf.skill.placeholder-unexpanded")).toEqual([]);
+});

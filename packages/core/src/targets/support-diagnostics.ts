@@ -215,6 +215,31 @@ export function corePending(
   });
 }
 
+/**
+ * `acf.skill.placeholder-unexpanded` (lossy) for a skill body that uses Claude placeholders
+ * (`$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`) on a target that does not expand them. Body placeholders
+ * are a pending core meaning (`skill.arguments`) and the body travels unchanged, so the target's
+ * agent reads the placeholder text where Claude would substitute a value.
+ */
+export function bodyPlaceholdersUnexpanded(
+  subject: SupportSubject & { family: "skill" },
+  placeholders: readonly string[],
+): Diagnostic {
+  const label = componentLabel(subject);
+  const list = placeholders.join(", ");
+  return diagnostic(subject, {
+    severity: "lossy",
+    code: "acf.skill.placeholder-unexpanded",
+    message: `${subject.target} does not expand the Claude placeholders ${list} in the body of ${label}; they reach it as written`,
+    data: {
+      outcome: "changed-behavior",
+      source: "skill body",
+      consequence: `${label} reads ${list} as literal text on ${subject.target}`,
+      recovery: recoveryFor(subject),
+    },
+  });
+}
+
 /** The support payload of a diagnostic built by this module, or undefined for any other. */
 export function readSupportData(
   diagnostic: Diagnostic | undefined,

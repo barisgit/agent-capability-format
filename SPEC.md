@@ -598,7 +598,10 @@ authentication and host-environment references, and the MCP meanings in
 §13a.4.2. It is authored with the target's `native` extras in the same
 spelling a foreign package uses. When a later spec version promotes the
 meaning, that version defines the migration, and an extra that duplicates
-the promoted field becomes `acf.extras.conflict`.
+the promoted field becomes `acf.extras.conflict`. Body placeholders such as
+`$ARGUMENTS`, `$ARGUMENTS[N]` and `${CLAUDE_SKILL_DIR}` reach a target other
+than Claude as written, and the skill writer reports them with
+`acf.skill.placeholder-unexpanded` (`lossy`).
 
 ### 7.9 Extras on other targets
 

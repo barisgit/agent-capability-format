@@ -2806,6 +2806,7 @@ acf.native.unsupported-entry                 # symlink or special file under nat
 acf.native.collision                         # native/<target> file collides with generated output (error)
 acf.skill.paths-not-core                     # top-level skill paths (error)
 acf.skill.native-key-not-core                # native key at skill top level (error; descriptive: warn)
+acf.skill.placeholder-unexpanded             # Claude body placeholder in a skill emitted to another target (lossy)
 
 # MCP
 acf.mcp.cwd.invalid                          # cwd base or traversal (error)
