@@ -173,23 +173,12 @@ export function planClaudeScope(
     });
   }
   const known = observed.marketplaces.some((m) => m.name === marketplace);
-  const keptBy: string[] = [];
-  if (desired.plugins.length === 0 && known) {
-    for (const plugin of [...otherScopeInstalls, ...installs.elsewhere]) {
-      const where = plugin.projectPath === undefined ? "" : ` for ${plugin.projectPath}`;
-      keptBy.push(`${plugin.id} is installed at Claude ${plugin.scope} scope${where}`);
-    }
-    for (const file of observed.settings) {
-      const own =
-        file.scope === claudeScope &&
-        (target.scope === "user" || target.projectRoot === projectDir);
-      if (own) continue;
-      if (file.marketplaces === undefined) keptBy.push(`${file.path} cannot be read`);
-      else if (file.marketplaces.includes(marketplace)) keptBy.push(`${file.path} declares it`);
-    }
-    if (keptBy.length === 0) {
-      steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
-    }
+  const retiring = desired.plugins.length === 0 && known;
+  const keptBy = retiring
+    ? marketplaceKeptBy({ target, claudeScope, marketplace, projectDir }, installs, observed)
+    : [];
+  if (retiring && keptBy.length === 0) {
+    steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
   }
   return {
     target: desired.target,
@@ -203,4 +192,30 @@ export function planClaudeScope(
     marketplaceKnown: known,
     keptBy,
   };
+}
+
+/**
+ * Why a retired marketplace must stay registered: each install outside caplet's registration
+ * that `marketplace remove` would uninstall, and each settings file it edits, other than caplet's
+ * own, that declares the marketplace or cannot be read. Empty when the removal is safe.
+ */
+function marketplaceKeptBy(
+  plan: Pick<ClaudeScopePlan, "target" | "claudeScope" | "marketplace" | "projectDir">,
+  installs: ClaudeInstallPartition,
+  observed: ObservedClaudeState,
+): string[] {
+  const { target, claudeScope, marketplace, projectDir } = plan;
+  const keptBy: string[] = [];
+  for (const plugin of [...installs.otherScope, ...installs.elsewhere]) {
+    const where = plugin.projectPath === undefined ? "" : ` for ${plugin.projectPath}`;
+    keptBy.push(`${plugin.id} is installed at Claude ${plugin.scope} scope${where}`);
+  }
+  for (const file of observed.settings) {
+    const own =
+      file.scope === claudeScope && (target.scope === "user" || target.projectRoot === projectDir);
+    if (own) continue;
+    if (file.marketplaces === undefined) keptBy.push(`${file.path} cannot be read`);
+    else if (file.marketplaces.includes(marketplace)) keptBy.push(`${file.path} declares it`);
+  }
+  return keptBy;
 }
