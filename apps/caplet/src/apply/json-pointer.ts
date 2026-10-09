@@ -79,55 +79,53 @@ function deleteAt(
   if (container.kind === "object") {
     const property = findObjectProperty(text, container.start, container.end, segment);
     if (property === null) return text;
-    if (last) return removeObjectProperty(text, container, property);
+    if (last) return removeMember(text, container, property.propStart, property.valueEnd);
     const child = containerAt(text, property.valueStart, property.valueEnd);
     return child === null ? text : deleteAt(text, child, segments, index + 1);
   }
 
   const element = findArrayElement(text, container.start, container.end, segment);
   if (element === null) return text;
-  if (last) return removeArrayElement(text, container, element);
+  if (last) return removeMember(text, container, element.valueStart, element.valueEnd);
   const child = containerAt(text, element.valueStart, element.valueEnd);
   return child === null ? text : deleteAt(text, child, segments, index + 1);
 }
 
-function removeObjectProperty(
+/**
+ * Removes one member of `container`, a property from its key or an element from its value
+ * (`start`) through `valueEnd`, with exactly one separating comma, and leaves every other member
+ * in place. A member alone on its line takes the whole line with it; a member that shares its line
+ * with other content takes only its own text and the inline space that separated it.
+ */
+function removeMember(
   text: string,
   container: ContainerLocation,
-  property: ObjectProperty,
+  start: number,
+  valueEnd: number,
 ): string {
-  const afterValue = skipWhitespace(text, property.valueEnd);
+  const afterValue = skipWhitespace(text, valueEnd);
   if (text[afterValue] === ",") {
-    const start = lineStartAt(text, property.propStart);
-    return replaceRange(text, start, consumeOneLineBreak(text, afterValue + 1), "");
+    const afterComma = skipInlineSpace(text, afterValue + 1);
+    const lineStart = lineStartAt(text, start);
+    const endsLine = atLineEnd(text, afterComma);
+    if (endsLine && isInlineSpace(text, lineStart, start)) {
+      return replaceRange(text, lineStart, consumeOneLineBreak(text, afterComma), "");
+    }
+    const from = endsLine ? skipInlineSpaceBack(text, start, lineStart) : start;
+    return replaceRange(text, from, afterComma, "");
   }
 
-  const previous = previousNonWhitespace(text, property.propStart, container.start);
+  const previous = previousNonWhitespace(text, start, container.start);
   if (previous !== null && text[previous] === ",") {
-    return replaceRange(text, previous, consumeOneLineBreak(text, property.valueEnd), "");
+    return replaceRange(text, previous, valueEnd, "");
   }
 
-  const close = findContainerClose(text, container.start, container.end, "}");
-  return replaceRange(text, container.start + 1, close, "");
-}
-
-function removeArrayElement(
-  text: string,
-  container: ContainerLocation,
-  element: ArrayElement,
-): string {
-  const afterValue = skipWhitespace(text, element.valueEnd);
-  if (text[afterValue] === ",") {
-    const start = lineStartAt(text, element.valueStart);
-    return replaceRange(text, start, consumeOneLineBreak(text, afterValue + 1), "");
-  }
-
-  const previous = previousNonWhitespace(text, element.valueStart, container.start);
-  if (previous !== null && text[previous] === ",") {
-    return replaceRange(text, previous, consumeOneLineBreak(text, element.valueEnd), "");
-  }
-
-  const close = findContainerClose(text, container.start, container.end, "]");
+  const close = findContainerClose(
+    text,
+    container.start,
+    container.end,
+    container.kind === "object" ? "}" : "]",
+  );
   return replaceRange(text, container.start + 1, close, "");
 }
 
@@ -263,6 +261,26 @@ function previousNonWhitespace(text: string, start: number, floor: number): numb
   let cursor = start - 1;
   while (cursor > floor && "\n\r\t ".includes(text[cursor] ?? "")) cursor -= 1;
   return cursor > floor ? cursor : null;
+}
+
+function skipInlineSpace(text: string, start: number): number {
+  let cursor = start;
+  while (text[cursor] === " " || text[cursor] === "\t") cursor += 1;
+  return cursor;
+}
+
+function skipInlineSpaceBack(text: string, end: number, floor: number): number {
+  let cursor = end;
+  while (cursor > floor && (text[cursor - 1] === " " || text[cursor - 1] === "\t")) cursor -= 1;
+  return cursor;
+}
+
+function isInlineSpace(text: string, start: number, end: number): boolean {
+  return skipInlineSpace(text, start) >= end;
+}
+
+function atLineEnd(text: string, index: number): boolean {
+  return index >= text.length || text[index] === "\n" || text[index] === "\r";
 }
 
 function lineStartAt(text: string, index: number): number {

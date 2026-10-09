@@ -61,6 +61,11 @@ export async function runCaplet(
       HOME: scope.home,
       USERPROFILE: scope.home,
       CLAUDE_CONFIG_DIR: path.join(scope.home, ".claude"),
+      // Git and the hosts read XDG locations; keep them inside the test home too. The cache
+      // stays where Bun expects it, so tests that scan the home skip only `.bun/`.
+      XDG_CONFIG_HOME: path.join(scope.home, ".config"),
+      XDG_DATA_HOME: path.join(scope.home, ".local", "share"),
+      XDG_STATE_HOME: path.join(scope.home, ".local", "state"),
       PATH: pathWithoutClaude(),
       ...env,
     },

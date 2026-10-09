@@ -1,7 +1,7 @@
 /**
  * Named, caplet-owned text regions inside files shared with the user. A region is delimited by
  * begin/end marker comments in the host file's comment syntax: HTML comments in Markdown, hash
- * comments in TOML. Readers accept either syntax; writers keep the syntax a region already
+ * comments in TOML. A marker is a whole line; the same text inside a longer line is not one. Readers accept either syntax; writers keep the syntax a region already
  * uses and otherwise use the one requested.
  */
 
@@ -68,13 +68,27 @@ type Located = { syntax: MarkerSyntax; begin: string; end: string; start: number
 function locate(text: string, name: string): Located | null {
   for (const syntax of markerSyntaxes) {
     const { begin, end } = markerLines(name, syntax);
-    const start = text.indexOf(begin);
+    const start = indexOfLine(text, begin, 0);
     if (start === -1) continue;
-    const finish = text.indexOf(end, start + begin.length);
+    const finish = indexOfLine(text, end, start + begin.length);
     if (finish === -1) continue;
     return { syntax, begin, end, start, finish };
   }
   return null;
+}
+
+/**
+ * The index of the first whole line from `from` on that is exactly `line`, or -1. Matching whole
+ * lines keeps a region name from matching a longer name it prefixes (`mcp_servers.foo` inside
+ * `# acf:begin mcp_servers.foobar`) and marker text quoted inside a line from counting.
+ */
+function indexOfLine(text: string, line: string, from: number): number {
+  for (let index = text.indexOf(line, from); index !== -1; index = text.indexOf(line, index + 1)) {
+    const after = index + line.length;
+    const startsLine = index === 0 || text[index - 1] === "\n";
+    if (startsLine && (after === text.length || lineBreakAt(text, after) > 0)) return index;
+  }
+  return -1;
 }
 
 function markerLines(name: string, syntax: MarkerSyntax): { begin: string; end: string } {

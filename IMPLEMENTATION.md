@@ -946,7 +946,9 @@ adapter that needs them:
   it.
 - `replaceMarkedBlock`, `removeMarkedBlock`, `extractMarkedBlock`, and
   `markerSyntaxOf` edit one `acf:begin`/`acf:end` region of a text file
-  (HTML comment markers by default, `#` markers in TOML).
+  (HTML comment markers by default, `#` markers in TOML). A marker counts
+  only as a whole line, so `mcp_servers.foo` never matches the markers of
+  `mcp_servers.foobar`.
 - `makeFileDiff(path, before, after, owns, modes?)` builds a `FileDiff`.
 
 ```ts
@@ -1505,9 +1507,13 @@ Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 
 `applyEmitPlan` (`apply-plan.ts`) runs in this order: write every change without a
 gate (plugin files, `marketplace.json`, loose files); reconcile each Claude
-install root with the host; apply each gated change whose gate opened and
+install root with the host, except a root where one of those plugin-carrier
+writes was skipped (`acf.claude.host-deferred`), whose gated changes all
+stay closed; apply each gated change whose gate opened and
 hold back the rest with their sidecar entries; drop the stale sidecar entries
-that were not held back and regenerate the inventory of roots with held-back
+that were not held back and whose path's write landed for their capability and
+for every capability taking over one of their regions (the entry's
+`recipients`), and regenerate the inventory of roots with held-back
 changes; finally `recordClaudeMarketplaces`.
 
 After the plan, human output prints one block per scope:
@@ -2840,6 +2846,7 @@ acf.claude.policy-blocked                    # host policy blocks the plugin (wa
 acf.claude.version-mismatch                  # installed version differs after update (warn)
 acf.claude.other-scope                       # plugin installed at another Claude scope (info)
 acf.claude.marketplace-kept                  # removing the marketplace would touch others' registrations (warn)
+acf.claude.host-deferred                     # a plugin package write was skipped; no claude command ran for its root (warn)
 acf.migration.drifted                        # edited loose artifact left in place (warn)
 
 # CLI

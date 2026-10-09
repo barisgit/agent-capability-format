@@ -67,6 +67,11 @@ export type StaleSidecarEntry = {
   capability: string;
   owns: AcfOwnership[];
   owner: SidecarOwner;
+  /**
+   * The other capabilities that take over some of its regions in this plan. The entry stays until
+   * each of them has recorded its own entry at the path, so a region is never left unowned.
+   */
+  recipients?: readonly string[] | undefined;
 };
 
 /** A capability a refusal blocks on one target in one scope (`capabilityBlocked`). */

@@ -2835,7 +2835,7 @@ Instruction trigger support is summarized as one of:
 
 On loose carriers caplet owns each server entry, not the file: JSON
 entries by JSON pointer, Codex tables by a `# acf:begin`/`# acf:end` marker
-region per server. A plugin's `.mcp.json` is a whole file of the package,
+region per server, each marker a whole line. A plugin's `.mcp.json` is a whole file of the package,
 and package-level `targets.claude.native.mcpServers` go into its
 `plugin.json` (§13a.4.1). Claude reads user-scope MCP servers only from
 `~/.claude.json`, a state file Claude rewrites, so the loose Claude carrier
@@ -2880,7 +2880,9 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
 - When applying a plan, the emit driver MUST check that each file still
   matches the state the plan was computed from. A file that changed in
   between is left untouched, keeps its sidecar entry, and is reported as
-  drift. On each apply, ACF-owned paths and regions no longer in the
+  drift. A region one capability hands to another keeps its old owner's
+  entry until the new owner's write lands, so it is never left unowned.
+  On each apply, ACF-owned paths and regions no longer in the
   desired plan are removed, even when their capability and facet remain.
   One whose owned content no longer matches the recorded hash was edited
   by the user: it is kept with its sidecar entry and reported as drift
@@ -2986,7 +2988,12 @@ commands run. Deleting a removed plugin's files waits until Claude no
 longer lists it, because Claude keeps serving an installed plugin from its
 cache, and deleting `marketplace.json` waits until the marketplace is
 removed; a change whose condition is not met stays, with its sidecar
-entry, for the next apply.
+entry, for the next apply. When apply skips a write of a plugin package or
+of `marketplace.json` because the file changed after planning, the install
+root's packages are incomplete: no `claude` command runs for that root,
+every change that waits on Claude there (including the retirement of loose
+output, §22.8.5) stays for the next apply, and the warning
+`acf.claude.host-deferred` says so.
 
 ACF user scope registers at Claude user scope; ACF project scope registers
 at Claude local scope (`.claude/settings.local.json`), so registration
