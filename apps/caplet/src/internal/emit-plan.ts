@@ -38,9 +38,8 @@ import {
 import { isInsideOrEqual } from "../apply/containment.js";
 import { detectDrift, diskDriftFs, readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
 import { readCwd, readScope } from "./args.js";
-import { claudeGate } from "./claude-host-flow.js";
+import { gateClaudeChanges } from "./claude-gates.js";
 import { planClaudeMarketplaces } from "./claude-marketplace.js";
-import { planClaudeMigration } from "./claude-migration.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
@@ -134,11 +133,7 @@ export async function buildEmitPlan(
     ),
     ...sweep.deletes.filter((item) => fileDiffChanged(item.diff)),
   ];
-  for (const item of diffs) {
-    const gate = claudeGate(item, claude.roots);
-    if (gate !== undefined) item.gate = gate;
-  }
-  const migration = planClaudeMigration(diffs);
+  const migration = gateClaudeChanges(diffs, claude.roots);
   return {
     cwd,
     config,

@@ -9,7 +9,7 @@ import type { Diagnostic, Scope } from "@caplet/core";
 import { colors } from "consola/utils";
 import { resolveDiffPath } from "../apply/apply-diffs.js";
 import { relativeSidecarPath } from "../apply/sidecar.js";
-import type { ClaudeGate } from "./claude-host-flow.js";
+import type { ClaudeGate } from "./claude-gates.js";
 import { displayPath } from "./plan-view.js";
 import type { EmittedDiff } from "./workflow.js";
 

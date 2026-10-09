@@ -32,7 +32,8 @@ import {
   SIDECAR_FILENAME,
   type SidecarOwner,
 } from "../apply/sidecar.js";
-import { type ClaudeGate, type ClaudeReport, claudeGate } from "./claude-host-flow.js";
+import { type ClaudeGate, claudeGate } from "./claude-gates.js";
+import type { ClaudeReport } from "./claude-host-flow.js";
 import type { ClaudeRootPlan } from "./claude-marketplace.js";
 import type { ClaudeMigration } from "./claude-migration.js";
 import { displayPath } from "./plan-view.js";

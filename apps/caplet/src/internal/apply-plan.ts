@@ -25,7 +25,8 @@ import {
   type SidecarOwner,
   writeSidecar,
 } from "../apply/sidecar.js";
-import { type ClaudeReport, gatedChange, gateOpen, reconcileClaude } from "./claude-host-flow.js";
+import { gatedChange, gateOpen } from "./claude-gates.js";
+import { type ClaudeReport, reconcileClaude } from "./claude-host-flow.js";
 import { type ClaudeRootPlan, recordClaudeMarketplaces } from "./claude-marketplace.js";
 import { driftedWarning } from "./claude-migration.js";
 import { diskReadOnlyFs } from "./fs.js";
