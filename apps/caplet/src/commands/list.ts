@@ -7,7 +7,7 @@ import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
 import { displayPath } from "../internal/plan-view.js";
-import { columns } from "../internal/render.js";
+import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
 
@@ -62,7 +62,11 @@ export const listCommand = defineCommand({
           const head = ["NAME", "VERSION", "CONTENTS"].map((cell) => colors.dim(cell));
           const rows = inventory.capabilities.map((capability) => {
             const summary = describeCapability(capability);
-            return [colors.bold(summary.name), summary.version, colors.dim(summary.contents)];
+            return [
+              colors.bold(summary.name),
+              displayVersion(summary.version),
+              colors.dim(summary.contents),
+            ];
           });
           for (const line of columns([head, ...rows], { indent: "  " })) out.log(line);
           count += inventory.capabilities.length;

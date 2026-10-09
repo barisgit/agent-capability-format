@@ -10,7 +10,7 @@ import { readCwd, readScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
-import { columns } from "../internal/render.js";
+import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
 import { capabilitySummary } from "../internal/workflow.js";
@@ -57,7 +57,7 @@ export const showCommand = defineCommand({
       for (const match of matches) {
         const capability = match.capability;
         out.log(
-          `${colors.bold(capability.manifest.name)} ${capability.manifest.version}${
+          `${colors.bold(capability.manifest.name)} ${displayVersion(capability.manifest.version)}${
             capability.synthesized === true ? colors.dim(" · unmanifested import") : ""
           }`,
         );

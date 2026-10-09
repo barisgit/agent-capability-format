@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   columns,
+  displayVersion,
   glyphs,
   stripAnsi,
   terminalWidth,
@@ -55,4 +56,14 @@ test("terminalWidth falls back to 80 when columns is undefined", () => {
 test("glyphs use unicode on TTY and ascii words when piped", () => {
   expect(glyphs(true)).toEqual({ ok: "\u2713", fail: "\u2717", warn: "!" });
   expect(glyphs(false)).toEqual({ ok: "ok", fail: "fail", warn: "warn" });
+});
+
+test("displayVersion abbreviates commit hashes in build metadata only", () => {
+  const commit = "315c4e48967d9541c29c3c656441dded353ca7aa";
+  expect(displayVersion(`0.0.0-unversioned+${commit}`)).toBe("0.0.0-unversioned+315c4e4");
+  expect(displayVersion(`0.0.0-unversioned+${commit}.acf.85ac8873ffc5`)).toBe(
+    "0.0.0-unversioned+315c4e4.acf.85ac8873ffc5",
+  );
+  expect(displayVersion("1.2.0-rc.1+local")).toBe("1.2.0-rc.1+local");
+  expect(displayVersion(`1.0.0-${commit}`)).toBe(`1.0.0-${commit}`);
 });

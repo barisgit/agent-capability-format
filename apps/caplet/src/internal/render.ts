@@ -39,6 +39,20 @@ export function columns(
   });
 }
 
+/**
+ * A version for human output: commit hashes in its build metadata, such as the revision in
+ * `0.0.0-unversioned+<commit>`, shortened to 7 characters. Machine output keeps the exact version.
+ */
+export function displayVersion(version: string): string {
+  const plus = version.indexOf("+");
+  if (plus === -1) return version;
+  const build = version
+    .slice(plus + 1)
+    .split(".")
+    .map((part) => (/^[0-9a-f]{40,64}$/.test(part) ? part.slice(0, 7) : part));
+  return `${version.slice(0, plus)}+${build.join(".")}`;
+}
+
 export function truncateMiddle(value: string, max: number): string {
   if (max <= 1 || width(value) <= max) return value;
   const ellipsis = "\u2026";
