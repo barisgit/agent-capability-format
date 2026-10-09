@@ -262,6 +262,7 @@ re-implementing the parser/emitter.
 ```ts
 export type AcfCapability = {
   root: string                         // absolute path to capability root
+  synthesized?: true                   // bare skill wrapped by the installer
   scope: Scope                         // resolved scope ("user" | "project")
   origin: CapabilityOrigin             // how this capability was obtained
   manifest: Manifest
@@ -274,6 +275,9 @@ export type AcfCapability = {
   mcp: McpFile | undefined
   assets: AssetRef[]                   // referenced asset paths
   diagnostics: Diagnostic[]
+  source?: CapabilitySource            // format reader provenance
+  remainder?: NativeRemainderComponent[] // foreign components kept unprojected
+  nativeFiles?: NativeFileExtra[]      // files under native/<target>/
 }
 
 export type FacetFamily =
@@ -298,6 +302,44 @@ records it.
 `CapabilityOrigin` lets `caplet show` and diagnostics explain why a
 capability exists and where it came from. `LockEntry` is defined in §7.
 
+The interop types live in `packages/core/src/types/interop.ts`; changing one
+is a cross-lane decision because readers, the support registry, writers, and
+caplet's plan/apply all share it:
+
+```ts
+export type SourceFormat = "acf" | "agent-plugins" | "claude-plugin" | "skills"
+export type Carrier = "plugin" | "loose"
+export type SafetyClass = "restricting" | "granting" | "functional" | "descriptive"
+
+export type CapabilitySource = {
+  format: SourceFormat
+  formatVersion?: string     // "1.0" for Agent Plugins
+  path: string               // package root relative to the source root, "." for the root
+  snapshotRoot: string       // immutable materialized snapshot of that root
+}
+
+export type NativeRemainderComponent = {
+  format: "agent-plugins" | "claude-plugin"
+  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, bin, mcp-server, ...
+  name: string
+  paths: string[]            // snapshot-relative files or directories
+  manifestKeys?: string[]    // manifest keys the component occupies
+  class: SafetyClass
+  executable: boolean        // stdio server, hook, LSP, monitor, bin
+}
+
+export type NativeFileExtra = {
+  target: TargetId
+  path: string               // relative to native/<target>/ and to the generated package
+  executable: boolean
+}
+```
+
+A writer of the remainder's own format copies `paths` unchanged; other
+targets omit or refuse each component by `class` (SPEC §14.3). Only a
+plugin-carrier writer of `target` copies `nativeFiles`; every other writer
+drops them with `acf.extras.dropped`.
+
 ### 3.2 Manifest
 
 ```ts
@@ -306,7 +348,7 @@ export type Manifest = {
   name: Slug
   version: SemVer
   description?: string
-  authors?: string[]
+  authors?: Array<string | PackageAuthor> // legacy strings kept verbatim
   license?: string
   homepage?: string
   repository?: string
@@ -318,6 +360,7 @@ export type Manifest = {
   unknown?: Record<string, unknown>
 }
 
+export type PackageAuthor = { name: string; email?: string; url?: string }
 export type Slug = string                   // matches ^[a-z0-9]+(-[a-z0-9]+)*$
 export type SemVer = string
 export type TargetExtensions = Partial<Record<TargetId, unknown>>
@@ -345,6 +388,10 @@ export type SkillFacet = {
     name: Slug
     description: string
     invocation?: { user?: boolean; model?: boolean }
+    license?: string
+    compatibility?: string              // at most 500 characters
+    metadata?: Record<string, string>
+    "argument-hint"?: string
   }>
   body: string                          // Markdown body after frontmatter
 }
@@ -633,7 +680,13 @@ type McpServerBase = {
 }
 
 type McpTransport =
-  | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
+  | {
+      transport: "stdio"
+      command: string
+      args?: string[]
+      env?: Record<string, string>
+      cwd?: string   // starts with ${ACF_CAPABILITY_DIR}, ${ACF_DATA_DIR} or ./
+    }
   | { transport: "http"; url: string; headers?: Record<string, string> }
   | { transport: "sse"; url: string; headers?: Record<string, string> }
 ```
@@ -643,12 +696,12 @@ type McpTransport =
 ```ts
 export type AssetRef = {
   path: string                          // capability-relative source path
-  origin: "frontmatter" | "markdown"
+  origin: "frontmatter" | "markdown" | "implicit"
   facet: { family: FacetFamily; name: string } | { family: "capability" }
 }
 ```
 
-### 3.10 Path placeholders (SPEC §13.6.5)
+### 3.10 Path placeholders (SPEC §13.6.3, §13a.4.1)
 
 ```ts
 export const acfPathPlaceholders = [
@@ -660,13 +713,23 @@ export const acfPathPlaceholders = [
 
 Substitution is performed when the adapter materializes a hook `run.command`,
 hook `run.args[i]`, hook `run.env[k]`, MCP `command`, MCP `args[i]`, MCP
-`env[k]`, and MCP `headers[k]`. No other interpolation is performed by ACF.
+`env[k]`, MCP `cwd`, MCP `url`, and MCP `headers[k]`. No other interpolation
+is performed by ACF.
+
+`acfDataDirPlaceholder` (`${ACF_DATA_DIR}`) is MCP-only: a persistent,
+writable directory per capability and install scope that survives updates.
+It is valid in stdio `command`, `args`, `env`, and `cwd`, and rejected in
+`url` and `headers` (`acf.mcp.placeholder.unsupported`). Loose carriers
+resolve it to `<install-root>/.acf/data/<capability>/`, which apply creates
+with a `.keep` file; the Claude plugin carrier writes
+`${CLAUDE_PLUGIN_DATA}`. A `./` MCP `cwd` resolves against the capability
+root.
 
 ## 4. Target registry
 
-The registry is the single source of truth for target identity, facet
-support, install paths, native mapping tables, and per-target extension
-schemas. It uses the definition-first pattern.
+The registry is the single source of truth for target identity, family and
+field-level support, carriers, install paths, native mapping tables, and
+per-target extension schemas. It uses the definition-first pattern.
 
 ### 4.1 Target definition contract
 
@@ -701,8 +764,11 @@ export type TargetDefinition<Id extends string> = {
   support: Partial<Record<Exclude<FacetFamily, "skill" | "mcp">, SupportLevel>>
   installPaths: InstallPaths
   // Native skill install paths, when the target has target-specific skill
-  // directories. Omitted = skills emit only to the canonical shared root.
+  // directories. Omitted = no native skill root (Cursor).
   skillInstallPaths?: InstallPaths
+  // The host discovers the shared .agents/skills root itself (Codex, Cursor,
+  // OpenCode, Pi). Only these targets cause the shared copy to be written.
+  discoversCanonicalSkills?: boolean
   mappings: TargetMappings
 
   extensions: {
@@ -726,7 +792,7 @@ registry treats it opaquely; the validation layer (§5.3) calls into it.
 
 Adapters do not write files directly. They return a list of `FileDiff`s
 between current and desired content. Caplet (or any consumer) applies the
-diffs and tracks ownership in a `.acf-managed.json` sidecar (§4.6).
+diffs and tracks ownership in a `.acf-managed.json` sidecar (§4.2.2).
 
 This design is universal across file formats (JSON, YAML, Markdown, MDC,
 TOML, anything text-based), makes `caplet apply --dry-run` trivial, and
@@ -764,6 +830,13 @@ export type EmitInput = {
 export type EmitOptions = {
   cleanBeforeEmit?: boolean
   dryRun?: boolean
+  // caplet.yml targets.<id>.skills; absent = target default (§4.8)
+  skills?: { native?: boolean; canonical?: boolean }
+  // Selected targets in this scope that discover .agents/skills. The shared
+  // copy must satisfy all of them; absent = this writer is the only reader.
+  canonicalSkillReaders?: readonly TargetId[]
+  // Claude plugin writer only: absent = the target's default carrier.
+  carrier?: Carrier
 }
 
 export type EmitResult = {
@@ -774,6 +847,20 @@ export type EmitResult = {
    *  `componentOutcomes`; support diagnostics come from the helpers in
    *  `targets/support-diagnostics.ts`, which read the registry cells. */
   outcomes?: ComponentOutcome[]
+  /** Plugin packages the Claude plugin writer generated (§4.9). */
+  plugins?: EmittedPlugin[]
+}
+
+export type ComponentOutcome = {
+  capability: string
+  target: TargetId
+  family: FacetFamily | "package" | "remainder"
+  component: string
+  outcome: "native" | "translated" | "changed-behavior" | "omitted" | "blocked"
+  source?: string        // core field id, native key, or component type
+  consequence?: string   // what the user loses
+  recovery?: string      // selection change that resolves it
+  dropped?: string[]     // descriptive fields and extras lost without behavior change
 }
 
 /** Read-only filesystem port. Caplet implements it over real fs; tests use
@@ -783,6 +870,7 @@ export type ReadOnlyFs = {
   exists(absPath: string): Promise<boolean>
   readText(absPath: string): Promise<string | null>  // null if missing
   readBytes(absPath: string): Promise<Uint8Array | null>
+  readMode(absPath: string): Promise<number | null>   // POSIX mode bits
   listDir(absPath: string): Promise<string[]>         // [] if missing
 }
 
@@ -791,11 +879,13 @@ export type ReadOnlyFs = {
  *  `caplet apply --dry-run`, and updates `.acf-managed.json`. */
 export type FileDiff = {
   path: string                           // absolute path on disk
-  before: string | null                  // null = file did not exist
-  after: string | null                   // null = delete file
+  before: string | Uint8Array | null     // null = file did not exist
+  after: string | Uint8Array | null      // null = delete file
+  beforeMode?: number | null             // POSIX mode; byte-exact copies keep the exec bit
+  afterMode?: number | null
   // The set of ACF-owned regions inside this file. For fully-owned files
   // (Cursor .mdc rules, ACF-generated YAML), `owns` is the single string
-  // "file". For intertwined files (Claude settings.json), `owns` lists the
+  // "file". For intertwined files (Codex config.toml, .mcp.json), `owns` lists the
   // JSON pointers or markers that ACF claims authorship of.
   owns: AcfOwnership[]
   facet?: { family: FacetFamily; name: string }
@@ -829,11 +919,11 @@ import {
   type AcfOwnership,
 } from "@caplet/adapters/common"
 
-// Example: insert an MCP server entry into Claude's settings.json
-const before = await fs.readText(`${installRoot}/settings.json`)
+// Example: insert an MCP server entry into Cursor's mcp.json
+const before = await fs.readText(`${installRoot}/mcp.json`)
 const after = patchJson(before ?? "{}", "/mcpServers/my-server", { command: "x" })
 const diff: FileDiff = {
-  path: `${installRoot}/settings.json`,
+  path: `${installRoot}/mcp.json`,
   before,
   after,
   owns: [{ kind: "json-pointer", pointer: "/mcpServers/my-server" }],
@@ -866,7 +956,7 @@ export type AcfManagedSidecar = {
     capability: string       // capability name that produced this entry
     facet?: { family: FacetFamily; name: string }
     target?: TargetId | "canonical" // root owner; filled in on the next write
-    carrier?: Carrier        // "loose" for every output caplet writes today
+    carrier?: Carrier        // "plugin" inside a generated Claude plugin, else "loose"
     mode?: number            // POSIX permission bits of a whole-file entry
     hash: string             // sha256 of the rendered content for drift detection
   }>
@@ -913,6 +1003,9 @@ planner checks the sidecar before proposing an overwrite, and the applier
 repeats the ownership check immediately before writing to close the race. ACF
 does not place notices directly in host discovery directories such as a native
 `skills/` root; local notices live one level lower inside each skill directory.
+Generated Claude plugin packages get no notice files: the package digest and
+version must depend only on package content (SPEC §14.7). The install-root
+inventory lists plugin directories and the marketplace instead.
 
 ### 4.3 Registry sketch
 
@@ -1016,8 +1109,8 @@ export const targets = defineTargets([
         file_context:     "none",
       },
       mcpInstallPath: {
-        user:    `${HOME}/.codex/mcp.json`,
-        project: null,
+        user:    `${HOME}/.codex/config.toml`,
+        project: `./.codex/config.toml`,
       },
     },
 
@@ -1068,8 +1161,8 @@ export const targets = defineTargets([
         file_context:     "partial",
       },
       mcpInstallPath: {
-        user:    `${HOME}/.config/opencode/mcp.json`,
-        project: `./.opencode/mcp.json`,
+        user:    `${HOME}/.config/opencode/opencode.json`,
+        project: `./opencode.json`,
       },
     },
     extensions: {
@@ -1097,7 +1190,8 @@ export const targets = defineTargets([
       user:    `${HOME}/.cursor`,
       project: `./.cursor`,
     },
-    // No skillInstallPaths: Cursor receives skills via the canonical shared root only.
+    // No skillInstallPaths: Cursor receives skills via the shared root only.
+    discoversCanonicalSkills: true,
     mappings: {
       hookEvents: {
         session_start:      [],
@@ -1235,6 +1329,110 @@ export const claudeHookExtensionSchema = z.object({
 
 Unknown target ids or unknown keys under a known target id are diagnostics
 (§11), not silent passes.
+
+### 4.6 Field-level support registry
+
+Skills, MCP servers, and package metadata are declared per field, target, and
+carrier, not per family. The tables live in `packages/core/src/targets/`:
+
+| Module | Exports | Role |
+| --- | --- | --- |
+| `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
+| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `pendingCoreFields` | Known native keys per target and attachment point, with class, `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
+| `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field. |
+| `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data.field`, consequence, and recovery stay uniform. |
+| `remainder-support.ts` | `remainderTargets`, `remainderSupport`, `remainderRefuses` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
+| `package-values.ts` | `packageValueSchemas`, `packageValueProblem` | Validates `targets.<target>.package` values (`acf.extras.package-value-invalid`). |
+| `plugin-layout.ts` | `generatedPluginPaths`, `generatedPathCollision` | Paths the plugin writer generates, so `native/<target>/` files that collide fail with `acf.native.collision`. |
+
+Family-level `support` (§4.1) remains only for agents, commands,
+instructions, and hooks.
+
+`componentOutcomes` (`packages/core/src/emit/outcomes.ts`) turns a writer's
+diagnostics and reported outcomes into the compatibility report.
+`capabilityBlocked` is true when any `acf.support.refused` names the target;
+caplet then marks the capability blocked for that target in `EmitPlan.blocked`
+(`apps/caplet/src/internal/workflow.ts`) and writes, updates, and removes
+nothing of it there. Other capabilities and targets apply, and the command
+exits 2 (`blockingExitCode` in `apps/caplet/src/internal/output.ts`). Any
+error other than a refusal stops apply, add, and update before writing.
+
+### 4.7 Native extras
+
+`packages/core/src/extras/index.ts` is the one reader of native extras:
+
+- `nativeExtras(targets, dialect)` returns the `targets.<dialect>.native`
+  map at package, skill, or MCP-server level; `withNativeExtras` writes one.
+  The `agent-plugins` dialect exists only for the Agent Plugins reader.
+- `packageValues` and `withPackageValues` read and write
+  `targets.<target>.package`, which is valid only in `acf.yml`.
+- `extrasDialects` lists the dialects a `targets` map carries.
+- `nativeFiles(capability, target)` and `nativeFileTargets` read the
+  `native/<target>/` tree recorded on `AcfCapability.nativeFiles`.
+
+Writers merge inline extras verbatim into the native object they generate
+(skill frontmatter, MCP server entry, plugin manifest). A key the writer also
+generates from a core field is an `acf.extras.conflict` error.
+
+### 4.8 Writer emit contract
+
+- **Skills.** The shared `.agents/skills` copy is written only when
+  `canonicalSkillReaders` is non-empty (or `skills.canonical` forces it), and
+  only when every reader applies the skill, none refuses it, and their
+  renderings merge without conflict. Otherwise each discovering target falls
+  back to its native skill root; Cursor, which has none, reports
+  `acf.support.component-omitted`. A target that does not discover the
+  shared root (Claude) writes its native root.
+- **MCP files.** `mcpPathFor` in `packages/adapters/src/common/mcp.ts` is
+  the one place that maps target and scope to the MCP config file (SPEC
+  §22.5). Codex entries live between `# acf:begin <name>` and
+  `# acf:end <name>` marker lines in `config.toml`.
+- **Server-name conflicts.** `withholdConflictingMcpServers`
+  (`apps/caplet/src/internal/mcp-conflicts.ts`) withholds a server name
+  claimed by two capabilities, or already defined by the user without
+  sidecar ownership, with `acf.mcp.config-conflict`. Recovery is
+  `exclude: { mcp: [<name>] }`.
+- **Data directory.** A loose writer that emits `${ACF_DATA_DIR}` also emits
+  `<install-root>/.acf/data/<capability>/.keep`.
+- **Executables.** `executableComponents` and `executableChanges`
+  (`packages/core/src/emit/executables.ts`) list added or changed MCP stdio
+  commands, hooks, LSP servers, monitors, executable files, and Claude
+  `bin/` entries for the change report and `--json` `executables`.
+
+### 4.9 Claude plugin carrier and host port
+
+The Claude plugin writer builds one package per capability at
+`pluginPackageDir(installRoot, name)`, which is
+`<claude-install-root>/.acf/marketplace/plugins/<capability>/`, and the
+marketplace at `pluginMarketplaceDir(installRoot)` with
+`.claude-plugin/marketplace.json` listing `./plugins/<capability>`.
+Plugin diffs set `artifactRoot` to the package directory and sidecar
+entries record `carrier: plugin`. `EmitResult.plugins` reports each package:
+
+```ts
+export type EmittedPlugin = {
+  target: TargetId
+  scope: Scope
+  name: string       // capability slug = plugin name
+  version: string    // <base>+acf.<d>
+  dir: string        // absolute package directory
+}
+```
+
+`d` is the first 12 hex characters of the acf-tree-2 digest of the generated
+package with `plugin.json` written at the base version, so the suffix does
+not feed back into the digest. `targets.<id>.carrier` in `caplet.yml` is
+validated against `carriersOf` at load.
+
+The host port in `apps/caplet/src/hosts/claude/` registers packages:
+
+| Module | Role |
+| --- | --- |
+| `scope.ts` | `claudeScopeFor` maps ACF `user` to Claude `user` and ACF `project` to Claude `local`; `claudeMarketplaceName` gives `acf-user` or `acf-project-<h>` (first 8 hex of the SHA-256 of the project root's real path, because Claude keeps one marketplace record per name for the whole user); `resolveClaudeScopeTarget` resolves that real path. |
+| `cli.ts` | `execClaudeCli` runs `claude` with an argv array and an explicit `cwd`, never a shell. |
+| `host.ts` | `ClaudeHost` port and `createClaudeHost`; tests inject a fake CLI. |
+| `plan.ts` | `planClaudeScope` diffs `claude plugin list --json` against desired plugins into marketplace add, install, update, and uninstall steps, always with `--scope`. An installed plugin is never re-`install`ed, because that re-enables a plugin the user disabled. The marketplace is removed only when no scope still has plugins from it, because `marketplace remove` uninstalls them everywhere. |
+| `reconcile.ts` | `reconcileClaudeHost` runs the plan and reports `acf.claude.cli-unavailable`, `.state-unreadable`, `.policy-blocked`, `.version-mismatch` (warnings), `.command-failed` (error), and `.other-scope` (info). |
 
 ## 5. Reader and validation pipeline
 
@@ -1815,9 +2013,11 @@ For each `ScopeRoot`, the resolver:
 2. parses `capabilities.lock` if present (§7.5),
 3. enumerates directories under `capabilitiesDir/` (autoloaded capabilities),
 4. for each entry in `capabilities.yml`, fetches the selected source root if
-   missing, out of date, or its capability selectors changed,
-5. discovers capability roots, applies collection selectors, and materializes
-   selected capabilities into `capabilitiesDir/`,
+   missing, out of date, or its `ref`, `capabilities` selectors, `rename`, or
+   `format` changed (a selection change never refetches),
+5. detects each package's format (§7.7), discovers capability roots, applies
+   collection selectors, and materializes selected capabilities into
+   `capabilitiesDir/` as unfiltered snapshots,
 6. reconciles snapshots no longer selected only after the complete resolution
    succeeds, then applies cross-capability uniqueness checks (§7.6).
 
@@ -1836,10 +2036,13 @@ export type CapabilityEntry = {
   source: SourceSpec
   ref?: string                          // tag, branch, or commit; default = default branch HEAD
   path?: string                         // subpath establishing the selected source root
+  format?: SourceFormat                 // overrides detection (§7.7)
   capabilities?: string[]               // normalized exact/glob paths under <source>/acf/
   include?: FacetSelector
   exclude?: FacetSelector
-  rename?: string                       // override capability slug for collision resolution
+  rename?: Slug | Record<string, Slug>  // new name for the one capability, or per discovered name
+  only?: TargetId[]                     // mutually exclusive with except
+  except?: TargetId[]
 }
 
 export type SourceSpec =
@@ -1847,8 +2050,21 @@ export type SourceSpec =
   | { kind: "git"; url: string }
   | { kind: "path"; location: string } // absolute, ~/..., or relative to capabilities.yml
 
-export type FacetSelector = Partial<Record<FacetFamily, string[]>>
+// Plural keys: skills, agents, commands, instructions, hooks, mcp.
+export type FacetSelector = Partial<Record<SelectorKey, string[]>>
 ```
+
+Selection (`include`, `exclude`, `only`, `except`) is applied when a
+capability is read, not when it is fetched: `applyEntrySelection`
+(`packages/core/src/resolver/selection.ts`) applies `only`/`except`, then
+`include`, then `exclude`, to the snapshot using the selection the lock
+entry mirrors. Hook and MCP selectors match entry and server names,
+including `targets.<target>` entries; a foreign package's native agents,
+commands, hooks, and MCP servers are selected by name, and its other
+remainder kinds follow the package. A selector that matches nothing is
+`acf.selection.unmatched` (warn). When `include` or `exclude` removes a
+component from a package that keeps native remainder, the remainder may
+still reference it, which is `acf.selection.remainder-references` (lossy).
 
 YAML form (canonical):
 
@@ -1861,6 +2077,10 @@ capabilities:
   - source: github:myorg/private-pack
     ref: main
     capabilities: [team-defaults, hardware/*]
+  - source: github:acme/review-plugin   # a Claude plugin
+    format: claude-plugin
+    exclude:
+      hooks: [format-on-save]
   - source: path:../my-private
 ```
 
@@ -1878,19 +2098,17 @@ export function parseSourceSpec(raw: string): SourceSpec | { error: string } {
 ### 7.3 Source identity
 
 ```ts
-export function sourceId(spec: SourceSpec, entry: CapabilityEntry): string {
-  const base =
-    spec.kind === "github" ? `github:${spec.repo}`     :
-    spec.kind === "git"    ? `git:${spec.url}`         :
-                             `path:${spec.location}`
-  const refPart  = entry.ref  ? `@${entry.ref}` : ""
-  const pathPart = entry.path ? `#${entry.path}` : ""
-  return `${base}${refPart}${pathPart}`
+export function entrySourceId(entry: CapabilityEntry, baseDir = process.cwd()): string {
+  const source = sourceString(entry.source, baseDir) // path: locations made absolute
+  if (entry.path === undefined) return source
+  const normalizedPath = path.posix.normalize(entry.path.replaceAll("\\", "/"))
+  return `${source}#path=${encodeURIComponent(normalizedPath)}`
 }
 ```
 
-`sourceId` is used as the stable key in the lockfile and in
-`CapabilityOrigin`.
+`entrySourceId` (`packages/installer/src/lockfile.ts`) is the stable key in
+the lockfile and in `CapabilityOrigin`. `ref` is not part of it: changing
+the ref updates the same lock entry.
 
 ### 7.4 Fetch strategy
 
@@ -1978,6 +2196,12 @@ warnings and recursive portable-asset collection while leaving the upstream
 `SKILL.md` byte-identical. Inventory is shared with `caplet add` preflight so
 interactive choices and resolver selectors cannot disagree.
 
+The snapshot copies every regular file of the package root except `.git/`,
+including hidden files, and keeps the executable bit. Symlinks, special
+files, and paths that collide after NFC normalization or case folding reject
+the source with `acf.source.snapshot-rejected`. Both digests are computed
+over this unfiltered snapshot (§7.5).
+
 ### 7.5 Lockfile
 
 ```ts
@@ -1987,18 +2211,47 @@ export type CapabilitiesLock = {
 }
 
 export type LockEntry = {
-  sourceId: string                    // SourceSpec + ref + path serialized
-  commit: string                      // resolved SHA (or "local" for path: sources)
-  contentHash: string                 // sha256 over the final installed tree
-  installedAt: string                 // ISO 8601
-  capabilityName: string              // final installed slug (post-rename)
-  synthesized?: boolean               // source was imported from bare skills
+  sourceId: string                    // entrySourceId (§7.3)
+  source: string
+  ref?: string
+  resolvedSha?: string                // never for path: sources
+  resolvedAt?: string                 // ISO 8601
+  capabilityNames: string[]           // final slugs, after rename
+  capabilityHash: string              // v1 hash of the first capability by name
+  resolvedCapabilities?: LockedCapability[] // one per name; absent in old lockfiles
+  capabilities?: string[]             // copied from the entry
+  selectorsByCapability?: Record<string, string>
+  rename?: Slug | Record<string, Slug>
+  include?: FacetSelector             // selection copied from the entry
+  exclude?: FacetSelector
+  only?: TargetId[]
+  except?: TargetId[]
+  synthesized?: true                  // source was imported from bare skills
+}
+
+export type LockedCapability = {
+  name: string                        // after rename
+  format: SourceFormat
+  formatVersion?: string
+  path: string                        // package root in the source, "." for the root
+  payloadDigest: string               // acf-tree-2:sha256:<hex> (SPEC §19.6)
+  capabilityHash: string              // sha256-<hex> (SPEC §19.5)
 }
 ```
 
-`contentHash` (lockfile field `capabilityHash` per SPEC §19.5) is computed
-over the installed capability subtree using the normative algorithm in
-SPEC §19.5:
+The lockfile is JSON written canonically by `packages/core/src/lock/`:
+entries sorted by `sourceId`, keys alphabetical, selector values sorted.
+Parsing is strict for names and digests and lenient for optional
+bookkeeping, so older lockfiles keep reading.
+
+The resolver recomputes each snapshot's payload digest when it reads the
+capability and fails with `acf.lock.digest-mismatch` before anything is
+emitted from a snapshot that no longer matches its record; a frozen restore
+refetches `resolvedSha` and verifies the same way.
+
+`capabilityHash` uses the v1 algorithm of SPEC §19.5 over the whole
+snapshot, before selection, so a selection change never invalidates a hash
+or forces a refetch:
 
 ```ts
 export async function computeContentHash(root: string): Promise<string> {
@@ -2022,8 +2275,13 @@ line-ending normalization; NFC-normalized relative paths.
 
 Drift handling:
 
-- `caplet check` warns if `contentHash` differs from on-disk state (user
-  edited an installed capability).
+- `detectLockDrift` (`packages/installer/src/drift.ts`) reports a
+  `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
+  and a changed ref, capabilities selector, or selection as `acf.lock.drift`.
+  Only `--mode never` (`--offline`) keeps selector and selection drift as an
+  error; other modes resolve it. `caplet check --frozen` exits 3 on any
+  non-info lock diagnostic.
+- An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and
   `caplet apply` remove snapshots and lock entries that are no longer
@@ -2070,8 +2328,22 @@ export function deduplicateCapabilities(
 - **Multi-capability repo**: `acf/<sub-path>/acf.yml`, arbitrary nesting under
   `acf/`. Source-entry `capabilities` exact/glob selectors match `<sub-path>`;
   omission selects all. `path` first establishes a different source root.
+- **Agent Plugins 1.0 package**: root `plugin.json` with the 1.0 `$schema`.
+- **Claude plugin**: `.claude-plugin/plugin.json`.
 - **Legacy bare `skills/` at root**: synthesizes a minimal manifest at fetch
   time when `acf.yml` is absent and `skills/` is present.
+
+Detection takes the first match in that order (SPEC §20.6); `format:`
+overrides it and the choice is reported as `acf.source.format-selected`
+(info). Formats are never merged. A recognized but invalid manifest fails
+the source rather than falling back to a lower format, and a
+marketplace-only source fails with `acf.source.marketplace-unsupported`,
+suggesting `path:`. Readers live in `packages/core/src/formats/`
+(`recognizedFormats`, `selectSourceFormat`, `isForeignFormat`,
+`readForeignPackage`); the installer calls them through
+`inspectSource(root, { format, rename, revision })`. A manifest name that
+is not a slug fails with `acf.manifest.invalid-name`, whose
+`data.suggestedRename` gives a valid `rename`.
 
 ```ts
 export async function discoverCapabilityRoots(repoRoot: string): Promise<string[]> {
@@ -2122,9 +2394,10 @@ export type CapletConfig = {
   targets?: Partial<Record<TargetId, {
     out?: { user?: string; project?: string }   // override adapter defaults; absolute paths
     disabled?: boolean
+    carrier?: "plugin" | "loose"        // default: the target's default carrier
     skills?: {
-      native?: boolean                   // false when target discovers canonical skills; otherwise native-path dependent
-      canonical?: boolean                // default: true
+      native?: boolean                   // default: target lacks discovery, or shared copy fell back
+      canonical?: boolean                // default: target discovers .agents/skills
     }
   }>>
   auth?: {
@@ -2161,6 +2434,7 @@ export const capletConfigSchema = z.object({
       project: z.string().optional(),
     }).optional(),
     disabled: z.boolean().optional(),
+    carrier: z.enum(["plugin", "loose"]).optional(), // checked against carriersOf(id)
     skills: skillsEmitOptionsSchema.optional(),
   })).optional(),
   auth: z.object({
@@ -2186,11 +2460,17 @@ export const capletConfigSchema = z.object({
 The config never restates what an adapter already knows (`installPaths` live
 in the target registry). `targets.<id>.out` is purely an override.
 `targets.<id>.skills.canonical` and `targets.<id>.skills.native` toggle the
-two skill emission destinations. `canonical` defaults to `true` and is planned
-once per scope, independently of target-native output. `native` defaults to
-`false` for Codex, OpenCode, and Pi because they already discover
-`.agents/skills`; Claude Code defaults to its native skills directory. An
-explicit `native: true` overrides discovery-aware defaults.
+two skill emission destinations. `canonical` defaults to whether the target
+discovers `.agents/skills` (Codex, Cursor, OpenCode, Pi), so a scope gets a
+shared copy only when a selected target reads it. `native` defaults to
+`false` for those targets unless the shared copy falls back (§4.8); Claude
+Code defaults to its native skills directory. Explicit values override both
+defaults.
+
+`targets.<id>.carrier` picks the carrier (SPEC §22.8). Only `claude` offers
+`plugin` (its default) and `loose`; naming `plugin` for any other target is a
+configuration error naming that target. Switching Claude to `loose`
+uninstalls caplet's Claude plugins on the next apply.
 
 ### 8.3 Scope handling
 
@@ -2395,8 +2675,57 @@ acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version
 
-# Emission
-acf.emit.drift                               # disk hash no longer matches sidecar.hash (info)
+# Apply
+acf.apply.drift                              # owned content changed since planning; skipped (warn)
+acf.apply.outside-root                       # write would escape the output root (error)
+
+# Source formats and snapshots
+acf.source.format-selected                   # format chosen by detection or format: (info)
+acf.source.marketplace-unsupported           # marketplace-only source; use path: (error)
+acf.source.format-version-unsupported        # Agent Plugins schema other than 1.0 (error)
+acf.source.format-not-found                  # format: names a format the source lacks (error)
+acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
+acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
+acf.source.component-invalid                 # invalid foreign skill or server, excluded (warn)
+acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
+acf.source.credential-in-url                 # source URL carries credentials (error)
+acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
+
+# Selection
+acf.selection.unmatched                      # selector matches nothing (warn)
+acf.selection.remainder-references           # removed component may be referenced by remainder (lossy)
+
+# Support registry and extras
+acf.support.refused                          # field or component refused; blocks the capability on the target (error)
+acf.support.degraded                         # descriptive or granting field degraded (lossy)
+acf.support.component-omitted                # component the target cannot carry (lossy)
+acf.extras.dropped                           # native extra not carried by this target or carrier (lossy)
+acf.extras.conflict                          # extra sets a key the writer generates (error)
+acf.extras.unclassified                      # native key unknown to the registry (info)
+acf.extras.package-value-invalid             # invalid targets.<target>.package value (error)
+acf.core.pending                             # extra for a pending core meaning (info)
+acf.native.unknown-target                    # native/<dir> is not a target id (error)
+acf.native.unsupported-entry                 # symlink or special file under native/ (error)
+acf.native.collision                         # native/<target> file collides with generated output (error)
+acf.skill.paths-not-core                     # top-level skill paths (error)
+acf.skill.native-key-not-core                # native key at skill top level (error; descriptive: warn)
+
+# MCP
+acf.mcp.cwd.invalid                          # cwd base or traversal (error)
+acf.mcp.url.insecure                         # non-https URL off localhost (error)
+acf.mcp.url.credential-in-url                # userinfo in url (error)
+acf.mcp.placeholder.unsupported              # ${ACF_DATA_DIR} in url or headers (error)
+acf.mcp.config-conflict                      # server name claimed twice or user-defined (error)
+
+# Claude carrier and host
+acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
+acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
+acf.claude.state-unreadable                  # plugin list unreadable (warn)
+acf.claude.command-failed                    # claude plugin command failed (error)
+acf.claude.policy-blocked                    # host policy blocks the plugin (warn)
+acf.claude.version-mismatch                  # installed version differs after update (warn)
+acf.claude.other-scope                       # plugin installed at another Claude scope (info)
+acf.migration.drifted                        # edited loose artifact left in place (warn)
 
 # CLI
 acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
@@ -2526,8 +2855,8 @@ export async function applyDiffs(
   //      owned regions (not the entire file unless `owns: [{ kind: "file" }]`).
   //    - else: write `after` to `path`.
   // 3. Rewrite the sidecar with the new (path, owns, hash) tuples.
-  // 4. Detect drift: any prior sidecar entry whose disk hash no longer
-  //    matches sidecar.hash emits `acf.emit.drift` info.
+  //    Before each write, owned content that changed since planning is
+  //    skipped with an `acf.apply.drift` warning (§4.2.2).
 }
 ```
 
