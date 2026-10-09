@@ -8,11 +8,11 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { AGENT_PLUGINS_DIALECT, type ExtrasDialect, withNativeExtras } from "../extras/index.js";
 import { parseMarkdown } from "../reader/helpers.js";
-import { nativeKeyInfo } from "../targets/native-keys.js";
+import { nativeKeyInfo, nativeValueProblem } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
-import { isRecord, isSlug, isStringMap } from "../utils/guards.js";
-import { filesUnder, isFile, nativeValuesProblem } from "./shared.js";
+import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
+import { componentNotLoaded, filesUnder, isFile, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
 export type SkillRules = "agent-plugins" | "claude";
@@ -30,13 +30,7 @@ export async function readForeignSkill(
 ): Promise<SkillFacet | undefined> {
   const primaryFile = path.join(dir, "SKILL.md");
   const invalid = (reason: string): undefined => {
-    diagnostics.push({
-      severity: "warn",
-      code: "acf.source.component-invalid",
-      message: `skill ${path.basename(dir)} is not loaded: ${reason}`,
-      path: primaryFile,
-      family: "skill",
-    });
+    diagnostics.push(componentNotLoaded("skill", path.basename(dir), reason, primaryFile));
     return undefined;
   };
 
@@ -61,11 +55,19 @@ export async function readForeignSkill(
   };
 }
 
-const AGENT_SKILL_KEYS = new Set(["name", "description", "license", "compatibility", "metadata"]);
+const AGENT_SKILL_KEYS = new Set([
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "allowed-tools",
+]);
 
 /** Agent Skills frontmatter: a closed set of checked keys; the rest are dialect extras. */
 function projectAgentSkill(raw: Record<string, unknown>, dirName: string): Frontmatter | string {
   const { name, description, license, compatibility, metadata } = raw;
+  const allowedTools = raw["allowed-tools"];
   if (typeof name !== "string" || !isSlug(name)) return "name must be a lowercase slug";
   if (name !== dirName) return `name ${name} does not match its directory ${dirName}`;
   if (typeof description !== "string" || description.length === 0 || description.length > 1024)
@@ -78,17 +80,26 @@ function projectAgentSkill(raw: Record<string, unknown>, dirName: string): Front
     return "compatibility must be a string of at most 500 characters";
   if (metadata !== undefined && !isStringMap(metadata))
     return "metadata must map strings to strings";
+  if (
+    allowedTools !== undefined &&
+    typeof allowedTools !== "string" &&
+    !isStringArray(allowedTools)
+  )
+    return "allowed-tools must be a string or a list of strings";
 
   const frontmatter: Frontmatter = { name, description };
   if (license !== undefined) frontmatter.license = license;
   if (compatibility !== undefined) frontmatter.compatibility = compatibility;
   if (metadata !== undefined) frontmatter.metadata = metadata;
+  if (allowedTools !== undefined) frontmatter["allowed-tools"] = allowedTools;
   return withExtras(frontmatter, raw, AGENT_SKILL_KEYS, "agent-plugins");
 }
 
 /**
  * Claude skill frontmatter. Claude defaults `name` to the directory and `description` to
- * the first non-empty body line; values outside the canonical domain stay Claude extras.
+ * the first non-empty body line. A core key becomes its core field when its value is in the
+ * registry's domain for it; otherwise it stays a Claude extra, which `withExtras` rejects, so the
+ * skill is left out (design D27.4).
  */
 function projectClaudeSkill(
   raw: Record<string, unknown>,
@@ -105,29 +116,22 @@ function projectClaudeSkill(
 
   const frontmatter: Frontmatter = { name, description };
   const consumed = new Set(["name", "description"]);
-  const take = (key: string, ok: boolean, apply: () => void): void => {
-    if (raw[key] === undefined || !ok) return;
-    apply();
+  for (const key of CLAUDE_CORE_SKILL_KEYS) {
+    const value = raw[key];
+    if (value === undefined || nativeValueProblem("claude", "skill", key, value) !== undefined)
+      continue;
+    Object.assign(frontmatter, { [key]: value });
     consumed.add(key);
-  };
-  take("license", typeof raw.license === "string", () => {
-    frontmatter.license = raw.license as string;
-  });
-  take("compatibility", typeof raw.compatibility === "string", () => {
-    frontmatter.compatibility = raw.compatibility as string;
-  });
-  take("metadata", isStringMap(raw.metadata), () => {
-    frontmatter.metadata = raw.metadata as Record<string, string>;
-  });
-  take("argument-hint", typeof raw["argument-hint"] === "string", () => {
-    frontmatter["argument-hint"] = raw["argument-hint"] as string;
-  });
+  }
   const invocation = claudeInvocation(raw);
   for (const key of invocation.consumed) consumed.add(key);
   if (Object.keys(invocation.restrictions).length > 0)
     frontmatter.invocation = { ...frontmatter.invocation, ...invocation.restrictions };
   return withExtras(frontmatter, raw, consumed, "claude");
 }
+
+/** Claude skill keys that are core fields of the same name. */
+const CLAUDE_CORE_SKILL_KEYS = ["license", "compatibility", "metadata", "argument-hint"] as const;
 
 /** Claude's boolean invocation keys, the core field each sets and the value that restricts. */
 const CLAUDE_INVOCATION_KEYS = [

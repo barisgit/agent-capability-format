@@ -1,6 +1,7 @@
 /**
  * Inputs, results and capability assembly shared by the foreign format readers.
  */
+import path from "node:path";
 import type {
   AcfCapability,
   AssetRef,
@@ -14,6 +15,9 @@ import type {
   Scope,
   SkillFacet,
 } from "../types/index.js";
+
+/** The warning of every component a reader leaves out (`componentNotLoaded`). */
+const COMPONENT_INVALID = "acf.source.component-invalid";
 
 /** What a format reader needs beyond the package root. */
 export type ForeignReadOptions = {
@@ -70,10 +74,18 @@ export function foreignCapability(input: {
     snapshotRoot: input.root,
     projected: {
       skills: input.skills.map((skill) => skill.name).sort(),
+      skillDirs: input.skills
+        .map((skill) => path.relative(input.root, skill.dir).split(path.sep).join("/"))
+        .sort(),
       servers: (input.mcp?.servers ?? []).map((server) => server.name).sort(),
       remainder: input.remainder,
     },
   };
+  if (
+    input.diagnostics.some((diagnostic) => diagnostic.code === COMPONENT_INVALID) &&
+    source.projected
+  )
+    source.projected.incomplete = true;
   if (input.source.formatVersion !== undefined) source.formatVersion = input.source.formatVersion;
   if (input.source.renamedFrom !== undefined) source.renamedFrom = input.source.renamedFrom;
   return {

@@ -53,6 +53,13 @@ const manifestKeys = new Set([
 const markdownKeys = new Set(["sections", "targets"]);
 
 /**
+ * Caplet's marker at the root of a capability it synthesized from a bare skill (SPEC.md §20.3).
+ * Caplet bookkeeping, not package content: the reader treats its tree as imported, and writers
+ * never copy the marker into an output package.
+ */
+export const IMPORT_MARKER_FILENAME = ".acf-import.json";
+
+/**
  * Reads the native ACF capability at `root`: manifest, `ACF.md`, every facet family, native
  * file extras and referenced assets, then runs cross-field validation. Problems are recorded on
  * `capability.diagnostics`, sorted by path then code; only I/O failures throw. A tree carrying
@@ -66,7 +73,7 @@ export async function readCapability(
 ): Promise<AcfCapability> {
   const absRoot = path.resolve(root);
   const diagnostics: Diagnostic[] = [];
-  const imported = await exists(path.join(absRoot, ".acf-import.json"));
+  const imported = await exists(path.join(absRoot, IMPORT_MARKER_FILENAME));
   await validateSingularFolders(absRoot, diagnostics);
   const manifestFile = await pickManifestFile(absRoot, diagnostics);
   const manifest =

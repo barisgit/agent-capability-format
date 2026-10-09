@@ -5,6 +5,7 @@ import {
   computeCapabilityDigests,
   type Diagnostic,
   entryCapabilityHash,
+  IMPORT_MARKER_FILENAME,
   type LockedCapability,
 } from "@caplet/core";
 import { matchCapabilitySelectors } from "./capability-selectors.js";
@@ -160,7 +161,7 @@ async function materializeImportedSkill(
     "utf8",
   );
   await writeFile(
-    path.join(destination, ".acf-import.json"),
+    path.join(destination, IMPORT_MARKER_FILENAME),
     `${JSON.stringify({ acf: 1, synthesized: true, sourcePath: candidate.sourcePath })}\n`,
     "utf8",
   );

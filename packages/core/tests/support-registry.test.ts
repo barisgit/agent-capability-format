@@ -29,6 +29,7 @@ const SKILL_FIELDS = [
   "skill.invocation.model=false",
   "skill.invocation.user=false",
   "skill.argument-hint",
+  "skill.allowed-tools",
   "skill.files",
   "skill.files.executable",
 ];

@@ -227,6 +227,39 @@ test("a Claude plugin leaves out the files and manifest entries of excluded comp
   });
 });
 
+test("a transformed Claude plugin keeps undeclared SKILL.md directories and drops excluded skills", async () => {
+  const skill = (name: string): string => `---\nname: ${name}\ndescription: ${name}\n---\nBody.\n`;
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": `${JSON.stringify({ name: "kit", version: "1.0.0", skills: "./extra" })}\n`,
+    "skills/review/SKILL.md": skill("review"),
+    "skills/drop/SKILL.md": skill("drop"),
+    "skills/drop/notes.md": "Dropped notes.\n",
+    "extra/triage/SKILL.md": skill("triage"),
+    "docs/example/SKILL.md": skill("example"),
+    "docs/example/notes.md": "How the example works.\n",
+  };
+  await withTempPackage("claude-skill-dirs-", files, async (input) => {
+    const selected = applyEntrySelection(await readInput(input, "claude-plugin"), {
+      exclude: { skills: ["drop", "triage"] },
+    });
+
+    const result = await emit(
+      claudeAdapter,
+      selected.capability,
+      INSTALL_ROOT,
+      await inputFs(input),
+    );
+
+    expect([...pluginTree(result, input).keys()].sort()).toEqual([
+      ".claude-plugin/plugin.json",
+      "docs/example/SKILL.md",
+      "docs/example/notes.md",
+      "report.json",
+      "skills/review/SKILL.md",
+    ]);
+  });
+});
+
 test("an Agent Plugins package is translated into a Claude plugin", async () => {
   const golden = goldenCase(testsDir, "agent-plugins-claude");
   const capability = await readInput(golden.input, "agent-plugins");

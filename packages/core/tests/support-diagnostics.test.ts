@@ -207,10 +207,12 @@ describe("support diagnostics derived from registry cells", () => {
   });
 
   test("pending native keys name the future core field", () => {
-    const diagnostic = corePending({ ...review, target: "claude" }, "allowed-tools");
+    const diagnostic = corePending({ ...review, target: "claude" }, "context");
     expect(diagnostic?.severity).toBe("info");
     expect(diagnostic?.code).toBe("acf.core.pending");
-    expect(diagnostic?.message).toContain("skill.allowed-tools");
+    expect(diagnostic?.message).toContain("skill.context");
+    // allowed-tools is the Agent Skills field (design D26), not a pending meaning.
+    expect(corePending({ ...review, target: "claude" }, "allowed-tools")).toBeUndefined();
     expect(corePending({ ...review, target: "claude" }, "description")).toBeUndefined();
   });
 });

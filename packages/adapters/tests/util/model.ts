@@ -76,6 +76,16 @@ export async function emitModel(
   );
 }
 
+/** `files` (POSIX paths relative to `root`) keyed by absolute path, for `emitModel`. */
+export function filesAt(root: string, files: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(files).map(([relative, text]) => [
+      path.join(root, ...relative.split("/")),
+      text,
+    ]),
+  );
+}
+
 /** Text of the diff whose path ends with `suffix`, or undefined when no such file is written. */
 export function fileText(result: EmitResult, suffix: string): string | undefined {
   const diff = result.diffs.find((item) => item.path.endsWith(suffix) && item.after !== null);

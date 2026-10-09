@@ -11,15 +11,14 @@ export type TreeFile = {
 
 /**
  * Every regular file under `root`, sorted by relative path. `skip` prunes a file or a whole
- * directory by its relative POSIX path; `skipDir` prunes a directory by its entry names. Relies on
- * the `ReadOnlyFs` contract that reading a directory yields null and listing a file yields [].
+ * directory by its relative POSIX path. Relies on the `ReadOnlyFs` contract that reading a
+ * directory yields null and listing a file yields [].
  */
 export async function listTree(
   fs: ReadOnlyFs,
   root: string,
   options: {
     skip?: (relativePath: string) => boolean;
-    skipDir?: (entries: readonly string[]) => boolean;
   } = {},
 ): Promise<TreeFile[]> {
   const files: TreeFile[] = [];
@@ -34,7 +33,6 @@ export async function listTree(
         files.push({ path: relativePath, bytes, mode: (await fs.readMode(absolute)) ?? 0o644 });
         continue;
       }
-      if (options.skipDir?.(await fs.listDir(absolute)) === true) continue;
       await walk(relativePath);
     }
   };

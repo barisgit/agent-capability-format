@@ -11,17 +11,22 @@ import path from "node:path";
 import {
   type AcfCapability,
   CLAUDE_PLUGIN_MANIFEST,
+  claudePluginComponents,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
   type EmitResult,
   type FileContent,
   type FileDiff,
+  IMPORT_MARKER_FILENAME,
   isExecutableMode,
+  isPerFileComponent,
   MANAGEMENT_NOTICE_FILENAME,
   NATIVE_FILES_DIR,
   nativeExtras,
   nativeFiles,
+  nativeKeyClass,
+  nativeKeyInfo,
   payloadDigestOfEntries,
   pluginPackageDir,
   type ReadOnlyFs,
@@ -57,8 +62,12 @@ const PLUGIN_DATA = `${PLACEHOLDER_OPEN}{CLAUDE_PLUGIN_DATA}`;
 /** The package's MCP config, which Claude reads from the plugin root. */
 const MCP_PATH = ".mcp.json";
 
-/** Paths of a native ACF capability that its reader owns; none is copied into the plugin. */
+/**
+ * Paths of a native ACF capability that its reader owns, and caplet's import marker; none is
+ * copied into the plugin.
+ */
 const ACF_OWNED = new Set([
+  IMPORT_MARKER_FILENAME,
   "acf.yml",
   "acf.yaml",
   "ACF.md",
@@ -81,13 +90,9 @@ const ACF_OWNED = new Set([
 const CLAUDE_DISCOVERED = new Set([
   ".claude-plugin",
   MCP_PATH,
-  ".lsp.json",
-  "settings.json",
-  "agents",
-  "commands",
-  "hooks/hooks.json",
-  "output-styles",
-  "workflows",
+  ...claudePluginComponents.flatMap((spec) =>
+    isPerFileComponent(spec) ? [spec.dir] : spec.file === undefined ? [] : [spec.file],
+  ),
 ]);
 
 /** One file of the plugin package, relative to its root. */
@@ -95,7 +100,9 @@ type PackageFile = { content: FileContent; mode: number };
 
 /**
  * Writes `input.capability` as a Claude plugin. Returns no diffs and no plugin when any
- * component is refused, since a refusal blocks the whole capability for Claude.
+ * component is refused, since a refusal blocks the whole capability for Claude, and when the
+ * plugin would carry nothing Claude loads (`acf.claude.plugin-empty`), so a plugin written
+ * before is retired like that of a removed capability.
  */
 export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promise<EmitResult> {
   const capability = input.capability;
@@ -106,6 +113,12 @@ export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promis
     : await generatedPackage(capability, fs, report);
   if (report.diagnostics.some((diagnostic) => diagnostic.code === "acf.support.refused"))
     return { diffs: [], diagnostics: report.diagnostics, outcomes: report.outcomes };
+  if (!built.carries)
+    return {
+      diffs: [],
+      diagnostics: [...report.diagnostics, emptyPlugin(capability)],
+      outcomes: report.outcomes,
+    };
 
   const atBase = built.files.with(CLAUDE_PLUGIN_MANIFEST, built.manifest(built.baseVersion));
   const digest = payloadDigestOfEntries(
@@ -142,6 +155,12 @@ export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promis
 /** The package's files without its manifest, which `manifest` renders for a version. */
 type BuiltPackage = {
   files: PackageFiles;
+  /**
+   * Whether the package holds anything Claude loads: a skill, an MCP server, a Claude component
+   * or `native/claude/` file, or a manifest entry beyond listing metadata. Support files alone
+   * are not.
+   */
+  carries: boolean;
   baseVersion: string;
   manifest(version: string): PackageFile;
 };
@@ -167,20 +186,31 @@ class PackageFiles implements Iterable<[string, PackageFile]> {
   }
 }
 
-/** The source package byte for byte; its manifest differs only in the `version` value. */
+/**
+ * The source package byte for byte and mode for mode; its manifest differs only in the `version`
+ * value.
+ */
 async function copiedPackage(capability: AcfCapability, fs: ReadOnlyFs): Promise<BuiltPackage> {
   const files = new PackageFiles();
   let manifestText = "{}\n";
+  let manifestMode = 0o644;
   for (const file of await listTree(fs, capability.root, { skip: (p) => p === ".git" })) {
-    if (file.path === CLAUDE_PLUGIN_MANIFEST) manifestText = new TextDecoder().decode(file.bytes);
-    else files.set(file.path, { content: file.bytes, mode: file.mode });
+    if (file.path === CLAUDE_PLUGIN_MANIFEST) {
+      manifestText = new TextDecoder().decode(file.bytes);
+      manifestMode = file.mode;
+    } else files.set(file.path, { content: file.bytes, mode: file.mode });
   }
   const raw = parseJsonObject(manifestText);
   const own = typeof raw?.version === "string" ? raw.version : undefined;
   return {
     files,
+    // Written unchanged, the source decides what its plugin is.
+    carries: true,
     baseVersion: own ?? capability.manifest.version,
-    manifest: (version) => ({ content: mergeJson(manifestText, "/version", version), mode: 0o644 }),
+    manifest: (version) => ({
+      content: mergeJson(manifestText, "/version", version),
+      mode: manifestMode,
+    }),
   };
 }
 
@@ -211,15 +241,17 @@ async function generatedPackage(
 
   for (const file of await supportFiles(capability, fs, rawManifest, report.diagnostics))
     files.set(file.path, { content: file.bytes, mode: file.mode });
+  let carries = false;
   for (const extra of nativeFiles(capability, "claude")) {
     const source = path.join(capability.root, NATIVE_FILES_DIR, "claude", ...extra.path.split("/"));
     const bytes = await fs.readBytes(source);
-    if (bytes !== null)
-      files.set(extra.path, { content: bytes, mode: (await fs.readMode(source)) ?? 0o644 });
+    if (bytes === null) continue;
+    files.set(extra.path, { content: bytes, mode: (await fs.readMode(source)) ?? 0o644 });
+    carries = true;
   }
   reportPackageDrops(report, capability, subject);
 
-  await addSkills(capability, fs, files, report);
+  if ((await addSkills(capability, fs, files, report)) > 0) carries = true;
   const mcp = await mcpConfig(capability, fs, rawManifest, report);
   if (mcp !== undefined) files.set(MCP_PATH, { content: mcp, mode: 0o644 });
   reportRemainder(capability, report);
@@ -233,18 +265,54 @@ async function generatedPackage(
   const manifest = pluginManifest(capability, extras, report);
   return {
     files,
+    carries:
+      carries ||
+      mcp !== undefined ||
+      carriesRemainder(capability) ||
+      extras.some(
+        ([key, value]) =>
+          nativeKeyClass(nativeKeyInfo("claude", "package", key), value) !== "descriptive",
+      ),
     baseVersion: manifest.baseVersion,
     manifest: (version) => ({ content: manifest.render(version), mode: 0o644 }),
   };
 }
 
-/** Writes every skill Claude accepts at `skills/<name>/` with its assets. */
+/**
+ * Whether a Claude plugin source keeps remainder that Claude loads; its listing metadata is not,
+ * and its MCP servers count through the plugin's `.mcp.json` and manifest.
+ */
+function carriesRemainder(capability: AcfCapability): boolean {
+  if (capability.source?.format !== "claude-plugin") return false;
+  return (capability.remainder ?? []).some(
+    (component) => component.kind !== "listing-metadata" && component.kind !== "mcp-server",
+  );
+}
+
+/**
+ * `acf.claude.plugin-empty` (info): nothing of `capability` reaches Claude, for example because
+ * selection, applicability or the reader (design D27.4) left out every component, so no plugin is
+ * written and one written before is uninstalled and removed.
+ */
+function emptyPlugin(capability: AcfCapability): Diagnostic {
+  const name = capability.manifest.name;
+  return {
+    severity: "info",
+    code: "acf.claude.plugin-empty",
+    message: `${name} has nothing a Claude plugin would carry (no skill, MCP server, Claude component or native/claude/ file), so no Claude plugin is written for it`,
+    targetId: "claude",
+    capability: { name },
+  };
+}
+
+/** Writes every skill Claude accepts at `skills/<name>/` with its assets; returns their count. */
 async function addSkills(
   capability: AcfCapability,
   fs: ReadOnlyFs,
   files: PackageFiles,
   report: EmitReport,
-): Promise<void> {
+): Promise<number> {
+  let written = 0;
   for (const skill of capability.skills) {
     const rendering = renderNativeSkill(capability, skill, "claude", "plugin");
     report.diagnostics.push(...rendering.diagnostics);
@@ -259,7 +327,9 @@ async function addSkills(
       content: renderMarkdownFile(rendering.frontmatter, skill.body),
       mode: 0o644,
     });
+    written += 1;
   }
+  return written;
 }
 
 /**
@@ -330,7 +400,11 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Claude configuration in a source not read as a Claude plugin is left out with a hint.
+ * Skill directories are left out only when they hold a skill the writer regenerates, a
+ * projected skill selection or applicability removed, or sit where Claude loads skills
+ * (`skills/<name>/`); any other directory holding a `SKILL.md` (documentation, examples) is
+ * support content. Claude configuration in a source not read as a
+ * Claude plugin is left out with a hint.
  */
 async function supportFiles(
   capability: AcfCapability,
@@ -339,14 +413,27 @@ async function supportFiles(
   diagnostics: Diagnostic[],
 ): Promise<TreeFile[]> {
   const format = capability.source?.format ?? "acf";
-  const owned = new Set<string>([".git"]);
-  if (format === "acf") for (const p of ACF_OWNED) owned.add(p);
+  const owned = new Set<string>([
+    ".git",
+    ...capability.skills.map((skill) =>
+      path.relative(capability.root, skill.dir).split(path.sep).join("/"),
+    ),
+    ...(capability.source?.projected?.skillDirs ?? []),
+  ]);
+  // A bare skill import is a native ACF tree caplet synthesized around the skill (SPEC.md §20.3),
+  // so its manifest and import marker are caplet's bookkeeping.
+  if (format === "acf" || format === "skills") for (const p of ACF_OWNED) owned.add(p);
   if (format === "claude-plugin") {
     owned.add(CLAUDE_PLUGIN_MANIFEST);
     owned.add(MCP_PATH);
     for (const p of jsonConfigPaths(rawManifest.mcpServers)) owned.add(p);
     for (const p of unselectedPathsAndKeys(capability).paths) owned.add(p);
   }
+  // Claude loads every `skills/<name>/SKILL.md` of a plugin, so a skill directory there that the
+  // writer does not regenerate is one its reader left out (design D27.4) and stays out too.
+  for (const name of await fs.listDir(path.join(capability.root, "skills")))
+    if (await fs.exists(path.join(capability.root, "skills", name, "SKILL.md")))
+      owned.add(`skills/${name}`);
   if (format === "agent-plugins") {
     owned.add("plugin.json");
     owned.add("mcp.json");
@@ -374,7 +461,5 @@ async function supportFiles(
       });
       return true;
     },
-    // Skill directories are regenerated, and an excluded skill's files never reach the plugin.
-    skipDir: (entries) => entries.includes("SKILL.md"),
   });
 }

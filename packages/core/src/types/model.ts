@@ -87,6 +87,8 @@ export type SkillFacet = {
     compatibility?: string | undefined;
     metadata?: Record<string, string> | undefined;
     "argument-hint"?: string | undefined;
+    /** Agent Skills tool pre-approval, carried only to hosts that read the same field (D26). */
+    "allowed-tools"?: string | string[] | undefined;
   }>;
   body: string;
 };

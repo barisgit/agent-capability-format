@@ -128,8 +128,20 @@ export type CapabilitySource = {
   projected?:
     | {
         skills: string[];
+        /**
+         * Package-relative POSIX directories of the projected skills (sorted), so a writer that
+         * regenerates skills leaves out exactly the directories of skills it regenerated or
+         * selection removed, and copies any other directory holding a `SKILL.md`.
+         */
+        skillDirs: string[];
         servers: string[];
         remainder: NativeRemainderComponent[];
+        /**
+         * True when the reader left out a component it could not load
+         * (`acf.source.component-invalid`, design D27.4). The package then differs from what its
+         * host would read, so a writer never copies it unchanged.
+         */
+        incomplete?: true | undefined;
       }
     | undefined;
   /**
@@ -145,6 +157,7 @@ export type NativeRemainderKind =
   | "command"
   | "hook"
   | "output-style"
+  | "workflow"
   | "lsp-server"
   | "monitor"
   | "bin"
@@ -172,6 +185,6 @@ export type NativeRemainderComponent = {
   /** Manifest keys belonging to the component, when it lives (partly) in the manifest. */
   manifestKeys?: string[] | undefined;
   class: SafetyClass;
-  /** True when the component executes code (stdio server, hook, LSP, monitor, bin). */
+  /** True when the component executes code (stdio server, hook, LSP, monitor, workflow, bin). */
   executable: boolean;
 };

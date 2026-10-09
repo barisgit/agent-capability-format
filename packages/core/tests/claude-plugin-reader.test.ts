@@ -78,6 +78,7 @@ describe("Claude plugin reader", () => {
     expect(capability?.source?.renamedFrom).toBe("review-kit");
     expect(capability?.source?.projected).toEqual({
       skills: ["review", "triage"],
+      skillDirs: ["extra-skills/triage", "skills/review"],
       servers: capability?.mcp?.servers.map((server) => server.name) ?? [],
       remainder: capability?.remainder ?? [],
     });
@@ -268,6 +269,41 @@ test("a skill or server with a native value its host rejects is left out with a 
   ]);
 });
 
+test("a non-boolean invocation key leaves the skill out instead of becoming an extra", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "skills/manual/SKILL.md":
+      '---\nname: manual\ndescription: Manual\ndisable-model-invocation: "yes"\n---\n',
+    "skills/hidden/SKILL.md": "---\nname: hidden\ndescription: Hidden\nuser-invocable: 0\n---\n",
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\nuser-invocable: false\n---\n",
+  });
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["fine"]);
+  expect(diagnostics.map((d) => [d.severity, d.code, d.message.split(":")[0]])).toEqual([
+    ["warn", "acf.source.component-invalid", "skill hidden is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill manual is not loaded"],
+  ]);
+});
+
+test("a core skill key with a value outside Claude's domain leaves the skill out", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "skills/licensed/SKILL.md": "---\nname: licensed\ndescription: L\nlicense: 5\n---\n",
+    "skills/compat/SKILL.md": "---\nname: compat\ndescription: C\ncompatibility: [a]\n---\n",
+    "skills/meta/SKILL.md": "---\nname: meta\ndescription: M\nmetadata:\n  n: 1\n---\n",
+    "skills/hint/SKILL.md": "---\nname: hint\ndescription: H\nargument-hint: [file]\n---\n",
+    "skills/fine/SKILL.md":
+      "---\nname: fine\ndescription: F\nlicense: MIT\nmetadata:\n  n: one\nargument-hint: <file>\n---\n",
+  });
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["fine"]);
+  expect(capability?.skills[0]?.frontmatter.targets).toBeUndefined();
+  expect(diagnostics.map((d) => [d.severity, d.code, d.message.split(":")[0]])).toEqual([
+    ["warn", "acf.source.component-invalid", "skill compat is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill hint is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill licensed is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill meta is not loaded"],
+  ]);
+});
+
 test("a placeholder named like an Object.prototype property keeps the server native", async () => {
   const { capability } = await read({
     ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
@@ -309,4 +345,30 @@ test("a remainder file is executable only with the owner execute bit", async () 
     ["agent", false],
     ["command", true],
   ]);
+});
+
+test("workflows are executing components, found by default or only at the manifest's paths", async () => {
+  const byDefault = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "workflows/release.js": "export default {}\n",
+  });
+  expect(byDefault.capability?.remainder).toEqual([
+    {
+      format: "claude-plugin",
+      kind: "workflow",
+      name: "release",
+      paths: ["workflows/release.js"],
+      class: "functional",
+      executable: true,
+    },
+  ]);
+  // A manifest `workflows` path replaces the default `workflows/` directory.
+  const declared = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", workflows: "./flows" }),
+    "workflows/ignored.js": "export default {}\n",
+    "flows/ship.js": "export default {}\n",
+  });
+  expect(
+    declared.capability?.remainder?.map((item) => [item.kind, item.name, item.executable]),
+  ).toEqual([["workflow", "ship", true]]);
 });

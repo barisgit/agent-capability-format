@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { extractMarkedBlock, removeMarkedBlock } from "@caplet/adapters/common";
 import {
@@ -37,13 +37,6 @@ export type SidecarOwner = { target: SidecarTarget; carrier: Carrier };
 export type DriftFs = {
   readText(filePath: string): string | null;
   readBytes?(filePath: string): Uint8Array | null;
-};
-/** What {@link removeOwnedRegions} changed, as sorted paths, and the sidecar left behind. */
-export type RemoveOwnedRegionsResult = {
-  written: string[];
-  deleted: string[];
-  unchanged: string[];
-  sidecar: AcfManagedSidecar;
 };
 
 /** Reads and validates a sidecar; a missing file is an empty sidecar, an invalid one throws. */
@@ -127,7 +120,7 @@ function readSyncIfExists<T>(read: () => T): T | null {
 
 /**
  * Paths `capabilityName` owns under `installRoot` that would leave `boundary` once existing parent
- * directories are followed. Callers check this before `removeOwnedRegions` so a refused removal
+ * directories are followed. Callers check this before planning a removal, so a refused removal
  * changes nothing.
  */
 export async function ownedPathViolations(
@@ -147,48 +140,6 @@ export async function ownedPathViolations(
     if (violation !== null) violations.push(violation);
   }
   return violations;
-}
-
-/** Removes everything `capabilityName` owns under `installRoot` and drops its entries. */
-export async function removeOwnedRegions(
-  sidecar: AcfManagedSidecar,
-  installRoot: string,
-  capabilityName: string,
-): Promise<RemoveOwnedRegionsResult> {
-  const selected = sidecar.managed.filter((entry) => entry.capability === capabilityName);
-  const grouped = groupByPath(selected);
-  const written: string[] = [];
-  const deleted: string[] = [];
-  const unchanged: string[] = [];
-
-  for (const [relativePath, entries] of grouped) {
-    const absolutePath = path.resolve(installRoot, relativePath);
-    const owns = entries.flatMap((entry) => entry.owns);
-    if (owns.some((own) => own.kind === "file")) {
-      await rm(absolutePath, { force: true });
-      deleted.push(absolutePath);
-      continue;
-    }
-
-    const before = await readTextIfExists(absolutePath);
-    if (before === null) {
-      unchanged.push(absolutePath);
-      continue;
-    }
-    const after = removeOwnedRegionsFromText(before, owns);
-    if (after === before) {
-      unchanged.push(absolutePath);
-      continue;
-    }
-    await mkdir(path.dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, after, "utf8");
-    written.push(absolutePath);
-  }
-
-  sidecar.managed = sortEntries(
-    sidecar.managed.filter((entry) => entry.capability !== capabilityName),
-  );
-  return { written: written.sort(), deleted: deleted.sort(), unchanged: unchanged.sort(), sidecar };
 }
 
 /** `text` without the JSON-pointer and marker regions in `owns`; other kinds are left in place. */

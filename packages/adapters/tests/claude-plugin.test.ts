@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { pluginPackageDir, readClaudePluginPackage } from "@caplet/core";
+import {
+  type ForeignReadResult,
+  pluginPackageDir,
+  readAgentPluginsPackage,
+  readClaudePluginPackage,
+} from "@caplet/core";
 import { claudeAdapter, codexAdapter } from "../src";
 import { claudeAuthor } from "../src/claude/manifest";
 import { makeInMemoryFs } from "./util/in-memory-fs";
-import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
+import { CAP_ROOT, capabilityModel, emitModel, filesAt, PROJECT, skillFacet } from "./util/model";
 import { withTempPackage } from "./util/temp-package";
 
 const INSTALL_ROOT = path.join(PROJECT, ".claude");
@@ -174,6 +179,29 @@ test("an unchanged Claude plugin without a version gets one inserted and nothing
   });
 });
 
+test("an unchanged Claude plugin keeps its manifest's file mode", async () => {
+  const manifest = '{\n  "name": "notes",\n  "version": "1.0.0"\n}\n';
+  await withTempPackage(
+    "acf-claude-plugin-",
+    { ".claude-plugin/plugin.json": manifest },
+    async (root) => {
+      const read = await readClaudePluginPackage(root, {
+        scope: "project",
+        origin: { kind: "local", directory: root },
+        revision: null,
+      });
+      if (read.capability === undefined) throw new Error("the plugin did not read");
+      const manifestPath = path.join(root, ".claude-plugin", "plugin.json");
+      const fs = makeInMemoryFs({ [manifestPath]: { content: manifest, mode: 0o755 } });
+      const result = await claudeAdapter.emit(
+        { capability: read.capability, scope: "project", installRoot: INSTALL_ROOT, options: {} },
+        fs,
+      );
+      expect(result.diffs.map((diff) => diff.afterMode)).toEqual([0o755]);
+    },
+  );
+});
+
 test("a native ACF capability with a skill and a hook stays whole on loose Claude files", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "review", description: "Review a change" })],
@@ -238,4 +266,96 @@ test("Agent Plugins remainder is omitted from a Claude plugin, or refuses it whe
   expect(refused.plugins ?? []).toEqual([]);
   expect(refused.diffs).toEqual([]);
   expect(refused.diagnostics.map((d) => d.code)).toContain("acf.support.refused");
+});
+
+/** The relative paths and texts of the Claude plugin `files` read by `reader` become. */
+async function pluginFromSource(
+  reader: typeof readClaudePluginPackage,
+  files: Record<string, string>,
+): Promise<Record<string, string>> {
+  return await withTempPackage("acf-plugin-source-", files, async (root) => {
+    const read: ForeignReadResult = await reader(root, {
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      revision: null,
+    });
+    if (read.capability === undefined) throw new Error("the package did not read");
+    const result = await emitModel(
+      claudeAdapter,
+      read.capability,
+      INSTALL_ROOT,
+      {},
+      filesAt(root, files),
+    );
+    const dir = pluginPackageDir(INSTALL_ROOT, read.capability.manifest.name);
+    return Object.fromEntries(
+      result.diffs.map((diff) => [path.relative(dir, diff.path), String(diff.after)]),
+    );
+  });
+}
+
+test("a skill or server its reader left out does not reach the Claude plugin", async () => {
+  const claude = await pluginFromSource(readClaudePluginPackage, {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", version: "1.0.0" }),
+    "skills/fast/SKILL.md": "---\nname: fast\ndescription: Fast\neffort: extreme\n---\n",
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\n---\n",
+    ".mcp.json": JSON.stringify({
+      mcpServers: { quick: { command: "node", timeout: 500 }, slow: { command: "node" } },
+    }),
+  });
+  expect(Object.keys(claude).sort()).toEqual([
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "skills/fine/SKILL.md",
+  ]);
+  expect(Object.keys(JSON.parse(claude[".mcp.json"] ?? "{}").mcpServers)).toEqual(["slow"]);
+
+  const agentPlugins = await pluginFromSource(readAgentPluginsPackage, {
+    "plugin.json": JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "kit",
+      version: "1.0.0",
+    }),
+    "skills/bad/SKILL.md": "---\nname: other\ndescription: Bad\n---\n",
+    "skills/good/SKILL.md": "---\nname: good\ndescription: Good\n---\n",
+  });
+  expect(Object.keys(agentPlugins).sort()).toEqual([
+    ".claude-plugin/plugin.json",
+    "skills/good/SKILL.md",
+  ]);
+});
+
+test("a capability with nothing for a Claude plugin to carry gets no plugin", async () => {
+  const emit = async (
+    native: Record<string, unknown> | undefined,
+  ): Promise<{ plugins: number; diffs: number; empty: string[] }> => {
+    const capability = capabilityModel({});
+    if (native !== undefined)
+      capability.manifest = { ...capability.manifest, targets: { claude: { native } } };
+    const result = await emitModel(
+      claudeAdapter,
+      capability,
+      INSTALL_ROOT,
+      {},
+      {
+        [path.join(CAP_ROOT, "README.md")]: "Docs.\n",
+      },
+    );
+    return {
+      plugins: result.plugins?.length ?? 0,
+      diffs: result.diffs.length,
+      empty: result.diagnostics
+        .filter((d) => d.code === "acf.claude.plugin-empty")
+        .map((d) => d.severity),
+    };
+  };
+  // Support files and listing metadata alone are nothing Claude would load.
+  expect(await emit(undefined)).toEqual({ plugins: 0, diffs: 0, empty: ["info"] });
+  expect(await emit({ displayName: "Demo" })).toEqual({ plugins: 0, diffs: 0, empty: ["info"] });
+  // A plugin that only pulls in other plugins still does something.
+  expect(await emit({ dependencies: ["helper-plugin"] })).toEqual({
+    plugins: 1,
+    diffs: 2,
+    empty: [],
+  });
 });

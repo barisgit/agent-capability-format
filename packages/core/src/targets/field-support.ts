@@ -141,6 +141,8 @@ function sameKey(
   });
 }
 
+const NOT_PRE_APPROVED = "allowed-tools is not written, so the host asks before the tools run";
+
 const OPENCODE_IGNORES = { condition: "OpenCode accepts the key and ignores it" };
 const CURSOR_UNINTERPRETED = { condition: "Cursor documents no interpretation of the key" };
 
@@ -199,6 +201,16 @@ const skillFields: FieldSupport[] = [
     cursor: degraded("the argument hint is not shown", SRC.cursorSkill),
     opencode: degraded("the argument hint is not shown", SRC.opencodeSkill),
     pi: degraded("the argument hint is not shown", SRC.piSkill),
+  }),
+  // Agent Skills field (design D26): only Claude reads it as a grant. Dropping it narrows what
+  // runs without asking; the other hosts do not enforce it (Codex and Pi document it as
+  // experimental metadata, Cursor and OpenCode do not read it).
+  field("skill", "skill.allowed-tools", "granting", {
+    ...claude(native("allowed-tools", SRC.claudeSkill)),
+    codex: degraded(NOT_PRE_APPROVED, SRC.codexSkill),
+    cursor: degraded(NOT_PRE_APPROVED, SRC.cursorSkill),
+    opencode: degraded(NOT_PRE_APPROVED, SRC.opencodeSkill),
+    pi: degraded(NOT_PRE_APPROVED, SRC.piSkill),
   }),
   sameKeyCells(
     "skill",

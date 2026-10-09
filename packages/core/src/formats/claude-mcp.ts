@@ -9,6 +9,7 @@ import type { Diagnostic, McpFile, NativeRemainderComponent } from "../types/ind
 import { isRecord } from "../utils/guards.js";
 import { projectClaudeServer } from "./mcp.js";
 import {
+  componentNotLoaded,
   componentPaths,
   contained,
   isFile,
@@ -155,13 +156,9 @@ async function projectDeclared(
       }),
     );
   } else {
-    sink.diagnostics.push({
-      severity: "warn",
-      code: "acf.source.component-invalid",
-      message: `MCP server ${name} is not loaded: ${projection.reason}`,
-      path: path.join(root, entry.file),
-      family: "mcp",
-    });
+    sink.diagnostics.push(
+      componentNotLoaded("mcp", name, projection.reason, path.join(root, entry.file)),
+    );
   }
   return undefined;
 }

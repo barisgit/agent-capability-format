@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { readCapability } from "@caplet/core";
+import path from "node:path";
+import { pluginPackageDir, readCapability } from "@caplet/core";
 import { claudeAdapter, opencodeAdapter } from "../src";
-import { emitModel, fileText, withCode } from "./util/model";
+import { emitModel, filesAt, fileText, withCode } from "./util/model";
 import { withTempPackage } from "./util/temp-package";
 
 const SKILLS: Record<string, string> = {
@@ -33,5 +34,50 @@ test("an imported skill keeps each restricting key: written for Claude, refused 
     expect(opencode.diffs.filter((diff) => diff.path.includes("/skills/"))).toEqual([]);
     const refused = withCode(opencode, "acf.support.refused").map((item) => item.data?.component);
     expect(refused.sort()).toEqual(Object.keys(SKILLS).sort());
+  });
+});
+
+test("an imported skill's Claude plugin holds none of caplet's bookkeeping", async () => {
+  const files = {
+    "acf.yml": "acf: 1\nname: fine\nversion: 0.0.0-unmanifested+local\n",
+    ".acf-import.json": '{"acf":1,"synthesized":true}\n',
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\n---\nBody.\n",
+    "skills/fine/notes.md": "Notes.\n",
+  };
+  await withTempPackage("acf-import-", files, async (root) => {
+    const capability = await readCapability(root, "project", { kind: "local", directory: root });
+    const dir = pluginPackageDir(".claude", "fine");
+    const pluginFiles = async (): Promise<string[]> =>
+      (await emitModel(claudeAdapter, capability, ".claude", {}, filesAt(root, files))).diffs
+        .map((diff) => path.relative(dir, diff.path))
+        .sort();
+    const expected = [".claude-plugin/plugin.json", "skills/fine/SKILL.md", "skills/fine/notes.md"];
+
+    // Installed through a lock record, and read without one (a lock from before records).
+    capability.source = {
+      format: "skills",
+      path: ".",
+      snapshotRoot: path.join(root, "skills", "fine"),
+    };
+    expect(await pluginFiles()).toEqual(expected);
+    delete capability.source;
+    expect(await pluginFiles()).toEqual(expected);
+  });
+});
+
+test("an imported skill left out as invalid leaves its capability without a Claude plugin", async () => {
+  const files = {
+    "acf.yml": "acf: 1\nname: fast\nversion: 0.0.0-unmanifested+local\n",
+    ".acf-import.json": '{"acf":1,"synthesized":true}\n',
+    "skills/fast/SKILL.md": "---\nname: fast\ndescription: Fast\neffort: extreme\n---\nBody.\n",
+  };
+  await withTempPackage("acf-import-", files, async (root) => {
+    const capability = await readCapability(root, "project", { kind: "local", directory: root });
+    capability.source = { format: "skills", path: ".", snapshotRoot: path.join(root, "skills") };
+    expect(withCode(capability, "acf.source.component-invalid")).toHaveLength(1);
+    const claude = await emitModel(claudeAdapter, capability, ".claude", {}, filesAt(root, files));
+    expect(claude.plugins ?? []).toEqual([]);
+    expect(claude.diffs).toEqual([]);
+    expect(withCode(claude, "acf.claude.plugin-empty")).toHaveLength(1);
   });
 });

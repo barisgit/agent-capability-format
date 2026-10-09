@@ -19,13 +19,14 @@ import { MAPPED_MANIFEST_KEYS } from "./manifest.js";
 const PROJECTED_MANIFEST_KEYS = new Set<string>([...MAPPED_MANIFEST_KEYS, "skills", "mcpServers"]);
 
 /**
- * True for a Claude plugin source that reaches Claude as its reader projected it: no rename and
- * no skill, server or remainder component removed by selection or applicability.
+ * True for a Claude plugin source that reaches Claude as its reader projected it: no rename, no
+ * skill, server or remainder component removed by selection or applicability, and none the
+ * reader left out (`projected.incomplete`), since a copy would carry it to Claude.
  */
 export function isUnchangedClaudePlugin(capability: AcfCapability): boolean {
   const projected =
     capability.source?.format === "claude-plugin" ? capability.source.projected : undefined;
-  if (projected === undefined) return false;
+  if (projected === undefined || projected.incomplete === true) return false;
   const skills = capability.skills.map((skill) => skill.name).sort();
   const servers = (capability.mcp?.servers ?? []).map((server) => server.name).sort();
   return (

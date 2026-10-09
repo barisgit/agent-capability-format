@@ -71,7 +71,7 @@ The Agent Plugins reader SHALL accept packages whose `plugin.json` `$schema` is 
 - **THEN** resolution fails with `acf.source.format-version-unsupported`
 
 ### Requirement: Claude plugin reader
-The Claude plugin reader SHALL project manifest metadata, skills from `skills/` and from additional manifest `skills` paths, and MCP servers from `.mcp.json` and manifest `mcpServers` (inline map or relative path) into the canonical model. Components it does not project in this change (agents, commands, hooks, output styles, LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`, channels, dependencies, and listing metadata) SHALL be recorded as Claude native remainder with their safety class. An MCP server whose values use a mechanism the canonical schema cannot express (host environment references, `headersHelper`, `${user_config.*}`) SHALL remain a Claude native remainder component rather than be partially projected. A skill or MCP server whose Claude native key holds a value outside the domain Claude documents SHALL be excluded with a warning, because Claude rejects it and native ACF rejects the same value.
+The Claude plugin reader SHALL project manifest metadata, skills from `skills/` and from additional manifest `skills` paths, and MCP servers from `.mcp.json` and manifest `mcpServers` (inline map or relative path) into the canonical model. Components it does not project in this change (agents, commands, hooks, output styles, workflows, LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`, channels, dependencies, and listing metadata) SHALL be recorded as Claude native remainder with their safety class. An MCP server whose values use a mechanism the canonical schema cannot express (host environment references, `headersHelper`, `${user_config.*}`) SHALL remain a Claude native remainder component rather than be partially projected. A skill or MCP server whose Claude native key holds a value outside the domain Claude documents SHALL be excluded with a warning, because Claude rejects it and native ACF rejects the same value.
 
 #### Scenario: Server with a value Claude rejects
 - **WHEN** `.mcp.json` declares a server with `timeout: 500`, below Claude's minimum
@@ -85,15 +85,22 @@ The Claude plugin reader SHALL project manifest metadata, skills from `skills/` 
 - **WHEN** the manifest `commands` is a map defining `danger` and `safe`, and the entry excludes command `danger`
 - **THEN** each map entry is a command remainder component, and the regenerated manifest's `commands` map holds only `safe`
 
+### Requirement: Invalid native values leave out one component
+A skill or MCP server read from a bare skill import, an Agent Plugins package or a Claude plugin whose target native key holds a value outside that host's domain SHALL be left out with the warning `acf.source.component-invalid` and the message `<skill|MCP server> <name> is not loaded: <key> is not a valid <target> value: <problem>`, the same for every source format, while the rest of the source loads (design D27.4). The same value in native ACF SHALL stay an error (`acf.extras.native-value-invalid`).
+
+#### Scenario: Bare skill with an invalid effort
+- **WHEN** a bare skills repository holds skills `fast` with `effort: extreme` and `fine`
+- **THEN** `fine` installs, `fast` is left out with `acf.source.component-invalid`, and a Claude plugin holding `fast` reports the same code and message
+
 ### Requirement: Lossless same-format output
-When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
+When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, no component the reader left out as invalid (`acf.source.component-invalid`, design D27.4), and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
 
 #### Scenario: Claude round trip
 - **WHEN** an unchanged Claude plugin with an unknown manifest key, an unreferenced executable file and irregularly formatted JSON is installed for Claude
 - **THEN** the generated plugin directory is byte-, path- and mode-identical to the source, except the `version` rule of the Claude plugin package requirement
 
 ### Requirement: Foreign Claude remainder needs the plugin carrier
-A Claude plugin source whose projection leaves Claude native remainder (agents, commands, hooks, output styles, LSP servers, monitors, `bin/`, plugin settings) SHALL be emitted for Claude only through the Claude plugin carrier. When `targets.claude.carrier: loose` is selected, such a capability SHALL be refused for Claude with `acf.support.refused` naming the remainder components and the recovery (`carrier: plugin` or `except: [claude]`); caplet SHALL NOT translate the remainder into loose Claude files.
+A Claude plugin source whose projection leaves Claude native remainder (agents, commands, hooks, output styles, workflows, LSP servers, monitors, `bin/`, plugin settings) SHALL be emitted for Claude only through the Claude plugin carrier. When `targets.claude.carrier: loose` is selected, such a capability SHALL be refused for Claude with `acf.support.refused` naming the remainder components and the recovery (`carrier: plugin` or `except: [claude]`); caplet SHALL NOT translate the remainder into loose Claude files.
 
 #### Scenario: Claude plugin with agents and loose carrier
 - **WHEN** a Claude plugin with one skill and one agent is applied with `targets.claude.carrier: loose`
