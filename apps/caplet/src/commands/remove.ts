@@ -22,7 +22,7 @@ import { removeManifestEntry } from "../internal/manifest.js";
 import { reporter } from "../internal/output.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { installRootFor, outputBoundary } from "../internal/workflow.js";
+import { installRootFor, outputBoundary, requestedTargets } from "../internal/workflow.js";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },
@@ -37,8 +37,7 @@ export const removeCommand = defineCommand({
       const root = (await resolveScopeRoots(scope, cwd))[0];
       if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
       const config = (await readCapletConfig(cwd)).config;
-      const selectedTargets =
-        typeof context.args.target === "string" ? [context.args.target] : [...targetIds];
+      const selectedTargets = requestedTargets(context.args) ?? [...targetIds];
       const resolvedCwd = path.resolve(cwd);
       const boundaries = new Map<string, OutputBoundary>([
         [root.agentsDir, { roots: [root.agentsDir], files: [] }],

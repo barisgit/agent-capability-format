@@ -3180,7 +3180,8 @@ flag reference. Running `caplet` with no command runs `status`.
 
 Global flags: `-s/--scope`, `-C/--cwd`, `-q/--quiet`, `-v/--verbose`,
 `-y/--yes`, `--json`, `--strict`, `-V/--version`, `-h/--help`. Commands that
-accept `-t/--target` may repeat it. Unknown commands and flags exit 2 with a
+accept `-t/--target` select exactly the targets it names; it may repeat and
+takes comma-separated ids, and an unknown id exits 2. Unknown commands and flags exit 2 with a
 did-you-mean hint when one is close.
 
 Stubs that exit 0 without doing anything are forbidden — the first audit

@@ -207,6 +207,47 @@ test("a capability that gains a refused skill keeps its earlier output for that 
   }
 });
 
+test("a repeated or comma-separated --target selects only the named targets", async () => {
+  const scope = await makeScope();
+  try {
+    const planned = async (...targets: string[]) => {
+      const result = await runCaplet(scope, [
+        "apply",
+        "--dry-run",
+        "--json",
+        "--cwd",
+        scope.cwd,
+        "--scope",
+        "project",
+        ...targets,
+      ]);
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as { plan: { changes: Array<{ target: string }> } };
+      return [...new Set(json.plan.changes.map((change) => change.target))].sort();
+    };
+
+    expect(await planned("-t", "codex", "-t", "pi")).toEqual(["codex", "pi"]);
+    expect(await planned("--target", "codex,pi")).toEqual(["codex", "pi"]);
+
+    const unknown = await runCaplet(scope, [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "-t",
+      "codex",
+      "-t",
+      "nope",
+    ]);
+    expect(unknown.exitCode).toBe(2);
+    expect(unknown.stderr).toContain("Unknown target: nope");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("targeted apply preserves other targets in a shared-root inventory", async () => {
   const scope = await makeScope();
   try {

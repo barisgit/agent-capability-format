@@ -86,7 +86,7 @@ export const TARGET_FLAG: FlagSpec = {
   short: "t",
   arg: "<id>",
   type: "string",
-  description: "limit targets: claude, codex, opencode, pi (repeatable)",
+  description: "limit targets: claude, codex, opencode, pi (repeatable or comma-separated)",
 };
 
 export const TARGET_IDS = ["claude", "codex", "opencode", "pi"] as const;
