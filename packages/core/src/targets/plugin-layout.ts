@@ -125,9 +125,14 @@ export function isPerFileComponent(spec: PluginComponentSpec): spec is PerFileCo
   return "dir" in spec;
 }
 
-/** The name of the per-file component package file `file` is: its file name without extension. */
-export function perFileComponentName(file: string): string {
-  return path.posix.basename(file).replace(/\.[^.]*$/, "");
+/**
+ * The name of the component `spec` makes of package-relative `file`. An executing component is
+ * named by `file` itself, so the executable change report (install-integrity) tells modules with
+ * one file name in different directories apart; any other by its file name without extension,
+ * the name Claude gives it.
+ */
+export function perFileComponentName(spec: PerFileComponentSpec, file: string): string {
+  return spec.executes ? file : path.posix.basename(file).replace(/\.[^.]*$/, "");
 }
 
 /** The Claude plugin directory whose every file is one executable `bin` component. */

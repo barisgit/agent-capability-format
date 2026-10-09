@@ -356,7 +356,7 @@ test("workflows are executing components, found by default or only at the manife
     {
       format: "claude-plugin",
       kind: "workflow",
-      name: "release",
+      name: "workflows/release.js",
       paths: ["workflows/release.js"],
       class: "functional",
       executable: true,
@@ -370,5 +370,14 @@ test("workflows are executing components, found by default or only at the manife
   });
   expect(
     declared.capability?.remainder?.map((item) => [item.kind, item.name, item.executable]),
-  ).toEqual([["workflow", "ship", true]]);
+  ).toEqual([["workflow", "flows/ship.js", true]]);
+  // A file the manifest names twice, directly and through its directory, is one component.
+  const twice = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({
+      name: "kit",
+      workflows: ["./flows", "./flows/ship.js"],
+    }),
+    "flows/ship.js": "export default {}\n",
+  });
+  expect(twice.capability?.remainder?.map((item) => item.name)).toEqual(["flows/ship.js"]);
 });

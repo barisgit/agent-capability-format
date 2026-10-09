@@ -286,7 +286,7 @@ async function fileComponents(
     for (const file of await sourceFiles(root, sources)) {
       inputs.push({
         kind: spec.kind,
-        name: perFileComponentName(file),
+        name: perFileComponentName(spec, file),
         paths: [file],
         manifestKeys: value === undefined ? [] : [spec.key],
         class: componentClass,
@@ -297,7 +297,10 @@ async function fileComponents(
   return inputs;
 }
 
-/** Package-relative files of each contained source: a directory's files, or the file itself. */
+/**
+ * Package-relative files of each contained source, a directory's files or the file itself, each
+ * once though several sources name it.
+ */
 async function sourceFiles(root: string, sources: readonly string[]): Promise<string[]> {
   const files: string[] = [];
   for (const relative of sources) {
@@ -307,7 +310,7 @@ async function sourceFiles(root: string, sources: readonly string[]): Promise<st
     else if (await isFile(resolved))
       files.push(path.relative(root, resolved).split(path.sep).join("/"));
   }
-  return files;
+  return [...new Set(files)];
 }
 
 /** One component per {@link MERGED_COMPONENTS} kind the package has a file or manifest key for. */

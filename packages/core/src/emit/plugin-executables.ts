@@ -261,15 +261,21 @@ function perFileComponents(
   locate: (relative: string) => string,
   target: TargetId,
 ): PluginConfigComponent[] {
-  const found =
-    value === undefined
-      ? files.filter((file) => underAny(file, [spec.dir])).map(locate)
-      : packagePaths(value).flatMap((relative) =>
-          filesUnder(snapshot, [locate(relative)]).map((file) => file.rel),
-        );
-  return [...new Set(found)].map((rel) => ({
+  // Package-relative path of each discovered file, mapped to its snapshot path.
+  const found = new Map<string, string>();
+  if (value === undefined) {
+    for (const file of files) if (underAny(file, [spec.dir])) found.set(file, locate(file));
+  } else {
+    for (const relative of packagePaths(value)) {
+      const located = locate(relative);
+      for (const file of filesUnder(snapshot, [located])) {
+        found.set(path.posix.join(relative, file.rel.slice(located.length)), file.rel);
+      }
+    }
+  }
+  return [...found].map(([file, rel]) => ({
     kind: spec.kind,
-    name: perFileComponentName(rel),
+    name: perFileComponentName(spec, file),
     detail: [rel, ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`])].join(
       ", ",
     ),
