@@ -132,7 +132,6 @@ export async function readAgentPluginsPackage(
       renamedFrom: named.identity.renamedFrom,
     },
     remainder,
-    manifestName: raw.name as string,
   });
   return { capability, diagnostics };
 }

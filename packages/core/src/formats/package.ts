@@ -63,15 +63,12 @@ export function foreignCapability(input: {
   diagnostics: Diagnostic[];
   source: Pick<CapabilitySource, "format" | "formatVersion" | "renamedFrom">;
   remainder: NativeRemainderComponent[];
-  /** The name the package's own manifest declares, before `rename`. */
-  manifestName: string;
 }): AcfCapability {
   const source: CapabilitySource = {
     format: input.source.format,
     path: input.options.sourcePath ?? ".",
     snapshotRoot: input.root,
     projected: {
-      name: input.manifestName,
       skills: input.skills.map((skill) => skill.name).sort(),
       servers: (input.mcp?.servers ?? []).map((server) => server.name).sort(),
       remainder: input.remainder,

@@ -75,8 +75,8 @@ describe("Claude plugin reader", () => {
     });
 
     expect(capability?.manifest.name).toBe("kit");
+    expect(capability?.source?.renamedFrom).toBe("review-kit");
     expect(capability?.source?.projected).toEqual({
-      name: "review-kit",
       skills: ["review", "triage"],
       servers: capability?.mcp?.servers.map((server) => server.name) ?? [],
       remainder: capability?.remainder ?? [],

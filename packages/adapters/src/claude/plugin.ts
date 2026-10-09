@@ -178,7 +178,7 @@ function isUnchangedClaudePlugin(capability: AcfCapability): boolean {
   const skills = capability.skills.map((skill) => skill.name).sort();
   const servers = (capability.mcp?.servers ?? []).map((server) => server.name).sort();
   return (
-    projected.name === capability.manifest.name &&
+    capability.source?.renamedFrom === undefined &&
     sameList(projected.skills, skills) &&
     sameList(projected.servers, servers) &&
     removedRemainder(capability).length === 0

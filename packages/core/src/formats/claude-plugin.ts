@@ -93,7 +93,6 @@ export async function readClaudePluginPackage(
     diagnostics,
     source: { format: "claude-plugin", renamedFrom: named.identity.renamedFrom },
     remainder,
-    manifestName: raw.name as string,
   });
   return { capability, diagnostics };
 }

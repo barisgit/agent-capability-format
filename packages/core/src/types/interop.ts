@@ -124,13 +124,12 @@ export type CapabilitySource = {
   snapshotRoot: string;
   /**
    * The package as its reader projected it, before `rename`, facet selection and applicability:
-   * the manifest's own name, the projected skill and MCP server names (sorted), and the native
-   * remainder as read. Writers compare it with the capability they receive to tell an unchanged package, which they write losslessly, from a
-   * transformed one. Absent for native ACF.
+   * the projected skill and MCP server names (sorted) and the native remainder as read. Writers
+   * compare it, and `renamedFrom`, with the capability they receive to tell an unchanged package,
+   * which they write losslessly, from a transformed one. Absent for native ACF.
    */
   projected?:
     | {
-        name: string;
         skills: string[];
         servers: string[];
         remainder: NativeRemainderComponent[];
