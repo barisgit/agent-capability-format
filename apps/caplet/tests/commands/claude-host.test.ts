@@ -194,6 +194,31 @@ test("apply updates a plugin whose content changed", async () => {
   ]);
 });
 
+test("apply says in human output that it updated a plugin", async () => {
+  const scope = await reviewScope("user");
+  const before = await applyWithoutCli(scope);
+  await writeSkill(scope, "Read the diff, then the tests.");
+  const refreshed = await runCaplet(scope, [
+    "update",
+    ...userArgs(scope).slice(0, 4),
+    "--no-apply",
+  ]);
+  expect(refreshed.exitCode).toBe(0);
+  const after = await plannedVersion(scope, userArgs(scope), NAME);
+  const host = await userHost(scope, [
+    atVersion("list-json-installed", before),
+    "marketplace-list-json",
+    "marketplace-add-already-known",
+    "update-changed",
+    atVersion("list-json-after-update", after, "1.0.0+acf.bbb"),
+  ]);
+
+  const result = await apply(scope, host.env);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toMatch(new RegExp(`${NAME} +registered +files current +updated\n`));
+});
+
 test("apply uninstalls a deselected plugin and removes the marketplace before deleting files", async () => {
   const scope = await reviewScope("user");
   const version = await applyWithoutCli(scope);

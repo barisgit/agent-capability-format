@@ -19,7 +19,7 @@ project  .
 ok Applied 8 files (6 writes, 2 deletes)
 
 Claude plugins project scope · acf-project-<h>
-  review  registered  files current
+  review  registered  files current  installed
   registered for this checkout only, at Claude local scope (.claude/settings.local.json)
 Claude skills are now invoked through their plugins
   /review -> /review:review

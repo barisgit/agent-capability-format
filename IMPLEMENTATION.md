@@ -1483,7 +1483,8 @@ changes; finally `recordClaudeMarketplaces`.
 
 After the plan, human output prints one block per scope:
 `Claude plugins <scope> scope · <marketplace>`, a row per plugin with its
-host state and `files <state>`, the note
+host state, `files <state>` and, after apply, `installed`, `updated` or
+`uninstalled` when that command succeeded, the note
 `registered for this checkout only, at Claude local scope (.claude/settings.local.json)`
 for a project, `would run` and the planned commands on a dry run, then
 `Claude skills are now invoked through their plugins` with one

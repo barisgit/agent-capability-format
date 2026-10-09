@@ -10,7 +10,7 @@ import { colors } from "consola/utils";
 import { hashOwnedRegions, type ManagedEntry, readSidecar } from "../apply/sidecar.js";
 import { execClaudeCli } from "../hosts/claude/cli.js";
 import { createClaudeHost } from "../hosts/claude/host.js";
-import type { DesiredClaudeScope } from "../hosts/claude/plan.js";
+import type { ClaudePluginAction, DesiredClaudeScope } from "../hosts/claude/plan.js";
 import {
   type ClaudeHostReport,
   type ClaudePluginReport,
@@ -158,9 +158,17 @@ export async function withFileStates(
   return { scopes, diagnostics: report.diagnostics };
 }
 
+/** What a succeeded command did to a plugin, for the applied host block. */
+const appliedActions: Partial<Record<ClaudePluginAction, string>> = {
+  install: "installed",
+  update: "updated",
+  uninstall: "uninstalled",
+};
+
 /**
- * Human lines for a Claude report: one block per scope with each plugin's host and file state,
- * the local-scope note for a project, and the commands a dry run would run.
+ * Human lines for a Claude report: one block per scope with each plugin's host and file state
+ * (and, after apply, whether its command installed, updated or uninstalled it), the local-scope
+ * note for a project, and the commands a dry run would run.
  */
 export function claudeLines(report: ClaudeReport, mode: "applied" | "planned"): string[] {
   const lines: string[] = [];
@@ -169,10 +177,16 @@ export function claudeLines(report: ClaudeReport, mode: "applied" | "planned"): 
     lines.push(
       `${colors.bold("Claude plugins")} ${colors.dim(`${scope.scope} scope · ${scope.marketplace}`)}`,
     );
+    const succeeded = new Set(
+      scope.commands
+        .filter((command) => command.status === "succeeded")
+        .flatMap((command) => command.plugin ?? []),
+    );
     const rows = scope.plugins.map((plugin) => [
       plugin.name,
       plugin.state,
       plugin.files === undefined ? "" : colors.dim(`files ${plugin.files}`),
+      mode === "applied" && succeeded.has(plugin.id) ? (appliedActions[plugin.action] ?? "") : "",
     ]);
     lines.push(...columns(rows, { indent: "  " }));
     if (scope.local !== undefined && scope.local.plugins.length > 0) {
