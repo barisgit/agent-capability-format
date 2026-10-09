@@ -168,9 +168,13 @@ export type SettledEmptyPlan = {
  * `applied` is the `--json` value: zero counts when entries were removed, otherwise null. A dry
  * run changes nothing and previews the Claude commands.
  */
-export async function settleEmptyPlan(plan: EmitPlan, dryRun: boolean): Promise<SettledEmptyPlan> {
+export async function settleEmptyPlan(
+  plan: EmitPlan,
+  dryRun: boolean,
+  preview?: ClaudeReport,
+): Promise<SettledEmptyPlan> {
   if (dryRun) {
-    const claude = await previewClaude(plan);
+    const claude = preview ?? (await previewClaude(plan));
     return { applied: null, claude, diagnostics: claude?.diagnostics ?? [] };
   }
   if (plan.staleEntries.length === 0 && plan.claude.length === 0) {

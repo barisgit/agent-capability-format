@@ -117,12 +117,59 @@ export function gatedChange(
   if (gate.kind !== "retired") return undefined;
   const scope = report.scopes.find((candidate) => candidate.marketplaceDir === gate.marketplaceDir);
   if (scope === undefined) return undefined;
-  const kept =
+  const kept = marketplaceKept(scope, (plugin) => plugin.state === "not installed");
+  return kept ? emptyCatalog(item, scope) : undefined;
+}
+
+/**
+ * The plan's changes as apply will make them, judged from a host preview ({@link previewClaude}):
+ * `marketplace.json` of a retired marketplace that stays registered becomes the empty catalog
+ * apply writes ({@link gatedChange}) instead of a deletion, and drops out when the file already
+ * is that catalog. Every other change is kept as planned.
+ */
+export function previewedDiffs(
+  plan: Pick<EmitPlan, "diffs" | "claude">,
+  report: ClaudeReport | undefined,
+): EmittedDiff[] {
+  if (report === undefined) return plan.diffs;
+  return plan.diffs.flatMap((item) => {
+    const gate = claudeGate(item, plan.claude);
+    if (gate?.kind !== "retired") return [item];
+    const scope = report.scopes.find(
+      (candidate) => candidate.marketplaceDir === gate.marketplaceDir,
+    );
+    // The plugins the plan uninstalls are gone by the time apply settles the marketplace.
+    const kept =
+      scope !== undefined &&
+      marketplaceKept(
+        scope,
+        (plugin) => plugin.state === "not installed" || plugin.action === "uninstall",
+      );
+    if (!kept) return [item];
+    const change = emptyCatalog(item, scope);
+    return change.diff.before === change.diff.after ? [] : [change];
+  });
+}
+
+/**
+ * Whether the host keeps the retired marketplace of `scope` registered
+ * (`acf.claude.marketplace-kept`): Claude lists it, caplet plans no `marketplace remove`, and
+ * every plugin is gone by `gone`.
+ */
+function marketplaceKept(
+  scope: ClaudeScopeStatus,
+  gone: (plugin: ClaudePluginStatus) => boolean,
+): boolean {
+  return (
     scope.stateRead &&
     scope.marketplaceKnown &&
     marketplaceRemove(scope) === undefined &&
-    scope.plugins.every((plugin) => plugin.state === "not installed");
-  if (!kept) return undefined;
+    scope.plugins.every(gone)
+  );
+}
+
+/** `item` (the retired `marketplace.json`) rewritten as the marketplace's empty catalog. */
+function emptyCatalog(item: EmittedDiff, scope: ClaudeScopeStatus): EmittedDiff {
   return { ...item, diff: { ...item.diff, after: renderMarketplace(scope.marketplace, []) } };
 }
 

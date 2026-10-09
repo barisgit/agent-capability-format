@@ -4,7 +4,7 @@ import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
 import { claudeJson, printClaude } from "../internal/apply-flow.js";
 import { readCwd, readScope, readVerbose } from "../internal/args.js";
-import { previewClaude } from "../internal/claude-host-flow.js";
+import { previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
@@ -52,7 +52,7 @@ export const statusCommand = defineCommand({
       if (!json) printDiagnostics(diagnostics, context.args);
       const code = exitCodeForDiagnostics(diagnostics, context.args);
       process.exitCode = code;
-      const view = buildPlanView(plan.diffs);
+      const view = buildPlanView(previewedDiffs(plan, claude));
       if (json) {
         printJson("status", code === 0, diagnostics, {
           pending: view.fileCount,

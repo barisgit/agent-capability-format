@@ -512,3 +512,53 @@ test("status prints each diagnostic once and one blank line after the Claude blo
   expect(output.split("missing").length - 1).toBe(1);
   expect(result.stdout).toMatch(/--scope user\n\n\S/);
 });
+
+test("dry run and status preview a kept marketplace as the empty catalog apply writes", async () => {
+  const scope = await reviewScope("user");
+  const version = await applyWithoutCli(scope);
+  await writeText(
+    path.join(scope.cwd, ".claude", "settings.json"),
+    JSON.stringify({ extraKnownMarketplaces: { "acf-user": { source: { source: "directory" } } } }),
+  );
+  await selectReview(scope, path.join(scope.home, ".agents"), false);
+  const state = [atVersion("list-json-installed", version), "marketplace-list-json"];
+  const host = await userHost(scope, [...state, ...state, ...state, ...state]);
+  const catalog = path.join(
+    claudeMarketplaceDir(scope, "user"),
+    ".claude-plugin",
+    "marketplace.json",
+  );
+  type Change = { action: string; path: string };
+  const catalogChange = (stdout: string) =>
+    (JSON.parse(stdout) as { plan: { changes: Change[] } }).plan.changes.find((change) =>
+      catalog.endsWith(change.path),
+    );
+
+  const dry = await apply(scope, host.env, ["--dry-run", "--json"]);
+  const status = await runCaplet(
+    scope,
+    ["status", ...userArgs(scope).slice(0, 4), "--json"],
+    host.env,
+  );
+
+  expect(dry.exitCode).toBe(0);
+  expect(catalogChange(dry.stdout)?.action).toBe("update");
+  const dryJson = JSON.parse(dry.stdout) as ApplyJson & { plan: { fileCount: number } };
+  expect(dryJson.diagnostics.map((item) => item.code)).toContain("acf.claude.marketplace-kept");
+  const pending = (stdout: string) => (JSON.parse(stdout) as { pending: number }).pending;
+  expect(pending(status.stdout)).toBe(dryJson.plan.fileCount);
+
+  // Once the catalog is already empty, nothing about it is pending.
+  await writeText(
+    catalog,
+    `${JSON.stringify({ name: "acf-user", owner: { name: "caplet" }, plugins: [] }, null, 2)}\n`,
+  );
+  const settled = await apply(scope, host.env, ["--dry-run", "--json"]);
+  const settledStatus = await runCaplet(
+    scope,
+    ["status", ...userArgs(scope).slice(0, 4), "--json"],
+    host.env,
+  );
+  expect(catalogChange(settled.stdout)).toBeUndefined();
+  expect(pending(settledStatus.stdout)).toBe(dryJson.plan.fileCount - 1);
+});

@@ -9,7 +9,7 @@ import {
   settleEmptyPlan,
 } from "../internal/apply-flow.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
-import { previewClaude } from "../internal/claude-host-flow.js";
+import { previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import {
@@ -77,7 +77,11 @@ export const applyCommand = defineCommand({
       const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, context.args);
       // Refused capabilities are already out of the plan for their targets; the rest applies.
       const planCode = exitCodeForDiagnostics(diagnostics, context.args);
-      const view = buildPlanView(plan.diffs, { verbose: readVerbose(context.args) });
+      // A dry run shows the changes as apply will make them once the host has run.
+      const preview = dryRun && blocking === 0 ? await previewClaude(plan) : undefined;
+      const view = buildPlanView(previewedDiffs(plan, preview), {
+        verbose: readVerbose(context.args),
+      });
       const reach = await collectReach(plan);
       const out = reporter(context.args);
       const executables = plannedExecutableChanges(installed, plan);
@@ -93,7 +97,7 @@ export const applyCommand = defineCommand({
       }
       process.exitCode = planCode;
       if (view.fileCount === 0) {
-        const settled = await settleEmptyPlan(plan, dryRun);
+        const settled = await settleEmptyPlan(plan, dryRun, preview);
         const all = [...diagnostics, ...settled.diagnostics];
         const code = exitCodeForDiagnostics(all, context.args);
         process.exitCode = code;
@@ -125,7 +129,7 @@ export const applyCommand = defineCommand({
         out.executables(executables);
       }
       if (dryRun) {
-        const claude = await previewClaude(plan);
+        const claude = preview;
         const previewed = claude?.diagnostics ?? [];
         if (json) {
           printJson("apply", planCode === 0, [...diagnostics, ...previewed], {
