@@ -33,7 +33,7 @@ import {
   entrySourceId,
   readCapabilitiesYml,
   readLockfile,
-  sourceId,
+  sourceString,
 } from "@caplet/installer";
 import { isInsideOrEqual } from "../apply/containment.js";
 import { detectDrift, diskDriftFs, readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
@@ -321,8 +321,8 @@ function manifestSelects(
     entries.flatMap((entry) => [
       entrySourceId(entry),
       entrySourceId(entry, manifestDir),
-      sourceId(entry.source),
-      sourceId(entry.source, manifestDir),
+      sourceString(entry.source),
+      sourceString(entry.source, manifestDir),
     ]),
   );
   const selected = new Set(

@@ -13,7 +13,6 @@ export {
   entrySourceId,
   readLockfile,
   sortLockEntries,
-  sourceId,
   sourceString,
   writeLockfile,
 } from "./lockfile.js";

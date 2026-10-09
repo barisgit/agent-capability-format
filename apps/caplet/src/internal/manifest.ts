@@ -14,7 +14,6 @@ import {
   type LockEntry,
   readCapabilitiesYml,
   readLockfile,
-  sourceId,
   sourceString,
   sourceUrlCredentialProblem,
   writeLockfile,
@@ -116,7 +115,7 @@ export async function removeManifestEntries(
   const found = new Set<string>();
   const kept = manifest.capabilities.flatMap((entry) => {
     const id = entrySourceId(entry, path.dirname(root.manifestPath));
-    const legacyId = sourceId(entry.source, path.dirname(root.manifestPath));
+    const legacyId = sourceString(entry.source, path.dirname(root.manifestPath));
     const lockEntry = lock?.entries.find(
       (candidate) => candidate.sourceId === id || candidate.sourceId === legacyId,
     );

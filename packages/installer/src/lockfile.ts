@@ -33,25 +33,21 @@ export function canonicalizePathLocation(location: string, baseDir = process.cwd
 }
 
 /**
- * Identity of the repository or directory a source names, without an entry's `path:`.
- * Lockfiles written before `#path=` ids keyed entries by it. Equal to {@link sourceString}.
- */
-export function sourceId(spec: SourceSpec, baseDir = process.cwd()): string {
-  return sourceString(spec, baseDir);
-}
-
-/**
- * Lock key of an entry: its {@link sourceId} plus a normalized, URI-encoded `#path=` when
+ * Lock key of an entry: its {@link sourceString} plus a normalized, URI-encoded `#path=` when
  * the entry selects a subdirectory. `ref` is not part of it, so a new ref updates the entry.
  */
 export function entrySourceId(entry: CapabilityEntry, baseDir = process.cwd()): string {
-  const source = sourceId(entry.source, baseDir);
+  const source = sourceString(entry.source, baseDir);
   if (entry.path === undefined) return source;
   const normalizedPath = path.posix.normalize(entry.path.replaceAll("\\", "/"));
   return `${source}#path=${encodeURIComponent(normalizedPath)}`;
 }
 
-/** The lock entry's `source`: `github:`, `git:` or `path:` with the location made absolute. */
+/**
+ * The lock entry's `source`: `github:`, `git:` or `path:` with the location made absolute. It
+ * identifies the repository or directory without an entry's `path:`, and lockfiles written before
+ * `#path=` ids keyed entries by it.
+ */
 export function sourceString(spec: SourceSpec, baseDir = process.cwd()): string {
   switch (spec.kind) {
     case "github":

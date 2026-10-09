@@ -21,7 +21,7 @@ import {
   type LockEntry,
   lockVersion,
   readLockfile,
-  sourceId,
+  sourceString,
   writeLockfile,
 } from "./lockfile.js";
 import { type CapabilityRecord, capabilityPath, materializeFetched } from "./materialize.js";
@@ -204,7 +204,7 @@ async function resolveCapabilitiesStaged(
 
   for (const entry of yml.capabilities) {
     const id = entrySourceId(entry);
-    const legacyId = sourceId(entry.source);
+    const legacyId = sourceString(entry.source);
     const locked = lockedBySource.get(id) ?? lockedBySource.get(legacyId);
     if (locked !== undefined) {
       priorRecords.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));

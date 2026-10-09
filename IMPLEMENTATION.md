@@ -2257,7 +2257,7 @@ the ref updates the same lock entry.
 entry's `path:` within the source as `root`, the checked-out `commit` (null
 for `path:` sources) and the entry's `sourceId`. A `path:` source is read in
 place. A git source is cloned afresh into
-`<agentsDir>/.cache/acf-installer/<cacheKeyFor(sourceId(source), ref)>`
+`<agentsDir>/.cache/acf-installer/<cacheKeyFor(sourceString(source), ref)>`
 through the `git` CLI (`packages/installer/src/git.ts`):
 
 - `--depth 1 --branch <ref>` (shallow) and `--filter=blob:none` (blobless) by
