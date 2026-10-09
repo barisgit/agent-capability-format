@@ -1,5 +1,7 @@
 import { type ArgsDef, defineCommand } from "citty";
 import {
+  appliedCounts,
+  appliedLine,
   claudeJson,
   printClaude,
   reportEmptyPlan,
@@ -159,8 +161,7 @@ export const applyCommand = defineCommand({
         }
       }
       const applied = await applyEmitPlan(plan);
-      const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
-      const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+      const counts = appliedCounts(applied);
       const appliedReach = await collectReach(plan);
       const applyCode = exitCodeForDiagnostics(
         [...diagnostics, ...applied.diagnostics],
@@ -170,7 +171,7 @@ export const applyCommand = defineCommand({
       if (json) {
         printJson("apply", applyCode === 0, [...diagnostics, ...applied.diagnostics], {
           plan: planToJson(view),
-          applied: { files: view.fileCount, writes: written, deletes: deleted },
+          applied: counts,
           ...outcomes,
           ...reachToJson(appliedReach),
           ...claudeJson(applied.claude),
@@ -179,9 +180,7 @@ export const applyCommand = defineCommand({
       }
       printDiagnostics(applied.diagnostics, context.args);
       out.log("");
-      out.done(
-        `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
-      );
+      out.done(appliedLine(counts, view.fileCount));
       printClaude(out, applied.claude, "applied");
       out.log("");
       for (const line of reachBlock(

@@ -17,6 +17,7 @@ import {
 } from "./output.js";
 import { buildPlanView, planToJson } from "./plan-view.js";
 import {
+  type ApplySummary,
   applyEmitPlan,
   buildEmitPlan,
   type EmitPlan,
@@ -91,8 +92,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     out.executables(executables);
   }
   const applied = await applyEmitPlan(plan);
-  const written = applied.results.reduce((sum, item) => sum + item.written.length, 0);
-  const deleted = applied.results.reduce((sum, item) => sum + item.deleted.length, 0);
+  const counts = appliedCounts(applied);
   const applyCode = exitCodeForDiagnostics([...diagnostics, ...applied.diagnostics], args);
   process.exitCode = applyCode;
   if (json) {
@@ -100,16 +100,36 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
       command,
       applyCode === 0,
       [...diagnostics, ...applied.diagnostics],
-      envelope({ files: view.fileCount, writes: written, deletes: deleted }, applied.claude),
+      envelope(counts, applied.claude),
     );
     return;
   }
   printDiagnostics(applied.diagnostics, args);
   out.log("");
-  out.done(
-    `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
-  );
+  out.done(appliedLine(counts, view.fileCount));
   printClaude(out, applied.claude, "applied");
+}
+
+/** The `applied` field of a `--json` envelope: distinct files apply wrote or deleted. */
+export type AppliedCounts = { files: number; writes: number; deletes: number };
+
+/**
+ * Counts the files apply changed. A plan's file can stay unapplied (drifted, or behind a Claude
+ * host gate), and a file can be written twice (an inventory regenerated after held-back
+ * changes), so the counts come from the results' distinct paths, not from the plan.
+ */
+export function appliedCounts(summary: Pick<ApplySummary, "results">): AppliedCounts {
+  const written = new Set(summary.results.flatMap((result) => result.written));
+  const deleted = new Set(summary.results.flatMap((result) => result.deleted));
+  for (const file of deleted) written.delete(file);
+  return { files: written.size + deleted.size, writes: written.size, deletes: deleted.size };
+}
+
+/** `Applied N files (W writes, D deletes)`, naming the planned total when apply did less. */
+export function appliedLine(counts: AppliedCounts, planned: number): string {
+  const { files, writes, deletes } = counts;
+  const total = files < planned ? `${files} of ${planned}` : String(files);
+  return `Applied ${total} ${planned === 1 && files === 1 ? "file" : "files"} (${writes} ${writes === 1 ? "write" : "writes"}, ${deletes} ${deletes === 1 ? "delete" : "deletes"})`;
 }
 
 /** Prints the Claude host block of a report, after a blank line, when there is one. */

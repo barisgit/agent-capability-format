@@ -16,7 +16,7 @@ project  .
 
 + 4 create  ~ 1 update  - 3 delete
 
-ok Applied 8 files (6 writes, 0 deletes)
+ok Applied 5 of 8 files (5 writes, 0 deletes)
 
 Claude plugins project scope · acf-project-<h>
   review  registration required  files current

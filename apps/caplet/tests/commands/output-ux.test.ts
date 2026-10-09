@@ -145,7 +145,7 @@ test("apply connects the change plan to an applied summary", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
-    expect(result.stdout).toContain("ok Applied 5 files (7 writes, 0 deletes)");
+    expect(result.stdout).toContain("ok Applied 5 files (5 writes, 0 deletes)");
     expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(true);
   } finally {
     await cleanup(scope);
