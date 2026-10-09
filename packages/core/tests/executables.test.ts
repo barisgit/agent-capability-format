@@ -6,7 +6,6 @@ import {
   acfPathPlaceholders,
   executableChanges,
   executableComponents,
-  type NativeRemainderComponent,
   readAgentPluginsPackage,
   readCapability,
   readClaudePluginPackage,
@@ -271,37 +270,30 @@ describe("executableChanges", () => {
   });
 
   test("a changed Claude plugin hook in the native remainder is reported for Claude only", async () => {
-    const pluginCapability = async (hookScript: string): Promise<AcfCapability> => {
-      const cap = await capability(
-        {
-          "acf.yml": baseManifest,
-          ".claude-plugin/plugin.json": '{"name":"test-cap","version":"1.0.0"}\n',
-          "hooks/hooks.json": `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/hooks/start.sh"}]}]}}\n`,
-          "hooks/start.sh": hookScript,
-        },
-        ["hooks/start.sh"],
-      );
-      const hook: NativeRemainderComponent = {
-        format: "claude-plugin",
-        kind: "hook",
-        name: "hooks",
-        paths: ["hooks/"],
-        class: "functional",
-        executable: true,
-      };
-      cap.source = { format: "claude-plugin", path: ".", snapshotRoot: cap.root };
-      cap.remainder = [hook];
+    const plugin = async (script: string): Promise<AcfCapability> => {
+      const dir = await tempDir();
+      dirs.push(dir);
+      await makeCapability(dir, {
+        ".claude-plugin/plugin.json": '{"name":"test-cap","version":"1.0.0"}\n',
+        "hooks/hooks.json": `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/hooks/${script}"}]}]}}\n`,
+      });
+      const { capability: cap } = await readClaudePluginPackage(dir, {
+        scope: "project",
+        origin: { kind: "local", directory: dir },
+        revision: null,
+      });
+      if (cap === undefined) throw new Error("the plugin did not read as a capability");
       return cap;
     };
-    const before = await pluginCapability("#!/bin/sh\necho one\n");
-    const after = await pluginCapability("#!/bin/sh\necho two\n");
+    const before = await plugin("start.sh");
+    const after = await plugin("begin.sh");
     const claude = executableChanges(
       await executableComponents(before, "claude"),
       await executableComponents(after, "claude"),
     );
     expect(
       claude.map(({ change, kind, name, detail }) => ({ change, kind, name, detail })),
-    ).toEqual([{ change: "changed", kind: "hook", name: "hooks", detail: "hooks/" }]);
+    ).toEqual([{ change: "changed", kind: "hook", name: "hooks", detail: "hooks/hooks.json" }]);
     expect(await executableComponents(after, "codex")).toEqual([]);
   });
 
