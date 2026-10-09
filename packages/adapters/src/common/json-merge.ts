@@ -1,3 +1,7 @@
+/**
+ * Edits one JSON pointer of a user-owned JSON file in place, keeping the rest of the text
+ * (formatting, key order, other entries) byte for byte.
+ */
 import { isRecord, ownValue, setOwn } from "./records.js";
 
 type JsonContainer = Record<string, unknown> | unknown[];
@@ -5,20 +9,33 @@ type JsonContainer = Record<string, unknown> | unknown[];
 type ObjectProperty = { key: string; propStart: number; valueStart: number; valueEnd: number };
 type ArrayElement = { index: number; valueStart: number; valueEnd: number };
 
+/**
+ * `currentText` with `newValue` set at `pointer`, creating missing parents (an array for a `-` or
+ * index segment, else an object). An empty or missing file becomes a fresh two-space document.
+ * Throws on invalid JSON or a non-object root.
+ */
 export function mergeJson(currentText: string | null, pointer: string, newValue: unknown): string {
   if (currentText === null || currentText.trim() === "") {
     const root = {};
     setJsonPointer(root, pointer, newValue);
     return `${JSON.stringify(root, null, 2)}\n`;
   }
+  // The text editor below assumes well-formed JSON; parsing first rejects anything else.
   JSON.parse(currentText);
   return mergeJsonText(currentText, pointer, newValue);
 }
 
+/**
+ * The top-level object of a JSON file; empty for a missing or blank file or a non-object root.
+ * Throws on invalid JSON.
+ */
 export function readJsonObject(currentText: string | null): Record<string, unknown> {
-  return parseJsonObject(currentText);
+  if (currentText === null || currentText.trim() === "") return {};
+  const parsed: unknown = JSON.parse(currentText);
+  return isRecord(parsed) ? { ...parsed } : {};
 }
 
+/** Escapes one key for use as a JSON pointer segment (RFC 6901). */
 export function jsonPointerEscape(value: string): string {
   return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
@@ -103,13 +120,6 @@ function mergeAt(
     );
   }
   return mergeAt(text, child, segments, index + 1, newValue);
-}
-
-function parseJsonObject(currentText: string | null): Record<string, unknown> {
-  if (currentText === null || currentText.trim() === "") return {};
-  const parsed: unknown = JSON.parse(currentText);
-  if (isRecord(parsed)) return { ...parsed };
-  return {};
 }
 
 function setJsonPointer(root: Record<string, unknown>, pointer: string, newValue: unknown): void {
