@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathWithoutClaude } from "./support/claude-path.js";
 
 export type TestScope = {
   dir: string;
@@ -41,12 +42,26 @@ export async function cleanup(scope: TestScope): Promise<void> {
   await rm(scope.dir, { recursive: true, force: true });
 }
 
-export async function runCaplet(scope: TestScope, args: string[]): Promise<RunResult> {
-  const proc = Bun.spawn(["bun", scope.bin, ...args], {
+/**
+ * Runs caplet as a subprocess with `HOME` at the scope's home. `claude` is missing from `PATH`
+ * unless `env` supplies one (see `claudeShim`), so no test reaches the real Claude Code.
+ */
+export async function runCaplet(
+  scope: TestScope,
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<RunResult> {
+  const proc = Bun.spawn([process.execPath, scope.bin, ...args], {
     cwd: path.resolve("../.."),
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, HOME: scope.home, USERPROFILE: scope.home },
+    env: {
+      ...process.env,
+      HOME: scope.home,
+      USERPROFILE: scope.home,
+      PATH: pathWithoutClaude(),
+      ...env,
+    },
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),

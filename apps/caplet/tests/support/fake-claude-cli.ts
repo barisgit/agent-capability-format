@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { ClaudeCli } from "../../src/hosts/claude/cli.js";
+import type { ClaudeCli, ClaudeCliOutcome } from "../../src/hosts/claude/cli.js";
 
 /**
  * A transcript from task 5.1 (`tests/fixtures/claude-cli/<fixture>.json`), optionally with
@@ -28,33 +28,63 @@ export type FakeClaudeCli = {
   unused(): string[];
 };
 
+/** One replayable transcript after substitution; `index` is its position in the options. */
+export type ReplayEntry = {
+  index: number;
+  fixture: string;
+  argv: string[];
+  outcome: Extract<ClaudeCliOutcome, { kind: "exited" }>;
+};
+
 type Transcript = { argv: string[]; exitCode: number; stdout: string; stderr: string };
 
 const FIXTURES = path.join(import.meta.dir, "../fixtures/claude-cli");
 
 /**
- * A `claude` runner that replays recorded Claude 2.1.97 transcripts. An invocation without a
- * matching unused transcript throws, so a test cannot pass on a command the real CLI was never
- * observed to accept.
+ * The transcripts of `options` with their replacements applied. This and {@link takeTranscript}
+ * are the one replay implementation, shared by the in-process fake and the `claude` shim that
+ * subprocess tests put on `PATH` (`claude-shim.ts`).
  */
-export function fakeClaudeCli(options: FakeClaudeCliOptions): FakeClaudeCli {
-  const pending = options.transcripts.map((entry) => {
+export function loadTranscripts(options: FakeClaudeCliOptions): ReplayEntry[] {
+  return options.transcripts.map((entry, index) => {
     const { fixture, replace = {} } = typeof entry === "string" ? { fixture: entry } : entry;
     const raw = JSON.parse(
       readFileSync(path.join(FIXTURES, `${fixture}.json`), "utf8"),
     ) as Transcript;
     const substitute = replacer({ ...options.replace, ...replace });
     return {
+      index,
       fixture,
       argv: raw.argv.map(substitute),
       outcome: {
-        kind: "exited" as const,
+        kind: "exited",
         exitCode: raw.exitCode,
         stdout: substitute(raw.stdout),
         stderr: substitute(raw.stderr),
       },
     };
   });
+}
+
+/**
+ * Removes and returns the first entry of `pending` recorded for `argv` (`claude ...`). Throws
+ * when there is none, so a test cannot pass on a command the real CLI was never observed to
+ * accept.
+ */
+export function takeTranscript(pending: ReplayEntry[], argv: readonly string[]): ReplayEntry {
+  const index = pending.findIndex((t) => sameArgv(t.argv, argv));
+  const match = pending[index];
+  if (match === undefined) {
+    const available = pending.map((t) => `${t.fixture}: ${t.argv.join(" ")}`).join("; ");
+    throw new Error(`fake claude: no transcript for \`${argv.join(" ")}\` (unused: ${available})`);
+  }
+  pending.splice(index, 1);
+  return match;
+}
+
+/** A `claude` runner that replays recorded Claude 2.1.97 transcripts in process. */
+export function fakeClaudeCli(options: FakeClaudeCliOptions): FakeClaudeCli {
+  const pending = loadTranscripts(options);
   const calls: string[][] = [];
   return {
     calls,
@@ -62,16 +92,7 @@ export function fakeClaudeCli(options: FakeClaudeCliOptions): FakeClaudeCli {
     cli: async (args) => {
       const argv = ["claude", ...args];
       calls.push(argv);
-      const index = pending.findIndex((t) => sameArgv(t.argv, argv));
-      const match = pending[index];
-      if (match === undefined) {
-        const available = pending.map((t) => `${t.fixture}: ${t.argv.join(" ")}`).join("; ");
-        throw new Error(
-          `fake claude: no transcript for \`${argv.join(" ")}\` (unused: ${available})`,
-        );
-      }
-      pending.splice(index, 1);
-      return match.outcome;
+      return takeTranscript(pending, argv).outcome;
     },
   };
 }
