@@ -46,7 +46,9 @@ const DATA_DIR = `${PLACEHOLDER_OPEN}{ACF_DATA_DIR}`;
 
 /** Values the server's path placeholders become in the written config. */
 export type McpPlaceholderValues = {
-  /** Replaces `${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`; `./` cwd values resolve against it. */
+  /**
+   * Replaces `${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`; `./` cwd values resolve against it.
+   */
   capabilityDir: string;
   /** Replaces `${ACF_HOOK_DIR}` (the directory of the capability's MCP file). */
   hookDir: string;
@@ -318,7 +320,7 @@ export function mcpPathFor(
  * `acf.support.component-omitted` for a server whose target has no writable MCP file at the
  * scope; the Claude plugin carrier installs user-scope servers through the plugin instead.
  */
-function unwritableServer(input: EmitInput, target: TargetId, server: McpServer) {
+function unwritableServer(input: EmitInput, target: TargetId, server: McpServer): Diagnostic {
   const subject = {
     capability: input.capability.manifest.name,
     target,
@@ -342,12 +344,14 @@ type Fields = {
   headers?: Record<string, string>;
 };
 
+/** The support-row field of a stdio command: its leading placeholder, else absolute or bare. */
 function commandField(command: string): string {
   const base = STDIO_PLACEHOLDERS.find((placeholder) => command.startsWith(placeholder));
   if (base !== undefined) return `mcp.command=${base}`;
   return path.isAbsolute(command) ? "mcp.command=absolute" : "mcp.command=bare";
 }
 
+/** A relative `cwd` resolves against the capability directory; others get placeholders filled. */
 function resolveCwd(
   cwd: string,
   capabilityDir: string,
@@ -356,7 +360,10 @@ function resolveCwd(
   return cwd === "." || cwd.startsWith("./") ? path.join(capabilityDir, cwd) : substitute(cwd);
 }
 
-/** The entry in each target's spelling (claude-code.md, codex.md, cursor.md, opencode.md, facets/mcp.md). */
+/**
+ * The entry in each target's spelling (claude-code.md, codex.md, cursor.md, opencode.md,
+ * facets/mcp.md).
+ */
 function dialectEntry(
   target: TargetId,
   transport: McpServer["transport"],
@@ -392,6 +399,7 @@ function dialectEntry(
   }
 }
 
+/** `record` without its undefined fields. */
 function defined(record: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
 }

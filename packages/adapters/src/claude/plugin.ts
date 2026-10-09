@@ -46,7 +46,8 @@ import {
   unselectedPathsAndKeys,
 } from "./plugin-source.js";
 
-// Built from parts so the source holds no placeholder string literal (biome noTemplateCurlyInString).
+// Built from parts so the source holds no placeholder string literal
+// (biome noTemplateCurlyInString).
 const PLACEHOLDER_OPEN = "$";
 const PLUGIN_ROOT = `${PLACEHOLDER_OPEN}{CLAUDE_PLUGIN_ROOT}`;
 const PLUGIN_DATA = `${PLACEHOLDER_OPEN}{CLAUDE_PLUGIN_DATA}`;
