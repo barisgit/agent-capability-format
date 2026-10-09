@@ -28,7 +28,7 @@ async function scopeWith(files: Record<string, string>, entry = "") {
     scopeRoot.manifestPath,
     `acf: 1\ncapabilities:\n  - source: path:../pkg\n${entry}`,
   );
-  const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+  const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
   const lock = await readLockfile(scopeRoot.lockPath);
   return { scopeRoot, result, records: lock?.entries[0]?.resolvedCapabilities ?? [] };
 }
@@ -147,7 +147,7 @@ describe("foreign source formats", () => {
       scopeRoot.manifestPath,
       "acf: 1\ncapabilities:\n  - source: path:../pkg\n    rename: kit-two\n",
     );
-    const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const second = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errorCodes(second)).toEqual([]);
     const lock = await readLockfile(scopeRoot.lockPath);
     expect(lock?.entries[0]?.rename).toBe("kit-two");
@@ -181,7 +181,7 @@ describe("foreign source formats", () => {
   test("removing format: restores detection", async () => {
     const { scopeRoot } = await scopeWith(polyglot, "    format: claude-plugin\n");
     await writeText(scopeRoot.manifestPath, "acf: 1\ncapabilities:\n  - source: path:../pkg\n");
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errorCodes(result)).toEqual([]);
     const entry = (await readLockfile(scopeRoot.lockPath))?.entries[0];
     expect(entry?.format).toBeUndefined();
@@ -206,7 +206,7 @@ describe("foreign source formats", () => {
           scopeRoot.manifestPath,
           `acf: 1\ncapabilities:\n  - source: path:../pkg\n${after}`,
         );
-        const result = await resolveCapabilities({ scope: "project", scopeRoot, mode, frozen });
+        const result = await resolveCapabilities({ scopeRoot, mode, frozen });
         expect(errorCodes(result)).toEqual(["acf.lock.drift"]);
         expect(await Bun.file(scopeRoot.lockPath).text()).toBe(lockBefore);
         expect(await readdir(scopeRoot.capabilitiesDir)).toEqual(installedBefore);

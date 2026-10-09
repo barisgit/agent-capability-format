@@ -54,7 +54,6 @@ export async function fetchScopes(
             .filter((entry) => entry.capabilityNames.includes(capabilityName))
             .map((entry) => entry.sourceId) ?? []);
     const result = await resolveCapabilities({
-      scope: scopeRoot.scope,
       scopeRoot,
       mode,
       sourceIds,

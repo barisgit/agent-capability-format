@@ -16,7 +16,7 @@ async function installTwo(dir: string) {
     scopeRoot.manifestPath,
     `acf: 1\ncapabilities:\n  - source: path:${path.join(sources, "kept")}\n  - source: path:${path.join(sources, "tampered")}\n`,
   );
-  const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+  const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
   expect(errors(result)).toEqual([]);
   return { scopeRoot, sources };
 }
@@ -41,7 +41,7 @@ for (const [label, tamper] of [
 
       // A tampered snapshot is not silently replaced: the user decides how to recover.
       const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
-      await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+      await resolveCapabilities({ scopeRoot, mode: "auto" });
       expect(await readFile(scopeRoot.lockPath, "utf8")).toBe(lockBefore);
       expect((await resolveScopeCapabilities(scopeRoot)).diagnostics).toHaveLength(1);
     } finally {
@@ -57,7 +57,7 @@ test("a missing snapshot is restored exactly as locked without rewriting the loc
     const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
     await rm(path.join(scopeRoot.capabilitiesDir, "kept"), { recursive: true });
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
 
     expect(result.diagnostics).toEqual([]);
     expect(await readFile(scopeRoot.lockPath, "utf8")).toBe(lockBefore);
@@ -75,7 +75,7 @@ test("restoring a snapshot whose source no longer matches the lock fails and wri
     await rm(path.join(scopeRoot.capabilitiesDir, "kept"), { recursive: true });
     await writeText(path.join(sources, "kept", "scripts", "run.sh"), "#!/bin/sh\nchanged\n");
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
 
     expect(result.diagnostics.map((item) => [item.code, item.data?.name])).toEqual([
       ["acf.lock.digest-mismatch", "kept"],

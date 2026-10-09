@@ -46,7 +46,6 @@ export async function loadApplicableCapabilities(
   for (const root of roots) {
     if (options.fetch !== "never") {
       const resolved = await resolveCapabilities({
-        scope: root.scope,
         scopeRoot: root,
         mode: options.fetch,
       });

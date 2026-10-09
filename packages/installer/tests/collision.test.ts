@@ -31,7 +31,7 @@ test("two sources with the same capability name fail without mutation", async ()
       `acf: 1\ncapabilities:\n  - source: path:${one}\n  - source: path:${two}\n`,
     );
 
-    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
 
     expect(collisionCodes(result.diagnostics)).toEqual(["acf.capability.name-collision"]);
     const collision = result.diagnostics.find(
@@ -61,7 +61,7 @@ test("new source colliding with a retained locked capability preserves snapshot 
     await writeCapability(one, "shared", "one");
     await writeCapability(two, "shared", "two");
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${one}\n`);
-    const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const first = await resolveCapabilities({ scopeRoot, mode: "auto" });
     expect(errors(first)).toEqual([]);
     const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
 
@@ -69,7 +69,7 @@ test("new source colliding with a retained locked capability preserves snapshot 
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${one}\n  - source: path:${two}\n`,
     );
-    const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    const second = await resolveCapabilities({ scopeRoot, mode: "auto" });
 
     expect(collisionCodes(second.diagnostics)).toEqual(["acf.capability.name-collision"]);
     expect(
@@ -96,7 +96,7 @@ test("rename onto another capability's name collides, rename to a free name reso
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${one}\n  - source: path:${two}\n    rename: alpha\n`,
     );
-    const colliding = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const colliding = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(collisionCodes(colliding.diagnostics)).toEqual(["acf.capability.name-collision"]);
     expect(await Bun.file(scopeRoot.lockPath).exists()).toBe(false);
     expect(
@@ -107,7 +107,7 @@ test("rename onto another capability's name collides, rename to a free name reso
       scopeRoot.manifestPath,
       `acf: 1\ncapabilities:\n  - source: path:${one}\n  - source: path:${two}\n    rename: gamma\n`,
     );
-    const resolved = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const resolved = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(resolved)).toEqual([]);
     expect(resolved.capabilities.map((item) => item.name)).toEqual(["alpha", "gamma"]);
     expect(

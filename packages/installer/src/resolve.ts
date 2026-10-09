@@ -28,7 +28,6 @@ import { type CapabilityRecord, capabilityPath, materializeFetched } from "./mat
 
 /** What {@link resolveCapabilities} reconciles and how far it may go. */
 export type ResolveOptions = {
-  scope: "user" | "project";
   scopeRoot: ScopeRoot;
   /**
    * `auto` fetches entries that are new, changed in intent, locked under a legacy key or

@@ -11,7 +11,7 @@ import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 async function resolvePathSource(dir: string, repo: string) {
   const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
   await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
-  const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+  const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
   return { scopeRoot, result };
 }
 
@@ -128,7 +128,7 @@ test("a bare skill snapshot is complete and rejects links like any package", asy
     });
 
     await symlink("SKILL.md", path.join(repo, "alias.md"));
-    const forced = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
+    const forced = await resolveCapabilities({ scopeRoot, mode: "force" });
     expect(errors(forced).map((item) => item.data?.path)).toEqual(["alias.md"]);
   } finally {
     await cleanup(dir);
