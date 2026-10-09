@@ -319,6 +319,28 @@ test("a transformed Claude plugin keeps its selected MCP bundle references and b
   });
 });
 
+test("a transformed Claude plugin keeps a native server declared inline in a manifest mcpServers list", async () => {
+  const helper = { type: "http", url: "https://example.com/mcp", headersHelper: "./auth.sh" };
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": `${JSON.stringify({
+      name: "kit",
+      version: "1.0.0",
+      mcpServers: [{ helper: { ...helper, url: "https://example.com/old" } }, { helper }],
+    })}\n`,
+    "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+  };
+  await withTempPackage("claude-inline-list-", files, async (input) => {
+    const capability = await readInput(input, "claude-plugin", "kit2");
+
+    const result = await emit(claudeAdapter, capability, INSTALL_ROOT, await inputFs(input));
+
+    expect(treeJson(pluginTree(result, input), ".mcp.json").mcpServers).toEqual({ helper });
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      "acf.support.component-omitted",
+    );
+  });
+});
+
 test("an excluded command of a manifest commands map leaves the regenerated manifest", async () => {
   const safe = { source: "./cmds/safe.md", description: "Safe" };
   const files: Record<string, string> = {

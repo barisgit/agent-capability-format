@@ -6,7 +6,7 @@
  */
 import path from "node:path";
 import type { AcfCapability, NativeRemainderComponent, ReadOnlyFs } from "@caplet/core";
-import { isRecord } from "../common/records.js";
+import { isRecord, ownValue } from "../common/records.js";
 import { CLAUDE_MANIFEST_PATH, MAPPED_MANIFEST_KEYS } from "./manifest.js";
 
 /** Manifest keys the plugin writer generates from core fields or projected components. */
@@ -116,14 +116,40 @@ export async function rawServerEntry(
 ): Promise<Record<string, unknown> | undefined> {
   const file = component.paths[0];
   if (file === undefined) return undefined;
-  const declared =
+  const name = component.name;
+  const entry =
     file === CLAUDE_MANIFEST_PATH
-      ? rawManifest.mcpServers
-      : parseJsonObject(await fs.readText(path.join(capability.root, ...file.split("/"))));
-  if (!isRecord(declared)) return undefined;
-  const map = isRecord(declared.mcpServers) ? declared.mcpServers : declared;
-  const entry = map[component.name];
+      ? inlineServer(rawManifest.mcpServers, name)
+      : serverEntry(
+          parseJsonObject(await fs.readText(path.join(capability.root, ...file.split("/")))),
+          name,
+        );
   return isRecord(entry) ? entry : undefined;
+}
+
+/**
+ * The server `name` declared inline in a manifest `mcpServers` value: one map, or the maps of
+ * a list that may also hold paths, a later map replacing an earlier one's server as in Claude.
+ */
+function inlineServer(value: unknown, name: string): unknown {
+  const entries = Array.isArray(value) ? value : [value];
+  return entries
+    .map((entry) => serverEntry(entry, name))
+    .reduce((found, entry) => entry ?? found, undefined);
+}
+
+/** The own entry `name` in the server map of an MCP config or inline entry. */
+function serverEntry(value: unknown, name: string): unknown {
+  const servers = serverMap(value);
+  return servers === undefined ? undefined : ownValue(servers, name);
+}
+
+/** The server map of an MCP config or inline entry: its `mcpServers` object, or itself. */
+function serverMap(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.mcpServers !== undefined)
+    return isRecord(value.mcpServers) ? value.mcpServers : undefined;
+  return value;
 }
 
 /**
