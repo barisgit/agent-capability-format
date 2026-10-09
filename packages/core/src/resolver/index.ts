@@ -121,44 +121,69 @@ export async function resolveScopeCapabilities(
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const dir = path.join(root.capabilitiesDir, entry.name);
     const locked = lock === null ? undefined : findLockedCapability(lock, entry.name);
-    const record = locked?.capability;
-    // A snapshot counts as installed only while it still matches its lock record.
-    const mismatch = record === undefined ? undefined : await verifySnapshot(dir, record);
-    if (mismatch !== undefined) {
-      diagnostics.push(mismatch);
-      continue;
-    }
-    if (record !== undefined && isForeignFormat(record.format)) {
-      const read = await readForeignPackage(record.format, dir, {
-        scope: root.scope,
-        origin: { kind: "local", directory: dir },
-        rename: record.name,
-        revision: locked?.entry.resolvedSha ?? null,
-        sourcePath: record.path,
-      });
-      if (read.capability === undefined) diagnostics.push(...read.diagnostics);
-      else capabilities.push(select(read.capability, locked?.entry));
-      continue;
-    }
-    const discovery = await discoverRepository(dir);
-    diagnostics.push(...discovery.diagnostics);
-    for (const capRoot of discovery.roots) {
-      const cap = await readCapability(capRoot, root.scope, { kind: "local", directory: capRoot });
-      cap.diagnostics.push(...discovery.diagnostics);
-      const source = capRoot === dir ? await lockedSource(record, dir) : undefined;
-      if (source !== undefined) {
-        // The snapshot keeps the package's own acf.yml; `rename` lives only in the lock.
-        if (record !== undefined && record.name !== cap.manifest.name) {
-          source.renamedFrom = cap.manifest.name;
-          cap.manifest.name = record.name;
-        }
-        cap.source = source;
-      }
-      capabilities.push(select(cap, locked?.entry));
-    }
+    for (const capability of await readSnapshotCapabilities(root.scope, dir, locked, diagnostics))
+      capabilities.push(select(capability, locked?.entry));
   }
   diagnostics.push(...sameScopeCollisionDiagnostics(capabilities));
   return { capabilities: capabilities.sort(byCapabilityName), diagnostics };
+}
+
+/**
+ * The capabilities of installed snapshot `dir`, read by the format its lock record names and
+ * carrying that record's provenance and name. A snapshot that no longer matches its record, or
+ * a foreign package that does not load, yields none and pushes why to `diagnostics`.
+ */
+async function readSnapshotCapabilities(
+  scope: Scope,
+  dir: string,
+  locked: ReturnType<typeof findLockedCapability>,
+  diagnostics: Diagnostic[],
+): Promise<AcfCapability[]> {
+  const record = locked?.capability;
+  // A snapshot counts as installed only while it still matches its lock record.
+  const mismatch = record === undefined ? undefined : await verifySnapshot(dir, record);
+  if (mismatch !== undefined) {
+    diagnostics.push(mismatch);
+    return [];
+  }
+  if (record !== undefined && isForeignFormat(record.format)) {
+    const read = await readForeignPackage(record.format, dir, {
+      scope,
+      origin: { kind: "local", directory: dir },
+      rename: record.name,
+      revision: locked?.entry.resolvedSha ?? null,
+      sourcePath: record.path,
+    });
+    if (read.capability !== undefined) return [read.capability];
+    diagnostics.push(...read.diagnostics);
+    return [];
+  }
+  const discovery = await discoverRepository(dir);
+  diagnostics.push(...discovery.diagnostics);
+  const capabilities: AcfCapability[] = [];
+  for (const capRoot of discovery.roots) {
+    const cap = await readCapability(capRoot, scope, { kind: "local", directory: capRoot });
+    cap.diagnostics.push(...discovery.diagnostics);
+    if (capRoot === dir) await applyLockedSource(cap, record, dir);
+    capabilities.push(cap);
+  }
+  return capabilities;
+}
+
+/** Gives the capability at a snapshot root its lock record's provenance and locked name. */
+async function applyLockedSource(
+  cap: AcfCapability,
+  record: LockedCapability | undefined,
+  dir: string,
+): Promise<void> {
+  const source = await lockedSource(record, dir);
+  if (source === undefined) return;
+  // The snapshot keeps the package's own acf.yml; `rename` lives only in the lock.
+  if (record !== undefined && record.name !== cap.manifest.name) {
+    source.renamedFrom = cap.manifest.name;
+    cap.manifest.name = record.name;
+  }
+  cap.source = source;
 }
 
 /**
