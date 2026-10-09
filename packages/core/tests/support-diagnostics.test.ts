@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  acfCapabilityDirPlaceholder,
   componentOmitted,
   corePending,
   extraDropped,
@@ -92,13 +93,18 @@ describe("support diagnostics derived from registry cells", () => {
   });
 
   test("the default carrier is used when the subject names none", () => {
-    const server = { capability: "tools", family: "mcp", component: "docs" } as const;
-    expect(supportDiagnostic({ ...server, target: "claude" }, "mcp.cwd")?.code).toBe(
-      "acf.support.refused",
-    );
-    expect(
-      supportDiagnostic({ ...server, target: "claude", carrier: "loose" }, "mcp.cwd")?.code,
-    ).toBe("acf.support.refused");
+    const server = {
+      capability: "tools",
+      family: "mcp",
+      component: "docs",
+      target: "claude",
+    } as const;
+    // Claude translates this field differently in a plugin and in loose files.
+    const field = `mcp.command=${acfCapabilityDirPlaceholder}`;
+    const implicit = translatedOutcome(server, field);
+    expect(implicit).toBeDefined();
+    expect(implicit).toEqual(translatedOutcome({ ...server, carrier: "plugin" }, field));
+    expect(implicit).not.toEqual(translatedOutcome({ ...server, carrier: "loose" }, field));
   });
 
   test("component omission is lossy and names the recovery", () => {
