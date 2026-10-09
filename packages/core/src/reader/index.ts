@@ -18,6 +18,7 @@ import {
   fallbackManifest,
   parseMarkdownFile,
   parseYamlFile,
+  pickFamilyYaml,
   pushUnknownFields,
   sortDiagnostics,
   validateSingularFolders,
@@ -117,19 +118,7 @@ export async function readManifest(
   root: string,
   diagnostics: Diagnostic[],
 ): Promise<Manifest | undefined> {
-  const yml = path.join(root, "acf.yml");
-  const yaml = path.join(root, "acf.yaml");
-  const hasYml = await exists(yml);
-  const hasYaml = await exists(yaml);
-  if (hasYml && hasYaml) {
-    diagnostics.push({
-      severity: "error",
-      code: "acf.manifest.duplicate-file",
-      message: "acf.yml and acf.yaml both exist",
-      path: root,
-    });
-  }
-  const file = hasYml ? yml : hasYaml ? yaml : undefined;
+  const file = await pickFamilyYaml(root, "acf", "acf.manifest.duplicate-file", diagnostics);
   if (file === undefined) return undefined;
   const raw = await parseYamlFile(file, diagnostics);
   if (!isRecord(raw)) return undefined;
