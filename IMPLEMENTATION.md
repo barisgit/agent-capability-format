@@ -326,6 +326,7 @@ export type CapabilitySource = {
   renamedFrom?: string       // manifest name when the entry's rename replaced it
   projected?: {              // foreign packages only, as read before rename,
     skills: string[]         // selection, and applicability (§4.9)
+    skillDirs: string[]      // package-relative directories of those skills
     servers: string[]
     remainder: NativeRemainderComponent[]
   }

@@ -78,6 +78,7 @@ describe("Claude plugin reader", () => {
     expect(capability?.source?.renamedFrom).toBe("review-kit");
     expect(capability?.source?.projected).toEqual({
       skills: ["review", "triage"],
+      skillDirs: ["extra-skills/triage", "skills/review"],
       servers: capability?.mcp?.servers.map((server) => server.name) ?? [],
       remainder: capability?.remainder ?? [],
     });

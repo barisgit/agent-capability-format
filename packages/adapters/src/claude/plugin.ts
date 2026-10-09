@@ -337,7 +337,10 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Claude configuration in a source not read as a Claude plugin is left out with a hint.
+ * Skill directories are left out only when they hold a skill the writer regenerates or a
+ * projected skill selection or applicability removed; any other directory holding a `SKILL.md`
+ * (documentation, examples) is support content. Claude configuration in a source not read as a
+ * Claude plugin is left out with a hint.
  */
 async function supportFiles(
   capability: AcfCapability,
@@ -346,7 +349,13 @@ async function supportFiles(
   diagnostics: Diagnostic[],
 ): Promise<TreeFile[]> {
   const format = capability.source?.format ?? "acf";
-  const owned = new Set<string>([".git"]);
+  const owned = new Set<string>([
+    ".git",
+    ...capability.skills.map((skill) =>
+      path.relative(capability.root, skill.dir).split(path.sep).join("/"),
+    ),
+    ...(capability.source?.projected?.skillDirs ?? []),
+  ]);
   if (format === "acf") for (const p of ACF_OWNED) owned.add(p);
   if (format === "claude-plugin") {
     owned.add(CLAUDE_PLUGIN_MANIFEST);
@@ -381,7 +390,5 @@ async function supportFiles(
       });
       return true;
     },
-    // Skill directories are regenerated, and an excluded skill's files never reach the plugin.
-    skipDir: (entries) => entries.includes("SKILL.md"),
   });
 }

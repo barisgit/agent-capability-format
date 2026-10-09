@@ -128,6 +128,12 @@ export type CapabilitySource = {
   projected?:
     | {
         skills: string[];
+        /**
+         * Package-relative POSIX directories of the projected skills (sorted), so a writer that
+         * regenerates skills leaves out exactly the directories of skills it regenerated or
+         * selection removed, and copies any other directory holding a `SKILL.md`.
+         */
+        skillDirs: string[];
         servers: string[];
         remainder: NativeRemainderComponent[];
       }

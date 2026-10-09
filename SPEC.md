@@ -2907,7 +2907,10 @@ user scope. It contains `.claude-plugin/plugin.json` (`name` is the
 capability slug; metadata per §4.2.2 plus package-level native extras),
 `skills/<name>/`, `.mcp.json` when a server is emitted, preserved Claude
 remainder, the `native/claude/` files, and the capability's other files
-outside ACF-defined paths (such as a server script), copied unchanged.
+outside ACF-defined paths (such as a server script), copied unchanged. Of
+those files, only the directories of skills the plugin regenerates or that
+selection or applicability removed are left out; a directory holding a
+`SKILL.md` that is no projected skill (documentation, an example) is copied.
 Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is
