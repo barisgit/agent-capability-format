@@ -5,10 +5,8 @@ export {
   hashOwnedRegions,
   type ManagedEntry,
   mergeSidecarEntry,
-  type RemoveOwnedRegionsResult,
   readSidecar,
   relativeSidecarPath,
-  removeOwnedRegions,
   writeSidecar,
 } from "./apply/sidecar.js";
 export { rootCommand } from "./cli.js";
