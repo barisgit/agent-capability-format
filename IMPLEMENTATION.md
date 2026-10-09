@@ -1558,48 +1558,36 @@ export async function readCapability(
   origin: CapabilityOrigin,
 ): Promise<AcfCapability> {
   const diagnostics: Diagnostic[] = []
+  // A bare skill import writes `.acf-import.json`; its skills keep every
+  // frontmatter key and their whole directory as assets.
+  const imported = await exists(path.join(root, ".acf-import.json"))
 
-  const manifest = await readManifest(root, diagnostics)
-  if (!manifest) return failed(root, scope, origin, diagnostics)
-
+  await validateSingularFolders(root, diagnostics)
+  const manifest = (await readManifest(root, diagnostics)) ?? fallbackManifest(root)
   const capabilityMarkdown = await readAcfMd(root, diagnostics)
 
-  const [skills, agents, commands, instructions, hooks, mcp] = await Promise.all([
-    readSkills(root, diagnostics),
+  const [skills, agents, commands, instructions, hooks, mcp, nativeFiles] = await Promise.all([
+    readSkills(root, diagnostics, imported),
     readAgents(root, diagnostics),
     readCommands(root, diagnostics),
     readInstructions(root, diagnostics),
     readHooks(root, diagnostics),
     readMcp(root, diagnostics),
+    readNativeFiles(root, diagnostics), // native/<target>/
   ])
 
   const capability: AcfCapability = {
-    root,
-    scope,
-    origin,
-    manifest,
-    capabilityMarkdown,
-    skills,
-    agents,
-    commands,
-    instructions,
-    hooks,
-    mcp,
-    assets: collectReferencedAssets({
-      root,
-      capabilityMarkdown,
-      skills,
-      agents,
-      commands,
-      instructions,
-      hooks,
-      mcp,
-      diagnostics,
-    }),
+    root, scope, origin, manifest, capabilityMarkdown,
+    skills, agents, commands, instructions, hooks, mcp, nativeFiles,
+    assets: [],
     diagnostics,
   }
+  if (imported) capability.synthesized = true
+  capability.assets = await collectReferencedAssets(capability)
+  if (imported) capability.assets = mergeByPath(capability.assets, await collectImportedSkillAssets(skills))
 
   validateCapability(capability)
+  sortDiagnostics(capability.diagnostics)
   return capability
 }
 ```
@@ -1638,7 +1626,8 @@ export const manifestSchema = z
     name: slugSchema,
     version: z.string(),
     description: z.string().optional(),
-    authors: z.array(z.string()).optional(),
+    // A structured { name, email?, url? } author, or a legacy string kept verbatim.
+    authors: z.array(z.union([z.string(), authorObjectSchema])).optional(),
     license: z.string().optional(),
     homepage: z.string().url().optional(),
     repository: z.string().optional(),
@@ -1659,6 +1648,10 @@ export const skillFrontmatterSchema = z
         model: z.boolean().optional(),
       })
       .optional(),
+    license: z.string().optional(),
+    compatibility: z.string().max(500).optional(),
+    metadata: z.record(z.string(), z.string()).optional(),
+    "argument-hint": z.string().optional(),
     assets: z.array(z.string()).optional(),
     only: z.array(slugSchema).optional(),
     except: z.array(slugSchema).optional(),
@@ -1834,11 +1827,13 @@ capability:
 function validateCapability(cap: AcfCapability): void {
   validateUniqueFacetNames(cap)
   validateHookFile(cap)
+  validateMcpServers(cap) // values, cwd, credentials in URLs
   validateOnlyExceptTargets(cap)
   validateTargetExtensions(cap)
+  validateInlineExtras(cap) // targets.<t>.native / .package
+  validateNativeFileCollisions(cap) // acf.native.collision
   validateActivationConstraints(cap)
-  validateAgentReferences(cap)
-  validateAssetReferences(cap)
+  validateApplicability(cap)
 }
 ```
 
@@ -1850,31 +1845,29 @@ function validateHookFile(cap: AcfCapability): void {
   const hooks = cap.hooks
   if (!hooks) return
 
-  for (const [bucket, entries] of Object.entries(hooks.buckets)) {
-    if (!entries) continue
-    const type = bucket as CanonicalHookType
-
-    for (const entry of entries) {
-      if (!hookEffectMatrix[type].includes(entry.effect)) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.hook.effect.not-allowed",
-          message: `effect "${entry.effect}" is not allowed for hook type "${type}"`,
-          path: hooks.path,
-        })
-      }
-
-      if (hookMatchRequired.has(type)) {
-        if (!entry.match || isEmptyMatch(entry.match)) {
-          cap.diagnostics.push({
-            severity: "error",
-            code: "acf.hook.match.required",
-            message: `${type} entries require a non-empty match`,
-            path: hooks.path,
-          })
-        }
-      }
+  // Canonical buckets and native events; `type` is undefined for a native event,
+  // which gets only the entry-shape checks (match syntax, args and shell exclusive).
+  for (const { type, entry } of hookEntries(hooks)) {
+    if (type !== undefined && !hookEffectMatrix[type].includes(entry.effect)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.effect.not-allowed",
+        message: `effect ${entry.effect} is not allowed for ${type}`,
+        path: hooks.path,
+        family: "hook",
+      })
     }
+    if (type !== undefined && hookMatchRequired.has(type) && isEmptyMatch(entry.match)) {
+      cap.diagnostics.push({
+        severity: "error",
+        code: "acf.hook.match.required",
+        message: `${type} entries require a non-empty match`,
+        path: hooks.path,
+        family: "hook",
+      })
+    }
+    validateMatch(entry.match, hooks.path, cap.diagnostics)
+    // args together with shell: acf.hook.run.args-and-shell
   }
 }
 ```
