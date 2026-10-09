@@ -238,6 +238,58 @@ test("a Claude grant stays with Claude and is reported as not carried to Codex",
   ]);
 });
 
+test("top-level allowed-tools reaches both Claude carriers unchanged and is dropped elsewhere", async () => {
+  const grant = "Bash(git status *) Read";
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "git", description: "Git helper", "allowed-tools": grant })],
+  });
+  for (const carrier of ["plugin", "loose"] as const) {
+    const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier });
+    expect(fileText(claude, "/skills/git/SKILL.md")).toContain(`allowed-tools: ${grant}`);
+    expect(withCode(claude, "acf.support.degraded")).toEqual([]);
+  }
+  for (const [adapter, root] of [
+    [codexAdapter, ".codex"],
+    [piAdapter, ".pi"],
+  ] as const) {
+    const result = await emitModel(adapter, capability, root, {
+      canonicalSkillReaders: [adapter.id],
+    });
+    expect(fileText(result, ".agents/skills/git/SKILL.md")).not.toContain("allowed-tools");
+    expect(withCode(result, "acf.support.degraded")).toEqual([
+      expect.objectContaining({
+        severity: "lossy",
+        data: expect.objectContaining({
+          outcome: "changed-behavior",
+          source: "skill.allowed-tools",
+        }),
+      }),
+    ]);
+  }
+});
+
+test("a target's native allowed-tools replaces the top-level value on that target only", async () => {
+  const capability = capabilityModel({
+    skills: [
+      skillFacet({
+        name: "git",
+        description: "Git helper",
+        "allowed-tools": "Read",
+        targets: {
+          claude: { native: { "allowed-tools": "Bash(git *)" } },
+          pi: { native: { "allowed-tools": "read" } },
+        },
+      }),
+    ],
+  });
+  const claude = await emitModel(claudeAdapter, capability, ".claude", { carrier: "loose" });
+  const claudeSkill = parse(fileText(claude, ".claude/skills/git/SKILL.md")?.split("---")[1] ?? "");
+  expect(claudeSkill["allowed-tools"]).toBe("Bash(git *)");
+  const pi = await emitModel(piAdapter, capability, ".pi", { canonicalSkillReaders: ["pi"] });
+  expect(fileText(pi, ".agents/skills/git/SKILL.md")).toContain("allowed-tools: read");
+  expect(withCode(pi, "acf.support.degraded")).toEqual([]);
+});
+
 test("argument-hint is native for Claude and degraded elsewhere", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "fix", description: "Fix", "argument-hint": "[issue]" })],

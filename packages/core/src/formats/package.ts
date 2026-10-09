@@ -1,6 +1,7 @@
 /**
  * Inputs, results and capability assembly shared by the foreign format readers.
  */
+import path from "node:path";
 import type {
   AcfCapability,
   AssetRef,
@@ -70,6 +71,9 @@ export function foreignCapability(input: {
     snapshotRoot: input.root,
     projected: {
       skills: input.skills.map((skill) => skill.name).sort(),
+      skillDirs: input.skills
+        .map((skill) => path.relative(input.root, skill.dir).split(path.sep).join("/"))
+        .sort(),
       servers: (input.mcp?.servers ?? []).map((server) => server.name).sort(),
       remainder: input.remainder,
     },

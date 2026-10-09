@@ -593,8 +593,7 @@ ACF facets.
 ### 7.8 Pending core meanings
 
 A meaning that may satisfy the promotion rule (§7.1) but whose core contract
-is deferred is pending core: permission expressions such as skill
-`allowed-tools`, argument and body placeholder dialects, agent coupling,
+is deferred is pending core: host-neutral permission expressions, argument and body placeholder dialects, agent coupling,
 isolated execution, MCP requirements, path-scoped activation, MCP
 authentication and host-environment references, and the MCP meanings in
 §13a.4.2. It is authored with the target's `native` extras in the same
@@ -612,7 +611,8 @@ extra is dropped with `acf.extras.dropped` (`lossy`). An extra the registry
 classifies as `restricting`, with no core equivalent the target carries,
 instead refuses the component for that target (§14.3). Unclassified extras
 are dropped; `diagnostics.failOnLossy` and strict mode turn the drop into a
-failure. A grant such as `allowed-tools` never reaches another target.
+failure. A grant in an extra, such as `targets.claude.native.allowed-tools`,
+never reaches another target.
 
 ## 8. Facet families overview
 
@@ -671,6 +671,7 @@ lines. Required and optional frontmatter fields:
 | `compatibility`  | string      | no       | Environment requirements; at most 500 characters. |
 | `metadata`       | mapping     | no       | String keys to string values.                    |
 | `argument-hint`  | string      | no       | Hint shown for the skill's arguments.            |
+| `allowed-tools`  | string or list | no    | Agent Skills tool pre-approval (§9.3).           |
 | `assets`         | list        | no       | Explicit asset references (§16).                 |
 | `only`           | list        | no       | Target applicability (§6).                       |
 | `except`         | list        | no       | Target applicability (§6).                       |
@@ -710,6 +711,18 @@ keeps its other keys; a bundled value that contradicts a written one is
 `argument-hint` is native on Claude and dropped with a `lossy` diagnostic
 elsewhere.
 
+`allowed-tools` is the Agent Skills field (`granting`). It is written
+unchanged for Claude, on both carriers, because Claude reads the same field
+with the same spelling as a pre-approval; every other target drops it with
+the `lossy` `acf.support.degraded` diagnostic, which narrows what runs
+without asking and never widens it. Caplet never translates the value into
+another host's permission syntax. `targets.<target>.native.allowed-tools`
+sets a target-specific value: it replaces the top-level value on that
+target, which then reports no drop, and reaches no other target. Readers
+of Agent Plugins skills and bare imported skills read the field the same
+way; the Claude plugin reader keeps it as a Claude extra, with the same
+output.
+
 ### 9.4 Body
 
 The body of `SKILL.md` is plain CommonMark Markdown. It is the skill's
@@ -738,7 +751,8 @@ Avoid adding new generic helpers unless two call sites already need them.
 
 Target-native frontmatter keys are not core fields and MUST be authored as
 `targets.<target>.native` extras (§7.5). A top-level native key in ACF
-source is an `error` (`acf.skill.native-key-not-core`) naming its core
+source (`allowed-tools` is a core field, §9.2) is an `error`
+(`acf.skill.native-key-not-core`) naming its core
 equivalent or its extra form, for example `invocation.model: false` for
 `disable-model-invocation`; a descriptive native key such as Claude
 `when_to_use` only warns. Top-level `paths` is the `error`
@@ -2334,9 +2348,9 @@ in the lockfile; that explicit act is the approval of the content. `caplet
 add`, `caplet update`, and `caplet apply` (human and `--json` output,
 including `--dry-run`) list, per capability and target, every executable
 component added, changed, or removed relative to the previously locked or
-installed content: MCP stdio commands, hooks, LSP servers, monitors, files
-with the executable bit, Claude `bin/` entries, and other code the registry
-classifies as executing. The list is shown whenever it is non-empty,
+installed content: MCP stdio commands, hooks, LSP servers, monitors, Claude
+workflows, files with the executable bit, Claude `bin/` entries, and other
+code the registry classifies as executing. The list is shown whenever it is non-empty,
 including in non-interactive runs, and never prompts or blocks. Caplet keeps
 no acceptance store, pre-approves no tool, permission, or MCP server, and
 never writes or bypasses a host's own trust, approval, or policy state.
@@ -2424,7 +2438,9 @@ the lock, an implementation recomputes each capability's payload digest
 from its snapshot and fails with `acf.lock.digest-mismatch`, writing nothing
 for that capability, when it differs. A capability counts as installed only
 when its digest verifies. A frozen restore fetches the recorded
-`resolvedSha`, never the moving `ref`.
+`resolvedSha`, never the moving `ref`. A restore MUST reproduce exactly
+the locked capability names and their payload digests; otherwise it fails
+with `acf.lock.digest-mismatch` and installs nothing from that entry.
 
 ### 19.5 Hash computation
 
@@ -2494,9 +2510,12 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   refetching.
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
-  lock entry), and emission does not run.
+  lock entry), and emission does not run. A lock entry whose source
+  `capabilities.yml` no longer declares is a disagreement too.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
-  diagnostic is present.
+  diagnostic is present. Every fetch it makes, including one `--mode force`
+  requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it
+  never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.
@@ -2553,6 +2572,9 @@ its validated skill frontmatter. Generated capability state MUST be staged
 outside the source checkout; a resolver MUST NOT write an `acf.yml` or other
 metadata into a local `path:` source. The generated version identifies the
 capability as unmanifested and SHOULD include the resolved source revision.
+A skill whose frontmatter holds a target's native key with a value outside
+that host's domain is left out with a warning, as in every foreign source
+format; the same value in an authored skill is an error.
 
 Imported skill contents include every recursively contained regular file
 except hidden paths, dependency trees such as `node_modules`, generated
@@ -2650,7 +2672,8 @@ Readers project into the canonical model:
   `skills` paths, and MCP servers from `.mcp.json` and manifest
   `mcpServers` (inline or a relative path). Agents, commands (each file or
   manifest `commands` map entry is one component), hooks, output styles,
-  LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`,
+  workflows (each module is one component), LSP servers, monitors, `bin/`,
+  plugin `settings.json`, `userConfig`,
   channels, dependencies, and listing metadata are kept as
   Claude native remainder with their safety class. Pending keys are read as
   Claude extras.
@@ -2908,7 +2931,10 @@ user scope. It contains `.claude-plugin/plugin.json` (`name` is the
 capability slug; metadata per §4.2.2 plus package-level native extras),
 `skills/<name>/`, `.mcp.json` when a server is emitted, preserved Claude
 remainder, the `native/claude/` files, and the capability's other files
-outside ACF-defined paths (such as a server script), copied unchanged.
+outside ACF-defined paths (such as a server script), copied unchanged. Of
+those files, only the directories of skills the plugin regenerates or that
+selection or applicability removed are left out; a directory holding a
+`SKILL.md` that is no projected skill (documentation, an example) is copied.
 Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is

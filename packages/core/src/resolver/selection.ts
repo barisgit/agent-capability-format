@@ -1,4 +1,5 @@
 import { computeSet } from "../applicability/index.js";
+import { remainderFamilies } from "../targets/remainder-support.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -6,7 +7,6 @@ import type {
   FacetSelector,
   HookFile,
   McpFile,
-  NativeRemainderKind,
   TargetId,
 } from "../types/index.js";
 import { hookEntries, selectorKeys } from "../types/index.js";
@@ -24,14 +24,6 @@ export type EntrySelection = {
 };
 
 const families = Object.keys(selectorKeys) as FacetFamily[];
-
-/** Remainder kinds a family selector reaches; other remainder kinds are selected only with the package. */
-const remainderFamily: Partial<Record<NativeRemainderKind, FacetFamily>> = {
-  agent: "agent",
-  command: "command",
-  hook: "hook",
-  "mcp-server": "mcp",
-};
 
 /**
  * Applies a `capabilities.yml` entry's selection to a resolved capability, native or foreign.
@@ -74,7 +66,7 @@ export function applyEntrySelection(
     mcp: selectMcp(capability.mcp, (name) => keep("mcp", name)),
   };
   const remainder = capability.remainder?.filter((item) => {
-    const family = remainderFamily[item.kind];
+    const family = remainderFamilies[item.kind];
     return family === undefined || keep(family, item.name);
   });
   if (remainder !== undefined) selected.remainder = remainder;
@@ -166,7 +158,7 @@ function selectorMatcher(field: "include" | "exclude", selector: FacetSelector |
 /** Every selectable name of `family`: canonical facets plus native remainder components. */
 function componentNames(capability: AcfCapability, family: FacetFamily): string[] {
   const native = (capability.remainder ?? [])
-    .filter((item) => remainderFamily[item.kind] === family)
+    .filter((item) => remainderFamilies[item.kind] === family)
     .map((item) => item.name);
   switch (family) {
     case "skill":

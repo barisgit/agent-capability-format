@@ -1,7 +1,8 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { pushZodIssues } from "../diagnostics/index.js";
-import { withNativeExtras } from "../extras/index.js";
+import { AGENT_PLUGINS_DIALECT, withNativeExtras } from "../extras/index.js";
+import { componentNotLoaded, nativeValuesProblem } from "../formats/shared.js";
 import { mapBareSkill } from "../formats/skills.js";
 import { skillFrontmatterSchema } from "../schemas/index.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
@@ -23,6 +24,7 @@ const coreSkillKeys: ReadonlySet<string> = new Set([
   "compatibility",
   "metadata",
   "argument-hint",
+  "allowed-tools",
 ]);
 
 /**
@@ -56,7 +58,11 @@ export async function readSkills(
   return facets.sort(byName);
 }
 
-/** The skill in directory `full` named `dirName`, or undefined after reporting why it is not. */
+/**
+ * The skill in directory `full` named `dirName`, or undefined after reporting why it is not. An
+ * imported skill whose native value is outside its host's domain is left out with the warning
+ * every foreign source uses (design D27.4); in an authored skill the same value is an error.
+ */
 async function readSkill(
   full: string,
   dirName: string,
@@ -89,6 +95,15 @@ async function readSkill(
       family: "skill",
     });
     return undefined;
+  }
+  if (imported) {
+    for (const [dialect, dialectExtras] of extras) {
+      if (dialect === AGENT_PLUGINS_DIALECT) continue;
+      const problem = nativeValuesProblem(dialect, "skill", dialectExtras);
+      if (problem === undefined) continue;
+      diagnostics.push(componentNotLoaded("skill", dirName, problem, primary));
+      return undefined;
+    }
   }
   const facet: SkillFacet = {
     family: "skill",

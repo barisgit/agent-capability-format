@@ -85,6 +85,22 @@ describe("Agent Plugins 1.0 reader", () => {
     ]);
   });
 
+  test("a skill's allowed-tools is read as the Agent Skills field", async () => {
+    const { capability, diagnostics } = await read({
+      "plugin.json": manifest(),
+      "skills/git/SKILL.md":
+        "---\nname: git\ndescription: Git\nallowed-tools: Bash(git:*) Read\n---\n",
+      "skills/bad/SKILL.md": "---\nname: bad\ndescription: Bad\nallowed-tools: 3\n---\n",
+    });
+    const git = capability?.skills.find((item) => item.name === "git");
+    expect(git?.frontmatter["allowed-tools"]).toBe("Bash(git:*) Read");
+    expect(nativeExtras(git?.frontmatter.targets, "agent-plugins")).toEqual({});
+    expect(capability?.skills.map((item) => item.name)).toEqual(["git"]);
+    expect(diagnostics.map((item) => [item.severity, item.code])).toEqual([
+      ["warn", "acf.source.component-invalid"],
+    ]);
+  });
+
   test("an invalid mcp.json disables only MCP", async () => {
     const { capability, diagnostics } = await read({
       "plugin.json": manifest(),

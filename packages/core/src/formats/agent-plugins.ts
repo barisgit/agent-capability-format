@@ -25,6 +25,7 @@ import {
   invalidManifest,
 } from "./package.js";
 import {
+  componentNotLoaded,
   coreManifest,
   isDirectory,
   isFile,
@@ -224,13 +225,7 @@ async function readMcp(
         }),
       );
     } else {
-      diagnostics.push({
-        severity: "warn",
-        code: "acf.source.component-invalid",
-        message: `MCP server ${name} is not loaded: ${projection.reason}`,
-        path: file,
-        family: "mcp",
-      });
+      diagnostics.push(componentNotLoaded("mcp", name, projection.reason, file));
     }
   }
   return { path: file, servers };

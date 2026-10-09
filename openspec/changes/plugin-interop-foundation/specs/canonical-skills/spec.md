@@ -5,7 +5,7 @@ Defines the canonical skill fields that this change reads from Agent Skills, Age
 ## ADDED Requirements
 
 ### Requirement: Canonical skill fields
-SKILL.md frontmatter in ACF SHALL accept these core fields in addition to SPEC.md §9.2: `license` (string), `compatibility` (string, at most 500 characters), `metadata` (map of string to string) and `argument-hint` (string). `invocation.model` keeps its SPEC.md §9.3 meaning. `invocation.user: false` SHALL mean that the host refuses explicit invocation of the skill by the user (typing its name or slash command), not merely that the skill is hidden from a menu or picker; a host whose documented effect is visibility only SHALL NOT be counted as supporting it.
+SKILL.md frontmatter in ACF SHALL accept these core fields in addition to SPEC.md §9.2: `license` (string), `compatibility` (string, at most 500 characters), `metadata` (map of string to string), `argument-hint` (string) and the Agent Skills field `allowed-tools` (a string, or a list of strings as Claude also documents). `invocation.model` keeps its SPEC.md §9.3 meaning. `invocation.user: false` SHALL mean that the host refuses explicit invocation of the skill by the user (typing its name or slash command), not merely that the skill is hidden from a menu or picker; a host whose documented effect is visibility only SHALL NOT be counted as supporting it.
 
 #### Scenario: Full skill frontmatter
 - **WHEN** a SKILL.md declares `name`, `description`, `license`, `compatibility`, `metadata`, `argument-hint` and `invocation: {model: false}`
@@ -16,8 +16,19 @@ SKILL.md frontmatter in ACF SHALL accept these core fields in addition to SPEC.m
 - **THEN** validation fails with an error that names `targets.claude.native.paths` and `targets.cursor.native.paths` as the authoring forms
 
 #### Scenario: Native skill keys are not core fields
-- **WHEN** a native ACF SKILL.md declares top-level `disable-model-invocation: true` and `allowed-tools: Read`
-- **THEN** validation fails with an error naming `invocation.model: false` as the core equivalent of the first and the `targets.<t>.native.allowed-tools` forms for Claude, Codex and Pi for the second; a descriptive native key such as `when_to_use` only warns with its `targets.claude.native` form
+- **WHEN** a native ACF SKILL.md declares top-level `disable-model-invocation: true` and `model: opus`
+- **THEN** validation fails with an error naming `invocation.model: false` as the core equivalent of the first and the `targets.claude.native.model` form for the second; a descriptive native key such as `when_to_use` only warns with its `targets.claude.native` form
+
+### Requirement: Agent Skills allowed-tools
+Top-level `allowed-tools` SHALL be accepted in native ACF, Agent Plugins and bare imported skills as the Agent Skills field (design D26). Writers SHALL carry it unchanged only to a target that reads the same field with the same spelling as a grant (Claude, both carriers) and SHALL drop it for every other target with `acf.support.degraded` (`lossy`, outcome `changed-behavior`); dropping a pre-approval narrows what runs without asking. `targets.<t>.native.allowed-tools` SHALL stay valid: it replaces the top-level value on target `t` only, and that target reports no drop. Writers SHALL NOT translate the value between hosts (D11).
+
+#### Scenario: Agent Skills grant to Claude and Codex
+- **WHEN** a native ACF skill declares top-level `allowed-tools: Bash(git status *) Read` and is emitted for Claude and Codex
+- **THEN** both Claude carriers write the same `allowed-tools` value, and the Codex skill omits it with `acf.support.degraded` (`lossy`)
+
+#### Scenario: Target-specific value
+- **WHEN** that skill also declares `targets.pi.native.allowed-tools: read` and is emitted for Pi
+- **THEN** the Pi SKILL.md contains `allowed-tools: read` and no drop is reported for Pi
 
 ### Requirement: Path-scoped activation stays per target
 Path-scoped automatic activation (Claude `paths`, Cursor `paths` and its legacy `globs`) SHALL NOT be a core field in this change, because neither the glob dialects nor the scope of "working with matching files" are documented as equivalent between the two tools. It SHALL be authored and imported as a per-target extra classified `restricting` for each tool that documents it, emitted verbatim only to that tool, and SHALL refuse the skill for every other target (Dropping extras elsewhere). Writers SHALL NOT translate one tool's glob list into another tool's field.
@@ -27,7 +38,7 @@ Path-scoped automatic activation (Claude `paths`, Cursor `paths` and its legacy 
 - **THEN** the Claude skill contains `paths` verbatim and the skill is refused for Cursor with `acf.support.refused`
 
 ### Requirement: Pending skill meanings
-The following skill meanings SHALL be pending core in this change: tool pre-approval (`allowed-tools`), declared arguments and body placeholders (`arguments`, `$ARGUMENTS`, `$ARGUMENTS[N]`, named argument references, skill-directory placeholders), isolated execution (`context`), agent coupling (`agent`), MCP requirements (`requires.mcp`) and path-scoped activation. Native ACF SHALL author them through `targets.<target>.native` with the target's native spelling, exactly as a foreign package of that target carries them. Readers SHALL preserve them in the source snapshot and SHALL report them as untranslated when the skill is emitted to another target. A grant such as `allowed-tools` SHALL NOT be carried to any target other than the one whose native spelling declares it.
+The following skill meanings SHALL be pending core in this change: declared arguments and body placeholders (`arguments`, `$ARGUMENTS`, `$ARGUMENTS[N]`, named argument references, skill-directory placeholders), isolated execution (`context`), agent coupling (`agent`), MCP requirements (`requires.mcp`) and path-scoped activation. Native ACF SHALL author them through `targets.<target>.native` with the target's native spelling, exactly as a foreign package of that target carries them. Readers SHALL preserve them in the source snapshot and SHALL report them as untranslated when the skill is emitted to another target. A grant in a target's native extra, such as `targets.claude.native.allowed-tools`, SHALL NOT be carried to any target other than the one whose native spelling declares it.
 
 #### Scenario: Imported allowed-tools to another target
 - **WHEN** a Claude plugin skill declaring `allowed-tools: Bash(git *)` is emitted for Codex
@@ -48,9 +59,10 @@ Skill writers SHALL apply this table. N = native spelling, T = translated, D = d
 | `invocation.model: false` | restricting | N `disable-model-invocation: true` | N `disable-model-invocation: true` | N `policy.allow_implicit_invocation: false` in `agents/openai.yaml` | N `disable-model-invocation: true` | R | N `disable-model-invocation: true` |
 | `invocation.user: false` | restricting | N `user-invocable: false` | N `user-invocable: false` | R | R | R | R |
 | `argument-hint` | descriptive | N | N | D | D | D | D |
+| `allowed-tools` | granting | N | N | D | D | D | D |
 | bundled files and executable bits | functional | N | N | N | N | N | N |
 
-Evidence per cell: Claude documents that `user-invocable: false` disallows typed invocation, not only menu listing; Codex `allow_implicit_invocation: false` leaves explicit `$skill` invocation, so it carries `invocation.model` but not `invocation.user`; Cursor does not document `user-invocable`; OpenCode documents no invocation control and no user skill-invocation contract; Pi documents `/skill:name` user invocation and no switch for it. The registry SHALL record each cell's evidence level.
+Evidence per cell: Claude documents that `user-invocable: false` disallows typed invocation, not only menu listing; Codex `allow_implicit_invocation: false` leaves explicit `$skill` invocation, so it carries `invocation.model` but not `invocation.user`; Cursor does not document `user-invocable`; OpenCode documents no invocation control and no user skill-invocation contract; Pi documents `/skill:name` user invocation and no switch for it; Claude reads `allowed-tools` as a pre-approval, while Codex and Pi document it only as experimental metadata without enforcement and Cursor and OpenCode do not read it. The registry SHALL record each cell's evidence level.
 
 #### Scenario: Manual-only skill to Claude and Pi
 - **WHEN** a skill with `invocation.model: false` is emitted for Claude and Pi

@@ -326,6 +326,7 @@ export type CapabilitySource = {
   renamedFrom?: string       // manifest name when the entry's rename replaced it
   projected?: {              // foreign packages only, as read before rename,
     skills: string[]         // selection, and applicability (§4.9)
+    skillDirs: string[]      // package-relative directories of those skills
     servers: string[]
     remainder: NativeRemainderComponent[]
   }
@@ -333,12 +334,12 @@ export type CapabilitySource = {
 
 export type NativeRemainderComponent = {
   format: "agent-plugins" | "claude-plugin"
-  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, bin, mcp-server, ...
+  kind: NativeRemainderKind  // agent, command, hook, lsp-server, monitor, workflow, bin, mcp-server, ...
   name: string
   paths: string[]            // snapshot-relative files or directories
   manifestKeys?: string[]    // manifest keys the component occupies
   class: SafetyClass
-  executable: boolean        // stdio server, hook, LSP, monitor, bin
+  executable: boolean        // stdio server, hook, LSP, monitor, workflow, bin
 }
 
 export type NativeFileExtra = {
@@ -405,6 +406,7 @@ export type SkillFacet = {
     compatibility?: string              // at most 500 characters
     metadata?: Record<string, string>
     "argument-hint"?: string
+    "allowed-tools"?: string | string[] // Agent Skills field; written for Claude only (D26)
   }>
   body: string                          // Markdown body after frontmatter
 }
@@ -734,8 +736,10 @@ refuses the server on every target. No other interpolation is performed by
 ACF, and validation rejects any other reference a writer target would expand
 in those MCP values (`acf.mcp.placeholder.pending`): `${...}` (Claude,
 Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode), and
-`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths. The
-Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
+`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths, also
+in a project's `.codex/config.toml`, because Codex resolves no relative MCP
+path against the config file (`plugin-interop-foundation` design.md D27.2).
+The Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
 `${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
 `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
 directory of the MCP file inside the capability (hooks keep a capability
@@ -1325,7 +1329,7 @@ carrier, not per family. The tables live in `packages/core/src/targets/`:
 | Module | Exports | Role |
 | --- | --- | --- |
 | `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
-| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
+| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`) and of the generated invocation booleans (so a foreign reader rejects a non-boolean value instead of keeping it as an extra), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
 | `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field, or a datum a foreign reader preserves has no native authoring form. |
 | `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data`, consequence, and recovery stay uniform. |
 | `remainder-support.ts` | `remainderTargets`, `remainderSupport` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
@@ -1398,8 +1402,12 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   `<install-root>/.acf/data/<capability>/.keep`.
 - **Executables.** `executableComponents` and `executableChanges`
   (`packages/core/src/emit/executables.ts`) list added, removed, or changed MCP stdio
-  commands, hooks, LSP servers, monitors, executable files, and Claude
-  `bin/` entries for the change report and `--json` `executables`. The
+  commands, hooks, LSP servers, monitors, Claude workflows, executable files,
+  and Claude `bin/` entries for the change report and `--json` `executables`.
+  How Claude discovers each plugin component and whether it runs code is
+  registered once in `claudePluginComponents`
+  (`packages/core/src/targets/plugin-layout.ts`), which the Claude plugin
+  reader, this inventory and the Claude writer all read. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
   component in a foreign Claude plugin, so both report alike; MCP servers from
@@ -1630,6 +1638,7 @@ export const skillFrontmatterSchema = z
     compatibility: z.string().max(500).optional(),
     metadata: z.record(z.string(), z.string()).optional(),
     "argument-hint": z.string().optional(),
+    "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
     assets: z.array(z.string()).optional(),
     only: z.array(slugSchema).optional(),
     except: z.array(slugSchema).optional(),
@@ -1935,7 +1944,9 @@ Each family has explicit discovery rules.
 
 ```ts
 // `imported`: a bare skill import keeps every frontmatter key (core, a target's
-// extra, or an agent-plugins extra) instead of reporting unknown keys.
+// extra, or an agent-plugins extra) instead of reporting unknown keys; a skill
+// whose target extra holds a value outside that host's domain is left out with
+// acf.source.component-invalid (warn), as in every foreign format (D27.4).
 async function readSkills(
   root: string,
   diagnostics: Diagnostic[],
@@ -2310,7 +2321,9 @@ bookkeeping, so older lockfiles keep reading.
 The resolver recomputes each snapshot's payload digest when it reads the
 capability and fails with `acf.lock.digest-mismatch` before anything is
 emitted from a snapshot that no longer matches its record. Restoring a missing
-snapshot refetches `resolvedSha` and must reproduce the locked digests.
+snapshot refetches `resolvedSha` and must reproduce exactly the locked
+capability names and digests; a capability the lock does not name fails the
+restore like a changed digest, so no snapshot is installed without a record.
 
 `capabilityHash` uses the v1 algorithm of SPEC §19.5 over the whole
 snapshot, before selection, so a selection change never invalidates a hash
@@ -2339,12 +2352,15 @@ Drift handling:
 - `detectLockDrift` (`packages/installer/src/drift.ts`) reports a
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
   and a changed ref, capabilities selector, `rename`, requested `format`, or
-  selection as `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
+  selection, or a lock entry `capabilities.yml` no longer declares, as
+  `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
   as an error; other modes resolve it in the same run (a changed ref,
   selector, rename or format refetches through `sameResolution`, a changed
-  selection rewrites the lock). `caplet apply --frozen` resolves with
+  selection rewrites the lock, a removed source leaves it). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
+  Every fetch a frozen resolution makes, including one `--mode force` asks
+  for, is such a restore at the locked `resolvedSha`.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
@@ -2769,7 +2785,7 @@ acf.source.format-version-unsupported        # Agent Plugins schema other than 1
 acf.source.format-not-found                  # format: names a format the source lacks (error)
 acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
 acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
-acf.source.component-invalid                 # invalid foreign skill or server (incl. a native value its host rejects), excluded (warn)
+acf.source.component-invalid                 # invalid foreign or bare imported skill, or foreign server (incl. a native value its host rejects), excluded (warn)
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)

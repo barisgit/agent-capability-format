@@ -1,3 +1,4 @@
+import path from "node:path";
 import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
@@ -35,7 +36,9 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
     const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
     diagnostics.push(...manifest.diagnostics);
     const lock = await readLockfile(scopeRoot.lockPath);
-    lockDiagnostics.push(...detectLockDrift(manifest.value, lock));
+    lockDiagnostics.push(
+      ...detectLockDrift(manifest.value, lock, path.dirname(scopeRoot.manifestPath)),
+    );
     const resolved = await resolveScopeCapabilities(scopeRoot);
     diagnostics.push(...resolved.diagnostics);
     capabilityCount += resolved.capabilities.length;

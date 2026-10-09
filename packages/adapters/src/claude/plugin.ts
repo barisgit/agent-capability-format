@@ -11,6 +11,7 @@ import path from "node:path";
 import {
   type AcfCapability,
   CLAUDE_PLUGIN_MANIFEST,
+  claudePluginComponents,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
@@ -18,6 +19,7 @@ import {
   type FileContent,
   type FileDiff,
   isExecutableMode,
+  isPerFileComponent,
   MANAGEMENT_NOTICE_FILENAME,
   NATIVE_FILES_DIR,
   nativeExtras,
@@ -81,13 +83,9 @@ const ACF_OWNED = new Set([
 const CLAUDE_DISCOVERED = new Set([
   ".claude-plugin",
   MCP_PATH,
-  ".lsp.json",
-  "settings.json",
-  "agents",
-  "commands",
-  "hooks/hooks.json",
-  "output-styles",
-  "workflows",
+  ...claudePluginComponents.flatMap((spec) =>
+    isPerFileComponent(spec) ? [spec.dir] : spec.file === undefined ? [] : [spec.file],
+  ),
 ]);
 
 /** One file of the plugin package, relative to its root. */
@@ -167,20 +165,29 @@ class PackageFiles implements Iterable<[string, PackageFile]> {
   }
 }
 
-/** The source package byte for byte; its manifest differs only in the `version` value. */
+/**
+ * The source package byte for byte and mode for mode; its manifest differs only in the `version`
+ * value.
+ */
 async function copiedPackage(capability: AcfCapability, fs: ReadOnlyFs): Promise<BuiltPackage> {
   const files = new PackageFiles();
   let manifestText = "{}\n";
+  let manifestMode = 0o644;
   for (const file of await listTree(fs, capability.root, { skip: (p) => p === ".git" })) {
-    if (file.path === CLAUDE_PLUGIN_MANIFEST) manifestText = new TextDecoder().decode(file.bytes);
-    else files.set(file.path, { content: file.bytes, mode: file.mode });
+    if (file.path === CLAUDE_PLUGIN_MANIFEST) {
+      manifestText = new TextDecoder().decode(file.bytes);
+      manifestMode = file.mode;
+    } else files.set(file.path, { content: file.bytes, mode: file.mode });
   }
   const raw = parseJsonObject(manifestText);
   const own = typeof raw?.version === "string" ? raw.version : undefined;
   return {
     files,
     baseVersion: own ?? capability.manifest.version,
-    manifest: (version) => ({ content: mergeJson(manifestText, "/version", version), mode: 0o644 }),
+    manifest: (version) => ({
+      content: mergeJson(manifestText, "/version", version),
+      mode: manifestMode,
+    }),
   };
 }
 
@@ -330,7 +337,10 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Claude configuration in a source not read as a Claude plugin is left out with a hint.
+ * Skill directories are left out only when they hold a skill the writer regenerates or a
+ * projected skill selection or applicability removed; any other directory holding a `SKILL.md`
+ * (documentation, examples) is support content. Claude configuration in a source not read as a
+ * Claude plugin is left out with a hint.
  */
 async function supportFiles(
   capability: AcfCapability,
@@ -339,7 +349,13 @@ async function supportFiles(
   diagnostics: Diagnostic[],
 ): Promise<TreeFile[]> {
   const format = capability.source?.format ?? "acf";
-  const owned = new Set<string>([".git"]);
+  const owned = new Set<string>([
+    ".git",
+    ...capability.skills.map((skill) =>
+      path.relative(capability.root, skill.dir).split(path.sep).join("/"),
+    ),
+    ...(capability.source?.projected?.skillDirs ?? []),
+  ]);
   if (format === "acf") for (const p of ACF_OWNED) owned.add(p);
   if (format === "claude-plugin") {
     owned.add(CLAUDE_PLUGIN_MANIFEST);
@@ -374,7 +390,5 @@ async function supportFiles(
       });
       return true;
     },
-    // Skill directories are regenerated, and an excluded skill's files never reach the plugin.
-    skipDir: (entries) => entries.includes("SKILL.md"),
   });
 }

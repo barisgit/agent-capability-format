@@ -113,13 +113,11 @@ test("a known native key outside its native value domain is acf.extras.native-va
 
 test("a pending meaning authored as an extra reports acf.core.pending naming the future field", async () => {
   await withCapability(
-    skill(
-      'targets:\n  claude:\n    native:\n      allowed-tools: "Bash(git status *)"\n      paths: ["src/**"]\n',
-    ),
+    skill('targets:\n  claude:\n    native:\n      context: fork\n      paths: ["src/**"]\n'),
     (cap) => {
       const pending = only(cap, "acf.core.pending");
       expect(pending.map((d) => d.severity)).toEqual(["info", "info"]);
-      expect(pending.map((d) => d.message).join("\n")).toContain("skill.allowed-tools");
+      expect(pending.map((d) => d.message).join("\n")).toContain("skill.context");
       expect(pending.map((d) => d.message).join("\n")).toContain("skill.paths");
       expect(errorCodes(cap)).toEqual([]);
     },

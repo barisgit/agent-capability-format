@@ -4,13 +4,21 @@ import { entrySourceId, sourceString } from "./lockfile.js";
 
 /**
  * Reports how `capabilities.yml` disagrees with the lock: an entry without a lock entry is
- * `acf.lock.missing-entry`, a changed {@link intentChecks intent field} is `acf.lock.drift`,
- * and a lock of another `acf` version is `acf.lock.unsupported-version` (and nothing else).
+ * `acf.lock.missing-entry`; a changed {@link intentChecks intent field}, or a lock entry no
+ * `capabilities.yml` entry declares any more, is `acf.lock.drift`; and a lock of another `acf`
+ * version is `acf.lock.unsupported-version` (and nothing else). Relative `path:` sources are
+ * read from `manifestDir`, the directory of the `capabilities.yml` that declares them.
  * Every diagnostic is an error; callers decide which ones their mode reconciles.
  */
-export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | null): Diagnostic[] {
+export function detectLockDrift(
+  yml: CapabilitiesYml,
+  lock: CapabilitiesLock | null,
+  manifestDir = process.cwd(),
+): Diagnostic[] {
   if (lock === null) {
-    return yml.capabilities.map((entry) => missingEntryDiagnostic(entrySourceId(entry)));
+    return yml.capabilities.map((entry) =>
+      missingEntryDiagnostic(entrySourceId(entry, manifestDir)),
+    );
   }
 
   const version = lock.acf;
@@ -27,9 +35,12 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
 
   const diagnostics: Diagnostic[] = [];
   const entriesBySource = new Map(lock.entries.map((entry) => [entry.sourceId, entry]));
+  const declared = new Set<string>();
   for (const entry of yml.capabilities) {
-    const id = entrySourceId(entry);
-    const lockEntry = entriesBySource.get(id) ?? entriesBySource.get(sourceString(entry.source));
+    const id = entrySourceId(entry, manifestDir);
+    const legacyId = sourceString(entry.source, manifestDir);
+    declared.add(id).add(legacyId);
+    const lockEntry = entriesBySource.get(id) ?? entriesBySource.get(legacyId);
     if (lockEntry === undefined) {
       diagnostics.push(missingEntryDiagnostic(id));
       continue;
@@ -43,6 +54,15 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
         data: { sourceId: id, ...check.data(entry, lockEntry) },
       });
     }
+  }
+  for (const lockEntry of lock.entries) {
+    if (declared.has(lockEntry.sourceId)) continue;
+    diagnostics.push({
+      severity: "error",
+      code: "acf.lock.drift",
+      message: `capabilities.lock has ${lockEntry.sourceId}, which capabilities.yml no longer declares`,
+      data: { sourceId: lockEntry.sourceId, ymlSource: null, lockSource: lockEntry.source },
+    });
   }
   return diagnostics;
 }

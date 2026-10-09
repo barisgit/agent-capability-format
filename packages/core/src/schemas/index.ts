@@ -63,6 +63,8 @@ export const skillFrontmatterSchema = withOnlyExcept({
   compatibility: z.string().max(500).optional(),
   metadata: z.record(z.string(), z.string()).optional(),
   "argument-hint": z.string().optional(),
+  // Agent Skills field (design D26); a list is Claude's other documented spelling.
+  "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
   ...frontmatterBase,
 });
 

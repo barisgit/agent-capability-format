@@ -12,7 +12,9 @@ import {
   CLAUDE_PLUGIN_BIN_DIR,
   CLAUDE_PLUGIN_MANIFEST,
   claudePluginComponents,
-  type PluginComponentSpec,
+  isPerFileComponent,
+  type MergedComponentSpec,
+  perFileComponentName,
 } from "../targets/plugin-layout.js";
 import type { PreservedForeignData } from "../targets/self-check.js";
 import type {
@@ -205,18 +207,17 @@ const LISTING_KEYS = [
  * Directory components whose files each become one component; manifest paths replace the
  * default. A manifest `commands` map instead makes each named definition one component.
  */
-const FILE_COMPONENTS = [
-  { key: "agents", kind: "agent", dir: "agents" },
-  { key: "commands", kind: "command", dir: "commands" },
-  { key: "outputStyles", kind: "output-style", dir: "output-styles" },
-] as const;
+const FILE_COMPONENTS = claudePluginComponents.filter(isPerFileComponent);
 
 /** Components whose default file merges with manifest declarations into one component. */
 const MERGED_COMPONENTS = claudePluginComponents.filter(
-  (spec): spec is PluginComponentSpec & { file: string } => spec.file !== undefined,
+  (spec): spec is MergedComponentSpec & { file: string } =>
+    !isPerFileComponent(spec) && spec.file !== undefined,
 );
 /** Keys that hold monitors; any other value of them is an `other` component. */
-const MONITOR_COMPONENTS = claudePluginComponents.filter((spec) => spec.kind === "monitor");
+const MONITOR_COMPONENTS = claudePluginComponents.filter(
+  (spec): spec is MergedComponentSpec => !isPerFileComponent(spec) && spec.kind === "monitor",
+);
 
 const KEY_COMPONENTS = [
   { key: "userConfig", kind: "user-config" },
@@ -224,7 +225,10 @@ const KEY_COMPONENTS = [
   { key: "dependencies", kind: "dependencies" },
 ] as const;
 
-type RemainderInput = Omit<NativeRemainderComponent, "format" | "executable">;
+/** A component before its files' modes are read; `executable` marks a kind that runs code. */
+type RemainderInput = Omit<NativeRemainderComponent, "format" | "executable"> & {
+  executable?: boolean;
+};
 
 /** Manifest keys some reader step owns; every other key becomes a monitor or `other` component. */
 const HANDLED_KEYS: ReadonlySet<string> = new Set([
@@ -273,6 +277,7 @@ async function fileComponents(
           paths,
           manifestKeys: [spec.key],
           class: componentClass,
+          executable: spec.executes,
         });
       }
       continue;
@@ -281,10 +286,11 @@ async function fileComponents(
     for (const file of await sourceFiles(root, sources)) {
       inputs.push({
         kind: spec.kind,
-        name: path.posix.basename(file).replace(/\.[^.]*$/, ""),
+        name: perFileComponentName(file),
         paths: [file],
         manifestKeys: value === undefined ? [] : [spec.key],
         class: componentClass,
+        executable: spec.executes,
       });
     }
   }
@@ -325,6 +331,7 @@ async function mergedComponents(
       paths,
       manifestKeys,
       class: keyClass(raw, [spec.key]),
+      executable: spec.executes,
     });
   }
   return inputs;
@@ -338,6 +345,7 @@ async function binComponents(root: string): Promise<RemainderInput[]> {
     name: path.posix.basename(file),
     paths: [file],
     class: "functional",
+    executable: true,
   }));
 }
 
@@ -380,17 +388,18 @@ function unhandledComponents(root: string, raw: Record<string, unknown>): Remain
     .sort()
     .filter((key) => !HANDLED_KEYS.has(key))
     .map((key) => {
-      const monitor = MONITOR_COMPONENTS.some(
+      const monitor = MONITOR_COMPONENTS.find(
         (spec) => spec.key === key && (spec.holds?.(raw[key]) ?? true),
       );
       return {
-        kind: monitor ? "monitor" : "other",
+        kind: monitor?.kind ?? "other",
         name: key,
         paths: componentPaths(raw[key]).filter(
           (relative) => contained(root, relative) !== undefined,
         ),
         manifestKeys: [key],
         class: keyClass(raw, [key]),
+        executable: monitor?.executes ?? false,
       };
     });
 }
