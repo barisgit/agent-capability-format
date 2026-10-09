@@ -1712,7 +1712,12 @@ beginning `./` to `${ACF_CAPABILITY_DIR}/`, in exactly the fields the source
 format expands.
 
 Implementations MUST NOT perform additional environment-variable
-expansion in canonical MCP fields. A server whose meaning depends on a host
+expansion in canonical MCP fields. The placeholders above are the only
+`${...}` references a canonical MCP `command`, `args`, `env`, `cwd`,
+`url`, or `headers` value may hold; any other, such as `${API_KEY}`, is a
+pending host reference (§13a.4.2) and an error
+(`acf.mcp.placeholder.pending`), so no host expands it after emission. A
+server whose meaning depends on a host
 environment reference, `${user_config.*}`, `headersHelper`, or OAuth has no
 canonical form in `acf: 1`: a reader keeps such a server whole as native
 remainder of its source format (§20.6), and native ACF authors it as a

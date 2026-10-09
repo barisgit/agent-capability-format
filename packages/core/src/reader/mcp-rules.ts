@@ -1,15 +1,25 @@
 /**
  * Value rules for canonical MCP servers that the schema cannot express (canonical-mcp,
- * Canonical MCP server fields and Data directory placeholder): the stdio working directory, the
- * URL scheme and userinfo rule, and where `${ACF_DATA_DIR}` may appear. Messages never echo a
- * URL, so a credential in it cannot reach plans or logs.
+ * Canonical MCP server fields, Data directory placeholder and Pending MCP meanings): the stdio
+ * working directory, the URL scheme and userinfo rule, where `${ACF_DATA_DIR}` may appear, and
+ * that no value references anything but an ACF placeholder. Messages never echo a URL, so a
+ * credential in it cannot reach plans or logs.
  */
 import { findUrlCredentials } from "../credentials/index.js";
+import { pendingCoreFields } from "../targets/native-keys.js";
 import type { Diagnostic, McpServer } from "../types/index.js";
-import { acfCapabilityDirPlaceholder, acfDataDirPlaceholder } from "../types/index.js";
+import {
+  acfCapabilityDirPlaceholder,
+  acfDataDirPlaceholder,
+  acfPathPlaceholders,
+} from "../types/index.js";
 
 const CWD_BASES = [acfCapabilityDirPlaceholder, acfDataDirPlaceholder] as const;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/** The only `${...}` references a canonical MCP value may hold (SPEC.md §13a.4.1). */
+const ACF_PLACEHOLDERS = new Set<string>([...acfPathPlaceholders, acfDataDirPlaceholder]);
+const VALUE_REFERENCE = /\$\{[^}]*\}/g;
+const VALUE_REFERENCES_MEANING = pendingCoreFields["mcp.valueReferences"];
 
 /** Pushes an error for every rule `server` breaks; `file` is the mcp.yml path. */
 export function validateMcpServerValues(
@@ -26,6 +36,17 @@ export function validateMcpServerValues(
       family: "mcp",
     });
   };
+  for (const [field, value] of valueFields(server)) {
+    for (const reference of new Set(value.match(VALUE_REFERENCE) ?? [])) {
+      if (ACF_PLACEHOLDERS.has(reference)) continue;
+      // Hosts such as Claude expand `${VAR}` in these fields, so writing it through would
+      // smuggle a host environment reference past the rule that ACF expands none.
+      push(
+        "acf.mcp.placeholder.pending",
+        `${field} references ${reference}, which is not an ACF placeholder; ${VALUE_REFERENCES_MEANING} are pending core and never expanded. Author the server natively: through targets.<target>.native on the server (for example targets.codex.native.env_vars), or for Claude as a native server under package-level targets.claude.native.mcpServers`,
+      );
+    }
+  }
   if (server.transport === "stdio") {
     if (server.cwd !== undefined) {
       const problem = cwdProblem(server.cwd);
@@ -49,18 +70,31 @@ export function validateMcpServerValues(
       "url must use https://, or http:// only for localhost, 127.0.0.1 or [::1]",
     );
   }
-  const dataDirFields = [
-    ...(server.url.includes(acfDataDirPlaceholder) ? ["url"] : []),
-    ...Object.entries(server.headers ?? {})
-      .filter(([, value]) => value.includes(acfDataDirPlaceholder))
-      .map(([name]) => `headers.${name}`),
-  ];
-  for (const field of dataDirFields) {
+  for (const [field, value] of valueFields(server)) {
+    if (!value.includes(acfDataDirPlaceholder)) continue;
     push(
       "acf.mcp.placeholder.unsupported",
       `${field} must not contain ${acfDataDirPlaceholder}; it is defined only for stdio command, args, env and cwd`,
     );
   }
+}
+
+/** Every string value a host may expand references in, labelled with its field path. */
+function valueFields(server: McpServer): [string, string][] {
+  const entries = (prefix: string, record: Record<string, string> | undefined) =>
+    Object.entries(record ?? {}).map(([key, value]): [string, string] => [
+      `${prefix}.${key}`,
+      value,
+    ]);
+  if (server.transport !== "stdio") {
+    return [["url", server.url], ...entries("headers", server.headers)];
+  }
+  return [
+    ["command", server.command],
+    ...(server.args ?? []).map((value, index): [string, string] => [`args[${index}]`, value]),
+    ...entries("env", server.env),
+    ...(server.cwd === undefined ? [] : [["cwd", server.cwd] as [string, string]]),
+  ];
 }
 
 /**

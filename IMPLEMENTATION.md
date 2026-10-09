@@ -714,7 +714,9 @@ export const acfPathPlaceholders = [
 Substitution is performed when the adapter materializes a hook `run.command`,
 hook `run.args[i]`, hook `run.env[k]`, MCP `command`, MCP `args[i]`, MCP
 `env[k]`, MCP `cwd`, MCP `url`, and MCP `headers[k]`. No other interpolation
-is performed by ACF.
+is performed by ACF, and validation rejects any other `${...}` reference in
+those MCP values (`acf.mcp.placeholder.pending`) because hosts such as Claude
+would expand it.
 
 `acfDataDirPlaceholder` (`${ACF_DATA_DIR}`) is MCP-only: a persistent,
 writable directory per capability and install scope that survives updates.
@@ -2715,6 +2717,7 @@ acf.mcp.cwd.invalid                          # cwd base or traversal (error)
 acf.mcp.url.insecure                         # non-https URL off localhost (error)
 acf.mcp.url.credential-in-url                # userinfo in url (error)
 acf.mcp.placeholder.unsupported              # ${ACF_DATA_DIR} in url or headers (error)
+acf.mcp.placeholder.pending                  # non-ACF ${...} reference in an MCP value (error)
 acf.mcp.config-conflict                      # server name claimed twice or user-defined (error)
 
 # Claude carrier and host
