@@ -1,7 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import {
   type AcfCapability,
   componentOutcomes,
@@ -10,6 +7,7 @@ import {
 } from "@caplet/core";
 import { codexAdapter, piAdapter } from "../src";
 import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet, withCode } from "./util/model";
+import { withTempPackage } from "./util/temp-package";
 
 /** A Claude plugin with one skill and the given remainder, as the Claude plugin reader builds it. */
 function claudePlugin(remainder: NativeRemainderComponent[]): AcfCapability {
@@ -57,18 +55,13 @@ test("a functional Claude plugin agent is omitted for a loose target", async () 
 });
 
 test("Claude plugin output styles and LSP servers are reported omitted for a loose target", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "remainder-"));
-  try {
-    const files: Record<string, string> = {
-      ".claude-plugin/plugin.json": JSON.stringify({ name: "styled", version: "1.0.0" }),
-      "skills/plain/SKILL.md": "---\nname: plain\ndescription: Plain skill\n---\nPlain.\n",
-      "output-styles/concise.md": "---\nname: Concise\n---\nBe brief.\n",
-      ".lsp.json": JSON.stringify({ go: { command: "gopls" } }),
-    };
-    for (const [file, text] of Object.entries(files)) {
-      await mkdir(path.dirname(path.join(root, file)), { recursive: true });
-      await writeFile(path.join(root, file), text);
-    }
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "styled", version: "1.0.0" }),
+    "skills/plain/SKILL.md": "---\nname: plain\ndescription: Plain skill\n---\nPlain.\n",
+    "output-styles/concise.md": "---\nname: Concise\n---\nBe brief.\n",
+    ".lsp.json": JSON.stringify({ go: { command: "gopls" } }),
+  };
+  await withTempPackage("remainder-", files, async (root) => {
     const read = await readClaudePluginPackage(root, {
       scope: "project",
       origin: { kind: "local", directory: root },
@@ -103,9 +96,7 @@ test("Claude plugin output styles and LSP servers are reported omitted for a loo
         recovery: "except: [codex]",
       }),
     ]);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("no shared skill copy is written when another reader refuses the package", async () => {
