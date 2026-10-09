@@ -699,7 +699,10 @@ spelling, R = refused):
 | `invocation.user: false`  | N `user-invocable: false`          | R                                                         | R                                   | R        | R                                   |
 
 `license`, `compatibility`, `metadata`, `name`, `description`, and bundled
-files with their executable bits are native on every target.
+files with their executable bits are native on every target. Keys written to
+Codex `agents/openai.yaml` are merged into a bundled `agents/openai.yaml`, which
+keeps its other keys; a bundled value that contradicts a written one is
+`acf.extras.conflict`.
 `argument-hint` is native on Claude and dropped with a `lossy` diagnostic
 elsewhere.
 
@@ -1958,11 +1961,13 @@ A native plugin package MAY be installed through a declared format reader
 as a foreign source (§20.6); it is then projected into a capability, never
 accepted as ACF source. Inside a native ACF capability, native files live
 only under `native/<target>/` (§7.7). When the Claude plugin writer
-generates a plugin from a native ACF capability, it leaves out the root
-entries Claude would read as plugin configuration (`.claude-plugin/`,
-`.mcp.json`, `.lsp.json`, `settings.json`, `output-styles/`) and reports
-each with the `info` diagnostic `acf.claude.plugin-file-ignored`, which
-points to `native/claude/`.
+generates a plugin from a capability not read as a Claude plugin, it leaves
+out the entries Claude would read as plugin configuration without a
+manifest naming them (`.claude-plugin/`, `.mcp.json`, `.lsp.json`,
+`settings.json`, `agents/`, `commands/`, `hooks/hooks.json`,
+`output-styles/`, `workflows/`) and reports each with the `info` diagnostic
+`acf.claude.plugin-file-ignored`, which points a native ACF capability to
+`native/claude/`.
 
 Install paths and native artifact layout per target are owned by the
 target adapter and are documented in §22 and `IMPLEMENTATION.md`.
@@ -2637,9 +2642,10 @@ Readers project into the canonical model:
   namespaces are preserved as native remainder.
 - **Claude plugin**: manifest metadata, skills from `skills/` and manifest
   `skills` paths, and MCP servers from `.mcp.json` and manifest
-  `mcpServers` (inline or a relative path). Agents, commands, hooks, output
-  styles, LSP servers, monitors, `bin/`, plugin `settings.json`,
-  `userConfig`, channels, dependencies, and listing metadata are kept as
+  `mcpServers` (inline or a relative path). Agents, commands (each file or
+  manifest `commands` map entry is one component), hooks, output styles,
+  LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`,
+  channels, dependencies, and listing metadata are kept as
   Claude native remainder with their safety class. Pending keys are read as
   Claude extras.
 

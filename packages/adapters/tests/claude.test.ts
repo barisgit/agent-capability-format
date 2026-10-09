@@ -30,13 +30,15 @@ test("claude emits all native artifacts with marker and JSON pointer ownership",
   expect(byPath(result.diffs, ".claude/.acf/instructions/test-cap/triggered.md").after).toContain(
     "operation_result",
   );
-  expect(byPath(result.diffs, ".claude/hooks/test-cap__guard.sh").owns).toEqual([{ kind: "file" }]);
+  expect(byPath(result.diffs, ".claude/hooks/test-cap__pre_tool__guard.sh").owns).toEqual([
+    { kind: "file" },
+  ]);
   const settingsDiff = byPath(result.diffs, ".claude/settings.json");
   expect(settingsDiff.owns.every((own) => own.kind === "json-pointer")).toBe(true);
   const hooks = parseJsonDiff(settingsDiff).hooks as Record<string, unknown[]>;
-  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:guard");
-  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:ask");
-  expect(JSON.stringify(hooks.SessionStart)).toContain("acf:test-cap:init");
+  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:pre_tool:guard");
+  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:permission_request:ask");
+  expect(JSON.stringify(hooks.SessionStart)).toContain("acf:test-cap:session_start:init");
   const mcpDiff = byPath(result.diffs, ".mcp.json");
   expect(mcpDiff.owns).toContainEqual({ kind: "json-pointer", pointer: "/mcpServers/fs" });
   expect(mcpDiff.owns).toContainEqual({ kind: "json-pointer", pointer: "/mcpServers/docs" });

@@ -119,11 +119,15 @@ When a target has no carrier for a whole component type (for example a Claude pl
 - **THEN** the package is refused for Codex with `acf.support.refused` naming the hook
 
 ### Requirement: Shared discovery roots
-When one emitted artifact is discovered by several selected targets (such as `.agents/skills/<name>/`), its rendering SHALL satisfy the support cells of every selected target that discovers that location, and any extra rendered into it SHALL count as emitted to every such target; if any such target refuses the component or a restricting extra in it, the shared artifact SHALL NOT be emitted and the refusal SHALL be reported for that target.
+When one emitted artifact is discovered by several selected targets (such as `.agents/skills/<name>/`), its rendering SHALL satisfy the support cells of every selected target that discovers that location, and any extra rendered into it SHALL count as emitted to every such target; if any such target refuses the component or a restricting extra in it, or a refusal of another component blocks the capability for that target, the shared artifact SHALL NOT be emitted and the refusal SHALL be reported for that target.
 
 #### Scenario: Shared skill root with a target that cannot restrict
 - **WHEN** a manual-only skill is selected for Pi and OpenCode, which both discover `.agents/skills`
 - **THEN** the shared copy is not written and the plan reports the OpenCode refusal
+
+#### Scenario: Shared skill root with a reader blocked by another component
+- **WHEN** a capability selected for Codex and Pi has a skill and an MCP server with a Codex-only restricting extra, which Pi refuses
+- **THEN** no copy of the skill is written to `.agents/skills`, Codex writes it to its native skill root, and the plan reports the Pi refusal
 
 ### Requirement: Inline native extras
 The extension data at every location listed in SPEC.md §7.2, and the package level of `acf.yml`, SHALL accept a `native` mapping (`targets.<target>.native`) whose keys and values are the target's native spelling and are merged verbatim into the native object that the attachment point maps to (skill frontmatter, MCP server entry, or plugin manifest). Registry-typed extension options outside `native` keep their existing validation. Keys inside `native` that the registry knows SHALL be validated and classified; unknown keys SHALL be accepted with an `info` diagnostic. A `native` key that the writer also generates from a core field SHALL be an `error` (`acf.extras.conflict`); extras SHALL NOT override core fields. A target-specific value for a manifest key generated from package metadata is declared through `targets.<target>.package` instead (canonical-package-metadata, Per-target package values).

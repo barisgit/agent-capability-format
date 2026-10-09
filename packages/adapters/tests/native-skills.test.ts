@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { claudeAdapter, codexAdapter, opencodeAdapter, piAdapter } from "../src";
-import { capabilityModel, emitModel, fileText, skillFacet, withCode } from "./util/model";
+import { CAP_ROOT, capabilityModel, emitModel, fileText, skillFacet, withCode } from "./util/model";
 
 const manualOnly = skillFacet({
   name: "deploy",
@@ -126,6 +126,64 @@ test("a skill excluded for one discovering target is not written to the shared r
   expect(fileText(pi, ".pi/skills/review/SKILL.md")).toBeDefined();
 });
 
+test("a server another discovering target refuses keeps the skill out of the shared root", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "review", description: "Review code" })],
+    servers: [
+      {
+        name: "search",
+        transport: "stdio",
+        command: "search-server",
+        targets: { codex: { native: { disabled_tools: ["delete"] } } },
+      },
+    ],
+  });
+  const options = { canonicalSkillReaders: ["codex", "pi"] };
+  const codex = await emitModel(codexAdapter, capability, ".codex", options);
+  const pi = await emitModel(piAdapter, capability, ".pi", options);
+  expect(withCode(pi, "acf.support.refused")[0]?.data?.component).toBe("search");
+  expect(codex.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
+  expect(fileText(codex, ".codex/skills/review/SKILL.md")).toContain("name: review");
+});
+
+function withBundledMetadata(yaml: string) {
+  const capability = capabilityModel({ skills: [manualOnly] });
+  capability.assets = [
+    {
+      path: "skills/deploy/agents/openai.yaml",
+      origin: "implicit",
+      facet: { family: "skill", name: "deploy" },
+    },
+  ];
+  return emitModel(
+    codexAdapter,
+    capability,
+    ".codex",
+    { canonicalSkillReaders: ["codex"] },
+    {
+      [`${CAP_ROOT}/skills/deploy/agents/openai.yaml`]: yaml,
+    },
+  );
+}
+
+test("a bundled agents/openai.yaml keeps its keys and gains the generated policy", async () => {
+  const result = await withBundledMetadata(
+    "# Shown in the Codex app\ninterface:\n  display_name: Deploy\npolicy:\n  products: [codex]\n",
+  );
+  expect(fileText(result, ".agents/skills/deploy/agents/openai.yaml")).toBe(
+    "# Shown in the Codex app\ninterface:\n  display_name: Deploy\npolicy:\n  products: [ codex ]\n  allow_implicit_invocation: false\n",
+  );
+  expect(withCode(result, "acf.extras.conflict")).toEqual([]);
+});
+
+test("a bundled agents/openai.yaml that contradicts a generated key is a conflict", async () => {
+  const result = await withBundledMetadata("policy:\n  allow_implicit_invocation: true\n");
+  const [conflict] = withCode(result, "acf.extras.conflict");
+  expect(conflict?.severity).toBe("error");
+  expect(conflict?.path).toBe("skills/deploy/agents/openai.yaml");
+  expect(conflict?.message).toContain("policy.allow_implicit_invocation");
+});
+
 test("Claude-only selection writes no canonical copy", async () => {
   const capability = capabilityModel({ skills: [manualOnly] });
   const result = await emitModel(claudeAdapter, capability, ".claude", {
@@ -193,4 +251,23 @@ test("Claude body placeholders are reported where the target does not expand the
   expect(fileText(codex, "triage/SKILL.md")).toContain("Triage issue $ARGUMENTS");
   const claude = await emitModel(claudeAdapter, capability, "/project/.claude");
   expect(withCode(claude, "acf.skill.placeholder-unexpanded")).toEqual([]);
+});
+
+test("a dotted Codex extra naming __proto__ is written as its own key, not through the prototype", async () => {
+  const capability = capabilityModel({
+    skills: [
+      skillFacet({
+        name: "review",
+        description: "Review",
+        targets: { codex: { native: { "__proto__.reviewPolluted": "yes", "constructor.x": 1 } } },
+      }),
+    ],
+  });
+  const result = await emitModel(codexAdapter, capability, ".codex", {
+    canonicalSkillReaders: ["codex"],
+  });
+  expect(Object.hasOwn(Object.prototype, "reviewPolluted")).toBe(false);
+  expect(fileText(result, ".agents/skills/review/agents/openai.yaml")).toBe(
+    "__proto__:\n  reviewPolluted: yes\nconstructor:\n  x: 1\n",
+  );
 });

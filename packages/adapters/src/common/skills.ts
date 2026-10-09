@@ -3,22 +3,26 @@ import path from "node:path";
 import {
   type AcfCapability,
   applicableTargets,
+  capabilityBlocked,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
   type ReadOnlyFs,
-  remainderRefuses,
+  remainderSupport,
   renderArtifactNotice,
   type Scope,
   type SkillFacet,
   type TargetDefinition,
   type TargetId,
 } from "@caplet/core";
+import { isMap, parse, parseDocument } from "yaml";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
-import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
+import { mcpSupport } from "./mcp.js";
+import { ownValue, setOwn } from "./records.js";
+import { CODEX_SKILL_METADATA, type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
 
@@ -30,7 +34,8 @@ type SkillCopy = { root: string; rendering: NativeSkill };
  * `.agents/skills` root writes its skills there when one rendering satisfies every selected
  * reader of that root (`options.canonicalSkillReaders`); otherwise, and for targets that do not
  * discover it, skills go to the target's native skill root. `options.skills` overrides both
- * defaults. Refused skills are not written anywhere for the target.
+ * defaults. Refused skills are not written anywhere for the target, and no skill goes to the
+ * shared root while a refusal blocks the capability for one of its readers.
  */
 export async function emitSkills(
   input: EmitInput,
@@ -41,9 +46,13 @@ export async function emitSkills(
   const cap = input.capability;
   const diffs: FileDiff[] = [];
   const emittedPaths = new Set<string>();
+  const readers = sharedRootReaders(input, target);
+  // A reader blocked by any refusal writes nothing of the capability, so a shared copy would
+  // still reach it through discovery; every discovering target then uses its native root.
+  const sharedReaders = readers.some((reader) => blocksCapability(cap, reader)) ? null : readers;
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
-    const copies = renderedCopies(input, target, skill, report);
+    const copies = renderedCopies(input, target, skill, sharedReaders, report);
     if (copies.length === 0) continue;
     const assets = await readSkillAssets(cap, skill, fs);
     for (const copy of copies) {
@@ -58,6 +67,7 @@ function renderedCopies(
   input: EmitInput,
   target: TargetDefinition,
   skill: SkillFacet,
+  readers: readonly TargetId[] | null,
   report: EmitReport,
 ): SkillCopy[] {
   const own = renderNativeSkill(input.capability, skill, target.id);
@@ -67,12 +77,12 @@ function renderedCopies(
 
   const discovers = target.discoversCanonicalSkills === true;
   const writeShared = input.options.skills?.canonical ?? discovers;
-  const readers = sharedRootReaders(input, target);
-  const shared = writeShared
-    ? readers.length === 0
-      ? own
-      : sharedRendering(input.capability, skill, readers)
-    : null;
+  const shared =
+    writeShared && readers !== null
+      ? readers.length === 0
+        ? own
+        : sharedRendering(input.capability, skill, readers)
+      : null;
   // A discovering target relies on the shared copy; when none can be written it falls back to
   // its native root, which other readers of the shared root do not discover.
   const fallback = discovers && writeShared && shared === null;
@@ -109,10 +119,9 @@ function sharedRootReaders(input: EmitInput, target: TargetDefinition): TargetId
 
 /**
  * The one rendering of `skill` for the shared root that every reader accepts, or null when
- * there is none: a reader excludes or refuses the skill or the whole package, the readers' own
- * extras differ (an
- * extra in a shared file counts as emitted to every reader), or two renderings disagree on a
- * key. Core translations of different readers are merged, since each states the same meaning.
+ * there is none: a reader excludes the skill, the readers' own extras differ (an extra in a
+ * shared file counts as emitted to every reader), or two renderings disagree on a key. The
+ * caller has ruled out readers blocked by a refusal, this skill's included. Core translations of different readers are merged, since each states the same meaning.
  */
 function sharedRendering(
   cap: AcfCapability,
@@ -121,9 +130,7 @@ function sharedRendering(
 ): NativeSkill | null {
   const applicable = applicableTargets(cap, skill.frontmatter);
   if (!readers.every((reader) => applicable.includes(reader))) return null;
-  if (readers.some((reader) => remainderRefuses(cap, reader))) return null;
   const renderings = readers.map((reader) => renderNativeSkill(cap, skill, reader));
-  if (renderings.some((rendering) => rendering.refused)) return null;
   const extras = new Set(renderings.map((rendering) => stableJson(rendering.extras)));
   if (extras.size > 1) return null;
 
@@ -142,10 +149,23 @@ function sharedRendering(
   return merged;
 }
 
+/**
+ * True when a refusal blocks the whole capability for `reader` on the loose carrier: one from its
+ * native remainder, or from a skill or MCP server that applies to `reader`.
+ */
+function blocksCapability(cap: AcfCapability, reader: TargetId): boolean {
+  const skills = cap.skills
+    .filter((skill) => applicableTargets(cap, skill.frontmatter).includes(reader))
+    .flatMap((skill) => renderNativeSkill(cap, skill, reader).diagnostics);
+  const support = [...remainderSupport(cap, reader), ...skills, ...mcpSupport(cap, reader)];
+  return capabilityBlocked(support, reader);
+}
+
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(source)) {
-    if (key in target && stableJson(target[key]) !== stableJson(value)) return false;
-    target[key] = value;
+    if (Object.hasOwn(target, key) && stableJson(ownValue(target, key)) !== stableJson(value))
+      return false;
+    setOwn(target, key, value);
   }
   return true;
 }
@@ -174,7 +194,8 @@ async function pushSkillCopy(
   const facet = { family: "skill" as const, name: skill.name };
   const metadata = { artifactRoot: skillRoot, facet };
   const skillPath = path.join(skillRoot, "SKILL.md");
-  const { frontmatter, files } = copy.rendering;
+  const { frontmatter } = copy.rendering;
+  const files = withBundledMetadata(cap, skill, copy.rendering.files, assets, diagnostics);
   await pushTextDiff(
     diffs,
     emittedPaths,
@@ -219,6 +240,75 @@ async function pushSkillCopy(
       metadata,
     );
   }
+}
+
+/**
+ * The skill's generated files, with the generated Codex metadata merged into a bundled
+ * `agents/openai.yaml` so the bundled keys and formatting survive. A bundled value that differs
+ * from a generated one, or a bundled file that is not a YAML mapping, is `acf.extras.conflict`:
+ * the generated keys come from the skill's fields and `targets.codex.native`, which the file
+ * must not contradict.
+ */
+function withBundledMetadata(
+  cap: AcfCapability,
+  skill: SkillFacet,
+  files: Record<string, string>,
+  assets: readonly AssetPayload[],
+  diagnostics: Diagnostic[],
+): Record<string, string> {
+  const generated = files[CODEX_SKILL_METADATA];
+  const bundled = assets.find((asset) => asset.relativePath === CODEX_SKILL_METADATA);
+  if (generated === undefined || bundled === undefined) return files;
+  const merged = mergeYamlMapping(new TextDecoder().decode(bundled.bytes), generated);
+  if (merged.conflicts.length > 0) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.extras.conflict",
+      message: `${bundled.sourcePath} sets ${merged.conflicts.join(", ")} unlike the value generated from skill ${skill.name}'s fields and targets.codex.native; make them agree or remove the keys from the file`,
+      path: bundled.sourcePath,
+      family: "skill",
+      capability: { name: cap.manifest.name },
+      data: { facet: skill.name, keys: merged.conflicts },
+    });
+  }
+  return { ...files, [CODEX_SKILL_METADATA]: merged.text };
+}
+
+/**
+ * Sets every leaf of the YAML mapping `generated` in the YAML mapping `text`, keeping its other
+ * keys and comments. Returns the dotted keys whose existing value differs, or `<file>` when `text`
+ * is not a mapping (the result is then `generated` alone).
+ */
+function mergeYamlMapping(text: string, generated: string): { text: string; conflicts: string[] } {
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0 || !(doc.contents === null || isMap(doc.contents))) {
+    return { text: generated, conflicts: ["<file>"] };
+  }
+  const current: unknown = doc.toJS() ?? {};
+  const conflicts: string[] = [];
+  for (const [keys, value] of leaves(parse(generated), [])) {
+    const existing = valueAt(current, keys);
+    if (existing === undefined) doc.setIn(keys, value);
+    else if (stableJson(existing) !== stableJson(value)) conflicts.push(keys.join("."));
+  }
+  return { text: doc.toString(), conflicts };
+}
+
+/** Every non-mapping value of a nested record, with its key path. */
+function leaves(value: unknown, keys: string[]): [string[], unknown][] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [[keys, value]];
+  return Object.entries(value).flatMap(([key, item]) => leaves(item, [...keys, key]));
+}
+
+/** The value at `keys` in nested own entries; null when a step is not a mapping. */
+function valueAt(value: unknown, keys: readonly string[]): unknown {
+  let cursor = value;
+  for (const key of keys) {
+    if (cursor === undefined) return undefined;
+    if (typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) return null;
+    cursor = ownValue(cursor as Record<string, unknown>, key);
+  }
+  return cursor;
 }
 
 async function pushAssetDiff(

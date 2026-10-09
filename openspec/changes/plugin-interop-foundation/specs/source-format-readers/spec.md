@@ -77,6 +77,10 @@ The Claude plugin reader SHALL project manifest metadata, skills from `skills/` 
 - **WHEN** `.mcp.json` declares a server whose header is `Bearer ${API_TOKEN}`
 - **THEN** the server is not projected, it is emitted unchanged for Claude, and other targets report it as an untranslated component
 
+#### Scenario: Manifest command map
+- **WHEN** the manifest `commands` is a map defining `danger` and `safe`, and the entry excludes command `danger`
+- **THEN** each map entry is a command remainder component, and the regenerated manifest's `commands` map holds only `safe`
+
 ### Requirement: Lossless same-format output
 When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
 
@@ -101,6 +105,10 @@ When a transformation applies, the writer SHALL regenerate only the native carri
 #### Scenario: Renamed package with native remainder
 - **WHEN** the entry sets `rename: kit` on a Claude plugin named `review-kit` that has an agent
 - **THEN** resolution emits `acf.selection.remainder-references` (lossy) naming `review-kit`, because the preserved agent may still reference the old name
+
+#### Scenario: Renamed Claude plugin with an MCP bundle
+- **WHEN** a renamed Claude plugin's manifest `mcpServers` lists `./mcp/extra.json` and `./bundles/tool.mcpb`
+- **THEN** the servers of `mcp/extra.json` are regenerated into `.mcp.json`, the regenerated manifest keeps `mcpServers: ["./bundles/tool.mcpb"]`, and `bundles/tool.mcpb` is copied
 
 ### Requirement: Native packages are foreign sources, not ACF source
 SPEC.md §14.4 and CONTEXT.md Axiom 12 SHALL be amended: native plugin packages MAY be read through a declared format reader as foreign sources, but SHALL NOT be accepted as ACF source. Native ACF capabilities keep YAML and Markdown as their authored format and carry native files only under `native/<target>/`.

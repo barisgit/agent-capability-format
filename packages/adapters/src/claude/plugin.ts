@@ -79,15 +79,21 @@ const ACF_OWNED = new Set([
 ]);
 
 /**
- * Root paths Claude reads from a plugin. In a native ACF capability they are not Claude
- * configuration, so they are left out of the plugin with a hint toward `native/claude/`.
+ * Paths Claude reads from a plugin without a manifest naming them. In a source not read as a
+ * Claude plugin they are not that source's configuration, so copying them would activate content
+ * its reader ignored; they are left out of the plugin with a hint. `bin/` stays: it only puts the
+ * package's own executables on PATH, which its servers may run.
  */
 const CLAUDE_DISCOVERED = new Set([
   ".claude-plugin",
   MCP_PATH,
   ".lsp.json",
   "settings.json",
+  "agents",
+  "commands",
+  "hooks/hooks.json",
   "output-styles",
+  "workflows",
 ]);
 
 /** One file of the plugin package, relative to its root. */
@@ -210,9 +216,10 @@ function unselected(capability: AcfCapability): { paths: Set<string>; keys: Set<
 }
 
 /**
- * The source manifest's unprojected entries for the plugin, without the keys and path entries
- * of remainder components selection removed: a key only removed components used is dropped, and
- * a shared component key (such as `agents`) loses the paths of removed files.
+ * The source manifest's unprojected entries for the plugin, without the keys and entries of
+ * remainder components selection removed: a key only removed components used is dropped, a
+ * shared component key (such as `agents`) loses the paths of removed files, and a shared
+ * component map (such as a `commands` map) loses the entries of removed components.
  */
 function selectedManifestEntries(
   capability: AcfCapability,
@@ -222,10 +229,29 @@ function selectedManifestEntries(
   const entries: Array<[string, unknown]> = [];
   for (const [key, value] of Object.entries(rawManifest)) {
     if (PROJECTED_MANIFEST_KEYS.has(key) || keys.has(key)) continue;
-    const kept = withoutPaths(value, paths);
+    const kept = isRecord(value)
+      ? withoutNames(value, removedNames(capability, key))
+      : withoutPaths(value, paths);
     if (kept !== undefined) entries.push([key, kept]);
   }
   return entries;
+}
+
+/** Names of the removed remainder components declared under manifest key `key`. */
+function removedNames(capability: AcfCapability, key: string): Set<string> {
+  return new Set(
+    removedRemainder(capability)
+      .filter((component) => component.manifestKeys?.includes(key) === true)
+      .map((component) => component.name),
+  );
+}
+
+/** `map` without the entries `names` lists. */
+function withoutNames(
+  map: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(map).filter(([name]) => !names.has(name)));
 }
 
 /** `value` without string entries naming one of `paths`; undefined when nothing is left. */
@@ -306,6 +332,8 @@ async function generatedPackage(
 
   const extras: Array<[string, unknown]> =
     format === "claude-plugin" ? selectedManifestEntries(capability, rawManifest) : [];
+  const bundles = selectedBundles(capability, rawManifest.mcpServers);
+  if (bundles !== undefined) extras.push(["mcpServers", bundles]);
   for (const entry of Object.entries(nativeExtras(capability.manifest.targets, "claude")))
     if (!extras.some(([key]) => key === entry[0])) extras.push(entry);
   const manifest = pluginManifest(capability, extras, report);
@@ -342,7 +370,8 @@ async function addSkills(
 
 /**
  * The plugin's `.mcp.json`: every canonical server Claude accepts, plus the raw entries of a
- * Claude plugin source's servers its reader kept as remainder. Undefined without servers.
+ * Claude plugin source's servers its reader kept as remainder. Bundle references stay in the
+ * manifest (`selectedBundles`). Undefined without servers.
  */
 async function mcpConfig(
   capability: AcfCapability,
@@ -370,8 +399,9 @@ async function mcpConfig(
     }
   }
   if (capability.source?.format === "claude-plugin") {
+    const bundles = bundleReferences(rawManifest.mcpServers);
     for (const component of capability.remainder ?? []) {
-      if (component.kind !== "mcp-server") continue;
+      if (component.kind !== "mcp-server" || bundles.includes(component.name)) continue;
       const entry = await rawServerEntry(capability, fs, rawManifest, component);
       if (entry !== undefined) servers[component.name] = entry;
       else
@@ -384,7 +414,7 @@ async function mcpConfig(
               family: "mcp",
               component: component.name,
             },
-            "a transformed plugin regenerates .mcp.json, which cannot reference a remote or .mcpb server",
+            "its declaration could not be read again from the source",
           ),
         );
     }
@@ -425,7 +455,7 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Claude configuration in a native ACF root is left out with a hint.
+ * Claude configuration in a source not read as a Claude plugin is left out with a hint.
  */
 async function supportFiles(
   capability: AcfCapability,
@@ -455,11 +485,14 @@ async function supportFiles(
         path.posix.basename(relativePath) === MANAGEMENT_NOTICE_FILENAME
       )
         return true;
-      if (format !== "acf" || !CLAUDE_DISCOVERED.has(relativePath)) return false;
+      if (format === "claude-plugin" || !CLAUDE_DISCOVERED.has(relativePath)) return false;
       diagnostics.push({
         severity: "info",
         code: "acf.claude.plugin-file-ignored",
-        message: `${relativePath} is not read from ACF capability ${capability.manifest.name}; put files for its Claude plugin under native/claude/`,
+        message:
+          format === "acf"
+            ? `${relativePath} is not read from ACF capability ${capability.manifest.name}; put files for its Claude plugin under native/claude/`
+            : `${relativePath} is Claude configuration that the ${format} reader of ${capability.manifest.name} does not read; it is left out of its Claude plugin (format: claude-plugin reads the source as a Claude plugin)`,
         path: path.join(capability.root, relativePath),
         targetId: "claude",
         capability: { name: capability.manifest.name },
@@ -471,13 +504,48 @@ async function supportFiles(
   });
 }
 
-/** Package-relative JSON config files named by a Claude manifest `mcpServers` value. */
+/**
+ * Package-relative JSON config files named by a Claude manifest `mcpServers` value. Their servers
+ * are regenerated into `.mcp.json`, so the files themselves are not copied.
+ */
 function jsonConfigPaths(value: unknown): string[] {
-  const values = Array.isArray(value) ? value : [value];
-  return values
-    .filter((item): item is string => typeof item === "string" && !item.includes("://"))
+  return references(value)
+    .filter((item) => !isBundleReference(item))
     .map((item) => path.posix.normalize(item))
     .filter((item) => !item.startsWith("../"));
+}
+
+/**
+ * The manifest `mcpServers` value for the bundle references whose servers selection kept, in
+ * the source's shape (one string or a list); undefined when none is kept. `.mcp.json` cannot
+ * hold a bundle, so these stay manifest references, and a local bundle file is copied as a
+ * support file.
+ */
+function selectedBundles(capability: AcfCapability, value: unknown): unknown {
+  const kept = bundleReferences(value).filter((reference) =>
+    (capability.remainder ?? []).some(
+      (component) => component.kind === "mcp-server" && component.name === reference,
+    ),
+  );
+  if (kept.length === 0) return undefined;
+  return typeof value === "string" ? kept[0] : kept;
+}
+
+/** The `.mcpb` and HTTPS bundle references of a manifest `mcpServers` value, as authored. */
+function bundleReferences(value: unknown): string[] {
+  return references(value).filter(isBundleReference);
+}
+
+/** The string entries of a manifest component value: one string or a list mixing forms. */
+function references(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [value]).filter(
+    (item): item is string => typeof item === "string",
+  );
+}
+
+/** True for an MCP bundle reference, which the Claude plugin reader keeps as remainder. */
+function isBundleReference(reference: string): boolean {
+  return reference.startsWith("https://") || reference.endsWith(".mcpb");
 }
 
 function parseJsonObject(text: string | null): Record<string, unknown> | undefined {

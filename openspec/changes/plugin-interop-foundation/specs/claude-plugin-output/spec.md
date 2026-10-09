@@ -22,8 +22,12 @@ For the Claude plugin carrier, caplet SHALL write one Claude plugin per capabili
 - **WHEN** ACF capability `review` version `1.2.0` with one skill and one stdio server is applied for Claude at project scope
 - **THEN** `.claude/.acf/marketplace/plugins/review/` contains `.claude-plugin/plugin.json` with `"name": "review"` and a version starting `1.2.0+acf.`, `skills/<skill>/SKILL.md` and `.mcp.json`
 
-### Requirement: Claude configuration in a native ACF root
-When caplet writes a native ACF capability as a Claude plugin, it SHALL leave out of the plugin each root entry Claude would read as plugin configuration (`.claude-plugin/`, `.mcp.json`, `.lsp.json`, `settings.json`, `output-styles/`) and report each with an `info` diagnostic `acf.claude.plugin-file-ignored` that names the entry and points to `native/claude/`, where files for the capability's Claude plugin belong (SPEC.md §14.4). The capability's own `plugin.json` and `.mcp.json` are generated from `acf.yml` and its MCP servers. Claude plugin and Agent Plugins sources are not affected: those files are their own configuration.
+### Requirement: Claude configuration in a source not read as a Claude plugin
+When caplet writes a capability that was not read as a Claude plugin (native ACF, Agent Plugins, bare skills) as a Claude plugin, it SHALL leave out of the plugin each entry Claude would read as plugin configuration without a manifest naming it (`.claude-plugin/`, `.mcp.json`, `.lsp.json`, `settings.json`, `agents/`, `commands/`, `hooks/hooks.json`, `output-styles/`, `workflows/`) and report each with an `info` diagnostic `acf.claude.plugin-file-ignored` that names the entry. For a native ACF capability it points to `native/claude/`, where files for the capability's Claude plugin belong (SPEC.md §14.4); for a foreign source it points to `format: claude-plugin`. The preserved source keeps these files. The capability's own `plugin.json` and `.mcp.json` are generated from its manifest and MCP servers. A Claude plugin source is not affected: those files are its own configuration.
+
+#### Scenario: Agent Plugins package with a Claude MCP config
+- **WHEN** an Agent Plugins package also contains `.mcp.json` declaring a stdio server and is applied for Claude
+- **THEN** the generated plugin has no `.mcp.json` from the source, the server does not run, and the plan shows `acf.claude.plugin-file-ignored` for `.mcp.json`
 
 #### Scenario: Native ACF capability with a .claude-plugin directory
 - **WHEN** ACF capability `review` has a `.claude-plugin/` directory at its root and is applied for Claude with the plugin carrier

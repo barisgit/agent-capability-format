@@ -218,7 +218,10 @@ const LISTING_KEYS = [
   "types",
 ];
 
-/** Directory components whose files each become one component; manifest paths replace the default. */
+/**
+ * Directory components whose files each become one component; manifest paths replace the
+ * default. A manifest `commands` map instead makes each named definition one component.
+ */
 const FILE_COMPONENTS = [
   { key: "agents", kind: "agent", dir: "agents" },
   { key: "commands", kind: "command", dir: "commands" },
@@ -253,6 +256,17 @@ async function remainderComponents(
 
   for (const spec of FILE_COMPONENTS) {
     handled.add(spec.key);
+    if (spec.key === "commands" && isRecord(raw.commands)) {
+      for (const [name, definition] of Object.entries(raw.commands))
+        await add({
+          kind: spec.kind,
+          name,
+          paths: await commandSource(root, definition),
+          manifestKeys: [spec.key],
+          class: keyClass([spec.key]),
+        });
+      continue;
+    }
     const declared = componentPaths(raw[spec.key]);
     const sources = raw[spec.key] === undefined ? [spec.dir] : declared;
     for (const relative of sources) {
@@ -342,6 +356,15 @@ async function remainderComponents(
     });
   }
   return out;
+}
+
+/** The package file a command-map definition's `source` names, when it is one. */
+async function commandSource(root: string, definition: unknown): Promise<string[]> {
+  if (!isRecord(definition) || typeof definition.source !== "string") return [];
+  const resolved = contained(root, definition.source);
+  return resolved !== undefined && (await isFile(resolved))
+    ? [path.posix.normalize(definition.source)]
+    : [];
 }
 
 function hasMonitors(raw: Record<string, unknown>, key: string): boolean {

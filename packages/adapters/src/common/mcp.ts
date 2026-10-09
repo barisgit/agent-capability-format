@@ -11,6 +11,7 @@ import {
   type AcfCapability,
   type AcfOwnership,
   acfPathPlaceholders,
+  applicableTargets,
   type Carrier,
   componentOmitted,
   type Diagnostic,
@@ -29,6 +30,7 @@ import { makeFileDiff } from "./diff.js";
 import { jsonPointerEscape, mergeJson } from "./json-merge.js";
 import { removeMarkedBlock, replaceMarkedBlock } from "./markers.js";
 import { substitutePlaceholders } from "./placeholders.js";
+import { setOwn } from "./records.js";
 import {
   type ComponentReport,
   considerField,
@@ -140,7 +142,7 @@ export function renderNativeMcpServer(
   for (const [key, value] of Object.entries(nativeExtras(server.targets, target))) {
     // Core fields own their generated keys; validation reports an extra that repeats one.
     if (nativeKeyInfo(target, "mcp", key)?.generatedFrom !== undefined) continue;
-    extras[key] = value;
+    setOwn(extras, key, value);
   }
   reportForeignExtras(report, subject, server.targets);
 
@@ -223,6 +225,24 @@ export async function emitMcp(
     diffs.push(makeFileDiff(keep, await fs.readText(keep), "", [{ kind: "file" }]));
   }
   return diffs;
+}
+
+/**
+ * The support diagnostics of every `capability` MCP server that applies to `target` on the loose
+ * carrier, without writing anything. Placeholder values do not affect support, so none are
+ * resolved against an install root.
+ */
+export function mcpSupport(capability: AcfCapability, target: TargetId): Diagnostic[] {
+  const mcp = capability.mcp;
+  if (mcp === undefined) return [];
+  const values: McpPlaceholderValues = {
+    capabilityDir: capability.root,
+    hookDir: path.dirname(mcp.path),
+    dataDir: capability.root,
+  };
+  return mcp.servers
+    .filter((server) => applicableTargets(capability, server).includes(target))
+    .flatMap((server) => renderNativeMcpServer(capability, server, target, values).diagnostics);
 }
 
 /** The JSON pointer of MCP server `name` in a JSON-config target's MCP file. */

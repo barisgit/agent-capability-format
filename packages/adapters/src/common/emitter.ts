@@ -269,10 +269,8 @@ export async function emitHooks(
     for (const entry of entries) planned.push({ type: undefined, entry, nativeEvents: [event] });
   for (const { type, entry, nativeEvents } of planned) {
     const effect = degradeEffectIfNeeded(type, entry, layout.targetId, diagnostics);
-    const scriptPath = path.join(
-      hookDir,
-      `${input.capability.manifest.name}__${entry.name}${hookExtension(entry.run)}`,
-    );
+    const id = hookIdentity(input.capability, type, nativeEvents, entry);
+    const scriptPath = path.join(hookDir, `${id.script}${hookExtension(entry.run)}`);
     const scriptBefore = await fs.readText(scriptPath);
     diffs.push(makeFileDiff(scriptPath, scriptBefore, renderHookScript(entry), [{ kind: "file" }]));
     for (const eventName of nativeEvents) {
@@ -283,6 +281,7 @@ export async function emitHooks(
         entry,
         effect,
         scriptPath,
+        id.marker,
       );
       const bucket = entriesByNativeEvent.get(eventName) ?? [];
       bucket.push(settingsEntry);
@@ -295,9 +294,15 @@ export async function emitHooks(
   )) {
     for (const entry of entries) {
       const current = readHookEntries(settings, eventName);
-      const replaceIndex = current.findIndex(
-        (item) => isRecord(item) && item.acfMarker === entry.acfMarker,
-      );
+      const markerIndex = (marker: string) =>
+        current.findIndex((item) => isRecord(item) && item.acfMarker === marker);
+      // Entries written before markers named the hook type carry `acf:<capability>:<name>`;
+      // taking over their index keeps the owned pointer the sidecar recorded for them.
+      const ownIndex = markerIndex(entry.acfMarker);
+      const replaceIndex =
+        ownIndex === -1
+          ? markerIndex(`acf:${input.capability.manifest.name}:${entry.name}`)
+          : ownIndex;
       const index = replaceIndex === -1 ? current.length : replaceIndex;
       settings = mergeJson(settings, `/hooks/${jsonPointerEscape(eventName)}/${index}`, entry);
       owns.push({ kind: "json-pointer", pointer: `/hooks/${eventName}/${index}` });
@@ -527,6 +532,37 @@ function degradeEffectIfNeeded(
   return entry.effect;
 }
 
+/**
+ * The names one hook entry is written under: its script file in the hook directory (without
+ * extension) and its `acfMarker` in the settings file. A hook name is unique only within its
+ * canonical type or native event, so both include it: `<capability>__<type>__<name>` and
+ * `acf:<capability>:<type>:<name>`, or for a target-native event (SPEC.md §13.9)
+ * `<capability>__native-<event>__<name>` and `acf:<capability>:native:<event>:<name>`. The event is
+ * percent-encoded in the file name, so every event spelling gives a distinct, portable name.
+ */
+function hookIdentity(
+  cap: AcfCapability,
+  type: CanonicalHookType | undefined,
+  nativeEvents: readonly string[],
+  entry: HookEntry,
+): { script: string; marker: string } {
+  const capability = cap.manifest.name;
+  if (type !== undefined)
+    return {
+      script: `${capability}__${type}__${entry.name}`,
+      marker: `acf:${capability}:${type}:${entry.name}`,
+    };
+  const event = nativeEvents[0] ?? "";
+  const fileEvent = encodeURIComponent(event).replace(
+    /[!'()*~]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return {
+    script: `${capability}__native-${fileEvent}__${entry.name}`,
+    marker: `acf:${capability}:native:${event}:${entry.name}`,
+  };
+}
+
 function hookExtension(run: HookRun): string {
   if (run.shell === "powershell") return ".ps1";
   if (run.shell === "bash") return ".sh";
@@ -549,6 +585,7 @@ function hookSettingsEntry(
   entry: HookEntry,
   effect: HookEffect,
   scriptPath: string,
+  acfMarker: string,
 ): HookSettingsEntry {
   const placeholders: PlaceholderValues = {
     capabilityDir: cap.root,
@@ -564,7 +601,7 @@ function hookSettingsEntry(
   const env = substituteStringRecord(entry.run.env, placeholders);
   if (env !== undefined) renderedRun.env = env;
   const out: HookSettingsEntry = {
-    acfMarker: `acf:${cap.manifest.name}:${entry.name}`,
+    acfMarker,
     name: entry.name,
     ...(type === undefined ? {} : { type }),
     event: eventName,

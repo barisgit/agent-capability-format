@@ -33,7 +33,7 @@ async function readHooksCapability(hooksYml: string): Promise<AcfCapability> {
   return capability;
 }
 
-/** The `acf:<capability>:<hook>` markers each native event of the target's settings file holds. */
+/** The `acf:<capability>:<type or native:event>:<hook>` markers each native event of the target's settings file holds. */
 async function emittedHooks(
   capability: AcfCapability,
   target: string,
@@ -92,18 +92,18 @@ test("family-level native hooks reach the hook writer of their own target only",
     ].join("\n"),
   );
   expect((await emittedHooks(capability, "claude")).markers).toEqual({
-    InstructionsLoaded: ["acf:demo:claude-extra"],
-    SessionStart: ["acf:demo:greet"],
+    InstructionsLoaded: ["acf:demo:native:InstructionsLoaded:claude-extra"],
+    SessionStart: ["acf:demo:session_start:greet"],
   });
   expect((await emittedHooks(capability, "codex")).markers).toEqual({
-    PreToolUse: ["acf:demo:codex-guard"],
-    SessionStart: ["acf:demo:greet"],
+    PreToolUse: ["acf:demo:native:PreToolUse:codex-guard"],
+    SessionStart: ["acf:demo:session_start:greet"],
   });
   expect((await emittedHooks(capability, "opencode")).markers).toEqual({
-    "session.start": ["acf:demo:greet"],
+    "session.start": ["acf:demo:session_start:greet"],
   });
   expect((await emittedHooks(capability, "pi")).markers).toEqual({
-    session_start: ["acf:demo:greet"],
+    session_start: ["acf:demo:session_start:greet"],
   });
 });
 
@@ -123,7 +123,7 @@ test("native hooks alone keep a capability on loose Claude files, where they are
   if (claude === null) throw new Error("demo does not apply to claude");
   expect(capabilityCarrier(claude, "claude")).toBe("loose");
   expect((await emittedHooks(capability, "claude")).markers).toEqual({
-    InstructionsLoaded: ["acf:demo:claude-extra"],
+    InstructionsLoaded: ["acf:demo:native:InstructionsLoaded:claude-extra"],
   });
   // Other targets receive nothing from a block that names Claude.
   const codex = applyApplicability(capability, "codex");
@@ -146,4 +146,79 @@ test("a target without hooks reports native hooks for it as unsupported", async 
   expect(cursor.markers).toEqual({});
   expect(cursor.diagnostics).toEqual(["acf.adapter.facet-unsupported"]);
   expect((await emittedHooks(capability, "claude")).diagnostics).toEqual([]);
+});
+
+test("hooks sharing a name across hook types and native events keep their own script and entry", async () => {
+  const capability = await readHooksCapability(
+    [
+      "session_start:",
+      "  - name: greet",
+      "    run:",
+      "      command: ./start.sh",
+      "    effect: observe",
+      "stop:",
+      "  - name: greet",
+      "    run:",
+      "      command: ./stop.sh",
+      "    effect: observe",
+      "targets:",
+      "  codex:",
+      "    hooks:",
+      "      SessionStart:",
+      "        - name: greet",
+      `${run("./native.sh")}          effect: observe`,
+      "",
+    ].join("\n"),
+  );
+  const applicable = applyApplicability(capability, "codex");
+  if (applicable === null) throw new Error("demo does not apply to codex");
+  const result = await emitModel(codexAdapter, applicable, "/project/.codex");
+  const scripts = result.diffs
+    .filter((diff) => diff.path.startsWith("/project/.codex/hooks/"))
+    .map((diff) => [path.basename(diff.path), diff.after]);
+  expect(scripts).toEqual([
+    ["demo__native-SessionStart__greet", "#!/usr/bin/env sh\nexec './native.sh' \"$@\"\n"],
+    ["demo__session_start__greet", "#!/usr/bin/env sh\nexec './start.sh' \"$@\"\n"],
+    ["demo__stop__greet", "#!/usr/bin/env sh\nexec './stop.sh' \"$@\"\n"],
+  ]);
+  expect((await emittedHooks(capability, "codex")).markers).toEqual({
+    SessionStart: ["acf:demo:session_start:greet", "acf:demo:native:SessionStart:greet"],
+    Stop: ["acf:demo:stop:greet"],
+  });
+});
+
+test("a hook entry written under its earlier name-only marker is replaced in place", async () => {
+  const capability = await readHooksCapability(
+    [
+      "session_start:",
+      "  - name: greet",
+      "    run:",
+      "      command: ./greet.sh",
+      "    effect: observe",
+      "",
+    ].join("\n"),
+  );
+  const applicable = applyApplicability(capability, "codex");
+  if (applicable === null) throw new Error("demo does not apply to codex");
+  const before = JSON.stringify({
+    hooks: { SessionStart: [{ acfMarker: "acf:demo:greet" }, { acfMarker: "user" }] },
+  });
+  const result = await emitModel(
+    codexAdapter,
+    applicable,
+    "/project/.codex",
+    {},
+    {
+      "/project/.codex/settings.json": before,
+    },
+  );
+  const settings = result.diffs.find((diff) => diff.path === "/project/.codex/settings.json");
+  expect(settings?.owns).toEqual([{ kind: "json-pointer", pointer: "/hooks/SessionStart/0" }]);
+  const after = JSON.parse(String(settings?.after)) as {
+    hooks: { SessionStart: Array<{ acfMarker: string }> };
+  };
+  expect(after.hooks.SessionStart.map((entry) => entry.acfMarker)).toEqual([
+    "acf:demo:session_start:greet",
+    "user",
+  ]);
 });

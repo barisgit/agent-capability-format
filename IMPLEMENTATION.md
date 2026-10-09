@@ -1449,10 +1449,12 @@ is `<claude-install-root>/.acf/marketplace/plugins/<capability>/`, inside
 `artifactRoot` to the package directory, so no `ACF-MANAGED.md` is written
 inside it; the install-root inventory lists `.acf/marketplace/` in the
 `acf-system` section and `.acf/marketplace/plugins/<capability>/` under each
-capability. From a native ACF root the writer leaves out `.claude-plugin/`,
-`.mcp.json`, `.lsp.json`, `settings.json`, and `output-styles/` with
+capability. From any source not read as a Claude plugin the writer leaves out
+the entries Claude discovers without a manifest (`CLAUDE_DISCOVERED`:
+`.claude-plugin/`, `.mcp.json`, `.lsp.json`, `settings.json`, `agents/`,
+`commands/`, `hooks/hooks.json`, `output-styles/`, `workflows/`) with
 `acf.claude.plugin-file-ignored` (info) and copies every other file outside
-ACF-defined paths. `EmitResult.plugins` reports each package:
+format-owned paths. `EmitResult.plugins` reports each package:
 
 ```ts
 export type EmittedPlugin = {
@@ -1476,7 +1478,9 @@ applicability). `isUnchangedClaudePlugin` compares it and `renamedFrom` with
 the capability the writer receives: an unchanged package is copied
 byte-identically except the `plugin.json` `version` value; a transformed one
 gets a regenerated manifest, skills, and `.mcp.json`, and loses the files and
-manifest keys that only removed remainder components used.
+manifest keys that only removed remainder components used. `.mcp.json` cannot
+hold an MCP bundle, so the manifest `mcpServers` keeps the selected `.mcpb` and
+HTTPS bundle references and a local bundle file is copied.
 
 Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 
@@ -2831,7 +2835,7 @@ acf.mcp.config-conflict                      # server name claimed twice or user
 
 # Claude carrier and host
 acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
-acf.claude.plugin-file-ignored               # Claude config in a native ACF root left out of its plugin (info)
+acf.claude.plugin-file-ignored               # Claude config in a non-Claude source left out of its plugin (info)
 acf.claude.skills-option-ignored             # targets.claude.skills cannot place a plugin's skills (warn)
 acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
 acf.claude.state-unreadable                  # plugin list unreadable (warn)

@@ -51,8 +51,8 @@ test("pi emits all six families without facet-unsupported and diagnoses partial 
     string,
     unknown[]
   >;
-  expect(JSON.stringify(hooks.tool_call_before)).toContain("acf:test-cap:guard");
-  expect(JSON.stringify(hooks.pre_compact)).toContain("acf:test-cap:compact");
+  expect(JSON.stringify(hooks.tool_call_before)).toContain("acf:test-cap:pre_tool:guard");
+  expect(JSON.stringify(hooks.pre_compact)).toContain("acf:test-cap:pre_compact:compact");
   expect(parseJsonDiff(byPath(result.diffs, ".pi/mcp.json")).mcpServers).toBeDefined();
 });
 

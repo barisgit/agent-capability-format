@@ -20,6 +20,7 @@ import {
   supportCell,
   type TargetId,
 } from "@caplet/core";
+import { ownValue, setOwn } from "./records.js";
 import { type ComponentReport, considerField, reportForeignExtras } from "./support-report.js";
 
 /** Relative path of the Codex skill metadata file (`agents/openai.yaml`). */
@@ -133,7 +134,7 @@ export function renderNativeSkill(
       setDotted(metadata, key, value);
       result.extras[`${CODEX_SKILL_METADATA}#${key}`] = value;
     } else {
-      result.frontmatter[key] = value;
+      setOwn(result.frontmatter, key, value);
       result.extras[`${SKILL_FILE}#${key}`] = value;
     }
   }
@@ -143,20 +144,24 @@ export function renderNativeSkill(
   return result;
 }
 
+/**
+ * Sets the nested entry a dotted key names. Every segment is an own entry, so a segment such as
+ * `__proto__` names a key of the output rather than the object's prototype.
+ */
 function setDotted(root: Record<string, unknown>, dotted: string, value: unknown): void {
   const segments = dotted.split(".");
   const last = segments.pop();
   if (last === undefined) return;
   let cursor = root;
   for (const segment of segments) {
-    const next = cursor[segment];
+    const next = ownValue(cursor, segment);
     if (typeof next === "object" && next !== null && !Array.isArray(next)) {
       cursor = next as Record<string, unknown>;
     } else {
       const created: Record<string, unknown> = {};
-      cursor[segment] = created;
+      setOwn(cursor, segment, created);
       cursor = created;
     }
   }
-  cursor[last] = value;
+  setOwn(cursor, last, value);
 }
