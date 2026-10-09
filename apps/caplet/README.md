@@ -31,6 +31,9 @@ it. When a still-selected capability no longer needs its plugin but Claude would
 options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`); it loads twice until you
 run `claude plugin uninstall <id> --scope <scope> --keep-data`.
 
+An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
+left out for every target with the warning `acf.source.component-invalid`; caplet 0.1.0 loaded it as written.
+
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
