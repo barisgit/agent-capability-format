@@ -39,9 +39,10 @@ export type PlanAndApplyInput = {
 };
 
 /**
- * Plans and applies the resolved scopes for `add` and `update`, printing the plan, the
- * executable change report and the applied counts, or one `--json` envelope with `plan`,
- * `applied` (null when nothing was written) and `executables`. The report never prompts or
+ * Plans and applies the resolved scopes for `add` and `update`, printing the compatibility
+ * report, the plan, the executable change report and the applied counts as `apply` does, or one
+ * `--json` envelope with `plan`, `applied` (null when nothing was written), `outcomes` and
+ * `executables`. The report never prompts or
  * blocks: adding or updating the source is the approval (design D10). Sets the exit code.
  */
 export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
@@ -56,6 +57,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     ...input.payload,
     plan: planToJson(view),
     applied,
+    outcomes: plan.outcomes,
     executables,
     ...claudeJson(claude),
   });
@@ -65,7 +67,10 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   process.exitCode = planCode;
   if (blocking !== 0) {
     if (json) printJson(command, false, diagnostics, envelope(null));
-    else printDiagnostics(diagnostics, args);
+    else {
+      printDiagnostics(diagnostics, args);
+      out.compatibility(plan.outcomes, plan.targets);
+    }
     return;
   }
   if (!json) {
@@ -80,6 +85,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     if (json) printJson(command, code === 0, all, envelope(settled.applied, settled.claude));
     else {
       printDiagnostics(settled.diagnostics, args);
+      printCompatibility(out, plan, view.fileCount);
       reportEmptyPlan(out, plan, false);
       out.executables(executables);
       printClaude(out, settled.claude, "applied");
@@ -88,6 +94,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
   }
   if (!json) {
     out.log("");
+    printCompatibility(out, plan, view.fileCount);
     out.plan(view);
     out.executables(executables);
   }
@@ -190,6 +197,19 @@ export function claudeJson(report: ClaudeReport | undefined): {
   return renames.length === 0
     ? { claude: report.scopes }
     : { claude: report.scopes, renames: renamesJson(renames) };
+}
+
+/**
+ * Prints the compatibility report of a plan that is not blocked from writing: before its files,
+ * or, for a plan with no file to write, only while a refusal blocks a capability, because that
+ * is then the one thing left to do.
+ */
+export function printCompatibility(
+  out: Reporter,
+  plan: Pick<EmitPlan, "outcomes" | "targets" | "blocked">,
+  fileCount: number,
+): void {
+  if (fileCount > 0 || plan.blocked.length > 0) out.compatibility(plan.outcomes, plan.targets);
 }
 
 /** Prints the status line of a plan with no file to write, after {@link settleEmptyPlan}. */

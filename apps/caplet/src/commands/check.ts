@@ -35,17 +35,17 @@ export const checkCommand = defineCommand({
       }
       const json = readJson(context.args);
       const out = reporter(context.args);
-      const allDiagnostics = [...diagnostics, ...lockDiagnostics];
-      if (!json) printDiagnostics(allDiagnostics, context.args);
-      const finish = (code: 0 | 1 | 2 | 3, result: string, pending: number, message?: string) => {
+      let reported = [...diagnostics, ...lockDiagnostics];
+      const finish = (code: 0 | 1 | 2 | 3, result: string, pending: number, message: string) => {
         if (json) {
-          printJson("check", code === 0, allDiagnostics, {
+          printJson("check", code === 0, reported, {
             result,
             pending,
             capabilities: capabilityCount,
             scopes: scopeRoots.map((scopeRoot) => scopeRoot.scope),
           });
-        } else if (message !== undefined) {
+        } else {
+          printDiagnostics(reported, context.args);
           if (code === 0) out.done(message);
           else out.failure(message);
         }
@@ -61,6 +61,17 @@ export const checkCommand = defineCommand({
         return;
       }
       const plan = await buildEmitPlan(context.args);
+      // The plan repeats the validation and lock findings above and adds what emitting found,
+      // such as a component apply refuses. Lock staleness only fails with --frozen, judged above.
+      reported = plan.diagnostics;
+      const planInvalid = exitCodeForDiagnostics(
+        reported.filter((d) => !d.code.startsWith("acf.lock.")),
+        context.args,
+      );
+      if (planInvalid !== 0) {
+        finish(2, "invalid", 0, "Validation failed");
+        return;
+      }
       const pending = plan.diffs.length;
       if (pending > 0) {
         finish(

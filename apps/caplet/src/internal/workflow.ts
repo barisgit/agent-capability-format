@@ -21,6 +21,7 @@ import {
   executableComponents,
   type FileDiff,
   hookEntries,
+  MANAGEMENT_NOTICE_FILENAME,
   readCapletConfig,
   resolveScopeCapabilities,
   type Scope,
@@ -55,6 +56,7 @@ import {
   readSidecar,
   relativeSidecarPath,
   removeOwnedRegionsFromText,
+  SIDECAR_FILENAME,
   type SidecarOwner,
   writeSidecar,
 } from "../apply/sidecar.js";
@@ -476,13 +478,13 @@ export async function installedExecutables(
   const executables: ExecutableComponent[] = [];
   for (const scopeRoot of await resolveScopeRoots(readScope(args), cwd)) {
     const { capabilities } = await resolveScopeCapabilities(scopeRoot);
-    const canonical = await readSidecar(path.join(scopeRoot.agentsDir, ".acf-managed.json"));
+    const canonical = await readSidecar(path.join(scopeRoot.agentsDir, SIDECAR_FILENAME));
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
       if (installRoot === null) continue;
       const written = new Set(
         [
-          ...(await readSidecar(path.join(installRoot, ".acf-managed.json"))).managed.filter(
+          ...(await readSidecar(path.join(installRoot, SIDECAR_FILENAME))).managed.filter(
             (entry) => entry.target === undefined || entry.target === targetId,
           ),
           ...(targetMap[targetId]?.discoversCanonicalSkills === true
@@ -628,7 +630,7 @@ async function sweepStaleSidecarEntries(input: SweepInput): Promise<SweepResult>
         destination: candidate.destination,
       };
       rootContexts.set(candidate.installRoot, context);
-      const sidecar = await readSidecar(path.join(candidate.installRoot, ".acf-managed.json"));
+      const sidecar = await readSidecar(path.join(candidate.installRoot, SIDECAR_FILENAME));
       for (const entry of sidecar.managed) {
         if (entry.capability === ACF_SYSTEM_OWNER) continue;
         const pathKey = `${candidate.installRoot}\u0000${entry.path}`;
@@ -848,25 +850,7 @@ export type ApplicablePlan = Pick<
 export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary> {
   const results: ApplyResult[] = [];
   const diagnostics: Diagnostic[] = [];
-  const blockedRoots = new Set<string>();
-  for (const item of plan.diffs) {
-    if (blockedRoots.has(item.installRoot)) continue;
-    const violation = await containmentViolation(
-      resolveDiffPath(item.installRoot, item.diff.path),
-      outputBoundary(item, plan.cwd),
-    );
-    if (violation === null) continue;
-    blockedRoots.add(item.installRoot);
-    const label = item.destination === "canonical" ? "canonical skills" : item.targetId;
-    diagnostics.push({
-      severity: "error",
-      code: "acf.apply.outside-root",
-      message: `nothing applied for ${label} (${item.scopeRoot.scope} scope): ${violation}`,
-      path: item.diff.path,
-      targetId: item.targetId,
-      data: { installRoot: item.installRoot },
-    });
-  }
+  const blockedRoots = await outsideRootFailures(plan, diagnostics);
   const skipped = new Set<string>();
   const applyItems = async (items: readonly EmittedDiff[]) => {
     for (const group of groupByApplyTarget(items)) {
@@ -874,7 +858,7 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
       const result = await applyDiffs(group.diffs, {
         installRoot: group.installRoot,
         capabilityName: group.capabilityName,
-        sidecarPath: path.join(group.installRoot, ".acf-managed.json"),
+        sidecarPath: path.join(group.installRoot, SIDECAR_FILENAME),
         owner: group.owner,
       });
       results.push(result);
@@ -928,7 +912,7 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
   );
   // The planned inventory assumed every delete; list what a held-back change left in place.
   for (const installRoot of heldBackRoots) {
-    const sidecarPath = path.join(installRoot, ".acf-managed.json");
+    const sidecarPath = path.join(installRoot, SIDECAR_FILENAME);
     const notice = await rootNoticeDiffFromSidecar(
       installRoot,
       await readSidecar(sidecarPath),
@@ -946,6 +930,75 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
   }
   await recordClaudeMarketplaces(claudeRoots);
   return { results, diagnostics, claude };
+}
+
+/**
+ * Checks every path apply may write or delete under each output root before anything is
+ * written: each planned change against its target's boundary, and the root's own sidecar and
+ * `ACF-MANAGED.md` for every root apply may touch, including roots that only sweep stale sidecar
+ * entries or record a Claude marketplace. Each failing root gets one `acf.apply.outside-root`
+ * error; the returned roots must be left untouched.
+ */
+async function outsideRootFailures(
+  plan: ApplicablePlan,
+  diagnostics: Diagnostic[],
+): Promise<Set<string>> {
+  type Check = { installRoot: string; path: string; boundary: OutputBoundary };
+  const owners = new Map<string, { label: string; targetId?: TargetId }>();
+  const checks: Check[] = [];
+  for (const item of plan.diffs) {
+    const label = item.destination === "canonical" ? "canonical skills" : item.targetId;
+    if (!owners.has(item.installRoot)) {
+      owners.set(item.installRoot, {
+        label: `${label} (${item.scopeRoot.scope} scope)`,
+        targetId: item.targetId,
+      });
+    }
+    checks.push({
+      installRoot: item.installRoot,
+      path: resolveDiffPath(item.installRoot, item.diff.path),
+      boundary: outputBoundary(item, plan.cwd),
+    });
+  }
+  for (const root of plan.claude) {
+    if (!owners.has(root.installRoot)) {
+      owners.set(root.installRoot, {
+        label: `claude (${root.scopeRoot.scope} scope)`,
+        targetId: "claude",
+      });
+    }
+  }
+  for (const entry of plan.staleEntries) {
+    const target = entry.owner.target;
+    if (owners.has(entry.installRoot)) continue;
+    owners.set(
+      entry.installRoot,
+      target === "canonical" ? { label: "canonical skills" } : { label: target, targetId: target },
+    );
+  }
+  for (const installRoot of owners.keys()) {
+    const boundary = { roots: [installRoot], files: [] };
+    for (const file of [SIDECAR_FILENAME, MANAGEMENT_NOTICE_FILENAME]) {
+      checks.push({ installRoot, path: path.join(installRoot, file), boundary });
+    }
+  }
+  const blocked = new Set<string>();
+  for (const check of checks) {
+    if (blocked.has(check.installRoot)) continue;
+    const violation = await containmentViolation(check.path, check.boundary);
+    if (violation === null) continue;
+    blocked.add(check.installRoot);
+    const owner = owners.get(check.installRoot);
+    diagnostics.push({
+      severity: "error",
+      code: "acf.apply.outside-root",
+      message: `nothing applied for ${owner?.label ?? check.installRoot}: ${violation}`,
+      path: check.path,
+      ...(owner?.targetId === undefined ? {} : { targetId: owner.targetId }),
+      data: { installRoot: check.installRoot },
+    });
+  }
+  return blocked;
 }
 
 /**
@@ -998,7 +1051,7 @@ async function removeStaleSidecarEntries(stale: readonly StaleSidecarEntry[]): P
     byRoot.set(entry.installRoot, bucket);
   }
   for (const [installRoot, removals] of byRoot) {
-    const sidecarPath = path.join(installRoot, ".acf-managed.json");
+    const sidecarPath = path.join(installRoot, SIDECAR_FILENAME);
     const sidecar = await readSidecar(sidecarPath);
     const before = sidecar.managed.length;
     const removed = new Set(removals.map(staleIdentity));
@@ -1119,7 +1172,7 @@ function emitOptionsForTarget(
 }
 
 async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {
-  const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
+  const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
   return detectDrift(sidecar, {
     readText(relativePath) {
       try {
@@ -1225,7 +1278,7 @@ async function managedRoots(plan: EmitPlan): Promise<ManagedRoot[]> {
     for (const candidate of candidates) {
       const key = `${scopeRoot.scope}\u0000${candidate.destination}`;
       if (seen.has(key)) continue;
-      const sidecar = await readSidecar(path.join(candidate.installRoot, ".acf-managed.json"));
+      const sidecar = await readSidecar(path.join(candidate.installRoot, SIDECAR_FILENAME));
       if (sidecar.managed.length === 0) continue;
       seen.add(key);
       roots.push({

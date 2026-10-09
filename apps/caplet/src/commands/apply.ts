@@ -4,6 +4,7 @@ import {
   appliedLine,
   claudeJson,
   printClaude,
+  printCompatibility,
   reportEmptyPlan,
   settleEmptyPlan,
 } from "../internal/apply-flow.js";
@@ -107,8 +108,7 @@ export const applyCommand = defineCommand({
           return;
         }
         printDiagnostics(settled.diagnostics, context.args);
-        // Blocked capabilities are the one thing left to do, so their report stays visible.
-        if (plan.blocked.length > 0) out.compatibility(plan.outcomes, plan.targets);
+        printCompatibility(out, plan, view.fileCount);
         reportEmptyPlan(out, plan, dryRun);
         out.executables(executables);
         printClaude(out, settled.claude, dryRun ? "planned" : "applied");
@@ -120,7 +120,7 @@ export const applyCommand = defineCommand({
         return;
       }
       if (!json) {
-        out.compatibility(plan.outcomes, plan.targets);
+        printCompatibility(out, plan, view.fileCount);
         out.plan(view);
         out.executables(executables);
       }

@@ -995,8 +995,9 @@ restored (retired loose Claude output is released instead, §4.9).
 Canonical-root entries are kept while their capability and facet exist and
 the facet was not planned into that root. Before writing,
 each install root is checked against its output boundary (the root, a
-target's native skills root, and its MCP file); an escape through a symlinked
-parent fails that root with `acf.apply.outside-root`. `caplet remove` checks
+target's native skills root, and its MCP file), and so are the root's sidecar
+and `ACF-MANAGED.md`; an escape through a symlinked parent or a symlinked file
+fails that root with `acf.apply.outside-root`. `caplet remove` checks
 the same boundary for every root before changing anything.
 
 Adapters do not write the sidecar. Caplet writes it after applying diffs.
@@ -3201,6 +3202,9 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   `caplet update --no-apply` before ambiguous collection narrowing.
 - `caplet update [name] [--scope …] [--no-apply]` re-resolves matching sources
   and applies by default.
+- When `add` and `update` apply, they report the plan as `apply` does: the
+  compatibility report, the file plan and the executable changes, and
+  `outcomes` in `--json`.
 
 ### 14.2 Reconcile commands
 
@@ -3228,9 +3232,14 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   pending changes.
 - `caplet list` (alias `ls`) — list installed capabilities per scope.
 - `caplet show <name>` — show one capability's facets, scope root, and
-  target support; `--json` gives machine output.
+  target support; `--json` gives machine output. Support per target comes
+  from the compatibility outcomes a plan for every target reports: `no` when
+  the target installs none of the capability (not applicable, blocked, or
+  every component omitted), `partial` when a component is omitted or changes
+  behavior, else `yes`.
 - `caplet check [--target …] [--frozen]` — validate without writing. Exits
-  1 when emitted outputs are stale, 2 on validation errors, and 3 with
+  1 when emitted outputs are stale, 2 on validation errors or an `error`
+  the plan reports (such as a component apply refuses), and 3 with
   `--frozen` when the lockfile is stale.
 - `caplet doctor` — checks git availability, `.agents/` readability, the
   target registry, and lockfiles; each check reports pass/warn/fail.

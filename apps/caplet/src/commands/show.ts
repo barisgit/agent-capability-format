@@ -1,7 +1,9 @@
 import {
   type AcfCapability,
+  type ComponentOutcome,
   type Diagnostic,
   resolveScopeCapabilities,
+  type TargetId,
   targetIds,
 } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
@@ -13,7 +15,7 @@ import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../inte
 import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { capabilitySummary, hookEvents } from "../internal/workflow.js";
+import { buildEmitPlan, capabilitySummary, hookEvents } from "../internal/workflow.js";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
@@ -41,11 +43,22 @@ export const showCommand = defineCommand({
           message: `capability not found: ${name}`,
         });
       }
+      // Support comes from the compatibility outcomes a plan for every target reports.
+      const outcomes =
+        matches.length === 0
+          ? []
+          : (await buildEmitPlan({ ...context.args, target: [...targetIds] })).outcomes;
       if (readJson(context.args)) {
         const code = exitCodeForDiagnostics(diagnostics, context.args);
         const payload = matches.map((match) => ({
           scope: match.scope,
           ...(capabilitySummary(match.capability, targetIds) as Record<string, unknown>),
+          support: Object.fromEntries(
+            targetIds.map((target) => [
+              target,
+              supportLevel(outcomes, match.capability.manifest.name, target),
+            ]),
+          ),
         }));
         printJson("show", code === 0, diagnostics, { capabilities: payload });
         process.exitCode = code;
@@ -77,16 +90,36 @@ export const showCommand = defineCommand({
           .map(([family, names]) => [`  ${colors.dim(family)}`, names.join(", ")]);
         for (const line of columns(rows)) out.log(line);
         out.log("");
-        const { applyApplicability } = await import("@caplet/core");
         const head = ["  TARGET", ...targetIds].map((cell) => colors.dim(cell));
         const support = [
           "  supported",
-          ...targetIds.map((targetId) =>
-            applyApplicability(capability, targetId) !== null ? "yes" : colors.yellow("no"),
-          ),
+          ...targetIds.map((targetId) => {
+            const level = supportLevel(outcomes, capability.manifest.name, targetId);
+            return level === "yes" ? level : colors.yellow(level);
+          }),
         ];
         for (const line of columns([head, support])) out.log(line);
       }
     });
   },
 });
+
+/**
+ * How fully `target` carries capability `name`, from the plan's compatibility outcomes: `no` when
+ * it installs none of it (not applicable or planned there, blocked, or every component omitted),
+ * `partial` when a component is omitted or changes behavior, and `yes` otherwise.
+ */
+function supportLevel(
+  outcomes: readonly ComponentOutcome[],
+  name: string,
+  target: TargetId,
+): "yes" | "partial" | "no" {
+  const own = outcomes.filter((item) => item.capability === name && item.target === target);
+  if (own.some((item) => item.outcome === "blocked")) return "no";
+  const components = own.filter((item) => item.family !== "package");
+  if (components.every((item) => item.outcome === "omitted")) return "no";
+  const lossy = components.some(
+    (item) => item.outcome === "omitted" || item.outcome === "changed-behavior",
+  );
+  return lossy ? "partial" : "yes";
+}

@@ -86,3 +86,39 @@ test("caplet show labels synthesized imports in human and JSON output", async ()
     await cleanup(scope);
   }
 });
+
+test("caplet show reports no support on a target that carries none of the capability", async () => {
+  const scope = await makeScope();
+  try {
+    const hooks = path.join(scope.sourceRoot, "hooks-only");
+    await writeText(path.join(hooks, "acf.yml"), "acf: 1\nname: hooks-only\nversion: 1.0.0\n");
+    await writeText(
+      path.join(hooks, "hooks", "hooks.yml"),
+      'pre_tool:\n  - name: guard\n    effect: observe\n    run:\n      command: "echo guard"\n',
+    );
+    await writeText(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${hooks}\n`,
+    );
+    await fetchProject(scope);
+    const args = ["show", "hooks-only", "--cwd", scope.cwd, "--scope", "project"];
+
+    const human = await runCaplet(scope, args);
+    expect(human.exitCode).toBe(0);
+    const [head, row] = human.stdout
+      .split("\n")
+      .filter((line) => line.includes("TARGET") || line.includes("supported"))
+      .map((line) => line.trim().split(/\s+/));
+    const cursor = head?.indexOf("cursor") ?? -1;
+    expect(cursor).toBeGreaterThan(0);
+    expect(row?.[cursor]).toBe("no");
+    expect(row?.[head?.indexOf("claude") ?? -1]).toBe("yes");
+
+    const json = JSON.parse((await runCaplet(scope, [...args, "--json"])).stdout) as {
+      capabilities: Array<{ support: Record<string, string> }>;
+    };
+    expect(json.capabilities[0]?.support).toMatchObject({ claude: "yes", cursor: "no" });
+  } finally {
+    await cleanup(scope);
+  }
+});

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import path from "node:path";
 import packageJson from "../../package.json" with { type: "json" };
-import { cleanup, fetchProject, makeScope, runCaplet } from "../helpers";
+import { cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
 
 function parseEnvelope(stdout: string): Record<string, unknown> {
   return JSON.parse(stdout) as Record<string, unknown>;
@@ -137,6 +138,29 @@ test("caplet show --json wraps capability details in the envelope", async () => 
     const capabilities = envelope.capabilities as Array<{ name: string; scope: string }>;
     expect(capabilities[0]?.name).toBe("alpha-cap");
     expect(capabilities[0]?.scope).toBe("project");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet status --json is not ok and exits 2 with an error diagnostic", async () => {
+  const scope = await makeScope();
+  try {
+    await writeText(path.join(scope.agentsDir, "capabilities.yml"), "acf: 1\ncapabilities: nope\n");
+    const result = await runCaplet(scope, [
+      "status",
+      "--json",
+      "--scope",
+      "project",
+      "--cwd",
+      scope.cwd,
+    ]);
+    expect(result.exitCode).toBe(2);
+    const envelope = parseEnvelope(result.stdout);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "acf.capabilities-yml.invalid" }),
+    );
   } finally {
     await cleanup(scope);
   }

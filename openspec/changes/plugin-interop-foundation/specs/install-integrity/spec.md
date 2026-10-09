@@ -56,11 +56,15 @@ Sidecar entries SHALL record `target`, `carrier`, `capability`, `facet`, `path`,
 - **THEN** the old skill directory is deleted and its sidecar entries are removed
 
 ### Requirement: Output containment
-Every write and delete SHALL resolve, after following existing parent directories, to a location inside the declared output root of its target and scope. A path escaping its root, or a parent directory that is a symbolic link leaving the root, SHALL fail apply for that target with an error naming the path.
+Every write and delete SHALL resolve, after following existing parent directories and an existing symbolic link at the path itself, to a location inside the declared output root of its target and scope; this includes the root's sidecar and `ACF-MANAGED.md`. A path escaping its root, or a parent directory or file that is a symbolic link leaving the root or dangling, SHALL fail apply for that target with an error naming the path.
 
 #### Scenario: Symlinked output directory
 - **WHEN** `.claude/skills` is a symbolic link to `/etc`
 - **THEN** apply fails for Claude without writing through the link
+
+#### Scenario: Symlinked owned file
+- **WHEN** an owned `SKILL.md` or the root's `.acf-managed.json` is a symbolic link to a file outside the root
+- **THEN** apply fails for that root without writing through the link
 
 ### Requirement: Executable change report
 The consumer's explicit act of adding a source or updating it, which pins the resolved revision and payload digest in `capabilities.lock`, SHALL be the approval of that content; caplet SHALL NOT add its own acceptance prompt, acceptance store or activation gate for executable components. `caplet add`, `caplet update` and `caplet apply` (human and `--json` output, including `--dry-run`) SHALL list, per capability and target, every executable component added, changed or removed relative to the previously locked or installed content: MCP stdio commands, hooks, LSP servers, monitors, files with the executable bit, Claude `bin/` entries and other code modules the registry classifies as executing code. The list SHALL be shown whenever it is non-empty, including in non-interactive runs, and SHALL NOT prompt or block. Caplet SHALL NOT pre-approve tools, permissions or MCP servers in any host, and SHALL NOT write or bypass a host's own trust, approval or enterprise-policy state.
