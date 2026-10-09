@@ -5,6 +5,7 @@
 import {
   ACF_SYSTEM_OWNER,
   type AcfCapability,
+  type AcfOwnership,
   type CapletConfig,
   type Diagnostic,
   type ScopeRoot,
@@ -72,7 +73,9 @@ export type SweepResult = {
  * MCP server key. The canonical root is shared with targets this run may not have planned, so an
  * entry there is kept while its capability and facet still exist unless this run planned that
  * facet into the canonical root. Regions another capability now owns are released without a
- * delete, and a partly stale entry forces its path so the remaining regions are re-recorded.
+ * delete, and a partly stale entry forces its path so the remaining regions are re-recorded. An
+ * entry whose regions are all still desired, but which no desired diff records with exactly those
+ * regions, is superseded and goes the same way, deleting nothing.
  * Entries of a capability blocked on the root's target (`keptOutput`) are never stale: a refusal
  * keeps the earlier install.
  *
@@ -140,6 +143,8 @@ type DesiredOwnership = {
   owns: ReadonlySet<string>;
   /** The capabilities that own each `<path key>\0<ownership key>`. */
   owners: ReadonlyMap<string, ReadonlySet<string>>;
+  /** {@link entryKey} of the sidecar entry each desired diff records. */
+  entries: ReadonlySet<string>;
   /** `<install root>\0<capability>\0<family>\0<name>` */
   facets: ReadonlySet<string>;
 };
@@ -147,9 +152,11 @@ type DesiredOwnership = {
 function desiredOwnership(desired: readonly EmittedDiff[]): DesiredOwnership {
   const owns = new Set<string>();
   const owners = new Map<string, Set<string>>();
+  const entries = new Set<string>();
   const facets = new Set<string>();
   for (const item of desired) {
     const key = diffPathKey(item);
+    entries.add(entryKey(key, item.capabilityName, item.diff.owns));
     for (const own of item.diff.owns) {
       owns.add(`${key}\u0000${item.capabilityName}\u0000${ownershipKey(own)}`);
       const regionKey = `${key}\u0000${ownershipKey(own)}`;
@@ -164,7 +171,12 @@ function desiredOwnership(desired: readonly EmittedDiff[]): DesiredOwnership {
       );
     }
   }
-  return { owns, owners, facets };
+  return { owns, owners, entries, facets };
+}
+
+/** A sidecar entry's path key, capability and owned regions, as the stale-entry removal matches it. */
+function entryKey(pathKey: string, capability: string, owns: readonly AcfOwnership[]): string {
+  return `${pathKey}\u0000${capability}\u0000${owns.map(ownershipKey).sort().join("|")}`;
 }
 
 /** Sweeps one sidecar entry of `root` into `result`, as {@link sweepStaleSidecarEntries} describes. */
@@ -184,7 +196,10 @@ function sweepEntry(
   const stale = entry.owns.filter(
     (own) => !desired.owns.has(`${pathKey}\u0000${entry.capability}\u0000${ownershipKey(own)}`),
   );
-  if (stale.length === 0) {
+  // An entry whose regions are all still desired but that no desired diff records any more, such as
+  // the entry of a capability that has since gained a server in the same file, is superseded: it
+  // goes like a stale one, deleting nothing, once the entry that replaces it is recorded.
+  if (stale.length === 0 && desired.entries.has(entryKey(pathKey, entry.capability, entry.owns))) {
     // Still desired. A recorded hash that no longer matches the owned regions on disk is stale
     // sidecar metadata: force the path so the sidecar heals even when the bytes are up to date.
     const disk = diskDriftFs(installRoot);
