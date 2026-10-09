@@ -289,3 +289,23 @@ test("a native/<target>/ file at or above a generated directory or file collides
     );
   }
 });
+
+test("a native file is executable only with the owner execute bit, as the payload digest counts it", async () => {
+  const dir = await tempDir();
+  try {
+    await makeCapability(dir, {
+      "acf.yml": baseManifest,
+      "native/claude/group.sh": "#!/bin/sh\n",
+      "native/claude/owner.sh": "#!/bin/sh\n",
+    });
+    await chmod(path.join(dir, "native/claude/group.sh"), 0o654);
+    await chmod(path.join(dir, "native/claude/owner.sh"), 0o744);
+    const cap = await readCapability(dir, "project", { kind: "local", directory: dir });
+    expect(nativeFiles(cap, "claude").map((file) => [file.path, file.executable])).toEqual([
+      ["group.sh", false],
+      ["owner.sh", true],
+    ]);
+  } finally {
+    await cleanup(dir);
+  }
+});

@@ -5,6 +5,7 @@
  */
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { isExecutableMode } from "../hash/tree.js";
 import { nativeValueProblem } from "../targets/native-keys.js";
 import type {
   CapabilityEntry,
@@ -119,7 +120,7 @@ async function anyExecutable(root: string, paths: readonly string[]): Promise<bo
       ? await filesUnder(root, path.join(root, relative))
       : [relative]) {
       try {
-        if (((await lstat(path.join(root, file))).mode & 0o111) !== 0) return true;
+        if (isExecutableMode((await lstat(path.join(root, file))).mode)) return true;
       } catch {
         // A path named by a manifest but absent from the package executes nothing.
       }

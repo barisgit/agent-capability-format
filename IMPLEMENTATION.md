@@ -340,7 +340,7 @@ export type NativeRemainderComponent = {
 export type NativeFileExtra = {
   target: TargetId
   path: string               // relative to native/<target>/ and to the generated package
-  executable: boolean
+  executable: boolean        // owner execute bit (0o100), as everywhere in core
 }
 ```
 
@@ -2298,7 +2298,10 @@ warnings and recursive portable-asset collection while leaving the upstream
 interactive choices and resolver selectors cannot disagree.
 
 The snapshot copies every regular file of the package root except `.git/`,
-including hidden files, and keeps the executable bit. Symlinks, special
+including hidden files, and keeps the executable bit. Core counts a file as
+executable by the owner execute bit (`0o100`, `isExecutableMode` in
+`hash/tree.ts`) everywhere: the payload digest (SPEC.md §19.6), `native/<target>/`
+files, remainder classification and the executable report. Symlinks, special
 files, and paths that collide after NFC normalization or case folding reject
 the source with `acf.source.snapshot-rejected`. Both digests are computed
 over this unfiltered snapshot (§7.5).

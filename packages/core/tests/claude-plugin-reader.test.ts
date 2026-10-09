@@ -289,3 +289,24 @@ test("a component path whose first name starts with two dots stays inside the pl
   expect(diagnostics).toEqual([]);
   expect(capability?.skills.map((skill) => skill.name)).toEqual(["triage"]);
 });
+
+test("a remainder file is executable only with the owner execute bit", async () => {
+  const root = await tempDir();
+  dirs.push(root);
+  await makeCapability(root, {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "agents/group.md": "---\nname: group\n---\n",
+    "commands/owner.md": "Owner\n",
+  });
+  await chmod(path.join(root, "agents/group.md"), 0o654);
+  await chmod(path.join(root, "commands/owner.md"), 0o744);
+  const { capability } = await readClaudePluginPackage(root, {
+    scope: "project",
+    origin: { kind: "local", directory: root },
+    revision: null,
+  });
+  expect(capability?.remainder?.map((item) => [item.kind, item.executable])).toEqual([
+    ["agent", false],
+    ["command", true],
+  ]);
+});

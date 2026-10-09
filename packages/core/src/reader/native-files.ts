@@ -9,6 +9,7 @@ import type { Dirent } from "node:fs";
 import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { AGENT_PLUGINS_DIALECT, NATIVE_FILES_DIR } from "../extras/index.js";
+import { isExecutableMode } from "../hash/tree.js";
 import { isTargetId } from "../targets/index.js";
 import type { Diagnostic, NativeFileExtra } from "../types/index.js";
 
@@ -60,7 +61,7 @@ async function collect(
     } else if (entry.isDirectory()) {
       await collect(target, full, `${rel}/`, files, diagnostics);
     } else if (entry.isFile()) {
-      const executable = ((await stat(full)).mode & 0o111) !== 0;
+      const executable = isExecutableMode((await stat(full)).mode);
       files.push({ target, path: rel, executable });
     } else {
       const kind = entry.isSymbolicLink() ? "a link" : "a special file";
