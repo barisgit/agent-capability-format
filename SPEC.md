@@ -2498,7 +2498,9 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
   lock entry), and emission does not run.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
-  diagnostic is present.
+  diagnostic is present. Every fetch it makes, including one `--mode force`
+  requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it
+  never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.

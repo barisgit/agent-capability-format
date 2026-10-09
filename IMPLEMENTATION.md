@@ -2341,6 +2341,8 @@ Drift handling:
   selection rewrites the lock). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
+  Every fetch a frozen resolution makes, including one `--mode force` asks
+  for, is such a restore at the locked `resolvedSha`.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit

@@ -46,7 +46,8 @@ export type ResolveOptions = {
   /**
    * A frozen resolution (SPEC.md §19.7): any disagreement between capabilities.yml and the
    * lock is an error and nothing is fetched or written; a missing snapshot is still restored
-   * from its lock entry.
+   * from its lock entry. Every fetch it makes, including one `force` asks for, is such a
+   * restore that must reproduce the locked commit, names and digests.
    */
   frozen?: boolean | undefined;
 };
@@ -299,9 +300,11 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
   const { opts, yml, stagingDir } = context;
   const { entry, id, legacyId, locked } = paired;
   const legacyLock = locked !== undefined && locked.sourceId !== id;
-  // Only a missing snapshot triggered this fetch: restore the locked content from the
-  // locked commit rather than wherever the moving ref points now.
-  const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
+  // A frozen resolution, or a fetch only a missing snapshot triggered, restores the locked
+  // content from the locked commit rather than wherever the moving ref points now.
+  const restoring =
+    locked !== undefined &&
+    (opts.frozen === true || (!legacyLock && !shouldFetch(opts.mode, entry, locked)));
   const prefetched = restoring
     ? undefined
     : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));

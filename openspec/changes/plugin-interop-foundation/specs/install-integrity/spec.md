@@ -37,6 +37,10 @@ Before emitting from a lock, caplet SHALL recompute each capability's payload di
 - **WHEN** the locked `ref` is `main`, upstream `main` has moved, and a frozen install runs
 - **THEN** caplet installs the content at the locked `resolvedSha`
 
+#### Scenario: Forced refetch under a frozen install
+- **WHEN** the locked `ref` is `main`, upstream `main` has moved, and a frozen install runs with `--mode force`
+- **THEN** caplet fetches only the locked `resolvedSha`, verifies it against the lock, and changes neither the lock nor the installed snapshots
+
 #### Scenario: Missing snapshot beside a modified one
 - **WHEN** one capability of a locked source is missing and a sibling from the same source was modified after locking
 - **THEN** the restore installs only the missing capability, leaves the modified sibling unchanged, and the sibling is excluded and reported with `acf.lock.digest-mismatch`
