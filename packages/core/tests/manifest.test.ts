@@ -62,3 +62,16 @@ test("each manifest schema error takes the code of the field it is in", async ()
     }
   }
 });
+
+test("a manifest whose root is not a mapping is an error, not a fallback", async () => {
+  for (const text of ["- a\n- b\n", "just text\n", ""]) {
+    const { cap, dir } = await readTempCapability({ "acf.yml": text });
+    try {
+      expect(cap.diagnostics.map((d) => [d.severity, d.code, d.path])).toEqual([
+        ["error", "acf.manifest.invalid-field", path.join(dir, "acf.yml")],
+      ]);
+    } finally {
+      await cleanup(dir);
+    }
+  }
+});

@@ -2721,7 +2721,7 @@ acf.schema.invalid-yaml                      # malformed YAML or frontmatter, or
 
 # Manifest
 acf.manifest.invalid-name
-acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...)
+acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...), or the root is not a mapping
 acf.manifest.acf-version-unknown
 acf.manifest.only-and-except
 acf.manifest.duplicate-file                  # acf.yml AND acf.yaml both present

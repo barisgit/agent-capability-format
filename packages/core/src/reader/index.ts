@@ -136,7 +136,17 @@ async function parseManifest(
   diagnostics: Diagnostic[],
 ): Promise<Manifest | undefined> {
   const raw = await parseYamlFile(file, diagnostics);
-  if (!isRecord(raw)) return undefined;
+  // undefined is a YAML error parseYamlFile already reported.
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.manifest.invalid-field",
+      message: `${path.basename(file)} must be a mapping of manifest fields`,
+      path: file,
+    });
+    return undefined;
+  }
   pushUnknownFields(raw, manifestKeys, diagnostics, file);
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
