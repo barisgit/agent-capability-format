@@ -671,8 +671,9 @@ native handler shape; in that case the adapter is responsible for the bridge.
 ```ts
 export type McpFile = {
   path: string
+  // Canonical servers, then each family-level targets.<target>.servers entry
+  // read as a server with only: [<target>] (SPEC §13a.5).
   servers: McpServer[]
-  targets?: Partial<Record<TargetId, { servers?: McpServer[] }>>
 }
 
 export type McpServer = McpServerBase & McpTransport

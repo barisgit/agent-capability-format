@@ -180,7 +180,7 @@ function componentNames(capability: AcfCapability, family: FacetFamily): string[
     case "hook":
       return [...hookEntries(capability.hooks).map((entry) => entry.name), ...native];
     case "mcp":
-      return [...mcpServers(capability.mcp).map((server) => server.name), ...native];
+      return [...(capability.mcp?.servers ?? []).map((server) => server.name), ...native];
   }
 }
 
@@ -221,18 +221,7 @@ function selectHooks(
 
 function selectMcp(mcp: McpFile | undefined, keep: (name: string) => boolean): McpFile | undefined {
   if (mcp === undefined) return undefined;
-  const selected: McpFile = { ...mcp, servers: mcp.servers.filter((server) => keep(server.name)) };
-  if (mcp.targets !== undefined) {
-    selected.targets = Object.fromEntries(
-      Object.entries(mcp.targets).map(([target, extension]) => [
-        target,
-        extension?.servers === undefined
-          ? extension
-          : { ...extension, servers: extension.servers.filter((server) => keep(server.name)) },
-      ]),
-    );
-  }
-  return selected;
+  return { ...mcp, servers: mcp.servers.filter((server) => keep(server.name)) };
 }
 
 function hookEntries(hooks: HookFile | undefined) {
@@ -241,13 +230,6 @@ function hookEntries(hooks: HookFile | undefined) {
     Object.values(extension?.hooks ?? {}).flat(),
   );
   return [...shared, ...targeted];
-}
-
-function mcpServers(mcp: McpFile | undefined) {
-  const targeted = Object.values(mcp?.targets ?? {}).flatMap(
-    (extension) => extension?.servers ?? [],
-  );
-  return [...(mcp?.servers ?? []), ...targeted];
 }
 
 /** `*` matches any run of characters and `?` exactly one; everything else is literal. */

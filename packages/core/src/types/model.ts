@@ -217,8 +217,8 @@ export const defaultHookTimeoutMs = 30_000;
 
 export type McpFile = {
   path: string;
+  /** Canonical servers, then family-level `targets.<target>.servers` read as `only: [<target>]`. */
   servers: McpServer[];
-  targets?: Partial<Record<TargetId, { servers?: McpServer[] | undefined }>> | undefined;
 };
 export type McpServer = McpServerBase & McpTransport;
 export type McpServerBase = {

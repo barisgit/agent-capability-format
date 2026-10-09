@@ -1783,11 +1783,16 @@ behavior is unknown and refused.
 
 ### 13a.5 Family-level `targets.<target>.servers`
 
-`targets.<target>.servers` allows native-only MCP server entries that
-have no canonical equivalent. Native entries reuse the canonical entry
-shape and get the same checks as canonical servers (§13a.3, §13a.4),
-including their own `targets` extension data; an unknown `<target>` is
-an error (§7.3).
+`targets.<target>.servers` declares servers for one target only. Each
+entry reuses the canonical entry shape and gets the same checks as
+canonical servers (§13a.3, §13a.4), including its own `targets` extension
+data; an unknown `<target>` is an error (§7.3). Readers add each entry to
+the capability's servers as a server whose applicability is `<target>`
+intersected with the entry's own `only`/`except` (§6), so it is selected,
+checked against the support table, and written exactly like a canonical
+server with `only: [<target>]`. An entry whose name repeats a canonical
+server or another entry of the same `<target>` is the `error`
+`acf.facet.duplicate`; entries of different targets may share a name.
 
 A server name MUST be unique among the servers caplet writes to one native
 MCP file. When two capabilities declare the same name, or a user-defined

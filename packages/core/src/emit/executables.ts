@@ -94,11 +94,7 @@ export async function executableComponents(
   const components: ExecutableComponent[] = [];
 
   const mcpDir = filtered.mcp === undefined ? filtered.root : path.dirname(filtered.mcp.path);
-  const servers = [
-    ...(filtered.mcp?.servers ?? []),
-    ...(filtered.mcp?.targets?.[target]?.servers ?? []),
-  ];
-  for (const server of servers) {
+  for (const server of filtered.mcp?.servers ?? []) {
     if (server.transport !== "stdio") continue;
     components.push({
       ...base,

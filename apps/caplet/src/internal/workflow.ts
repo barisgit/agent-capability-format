@@ -1035,7 +1035,8 @@ export function capabilitySummary(
       commands: capability.commands.map((facet) => facet.name),
       instructions: capability.instructions.map((facet) => facet.name),
       hooks: Object.keys(capability.hooks?.buckets ?? {}),
-      mcp: capability.mcp?.servers.map((server) => server.name) ?? [],
+      // Servers for different targets may share a name (SPEC.md §13a.5).
+      mcp: [...new Set(capability.mcp?.servers.map((server) => server.name))],
     },
     applicability: Object.fromEntries(
       targets.map((targetId) => [targetId, applyApplicability(capability, targetId) !== null]),

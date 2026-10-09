@@ -289,3 +289,59 @@ test("a family-level native server gets the canonical server checks", async () =
     await withCapability(file, (cap) => expect(errors(cap)).toEqual([code]));
   }
 });
+
+test("a family-level native server joins the server list for its own target only", async () => {
+  const file = {
+    "mcp/mcp.yml": [
+      "servers:",
+      "  - name: shared",
+      "    transport: stdio",
+      "    command: srv",
+      "targets:",
+      "  codex:",
+      "    servers:",
+      "      - name: codex-only",
+      "        transport: stdio",
+      "        command: srv",
+      "      - name: narrowed",
+      "        transport: stdio",
+      "        command: srv",
+      "        only: [claude]",
+      "  claude:",
+      "    servers:",
+      "      - name: codex-only",
+      "        transport: stdio",
+      "        command: srv",
+      "",
+    ].join("\n"),
+  };
+  await withCapability(file, (cap) => {
+    expect(errors(cap)).toEqual([]);
+    expect(cap.mcp?.servers.map(({ name, only }) => [name, only])).toEqual([
+      ["shared", undefined],
+      ["codex-only", ["codex"]],
+      ["narrowed", []],
+      ["codex-only", ["claude"]],
+    ]);
+  });
+});
+
+test("a family-level native server may not reuse a name its target already receives", async () => {
+  const stdio = "        transport: stdio\n        command: srv\n";
+  const canonical = "servers:\n  - name: tools\n    transport: stdio\n    command: srv\n";
+  for (const body of [
+    `${canonical}targets:\n  codex:\n    servers:\n      - name: tools\n${stdio}`,
+    `targets:\n  codex:\n    servers:\n      - name: tools\n${stdio}      - name: tools\n${stdio}`,
+  ]) {
+    await withCapability({ "mcp/mcp.yml": body }, (cap) => {
+      expect(errors(cap)).toEqual(["acf.facet.duplicate"]);
+      expect(cap.mcp?.servers.map((server) => server.name)).toEqual(["tools"]);
+    });
+  }
+  await withCapability(
+    {
+      "mcp/mcp.yml": `targets:\n  codex:\n    servers:\n      - name: tools\n${stdio}        except: [nope]\n`,
+    },
+    (cap) => expect(errors(cap)).toEqual(["acf.target.unknown-id"]),
+  );
+});

@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { computeSet } from "../applicability/index.js";
 import { collectImportedSkillAssets, collectReferencedAssets } from "../assets/index.js";
 import { pushZodIssues } from "../diagnostics/index.js";
 import { withNativeExtras } from "../extras/index.js";
@@ -15,7 +16,7 @@ import {
   skillFrontmatterSchema,
 } from "../schemas/index.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
-import { targetIds } from "../targets/registry.js";
+import { isTargetId, targetIds } from "../targets/registry.js";
 import type {
   AcfCapability,
   AgentFacet,
@@ -28,6 +29,7 @@ import type {
   InstructionFacet,
   Manifest,
   McpFile,
+  McpServer,
   Scope,
   SkillFacet,
 } from "../types/index.js";
@@ -402,10 +404,68 @@ export async function readMcp(
     pushZodIssues(diagnostics, parsed.error, file, { family: "mcp" });
     return undefined;
   }
-  const mcpFile: McpFile = { path: file, servers: parsed.data.servers as McpFile["servers"] };
-  if (parsed.data.targets !== undefined)
-    mcpFile.targets = parsed.data.targets as McpFile["targets"];
-  return mcpFile;
+  const servers = parsed.data.servers as McpServer[];
+  const targets = parsed.data.targets as Record<string, { servers?: McpServer[] }> | undefined;
+  return {
+    path: file,
+    servers: [...servers, ...targetServers(servers, targets, file, diagnostics)],
+  };
+}
+
+/**
+ * The family-level `targets.<target>.servers` (SPEC.md §13a.5) as servers that apply to
+ * `<target>` only, so selection, every writer, the support registry, conflict checks and
+ * executable fingerprints see them in the one server list. A server's own `only`/`except`
+ * still narrows it: its applicability becomes the intersection with `[<target>]`, possibly
+ * empty. Reports an unknown block or entry target id, and a name that repeats a canonical
+ * server or another server of the same target's list, since a target would then receive two
+ * servers under one name.
+ */
+function targetServers(
+  canonical: McpServer[],
+  targets: Record<string, { servers?: McpServer[] }> | undefined,
+  file: string,
+  diagnostics: Diagnostic[],
+): McpServer[] {
+  const unknownTarget = (id: string): void => {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.target.unknown-id",
+      message: `unknown target id: ${id}`,
+      path: file,
+      family: "mcp",
+    });
+  };
+  const canonicalNames = new Set(canonical.map((server) => server.name));
+  const out: McpServer[] = [];
+  for (const [target, block] of Object.entries(targets ?? {})) {
+    if (!isTargetId(target)) {
+      unknownTarget(target);
+      continue;
+    }
+    const seen = new Set<string>();
+    for (const { only, except, ...server } of block.servers ?? []) {
+      for (const id of [...(only ?? []), ...(except ?? [])]) if (!isTargetId(id)) unknownTarget(id);
+      const clash = canonicalNames.has(server.name)
+        ? "a canonical server"
+        : seen.has(server.name)
+          ? `another targets.${target}.servers entry`
+          : undefined;
+      seen.add(server.name);
+      if (clash !== undefined) {
+        diagnostics.push({
+          severity: "error",
+          code: "acf.facet.duplicate",
+          message: `duplicate mcp server: targets.${target}.servers entry ${server.name} has the name of ${clash}`,
+          path: file,
+          family: "mcp",
+        });
+        continue;
+      }
+      out.push({ ...server, only: computeSet({ only, except }, [target]) } as McpServer);
+    }
+  }
+  return out;
 }
 
 async function readProseFamily<Family extends "agent" | "command" | "instruction">(

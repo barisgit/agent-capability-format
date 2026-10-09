@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import type { McpServer, TargetAdapter } from "@caplet/core";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
+  applyApplicability,
+  type McpServer,
+  readCapability,
+  type TargetAdapter,
+} from "@caplet/core";
 import { claudeAdapter, codexAdapter, cursorAdapter, opencodeAdapter, piAdapter } from "../src";
 import { CAP_ROOT, capabilityModel, emitModel, fileText, withCode } from "./util/model";
 
@@ -279,5 +287,57 @@ test("a command under any path placeholder is translated, not a bare command", a
     expect(sources).toContain(`mcp.command=${placeholder}`);
     expect(sources).toContain(`mcp.args=${placeholder}`);
     expect(sources).not.toContain("mcp.command=bare");
+  }
+});
+
+test("family-level native servers reach every writer of their own target only", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "acf-native-servers-"));
+  try {
+    await mkdir(path.join(root, "mcp"));
+    await writeFile(path.join(root, "acf.yml"), "acf: 1\nname: demo\nversion: 1.0.0\n");
+    await writeFile(
+      path.join(root, "mcp", "mcp.yml"),
+      [
+        "servers:",
+        "  - name: shared",
+        "    transport: stdio",
+        "    command: shared-server",
+        "targets:",
+        "  codex:",
+        "    servers:",
+        "      - name: codex-only",
+        "        transport: stdio",
+        "        command: codex-server",
+        "  claude:",
+        "    servers:",
+        "      - name: claude-only",
+        "        transport: http",
+        "        url: https://example.com/mcp",
+        "",
+      ].join("\n"),
+    );
+    const capability = await readCapability(root, "project", { kind: "local", directory: root });
+    expect(capability.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    const names = async (target: string, carrier: "plugin" | "loose") => {
+      const writer = writers[target];
+      const applicable = applyApplicability(capability, target);
+      if (writer === undefined || applicable === null) throw new Error(`no writer for ${target}`);
+      // As caplet's workflow does, the writer receives what applies to its target.
+      const result = await emitModel(writer.adapter, applicable, writer.root, { carrier });
+      const suffix = carrier === "plugin" ? "/plugins/demo/.mcp.json" : writer.file;
+      const config = fileText(result, suffix);
+      if (config === undefined) return [];
+      const parsed =
+        target === "codex"
+          ? (Bun.TOML.parse(config) as { mcp_servers: Record<string, unknown> }).mcp_servers
+          : (JSON.parse(config) as { mcpServers: Record<string, unknown> }).mcpServers;
+      return Object.keys(parsed).sort();
+    };
+    expect(await names("claude", "plugin")).toEqual(["claude-only", "shared"]);
+    expect(await names("claude", "loose")).toEqual(["claude-only", "shared"]);
+    expect(await names("codex", "loose")).toEqual(["codex-only", "shared"]);
+    expect(await names("cursor", "loose")).toEqual(["shared"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
