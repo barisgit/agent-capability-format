@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { ClaudeCli, ClaudeCliOutcome } from "./cli.js";
 import {
   type ClaudeCommand,
@@ -8,8 +10,10 @@ import {
 import {
   type ClaudeInstalledPlugin,
   type ClaudeKnownMarketplace,
+  type ClaudeSettingsFile,
   parseMarketplaceList,
   parsePluginList,
+  parseSettingsMarketplaces,
 } from "./state.js";
 
 /**
@@ -38,13 +42,19 @@ export interface ClaudeHost {
   listPlugins(): Promise<ClaudeHostResult<ClaudeInstalledPlugin[]>>;
   listMarketplaces(): Promise<ClaudeHostResult<ClaudeKnownMarketplace[]>>;
   run(command: ClaudeCommand): Promise<ClaudeHostResult<undefined>>;
+  /** The settings files `marketplace remove` edits from `projectDir`; a missing file declares nothing. */
+  readSettings(): Promise<ClaudeSettingsFile[]>;
 }
 
 /**
  * The Claude host port over a `claude` runner (`execClaudeCli`, or a transcript fake in tests).
- * `projectDir` must be the runner's working directory.
+ * `projectDir` must be the runner's working directory and `configDir` Claude's configuration
+ * directory (`CLAUDE_CONFIG_DIR`, else `~/.claude`), which holds the user settings.
  */
-export function createClaudeHost(cli: ClaudeCli, location: { projectDir: string }): ClaudeHost {
+export function createClaudeHost(
+  cli: ClaudeCli,
+  location: { projectDir: string; configDir: string },
+): ClaudeHost {
   async function list<T>(args: readonly string[], parse: (stdout: string) => T) {
     const outcome = await cli(args);
     if (outcome.kind !== "exited" || outcome.exitCode !== 0) return failed(outcome);
@@ -65,7 +75,31 @@ export function createClaudeHost(cli: ClaudeCli, location: { projectDir: string 
         return { ok: true, value: undefined };
       return failed(outcome);
     },
+    readSettings: () =>
+      Promise.all([
+        readSettingsFile("user", path.join(location.configDir, "settings.json")),
+        readSettingsFile("project", path.join(location.projectDir, ".claude", "settings.json")),
+        readSettingsFile("local", path.join(location.projectDir, ".claude", "settings.local.json")),
+      ]),
   };
+}
+
+async function readSettingsFile(
+  scope: ClaudeSettingsFile["scope"],
+  file: string,
+): Promise<ClaudeSettingsFile> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+    return { scope, path: file, marketplaces: missing ? [] : undefined };
+  }
+  try {
+    return { scope, path: file, marketplaces: parseSettingsMarketplaces(text) };
+  } catch {
+    return { scope, path: file, marketplaces: undefined };
+  }
 }
 
 function failed(outcome: ClaudeCliOutcome): { ok: false; failure: ClaudeHostFailure } {

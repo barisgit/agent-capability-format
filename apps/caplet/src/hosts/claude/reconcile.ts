@@ -17,7 +17,7 @@ import {
   planClaudeScope,
 } from "./plan.js";
 import { claudeMarketplaceName, claudeScopeFor } from "./scope.js";
-import type { ClaudeInstalledPlugin, ObservedClaudeState } from "./state.js";
+import type { ClaudeInstalledPlugin, ClaudeSettingsFile, ObservedClaudeState } from "./state.js";
 
 /**
  * Host state of one caplet plugin (claude-plugin-output, Claude host state). `registration
@@ -88,7 +88,10 @@ export type ClaudeStateRead =
   | { ok: true; value: ObservedClaudeState }
   | { ok: false; failure: ClaudeHostFailure; command: string };
 
-/** Reads `claude plugin list --json`, then `claude plugin marketplace list --json`. */
+/**
+ * Reads `claude plugin list --json`, then `claude plugin marketplace list --json`, then the
+ * settings files `marketplace remove` would edit.
+ */
 export async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
   const plugins = await host.listPlugins();
   if (!plugins.ok) return { ...plugins, command: listCommand(LIST_PLUGINS_ARGS) };
@@ -100,6 +103,7 @@ export async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeState
       plugins: plugins.value,
       marketplaces: marketplaces.value,
       projectDir: host.projectDir,
+      settings: await host.readSettings(),
     },
   };
 }
@@ -123,7 +127,7 @@ export async function reconcileClaudeHost(
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
   const before = await readClaudeHostState(host);
-  if (!before.ok) return notRun(desired, before, host.projectDir);
+  if (!before.ok) return await notRun(desired, before, host);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
   const run = { unavailable: undefined as ClaudeHostFailure | undefined };
@@ -175,7 +179,7 @@ export async function previewClaudeHost(
 ): Promise<ClaudeHostReport> {
   const state = await readClaudeHostState(host);
   if (!state.ok) {
-    const report = notRun(desired, state, host.projectDir);
+    const report = await notRun(desired, state, host);
     return state.failure.kind === "unavailable" ? { ...report, diagnostics: [] } : report;
   }
   const diagnostics: Diagnostic[] = [];
@@ -240,6 +244,7 @@ function scopeReport(
   const atScope = new Map(installs.managed.map((p) => [p.id, p]));
   const others = installs.otherScope;
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
+  if (plan.keptBy.length > 0) diagnostics.push(keptDiagnostic(plan));
 
   const plugins = plan.plugins.map((plugin): ClaudePluginReport => {
     const index = plan.steps.findIndex((step) => step.plugin === plugin.id);
@@ -366,17 +371,18 @@ function failureState(failure: ClaudeHostFailure): ClaudeHostState {
  * The CLI could not report state: plan against an empty host, run nothing, and report each
  * planned command as `not run`.
  */
-function notRun(
+async function notRun(
   desired: readonly DesiredClaudeScope[],
   read: { failure: ClaudeHostFailure; command: string },
-  projectDir: string,
-): ClaudeHostReport {
+  host: ClaudeHost,
+): Promise<ClaudeHostReport> {
   const { failure } = read;
   const state = failureState(failure);
+  const settings = await host.readSettings();
   const ignored: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
     scopeReport(
-      planClaudeScope(scope, assumedState(scope, projectDir)),
+      planClaudeScope(scope, assumedState(scope, host.projectDir, settings)),
       [],
       undefined,
       state,
@@ -410,9 +416,13 @@ function cliUnavailable(
  * The host state to plan against when it cannot be read: nothing installed except the scope's
  * leftover plugins, whose marketplace is then assumed registered.
  */
-function assumedState(scope: DesiredClaudeScope, projectDir: string): ObservedClaudeState {
+function assumedState(
+  scope: DesiredClaudeScope,
+  projectDir: string,
+  settings: ClaudeSettingsFile[],
+): ObservedClaudeState {
   const leftover = scope.leftover ?? [];
-  if (leftover.length === 0) return { plugins: [], marketplaces: [], projectDir };
+  if (leftover.length === 0) return { plugins: [], marketplaces: [], projectDir, settings };
   const { target } = scope;
   const marketplace = claudeMarketplaceName(target);
   const claudeScope = claudeScopeFor(target.scope);
@@ -429,6 +439,7 @@ function assumedState(scope: DesiredClaudeScope, projectDir: string): ObservedCl
     })),
     marketplaces: [{ name: marketplace, source: "directory" }],
     projectDir,
+    settings,
   };
 }
 
@@ -536,6 +547,18 @@ function otherScopeDiagnostic(plan: ClaudeScopePlan, other: ClaudeInstalledPlugi
     targetId: "claude",
     message: `\`${other.id}\` is also installed at Claude ${other.scope} scope; caplet manages only ${plan.claudeScope} scope and leaves it unchanged.`,
     data: { plugin: other.id, scope: other.scope },
+  };
+}
+
+/** The marketplace stays registered because removing it would change more than caplet's own. */
+function keptDiagnostic(plan: ClaudeScopePlan): Diagnostic {
+  const command = formatClaudeCommand({ op: "marketplace remove", marketplace: plan.marketplace });
+  return {
+    severity: "warn",
+    code: "acf.claude.marketplace-kept",
+    targetId: "claude",
+    message: `Claude marketplace \`${plan.marketplace}\` stays registered with an empty catalog, because \`${command}\` would also change what caplet does not own:\n${indent(plan.keptBy)}\nRun \`${command}\` yourself to remove it everywhere.`,
+    data: { marketplace: plan.marketplace, keptBy: plan.keptBy, command },
   };
 }
 

@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execClaudeCli } from "../../../src/hosts/claude/cli.js";
 import { classifyClaudeFailure, createClaudeHost } from "../../../src/hosts/claude/host.js";
+import { missingClaudeCli } from "../../support/fake-claude-cli.js";
 
 let dir = "";
 
@@ -65,7 +66,7 @@ describe("createClaudeHost over the real runner", () => {
   test("maps a missing CLI to an unavailable failure", async () => {
     const host = createClaudeHost(
       execClaudeCli({ binary: path.join(dir, "no-such-claude"), cwd: dir }),
-      { projectDir: dir },
+      { projectDir: dir, configDir: dir },
     );
     expect(await host.listPlugins()).toMatchObject({
       ok: false,
@@ -92,5 +93,40 @@ describe("classifyClaudeFailure", () => {
         '✘ Failed to install plugin "probe@nope-mkt": Plugin "probe" not found in marketplace "nope-mkt"',
       ),
     ).toBe("failed");
+  });
+});
+
+describe("createClaudeHost settings", () => {
+  test("reads the settings files marketplace remove edits; a missing file declares nothing", async () => {
+    const configDir = path.join(dir, "config");
+    const projectDir = path.join(dir, "settings-project");
+    await mkdir(configDir, { recursive: true });
+    await mkdir(path.join(projectDir, ".claude"), { recursive: true });
+    await writeFile(
+      path.join(configDir, "settings.json"),
+      JSON.stringify({
+        extraKnownMarketplaces: { "acf-user": {} },
+        enabledPlugins: { "review@team-mkt": true },
+      }),
+    );
+    await writeFile(path.join(projectDir, ".claude", "settings.json"), "{ not json");
+    const host = createClaudeHost(missingClaudeCli(), { projectDir, configDir });
+    expect(await host.readSettings()).toEqual([
+      {
+        scope: "user",
+        path: path.join(configDir, "settings.json"),
+        marketplaces: ["acf-user", "team-mkt"],
+      },
+      {
+        scope: "project",
+        path: path.join(projectDir, ".claude", "settings.json"),
+        marketplaces: undefined,
+      },
+      {
+        scope: "local",
+        path: path.join(projectDir, ".claude", "settings.local.json"),
+        marketplaces: [],
+      },
+    ]);
   });
 });

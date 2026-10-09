@@ -60,6 +60,12 @@ export type ClaudeScopePlan = {
    * scope, so the planned `marketplace add` still runs, as a no-op when it is registered.
    */
   marketplaceKnown: boolean;
+  /**
+   * Why the marketplace stays registered although no plugin is desired: what
+   * `marketplace remove` would also change (another settings file declaring it, one caplet
+   * cannot read, or an install outside caplet's registration). Empty otherwise.
+   */
+  keptBy: string[];
 };
 
 /** How the installs of a scope plan's marketplace relate to caplet's registration. */
@@ -98,8 +104,9 @@ export function partitionInstalls(
  * managed identity, `update` for changed versions (also for disabled plugins, which stay disabled),
  * and `uninstall` for plugins no longer desired. It never plans `install` for an installed plugin,
  * because install re-enables a plugin the user disabled (D15). The marketplace is removed only
- * when no plugin is desired and nothing else, at any Claude scope or directory, has plugins from
- * it, because `marketplace remove` uninstalls its plugins everywhere.
+ * when no plugin is desired and the removal touches nothing but caplet's registration:
+ * `marketplace remove` uninstalls its plugins at every scope and directory and drops its
+ * declarations from every settings file it edits (`ObservedClaudeState.settings`).
  */
 export function planClaudeScope(
   desired: DesiredClaudeScope,
@@ -164,9 +171,23 @@ export function planClaudeScope(
     });
   }
   const known = observed.marketplaces.some((m) => m.name === marketplace);
-  const retained = otherScopeInstalls.length + installs.elsewhere.length;
-  if (desired.plugins.length === 0 && known && retained === 0) {
-    steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
+  const keptBy: string[] = [];
+  if (desired.plugins.length === 0 && known) {
+    for (const plugin of [...otherScopeInstalls, ...installs.elsewhere]) {
+      const where = plugin.projectPath === undefined ? "" : ` for ${plugin.projectPath}`;
+      keptBy.push(`${plugin.id} is installed at Claude ${plugin.scope} scope${where}`);
+    }
+    for (const file of observed.settings) {
+      const own =
+        file.scope === claudeScope &&
+        (target.scope === "user" || target.projectRoot === projectDir);
+      if (own) continue;
+      if (file.marketplaces === undefined) keptBy.push(`${file.path} cannot be read`);
+      else if (file.marketplaces.includes(marketplace)) keptBy.push(`${file.path} declares it`);
+    }
+    if (keptBy.length === 0) {
+      steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
+    }
   }
   return {
     target: desired.target,
@@ -178,5 +199,6 @@ export function planClaudeScope(
     plugins,
     otherScopeInstalls,
     marketplaceKnown: known,
+    keptBy,
   };
 }

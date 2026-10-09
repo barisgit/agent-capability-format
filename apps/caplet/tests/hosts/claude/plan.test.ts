@@ -8,7 +8,7 @@ import {
   claudeMarketplaceName,
   resolveClaudeScopeTarget,
 } from "../../../src/hosts/claude/scope.js";
-import type { ClaudeInstalledPlugin } from "../../../src/hosts/claude/state.js";
+import type { ClaudeInstalledPlugin, ClaudeSettingsFile } from "../../../src/hosts/claude/state.js";
 
 const userDir = "/home/u/.claude/.acf/marketplace";
 const projectRoot = "/home/u/proj";
@@ -64,7 +64,7 @@ describe("planClaudeScope", () => {
         marketplaceDir: userDir,
         plugins: [{ name: "review", version: "1.2.0+acf.aaa" }],
       },
-      { plugins: [], marketplaces: [], projectDir: projectRoot },
+      { plugins: [], marketplaces: [], projectDir: projectRoot, settings: [] },
     );
     expect(plan.claudeScope).toBe("user");
     expect(plan.marketplace).toBe("acf-user");
@@ -82,7 +82,7 @@ describe("planClaudeScope", () => {
         marketplaceDir: projectDir,
         plugins: [{ name: "review", version: "1.0.0+acf.aaa" }],
       },
-      { plugins: [], marketplaces: [], projectDir: projectRoot },
+      { plugins: [], marketplaces: [], projectDir: projectRoot, settings: [] },
     );
     expect(plan.claudeScope).toBe("local");
     expect(commands(plan)).toEqual([
@@ -111,6 +111,7 @@ describe("planClaudeScope", () => {
         ],
         marketplaces: [{ name: "acf-user", source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(commands(plan)).toEqual([
@@ -146,6 +147,7 @@ describe("planClaudeScope", () => {
         ],
         marketplaces: [],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(commands(plan)).toEqual([
@@ -161,6 +163,7 @@ describe("planClaudeScope", () => {
         plugins: [installed("gone@acf-user", "1.0.0", "user")],
         marketplaces: [{ name: "acf-user", source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(commands(plan)).toEqual([
@@ -173,7 +176,7 @@ describe("planClaudeScope", () => {
   test("no desired plugins and an unknown marketplace: nothing to run", () => {
     const plan = planClaudeScope(
       { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
-      { plugins: [], marketplaces: [], projectDir: projectRoot },
+      { plugins: [], marketplaces: [], projectDir: projectRoot, settings: [] },
     );
     expect(plan.steps).toEqual([]);
   });
@@ -192,6 +195,7 @@ describe("planClaudeScope", () => {
         ],
         marketplaces: [{ name: projectMarketplace, source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     // Installing at local scope would write enabledPlugins true over the user's disable.
@@ -210,6 +214,7 @@ describe("planClaudeScope", () => {
         plugins: [installed("manual@acf-user", "1.0.0", "project")],
         marketplaces: [{ name: "acf-user", source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(plan.steps).toEqual([]);
@@ -227,6 +232,7 @@ describe("planClaudeScope", () => {
         plugins: [installed(`review@${projectMarketplace}`, "1.0.0", "local", true, other)],
         marketplaces: [{ name: projectMarketplace, source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(commands(plan)).toEqual([
@@ -245,7 +251,7 @@ describe("planClaudeScope", () => {
         marketplaceDir: userDir,
         plugins: [{ name: "review", version: "1.0.0" }],
       },
-      { plugins: [elsewhere], marketplaces: [], projectDir: projectRoot },
+      { plugins: [elsewhere], marketplaces: [], projectDir: projectRoot, settings: [] },
     );
     expect(install.plugins.map((p) => p.action)).toEqual(["install"]);
     expect(install.otherScopeInstalls).toEqual([]);
@@ -256,6 +262,7 @@ describe("planClaudeScope", () => {
         plugins: [elsewhere],
         marketplaces: [{ name: "acf-user", source: "directory" }],
         projectDir: projectRoot,
+        settings: [],
       },
     );
     expect(retire.steps).toEqual([]);
@@ -265,5 +272,57 @@ describe("planClaudeScope", () => {
     expect(
       formatClaudeCommand({ op: "marketplace add", dir: "/home/u/my proj/m", scope: "local" }),
     ).toBe("claude plugin marketplace add '/home/u/my proj/m' --scope local");
+  });
+});
+
+describe("removing caplet's marketplace", () => {
+  const userSettings = "/home/u/.claude/settings.json";
+  const projectSettings = `${projectRoot}/.claude/settings.json`;
+  const localSettings = `${projectRoot}/.claude/settings.local.json`;
+
+  function retire(
+    target: { scope: "user" } | { scope: "project"; projectRoot: string },
+    settings: ClaudeSettingsFile[],
+  ) {
+    const marketplace = claudeMarketplaceName(target);
+    return planClaudeScope(
+      { target, marketplaceDir: target.scope === "user" ? userDir : projectDir, plugins: [] },
+      {
+        plugins: [],
+        marketplaces: [{ name: marketplace, source: "directory" }],
+        projectDir: projectRoot,
+        settings,
+      },
+    );
+  }
+
+  test("runs when only caplet's own settings file declares it", () => {
+    const plan = retire({ scope: "project", projectRoot }, [
+      { scope: "user", path: userSettings, marketplaces: ["acf-user"] },
+      { scope: "project", path: projectSettings, marketplaces: [] },
+      { scope: "local", path: localSettings, marketplaces: [projectMarketplace] },
+    ]);
+    expect(commands(plan)).toEqual([`claude plugin marketplace remove ${projectMarketplace}`]);
+    expect(plan.keptBy).toEqual([]);
+  });
+
+  test("is not run when another settings file it edits declares the marketplace", () => {
+    const plan = retire({ scope: "user" }, [
+      { scope: "user", path: userSettings, marketplaces: ["acf-user"] },
+      { scope: "project", path: projectSettings, marketplaces: ["acf-user"] },
+      { scope: "local", path: localSettings, marketplaces: [] },
+    ]);
+    expect(commands(plan)).toEqual([]);
+    expect(plan.keptBy).toEqual([`${projectSettings} declares it`]);
+  });
+
+  test("is not run when a settings file it edits cannot be read", () => {
+    const plan = retire({ scope: "project", projectRoot }, [
+      { scope: "user", path: userSettings, marketplaces: undefined },
+      { scope: "project", path: projectSettings, marketplaces: [] },
+      { scope: "local", path: localSettings, marketplaces: [projectMarketplace] },
+    ]);
+    expect(commands(plan)).toEqual([]);
+    expect(plan.keptBy).toEqual([`${userSettings} cannot be read`]);
   });
 });

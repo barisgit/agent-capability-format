@@ -63,6 +63,7 @@ import {
   type ClaudeGate,
   type ClaudeReport,
   claudeGate,
+  gatedChange,
   gateOpen,
   reconcileClaude,
 } from "./claude-host-flow.js";
@@ -906,8 +907,9 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
     const open: EmittedDiff[] = [];
     for (const item of plan.diffs) {
       if (item.gate === undefined) continue;
-      if (gateOpen(item.gate, report)) open.push(item);
-      else holdBack(item);
+      const change = gatedChange(item, item.gate, report);
+      if (change === undefined) holdBack(item);
+      else open.push(change);
     }
     await applyItems(open);
     // A drifted artifact stays on disk; its sidecar entry goes with the stale entries below.

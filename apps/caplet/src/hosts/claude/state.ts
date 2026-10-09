@@ -1,3 +1,5 @@
+import type { ClaudeScope } from "./commands.js";
+
 /** Host state as `claude plugin list --json` and `claude plugin marketplace list --json` report it. */
 
 /** One entry of `claude plugin list --json`. */
@@ -22,6 +24,21 @@ export type ClaudeKnownMarketplace = {
   path?: string | undefined;
 };
 
+/**
+ * A Claude settings file that `claude plugin marketplace remove` edits when run from
+ * `projectDir`: the user file and that directory's project and local files (verified with
+ * Claude 2.1.97). The command drops every declaration of the marketplace in them.
+ */
+export type ClaudeSettingsFile = {
+  scope: ClaudeScope;
+  path: string;
+  /**
+   * Marketplaces the file declares in `extraKnownMarketplaces` or names in an `enabledPlugins`
+   * key; `undefined` when the file exists but cannot be read as settings.
+   */
+  marketplaces: string[] | undefined;
+};
+
 /** What the host reported before planning. */
 export type ObservedClaudeState = {
   plugins: ClaudeInstalledPlugin[];
@@ -32,7 +49,27 @@ export type ObservedClaudeState = {
    * its `projectPath`.
    */
   projectDir: string;
+  settings: ClaudeSettingsFile[];
 };
+
+/**
+ * Parses a Claude settings file into the marketplaces it declares or names in `enabledPlugins`
+ * (`<plugin>@<marketplace>` keys). Throws when the text is not a JSON object.
+ */
+export function parseSettingsMarketplaces(text: string): string[] {
+  const settings: unknown = JSON.parse(text);
+  if (!isObject(settings)) throw new Error("settings are not a JSON object");
+  const declared = isObject(settings.extraKnownMarketplaces)
+    ? Object.keys(settings.extraKnownMarketplaces)
+    : [];
+  const enabled = isObject(settings.enabledPlugins)
+    ? Object.keys(settings.enabledPlugins).flatMap((id) => {
+        const separator = id.lastIndexOf("@");
+        return separator > 0 ? [id.slice(separator + 1)] : [];
+      })
+    : [];
+  return [...new Set([...declared, ...enabled])];
+}
 
 /**
  * Parses `claude plugin list --json` (an array of `{id, version, scope, enabled, installPath,
@@ -88,12 +125,14 @@ function parseArray(stdout: string, what: string): Record<string, unknown>[] {
     throw new Error(`${what} did not print JSON: ${reason}`);
   }
   if (!Array.isArray(value)) throw new Error(`${what} did not print a JSON array`);
-  return value.map((entry, index) => {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-      throw new Error(`${what} entry ${index} is not an object`);
-    }
-    return entry as Record<string, unknown>;
+  return value.map((entry: unknown, index) => {
+    if (!isObject(entry)) throw new Error(`${what} entry ${index} is not an object`);
+    return entry;
   });
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringField(entry: Record<string, unknown>, key: string, at: string): string {

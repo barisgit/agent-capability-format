@@ -2916,9 +2916,15 @@ one, reading state with `claude plugin list --json`. It never runs
 the user disabled. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
 `extraKnownMarketplaces`. It removes the marketplace only when no plugin
-in it is desired and no other Claude scope has one installed, because
-`claude plugin marketplace remove` uninstalls the marketplace's plugins in
-every scope.
+in it is desired and the removal touches nothing but caplet's registration,
+because `claude plugin marketplace remove` uninstalls the marketplace's
+plugins in every scope and directory and drops its declarations from the
+user settings and the working directory's project and local settings. When
+another of those settings files declares the marketplace or cannot be read,
+or a plugin from it is installed outside caplet's registration, the
+marketplace stays registered, `marketplace.json` is rewritten to list no
+plugins, and the warning `acf.claude.marketplace-kept` names what keeps it
+and the `claude plugin marketplace remove` command to run by hand.
 
 File changes that do not depend on Claude are applied before the `claude`
 commands run. Deleting a removed plugin's files waits until Claude no

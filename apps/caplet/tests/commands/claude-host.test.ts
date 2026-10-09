@@ -290,6 +290,46 @@ test("remove uninstalls the plugin and removes the marketplace before deleting f
   );
 });
 
+test("remove keeps a marketplace another Claude settings file declares, with an empty catalog", async () => {
+  const scope = await reviewScope("user");
+  const version = await applyWithoutCli(scope);
+  // `marketplace remove` run from the working directory would also drop this declaration.
+  const projectSettings = path.join(scope.cwd, ".claude", "settings.json");
+  await writeText(
+    projectSettings,
+    JSON.stringify({ extraKnownMarketplaces: { "acf-user": { source: { source: "directory" } } } }),
+  );
+  const host = await userHost(scope, [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+    "uninstall-user",
+    "list-json-empty",
+  ]);
+
+  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"], host.env);
+
+  expect(result.exitCode).toBe(0);
+  expect(await host.calls()).toEqual([
+    ...READ,
+    `claude plugin uninstall ${NAME}@acf-user --scope user`,
+    "claude plugin list --json",
+  ]);
+  const json = JSON.parse(result.stdout) as ApplyJson;
+  const kept = json.diagnostics.find((d) => d.code === "acf.claude.marketplace-kept");
+  expect(kept?.severity).toBe("warn");
+  expect(kept?.message).toContain(projectSettings);
+  expect(kept?.message).toContain("claude plugin marketplace remove acf-user");
+  expect(existsSync(pluginDir(scope))).toBe(false);
+  const catalog = JSON.parse(
+    await readText(
+      path.join(claudeMarketplaceDir(scope, "user"), ".claude-plugin", "marketplace.json"),
+    ),
+  );
+  expect(catalog).toMatchObject({ name: "acf-user", plugins: [] });
+  const sidecar = JSON.parse(await readText(path.join(scope.home, ".claude", ".acf-managed.json")));
+  expect(sidecar.marketplace).toEqual({ name: "acf-user", scope: "user" });
+});
+
 test("without the CLI remove keeps the plugin files and the warning lists the uninstall", async () => {
   const scope = await reviewScope("user");
   await applyWithoutCli(scope);

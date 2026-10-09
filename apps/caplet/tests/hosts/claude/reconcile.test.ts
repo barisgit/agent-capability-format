@@ -28,7 +28,10 @@ afterEach(async () => {
 
 /** The host port over `cli`, with Claude resolving project and local scope from the test project. */
 function host(cli: ClaudeCli) {
-  return createClaudeHost(cli, { projectDir: path.join(dir, "project") });
+  return createClaudeHost(cli, {
+    projectDir: path.join(dir, "project"),
+    configDir: path.join(home, ".claude"),
+  });
 }
 
 function userFake(transcripts: FakeTranscript[]) {
