@@ -17,6 +17,7 @@ import type {
   PackageAuthor,
   SkillFacet,
 } from "../types/index.js";
+import { isRecord } from "../utils/guards.js";
 import { projectAgentPluginsServer } from "./mcp.js";
 import {
   type ForeignReadOptions,
@@ -27,7 +28,6 @@ import {
 import {
   isDirectory,
   isFile,
-  isRecord,
   packageAuthor,
   packageIdentity,
   readJson,

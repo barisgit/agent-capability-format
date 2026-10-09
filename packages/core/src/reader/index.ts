@@ -36,12 +36,12 @@ import type {
   SkillFacet,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
+import { isRecord } from "../utils/guards.js";
 import {
   byName,
   collectUnknown,
   counts,
   fallbackManifest,
-  isRecord,
   parseMarkdownFile,
   parseYamlFile,
   pickFamilyYaml,

@@ -6,11 +6,10 @@
 import { withNativeExtras } from "../extras/index.js";
 import { hostReferences, urlProblem } from "../reader/mcp-rules.js";
 import type { McpServer } from "../types/index.js";
+import { isRecord, isSlug } from "../utils/guards.js";
 import {
   CAPABILITY_DIR,
   DATA_DIR,
-  isRecord,
-  isSlug,
   mapPlaceholders,
   nativeValuesProblem,
   placeholder,

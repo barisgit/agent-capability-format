@@ -11,7 +11,8 @@ import { parseMarkdown } from "../reader/helpers.js";
 import { nativeKeyInfo } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
-import { filesUnder, isFile, isRecord, isSlug, nativeValuesProblem } from "./shared.js";
+import { isRecord, isSlug } from "../utils/guards.js";
+import { filesUnder, isFile, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
 export type SkillRules = "agent-plugins" | "claude";

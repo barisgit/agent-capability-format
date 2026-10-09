@@ -23,6 +23,7 @@ import type {
   SafetyClass,
   SkillFacet,
 } from "../types/index.js";
+import { isRecord } from "../utils/guards.js";
 import { readClaudeMcp } from "./claude-mcp.js";
 import {
   type ForeignReadOptions,
@@ -37,7 +38,6 @@ import {
   filesUnder,
   isDirectory,
   isFile,
-  isRecord,
   outsidePackage,
   packageAuthor,
   packageIdentity,

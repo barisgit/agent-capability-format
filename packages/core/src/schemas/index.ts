@@ -4,8 +4,9 @@ import { z } from "zod";
 import { carriersOf } from "../targets/field-support.js";
 import { sourceFormats } from "../types/interop.js";
 import type { SelectorKey } from "../types/model.js";
+import { SLUG_PATTERN } from "../utils/guards.js";
 
-export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+export const slugSchema = z.string().regex(SLUG_PATTERN);
 export const targetIdSchema = slugSchema;
 export const targetsSchema = z.record(z.string(), z.unknown());
 

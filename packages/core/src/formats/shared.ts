@@ -15,12 +15,8 @@ import type {
   SafetyClass,
   TargetId,
 } from "../types/index.js";
+import { isSlug } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
-
-/** True for a plain JSON object (not null, not an array). */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** `${NAME}`, spelled without a template literal so the placeholder stays literal. */
 export function placeholder(name: string): string {
@@ -31,15 +27,9 @@ export function placeholder(name: string): string {
 export const CAPABILITY_DIR = placeholder("ACF_CAPABILITY_DIR");
 export const DATA_DIR = placeholder("ACF_DATA_DIR");
 
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // SemVer 2.0.0, the regular expression published at semver.org.
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-
-/** True when `value` is an ACF slug. */
-export function isSlug(value: string): boolean {
-  return SLUG.test(value);
-}
 
 /** True when `value` is a SemVer 2.0.0 version. */
 export function isSemVer(value: string): boolean {

@@ -5,13 +5,13 @@
  */
 import path from "node:path";
 import type { Diagnostic, McpFile, NativeRemainderComponent } from "../types/index.js";
+import { isRecord } from "../utils/guards.js";
 import { projectClaudeServer } from "./mcp.js";
 import {
   CLAUDE_MANIFEST,
   componentPaths,
   contained,
   isFile,
-  isRecord,
   outsidePackage,
   readJson,
   remainderComponent,

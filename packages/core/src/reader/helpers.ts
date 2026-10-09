@@ -2,6 +2,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import type { Diagnostic, FacetFamily, Manifest } from "../types/index.js";
 import { exists, readText } from "../utils/fs.js";
+import { isRecord } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 import { parseYaml } from "../yaml.js";
 
@@ -117,10 +118,6 @@ export function counts(values: string[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const value of values) map.set(value, (map.get(value) ?? 0) + 1);
   return map;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function pushUnknownFields(

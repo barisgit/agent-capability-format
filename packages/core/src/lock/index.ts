@@ -12,6 +12,7 @@ import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
+import { isRecord, isSlug } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -62,7 +63,6 @@ export type CapabilitiesLock = { acf: 1; entries: LockEntry[] };
 
 type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
 
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const V1_HASH = /^sha256-[a-f0-9]{64}$/;
 
 /** Reads and parses a lockfile; `null` when it does not exist. Throws on malformed content. */
@@ -305,7 +305,7 @@ function parseLockedCapabilities(value: unknown, names: readonly string[]): Lock
 function parseLockedCapability(value: unknown): LockedCapability {
   if (!isRecord(value)) throw new Error("invalid lock resolvedCapabilities entry");
   const { name, format, formatVersion, path: sourcePath, payloadDigest, capabilityHash } = value;
-  if (typeof name !== "string" || !SLUG.test(name)) throw new Error("invalid lock capability name");
+  if (typeof name !== "string" || !isSlug(name)) throw new Error("invalid lock capability name");
   if (!isSourceFormat(format)) throw new Error(`invalid lock capability format for ${name}`);
   if (formatVersion !== undefined && typeof formatVersion !== "string") {
     throw new Error(`invalid lock capability formatVersion for ${name}`);
@@ -349,20 +349,16 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function isCapabilityNameArray(value: unknown): value is string[] {
-  return isStringArray(value) && value.every((item) => SLUG.test(item));
+  return isStringArray(value) && value.every(isSlug);
 }
 
 function isCapabilitySelectorMap(value: unknown): value is Record<string, string> {
   return (
     isRecord(value) &&
     Object.entries(value).every(
-      ([name, selector]) => SLUG.test(name) && typeof selector === "string" && selector.length > 0,
+      ([name, selector]) => isSlug(name) && typeof selector === "string" && selector.length > 0,
     )
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isErrno(error: unknown, code: string): error is { code: string } {

@@ -16,6 +16,7 @@
  */
 import type { NativeFileExtra } from "../types/interop.js";
 import type { AcfCapability, Manifest, TargetExtensions, TargetId } from "../types/model.js";
+import { isRecord } from "../utils/guards.js";
 
 /** Owner of a set of native keys: a target id, or the Agent Plugins 1.0 dialect. */
 export type ExtrasDialect = TargetId | "agent-plugins";
@@ -23,10 +24,6 @@ export const AGENT_PLUGINS_DIALECT = "agent-plugins" as const;
 
 /** A map of native keys to values in one dialect's own spelling. */
 export type NativeExtras = Readonly<Record<string, unknown>>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function section(
   targets: TargetExtensions | undefined,

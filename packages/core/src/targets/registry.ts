@@ -9,6 +9,7 @@ import type {
   TargetDefinition,
   TargetId,
 } from "../types/index.js";
+import { isSlug } from "../utils/guards.js";
 import {
   claudeExtensionSchemas,
   codexExtensionSchemas,
@@ -37,8 +38,7 @@ const triggerKeys: readonly CanonicalTriggerName[] = [
 export function defineTarget<const Id extends string>(
   target: TargetDefinition<Id>,
 ): TargetDefinition<Id> {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(target.id))
-    throw new Error(`invalid target id: ${target.id}`);
+  if (!isSlug(target.id)) throw new Error(`invalid target id: ${target.id}`);
   for (const key of hookKeys) {
     if (!(key in target.mappings.hookEvents))
       throw new Error(`missing hook mapping ${target.id}.${key}`);
