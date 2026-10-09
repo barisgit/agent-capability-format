@@ -2950,21 +2950,19 @@ diagnostics).
 ```ts
 export async function applyDiffs(
   diffs: FileDiff[],
-  installRoot: string,
-  options: { dryRun?: boolean } = {},
-): Promise<ApplyReport> {
-  // 1. Read existing sidecar from `${installRoot}/.acf-managed.json` if any.
-  // 2. For each diff:
+  opts: { installRoot: string; capabilityName: string; sidecarPath: string; owner?: SidecarOwner },
+): Promise<ApplyResult> {
+  // 1. Read the sidecar at `sidecarPath` (`${installRoot}/.acf-managed.json`) if any.
+  // 2. For each diff, skip it with an `acf.apply.drift` warning when the content it
+  //    owns changed since planning (§4.2.2); otherwise:
   //    - if `after === null` and a prior sidecar entry exists: delete the
   //      owned regions (not the entire file unless `owns: [{ kind: "file" }]`).
   //    - else: write `after` to `path`.
-  // 3. Rewrite the sidecar with the new (path, owns, hash) tuples.
-  //    Before each write, owned content that changed since planning is
-  //    skipped with an `acf.apply.drift` warning (§4.2.2).
+  // 3. Rewrite the sidecar with the new (path, owns, hash) tuples of `capabilityName`.
 }
 ```
 
-`--dry-run` skips steps 2–3 and prints the diff list instead.
+`apply --dry-run` plans and prints the diff list without calling it.
 
 ### 12.2 Determinism
 
