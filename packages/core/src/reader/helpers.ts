@@ -1,6 +1,8 @@
 import path from "node:path";
 import matter from "gray-matter";
-import type { Diagnostic, FacetFamily, Manifest } from "../types/index.js";
+import { type ApplicabilityDecl, computeSet } from "../applicability/index.js";
+import { isTargetId } from "../targets/registry.js";
+import type { Diagnostic, FacetFamily, Manifest, TargetId } from "../types/index.js";
 import { exists, readText } from "../utils/fs.js";
 import { isRecord } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
@@ -147,6 +149,21 @@ export function collectUnknown(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) if (!allowed.has(key)) out[key] = value;
   return out;
+}
+
+/**
+ * An entry of a family-level `targets.<target>` block (hooks, MCP servers), applying to `target`
+ * only: its own `only`/`except` narrows it, so its applicability becomes their intersection with
+ * `[target]`, possibly empty. The entry's own ids do not survive into the model, so unknown ones
+ * are passed to `reportUnknownId` here.
+ */
+export function narrowToTarget<Entry extends ApplicabilityDecl>(
+  { only, except, ...entry }: Entry,
+  target: TargetId,
+  reportUnknownId: (id: string) => void,
+): Omit<Entry, "only" | "except"> & { only: TargetId[] } {
+  for (const id of [...(only ?? []), ...(except ?? [])]) if (!isTargetId(id)) reportUnknownId(id);
+  return { ...entry, only: computeSet({ only, except }, [target]) };
 }
 
 export function fallbackManifest(root: string): Manifest {

@@ -1,59 +1,39 @@
-import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { ZodIssue } from "zod";
-import { computeSet } from "../applicability/index.js";
 import { collectImportedSkillAssets, collectReferencedAssets } from "../assets/index.js";
 import { type AcfDiagnosticCode, pushZodIssues } from "../diagnostics/index.js";
-import { withNativeExtras } from "../extras/index.js";
-import { mapBareSkill } from "../formats/skills.js";
-import {
-  agentFrontmatterSchema,
-  capabilityMarkdownFrontmatterSchema,
-  commandFrontmatterSchema,
-  hookFileSchema,
-  instructionFrontmatterSchema,
-  manifestSchema,
-  mcpFileSchema,
-  skillFrontmatterSchema,
-} from "../schemas/index.js";
-import { nativeKeyInfo } from "../targets/native-keys.js";
-import { isTargetId, targetIds } from "../targets/registry.js";
+import { capabilityMarkdownFrontmatterSchema, manifestSchema } from "../schemas/index.js";
 import type {
   AcfCapability,
-  AgentFacet,
   CapabilityMarkdown,
   CapabilityOrigin,
-  CommandFacet,
   Diagnostic,
-  HookEntry,
-  HookFile,
-  InstructionFacet,
   Manifest,
-  McpFile,
-  McpServer,
-  NativeHooks,
   Scope,
-  SkillFacet,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
 import { isRecord } from "../utils/guards.js";
 import {
-  byName,
   collectUnknown,
-  counts,
   fallbackManifest,
   parseMarkdownFile,
   parseYamlFile,
-  pickFamilyYaml,
   pushUnknownFields,
   sortDiagnostics,
-  validateNameMatch,
   validateSingularFolders,
 } from "./helpers.js";
+import { readHooks } from "./hooks.js";
+import { readMcp } from "./mcp.js";
 import { readNativeFiles } from "./native-files.js";
+import { readAgents, readCommands, readInstructions } from "./prose.js";
+import { readSkills } from "./skills.js";
 import { validateCapability } from "./validation.js";
 
 export { parseMarkdown } from "./helpers.js";
+export { readHooks } from "./hooks.js";
+export { readMcp } from "./mcp.js";
+export { readAgents, readCommands, readInstructions } from "./prose.js";
+export { readSkills } from "./skills.js";
 export { validateCapability } from "./validation.js";
 
 const manifestKeys = new Set([
@@ -71,43 +51,14 @@ const manifestKeys = new Set([
   "targets",
 ]);
 const markdownKeys = new Set(["sections", "targets"]);
-/** Skill frontmatter keys that are core ACF fields. */
-const coreSkillKeys: ReadonlySet<string> = new Set([
-  "name",
-  "description",
-  "invocation",
-  "assets",
-  "only",
-  "except",
-  "targets",
-  "license",
-  "compatibility",
-  "metadata",
-  "argument-hint",
-]);
-const frontmatterKeys = {
-  agent: new Set(["name", "description", "mode", "model", "assets", "only", "except", "targets"]),
-  command: new Set([
-    "name",
-    "description",
-    "arguments",
-    "agent",
-    "assets",
-    "only",
-    "except",
-    "targets",
-  ]),
-  instruction: new Set([
-    "name",
-    "description",
-    "activation",
-    "assets",
-    "only",
-    "except",
-    "targets",
-  ]),
-} as const;
 
+/**
+ * Reads the native ACF capability at `root`: manifest, `ACF.md`, every facet family, native
+ * file extras and referenced assets, then runs cross-field validation. Problems are recorded on
+ * `capability.diagnostics`, sorted by path then code; only I/O failures throw. A tree carrying
+ * `.acf-import.json` is read as synthesized (see `readSkills`), and its skill directories'
+ * files become implicit assets.
+ */
 export async function readCapability(
   root: string,
   scope: Scope,
@@ -157,6 +108,11 @@ export async function readCapability(
   return capability;
 }
 
+/**
+ * Reads `acf.yml` (or `acf.yaml`). `undefined` when neither exists or the manifest fails its
+ * schema, with the problems pushed to `diagnostics`. Top-level keys outside the schema are
+ * reported and kept on `manifest.unknown`.
+ */
 export async function readManifest(
   root: string,
   diagnostics: Diagnostic[],
@@ -205,6 +161,10 @@ function manifestIssueCode(issue: ZodIssue): AcfDiagnosticCode | undefined {
   return "acf.manifest.invalid-field";
 }
 
+/**
+ * Reads the optional `ACF.md`. Frontmatter that fails its schema is reported and read as
+ * empty; the body is kept.
+ */
 export async function readAcfMd(
   root: string,
   diagnostics: Diagnostic[],
@@ -221,432 +181,4 @@ export async function readAcfMd(
     });
   }
   return { path: file, frontmatter: result.success ? result.data : {}, body: parsed.body };
-}
-
-export async function readSkills(
-  root: string,
-  diagnostics: Diagnostic[],
-  imported = false,
-): Promise<SkillFacet[]> {
-  const dir = path.join(root, "skills");
-  if (!(await exists(dir))) return [];
-  const facets: SkillFacet[] = [];
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) continue;
-    const full = path.join(dir, entry.name);
-    if (!entry.isDirectory()) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.skill.shape.not-directory",
-        message: `skills/${entry.name} must be a directory`,
-        path: full,
-      });
-      continue;
-    }
-    const primary = path.join(full, "SKILL.md");
-    if (!(await exists(primary))) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.facet.primary-missing",
-        message: `skills/${entry.name}/ must contain SKILL.md`,
-        path: full,
-        family: "skill",
-      });
-      continue;
-    }
-    const parsed = await parseMarkdownFile(primary, diagnostics);
-    if (parsed === undefined) continue;
-    // A bare imported skill keeps every key as core, a target's extra or an agent-plugins
-    // extra; an authored skill reports unknown keys.
-    const mapped = imported ? mapBareSkill(parsed.frontmatter, coreSkillKeys) : undefined;
-    if (mapped === undefined) {
-      const reported = rejectNativeSkillKeys(parsed.frontmatter, primary, diagnostics);
-      pushUnknownFields(
-        parsed.frontmatter,
-        new Set([...coreSkillKeys, ...reported]),
-        diagnostics,
-        primary,
-      );
-    }
-    const candidate = mapped?.core ?? parsed.frontmatter;
-    const missingDescription =
-      imported && (typeof candidate.description !== "string" || candidate.description.length === 0);
-    const frontmatter = missingDescription
-      ? { ...candidate, description: "Imported skill" }
-      : candidate;
-    if (missingDescription) {
-      diagnostics.push({
-        severity: "warn",
-        code: "acf.import.skill-description-missing",
-        message: "imported skill has no description; using an in-memory fallback",
-        path: primary,
-        family: "skill",
-      });
-    }
-    const result = skillFrontmatterSchema.safeParse(frontmatter);
-    if (!result.success) {
-      pushZodIssues(diagnostics, result.error, primary, {
-        baseCode: "acf.markdown.invalid-frontmatter-field",
-        family: "skill",
-      });
-      continue;
-    }
-    const facet: SkillFacet = {
-      family: "skill",
-      name: result.data.name,
-      dir: full,
-      primaryFile: primary,
-      frontmatter: result.data,
-      body: parsed.body,
-    };
-    for (const [dialect, extras] of mapped?.extras ?? []) {
-      facet.frontmatter.targets = withNativeExtras(facet.frontmatter.targets, dialect, extras);
-    }
-    validateNameMatch(facet.family, facet.name, entry.name, primary, diagnostics);
-    facets.push(facet);
-  }
-  return facets.sort(byName);
-}
-
-/**
- * Reports the top-level keys of an authored skill that are a target's native skill keys rather
- * than core fields, and returns them so they are not reported again as unknown. A key a writer
- * generates from a core field (`disable-model-invocation`) names that field. Any other key
- * names its `targets.<t>.native` spelling for every target that knows it: an error when
- * dropping it would change behavior, a warning for a descriptive key. Path-scoped activation
- * keeps its own code (canonical-skills, Path-scoped activation stays per target). A key no
- * target knows is left to the unknown-field report.
- */
-function rejectNativeSkillKeys(
-  frontmatter: Record<string, unknown>,
-  file: string,
-  diagnostics: Diagnostic[],
-): string[] {
-  const reported: string[] = [];
-  for (const key of Object.keys(frontmatter)) {
-    if (coreSkillKeys.has(key)) continue;
-    const known = targetIds.flatMap((target) => nativeKeyInfo(target, "skill", key) ?? []);
-    if (known.length === 0) continue;
-    reported.push(key);
-    const perTarget = known.map((info) => `targets.${info.target}.native.${key}`);
-    const coreField = known.find((info) => info.generatedFrom !== undefined)?.generatedFrom;
-    const base = { path: file, family: "skill" as const, data: { field: key } };
-    if (key === "paths") {
-      diagnostics.push({
-        ...base,
-        severity: "error",
-        code: "acf.skill.paths-not-core",
-        message:
-          "paths is not a core skill field: glob dialects and activation scope differ between " +
-          `tools. Declare it per target as ${perTarget.join(" or ")}`,
-      });
-    } else if (coreField !== undefined) {
-      diagnostics.push({
-        ...base,
-        severity: "error",
-        code: "acf.skill.native-key-not-core",
-        message: `${key} is a native skill key, not an ACF field; write its core equivalent ${coreFieldSpelling(coreField)}`,
-      });
-    } else {
-      diagnostics.push({
-        ...base,
-        severity: known.every((info) => info.class === "descriptive") ? "warn" : "error",
-        code: "acf.skill.native-key-not-core",
-        message: `${key} is a native skill key, not an ACF field; declare it per target as ${perTarget.join(" or ")}`,
-      });
-    }
-  }
-  return reported;
-}
-
-/** A registry field id such as `skill.invocation.model=false` as frontmatter: `invocation.model: false`. */
-function coreFieldSpelling(field: string): string {
-  const [fieldPath = field, value] = field.replace(/^skill\./, "").split("=");
-  return value === undefined ? fieldPath : `${fieldPath}: ${value}`;
-}
-
-export async function readAgents(root: string, diagnostics: Diagnostic[]): Promise<AgentFacet[]> {
-  return await readProseFamily(root, "agents", "AGENT.md", "agent", diagnostics);
-}
-
-export async function readCommands(
-  root: string,
-  diagnostics: Diagnostic[],
-): Promise<CommandFacet[]> {
-  return await readProseFamily(root, "commands", "COMMAND.md", "command", diagnostics);
-}
-
-export async function readInstructions(
-  root: string,
-  diagnostics: Diagnostic[],
-): Promise<InstructionFacet[]> {
-  return await readProseFamily(root, "instructions", "INSTRUCTION.md", "instruction", diagnostics);
-}
-
-export async function readHooks(
-  root: string,
-  diagnostics: Diagnostic[],
-): Promise<HookFile | undefined> {
-  const file = await pickFamilyYaml(
-    path.join(root, "hooks"),
-    "hooks",
-    "acf.hooks.duplicate-file",
-    diagnostics,
-  );
-  if (file === undefined) return undefined;
-  const parsed = hookFileSchema.safeParse(await parseYamlFile(file, diagnostics));
-  if (!parsed.success) {
-    // Only the family-level target blocks reject unknown keys.
-    pushZodIssues(diagnostics, parsed.error, file, {
-      baseCode: "acf.hooks.invalid-field",
-      family: "hook",
-      unknownKeyCode: "acf.target.extension.unknown-field",
-    });
-    return undefined;
-  }
-  const data = parsed.data;
-  const buckets: HookFile["buckets"] = {};
-  if (data.session_start !== undefined) buckets.session_start = data.session_start as HookEntry[];
-  if (data.user_prompt_submit !== undefined)
-    buckets.user_prompt_submit = data.user_prompt_submit as HookEntry[];
-  if (data.pre_tool !== undefined) buckets.pre_tool = data.pre_tool as HookEntry[];
-  if (data.permission_request !== undefined)
-    buckets.permission_request = data.permission_request as HookEntry[];
-  if (data.post_tool !== undefined) buckets.post_tool = data.post_tool as HookEntry[];
-  if (data.stop !== undefined) buckets.stop = data.stop as HookEntry[];
-  if (data.pre_compact !== undefined) buckets.pre_compact = data.pre_compact as HookEntry[];
-  const hookFile: HookFile = { path: file, buckets };
-  const native = nativeHooks(
-    data.targets as Record<string, { hooks?: Record<string, HookEntry[]> }> | undefined,
-    file,
-    diagnostics,
-  );
-  if (native !== undefined) hookFile.native = native;
-  return hookFile;
-}
-
-/**
- * The family-level `targets.<target>.hooks` blocks (SPEC.md §13.9) as entries that apply to
- * `<target>` only: an entry's own `only`/`except` narrows it, so its applicability becomes the
- * intersection with `[<target>]`, possibly empty. An unknown block target id is reported and the
- * block left out. Unknown entry target ids are reported here because the entry's own
- * `only`/`except` does not survive into the model.
- */
-function nativeHooks(
-  targets: Record<string, { hooks?: Record<string, HookEntry[]> }> | undefined,
-  file: string,
-  diagnostics: Diagnostic[],
-): NativeHooks | undefined {
-  if (targets === undefined) return undefined;
-  const unknownTarget = (id: string): void => {
-    diagnostics.push({
-      severity: "error",
-      code: "acf.target.unknown-id",
-      message: `unknown target id: ${id}`,
-      path: file,
-      family: "hook",
-      targetId: id,
-    });
-  };
-  const out: NativeHooks = {};
-  for (const [target, block] of Object.entries(targets)) {
-    if (!isTargetId(target)) {
-      unknownTarget(target);
-      continue;
-    }
-    const events: Record<string, HookEntry[]> = {};
-    for (const [event, entries] of Object.entries(block.hooks ?? {})) {
-      events[event] = entries.map(({ only, except, ...entry }) => {
-        for (const id of [...(only ?? []), ...(except ?? [])])
-          if (!isTargetId(id)) unknownTarget(id);
-        return { ...entry, only: computeSet({ only, except }, [target]) };
-      });
-    }
-    out[target] = events;
-  }
-  return out;
-}
-
-export async function readMcp(
-  root: string,
-  diagnostics: Diagnostic[],
-): Promise<McpFile | undefined> {
-  const file = await pickFamilyYaml(
-    path.join(root, "mcp"),
-    "mcp",
-    "acf.mcp.duplicate-file",
-    diagnostics,
-  );
-  if (file === undefined) return undefined;
-  const parsed = mcpFileSchema.safeParse(await parseYamlFile(file, diagnostics));
-  if (!parsed.success) {
-    // Only the family-level target blocks reject unknown keys.
-    pushZodIssues(diagnostics, parsed.error, file, {
-      baseCode: "acf.mcp.invalid-field",
-      family: "mcp",
-      unknownKeyCode: "acf.target.extension.unknown-field",
-    });
-    return undefined;
-  }
-  const targets = parsed.data.targets as Record<string, { servers?: McpServer[] }> | undefined;
-  return {
-    path: file,
-    servers: serverList(parsed.data.servers as McpServer[], targets, file, diagnostics),
-  };
-}
-
-/**
- * The canonical servers, then the family-level `targets.<target>.servers` (SPEC.md §13a.5) as
- * servers that apply to `<target>` only, so selection, every writer, the support registry,
- * conflict checks and executable fingerprints see one list. An entry's own `only`/`except`
- * still narrows it: its applicability becomes the intersection with `[<target>]`, possibly
- * empty. A server whose name repeats a canonical server, or another entry of the same target,
- * is reported and left out, since a target would otherwise receive two servers under one name;
- * so is an unknown block target id. Unknown entry target ids are reported here because the
- * entry's own `only`/`except` does not survive into the list.
- */
-function serverList(
-  canonical: McpServer[],
-  targets: Record<string, { servers?: McpServer[] }> | undefined,
-  file: string,
-  diagnostics: Diagnostic[],
-): McpServer[] {
-  const report = (code: string, message: string): void => {
-    diagnostics.push({ severity: "error", code, message, path: file, family: "mcp" });
-  };
-  const duplicate = (name: string, of: string): void =>
-    report("acf.facet.duplicate", `duplicate mcp server: ${name} repeats the name of ${of}`);
-  const out: McpServer[] = [];
-  const canonicalNames = new Set<string>();
-  for (const server of canonical) {
-    if (canonicalNames.has(server.name)) duplicate(server.name, "another canonical server");
-    else out.push(server);
-    canonicalNames.add(server.name);
-  }
-  for (const [target, block] of Object.entries(targets ?? {})) {
-    if (!isTargetId(target)) {
-      report("acf.target.unknown-id", `unknown target id: ${target}`);
-      continue;
-    }
-    const seen = new Set<string>();
-    for (const { only, except, ...server } of block.servers ?? []) {
-      for (const id of [...(only ?? []), ...(except ?? [])])
-        if (!isTargetId(id)) report("acf.target.unknown-id", `unknown target id: ${id}`);
-      if (canonicalNames.has(server.name)) duplicate(server.name, "a canonical server");
-      else if (seen.has(server.name))
-        duplicate(server.name, `another targets.${target}.servers entry`);
-      else out.push({ ...server, only: computeSet({ only, except }, [target]) } as McpServer);
-      seen.add(server.name);
-    }
-  }
-  return out;
-}
-
-async function readProseFamily<Family extends "agent" | "command" | "instruction">(
-  root: string,
-  folder: string,
-  primaryName: string,
-  family: Family,
-  diagnostics: Diagnostic[],
-): Promise<
-  Array<
-    Family extends "agent" ? AgentFacet : Family extends "command" ? CommandFacet : InstructionFacet
-  >
-> {
-  const dir = path.join(root, folder);
-  if (!(await exists(dir))) return [];
-  const discovered = await discoverProse(dir, primaryName, family, diagnostics);
-  for (const [name, count] of counts(discovered.map((facet) => facet.name))) {
-    if (count > 1) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.facet.duplicate",
-        message: `${folder}/${name} appears in both file and directory form`,
-        path: dir,
-        family,
-      });
-    }
-  }
-  const out: Array<AgentFacet | CommandFacet | InstructionFacet> = [];
-  const schema =
-    family === "agent"
-      ? agentFrontmatterSchema
-      : family === "command"
-        ? commandFrontmatterSchema
-        : instructionFrontmatterSchema;
-  const allowed = frontmatterKeys[family];
-  for (const item of discovered) {
-    pushUnknownFields(item.frontmatter, allowed, diagnostics, item.source.primary);
-    const result = schema.safeParse(item.frontmatter);
-    if (!result.success) {
-      pushZodIssues(diagnostics, result.error, item.source.primary, {
-        baseCode: "acf.markdown.invalid-frontmatter-field",
-        family,
-      });
-      continue;
-    }
-    validateNameMatch(family, result.data.name, item.name, item.source.primary, diagnostics);
-    out.push({
-      family,
-      name: result.data.name,
-      source: item.source,
-      frontmatter: result.data,
-      body: item.body,
-    } as AgentFacet | CommandFacet | InstructionFacet);
-  }
-  return out.sort(byName) as Array<
-    Family extends "agent" ? AgentFacet : Family extends "command" ? CommandFacet : InstructionFacet
-  >;
-}
-
-type DiscoveredProse = {
-  name: string;
-  source: { kind: "file" | "directory"; path: string; primary: string };
-  frontmatter: Record<string, unknown>;
-  body: string;
-};
-
-async function discoverProse(
-  dir: string,
-  primaryName: string,
-  family: "agent" | "command" | "instruction",
-  diagnostics: Diagnostic[],
-): Promise<DiscoveredProse[]> {
-  const discovered: DiscoveredProse[] = [];
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isFile() && entry.name.endsWith(".md")) {
-      const parsed = await parseMarkdownFile(full, diagnostics);
-      if (parsed === undefined) continue;
-      discovered.push({
-        name: path.basename(entry.name, ".md"),
-        source: { kind: "file", path: full, primary: full },
-        frontmatter: parsed.frontmatter,
-        body: parsed.body,
-      });
-      continue;
-    }
-    if (!entry.isDirectory()) continue;
-    const primary = path.join(full, primaryName);
-    if (!(await exists(primary))) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.facet.primary-missing",
-        message: `${path.basename(dir)}/${entry.name}/ must contain ${primaryName}`,
-        path: full,
-        family,
-      });
-      continue;
-    }
-    const parsed = await parseMarkdownFile(primary, diagnostics);
-    if (parsed === undefined) continue;
-    discovered.push({
-      name: entry.name,
-      source: { kind: "directory", path: full, primary },
-      frontmatter: parsed.frontmatter,
-      body: parsed.body,
-    });
-  }
-  return discovered;
 }
