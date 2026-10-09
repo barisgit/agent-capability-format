@@ -2681,6 +2681,7 @@ acf.lock.missing-entry
 acf.lock.unsupported-version
 
 # Apply
+acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
 acf.apply.drift                              # owned content changed since planning; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
 
