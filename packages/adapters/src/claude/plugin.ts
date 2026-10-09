@@ -17,6 +17,7 @@ import {
   type EmitResult,
   type FileContent,
   type FileDiff,
+  isExecutableMode,
   MANAGEMENT_NOTICE_FILENAME,
   NATIVE_FILES_DIR,
   nativeExtras,
@@ -111,7 +112,7 @@ export async function emitClaudePlugin(input: EmitInput, fs: ReadOnlyFs): Promis
     [...atBase].map(([relativePath, file]) => ({
       path: relativePath,
       content: file.content,
-      executable: (file.mode & 0o111) !== 0,
+      executable: isExecutableMode(file.mode),
     })),
   );
   const version = pluginVersion(built.baseVersion, digest);

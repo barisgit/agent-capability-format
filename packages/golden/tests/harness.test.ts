@@ -144,6 +144,18 @@ test("emitted file diffs become a tree relative to the emit root", async () => {
   await assertGoldenTree(tree, sample.expected, { update: false });
 });
 
+test("a file diff is executable by its owner execute bit alone", () => {
+  const tree = treeFromFileDiffs(
+    [
+      { path: "/work/group.sh", after: "x", afterMode: 0o654 },
+      { path: "/work/owner.sh", after: "x", afterMode: 0o744 },
+    ],
+    "/work",
+  );
+  expect(tree.get("group.sh")?.executable).toBe(false);
+  expect(tree.get("owner.sh")?.executable).toBe(true);
+});
+
 test("file diffs outside the emit root are rejected", () => {
   expect(() => treeFromFileDiffs([{ path: "/elsewhere/x", after: "x" }], "/work")).toThrow(
     "outside the golden root",

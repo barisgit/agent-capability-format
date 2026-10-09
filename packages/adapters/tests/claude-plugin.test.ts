@@ -3,6 +3,7 @@ import path from "node:path";
 import { pluginPackageDir, readClaudePluginPackage } from "@caplet/core";
 import { claudeAdapter, codexAdapter } from "../src";
 import { claudeAuthor } from "../src/claude/manifest";
+import { makeInMemoryFs } from "./util/in-memory-fs";
 import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
 import { withTempPackage } from "./util/temp-package";
 
@@ -34,6 +35,24 @@ test("an ACF capability with a skill and a server becomes one Claude plugin", as
     "server.js",
     "skills/review/SKILL.md",
   ]);
+});
+
+test("the plugin version counts a file as executable by its owner execute bit alone", async () => {
+  const version = async (mode: number): Promise<string | undefined> => {
+    const capability = capabilityModel({
+      skills: [skillFacet({ name: "review", description: "Review a change" })],
+    });
+    const fs = makeInMemoryFs({
+      [path.join(CAP_ROOT, "tool.sh")]: { content: "#!/bin/sh\n", mode },
+    });
+    const result = await claudeAdapter.emit(
+      { capability, scope: "project", installRoot: INSTALL_ROOT, options: {} },
+      fs,
+    );
+    return result.plugins?.[0]?.version;
+  };
+  expect(await version(0o654)).toBe(await version(0o644));
+  expect(await version(0o744)).not.toBe(await version(0o644));
 });
 
 test("a stdio command under the data directory runs from Claude's plugin data directory", async () => {

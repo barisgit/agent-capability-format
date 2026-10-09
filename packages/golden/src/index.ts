@@ -11,6 +11,7 @@
 import type { Dirent } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isExecutableMode } from "@caplet/core";
 
 /** One file of a golden tree. */
 export type GoldenFile = { bytes: Uint8Array; executable: boolean };
@@ -46,8 +47,9 @@ function toBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === "string" ? encoder.encode(content) : content;
 }
 
-function isExecutableMode(mode: number | null | undefined): boolean {
-  return mode !== null && mode !== undefined && (mode & 0o111) !== 0;
+/** Whether a file of mode `mode` is executable, as core reads modes; a missing mode is not. */
+function executable(mode: number | null | undefined): boolean {
+  return mode !== null && mode !== undefined && isExecutableMode(mode);
 }
 
 /**
@@ -87,7 +89,7 @@ export function treeFromFileDiffs(diffs: readonly GoldenFileDiff[], root: string
     }
     tree.set(normalizeRelative(relative), {
       bytes: toBytes(diff.after),
-      executable: isExecutableMode(diff.afterMode),
+      executable: executable(diff.afterMode),
     });
   }
   return tree;
@@ -111,7 +113,7 @@ export async function readTree(dir: string): Promise<GoldenTree> {
         const [bytes, info] = await Promise.all([readFile(absolute), stat(absolute)]);
         tree.set(normalizeRelative(path.relative(dir, absolute)), {
           bytes: new Uint8Array(bytes),
-          executable: isExecutableMode(info.mode),
+          executable: executable(info.mode),
         });
       }
     }

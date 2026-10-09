@@ -10,6 +10,7 @@ export {
   payloadDigestOfEntries,
   type TreeEntry,
 } from "./payload-digest.js";
+export { isExecutableMode } from "./tree.js";
 
 /**
  * Computes the v1 `capabilityHash` (`sha256-<hex>`) of a materialized capability tree

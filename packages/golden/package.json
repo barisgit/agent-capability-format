@@ -11,6 +11,9 @@
     "lint": "echo 'no lint for @caplet/golden'",
     "test": "bun test"
   },
+  "dependencies": {
+    "@caplet/core": "workspace:*"
+  },
   "devDependencies": {
     "@typescript/native-preview": "7.0.0-dev.20251104.1",
     "typescript": "5.9.3"
