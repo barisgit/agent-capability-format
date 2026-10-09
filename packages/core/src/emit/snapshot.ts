@@ -1,6 +1,6 @@
 /**
  * The capability snapshot an executable-component inventory reads: which files a definition
- * reaches through ACF path placeholders or relative entrypoints, and the fingerprint that
+ * reaches through ACF or plugin-root path placeholders or relative entrypoints, and the fingerprint that
  * changes when a component's definition or any of its files does.
  */
 import { createHash } from "node:crypto";
@@ -8,8 +8,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import { acfCapabilityDirPlaceholder } from "../types/index.js";
+import { leavesBase } from "../utils/paths.js";
 
 const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
+/** `${NAME}/path`, ending where a shell word or a JSON or YAML value would. */
+const PACKAGE_ROOT_PATH = /\$\{([A-Z_]+)\}(\/[^\s"'=:,;\\|&<>()`]+)/g;
 
 /** A capability's files at the time of the inventory, relative to its resolved root. */
 export type Snapshot = {
@@ -74,6 +77,75 @@ export function relativeEntrypoints(
   return snapshot.files.filter((file) => named.has(file.rel));
 }
 
+/**
+ * Snapshot files that `values` name below a placeholder for a plugin package's root, such as
+ * `${CLAUDE_PLUGIN_ROOT}/scripts/start.js`: the code a plugin configuration runs. `names` are
+ * the placeholder names that mean the package root, and `bases` the snapshot-relative
+ * directories the package draws its files from, highest precedence first; a path resolves in the
+ * first base that holds it, as a plugin carrier copies `native/<target>/` over the capability's
+ * own files. A directory path counts every file under it.
+ */
+export function packageRootReferences(
+  snapshot: Snapshot,
+  bases: readonly string[],
+  names: readonly string[],
+  values: readonly string[],
+): TreeFile[] {
+  const chosen: TreeFile[] = [];
+  for (const value of values) {
+    for (const match of value.matchAll(PACKAGE_ROOT_PATH)) {
+      if (!names.includes(match[1] ?? "")) continue;
+      const relative = path.posix.normalize((match[2] ?? "").slice(1)).normalize("NFC");
+      // The package root itself, or a path leaving it, names no file the configuration owns.
+      if (relative === "." || leavesBase(relative)) continue;
+      for (const base of bases) {
+        const prefix = base === "" ? relative : `${base}/${relative}`;
+        const files = filesUnder(snapshot, [prefix]);
+        if (files.length === 0) continue;
+        chosen.push(...files);
+        break;
+      }
+    }
+  }
+  return union(snapshot, chosen);
+}
+
+/**
+ * Every string a component's definition or files hold, for {@link packageRootReferences}: the
+ * string leaves of the definition and of each file that parses as JSON, else the file's text.
+ */
+export async function componentStrings(
+  definition: unknown,
+  files: readonly TreeFile[],
+): Promise<string[]> {
+  const strings = stringLeaves(definition);
+  for (const file of files) {
+    const text = await readFile(file.absPath, "utf8");
+    try {
+      strings.push(...stringLeaves(JSON.parse(text)));
+    } catch {
+      strings.push(text);
+    }
+  }
+  return strings;
+}
+
+function stringLeaves(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (typeof value !== "object" || value === null) return [];
+  return Object.values(value).flatMap(stringLeaves);
+}
+
+/**
+ * `files` in the byte order of their `rel`, as a snapshot lists them, so files a plugin package
+ * draws from several bases hash in the order the same foreign package's files would.
+ */
+export function byRel(files: readonly TreeFile[]): TreeFile[] {
+  return [...files].sort((a, b) =>
+    Buffer.compare(Buffer.from(a.rel, "utf8"), Buffer.from(b.rel, "utf8")),
+  );
+}
+
 /** Files in any of `lists`, once each, in snapshot order. */
 export function union(snapshot: Snapshot, ...lists: readonly (readonly TreeFile[])[]): TreeFile[] {
   const chosen = new Set(lists.flat());
@@ -99,7 +171,7 @@ export function underAny(rel: string, prefixes: readonly string[]): boolean {
 export function relativeTo(root: string, absolute: string): string {
   const relative = path.relative(root, absolute).split(path.sep).join("/").normalize("NFC");
   // A path outside the snapshot can match no snapshot file.
-  return relative.startsWith("..") ? "\u0000outside" : relative === "." ? "" : relative;
+  return leavesBase(relative) ? "\u0000outside" : relative === "." ? "" : relative;
 }
 
 /**

@@ -108,3 +108,14 @@ describe("marketplaces", () => {
     expect(await marketplaceDiagnostic(await source({ "README.md": "hi\n" }))).toBeUndefined();
   });
 });
+
+test("a marketplace plugin directory whose name starts with two dots is suggested", async () => {
+  const root = await source({
+    ".claude-plugin/marketplace.json": JSON.stringify({
+      name: "market",
+      owner: { name: "Acme" },
+      plugins: [{ name: "dots", source: "./..dots" }],
+    }),
+  });
+  expect((await marketplaceDiagnostic(root))?.data).toEqual({ suggestedPaths: ["..dots"] });
+});

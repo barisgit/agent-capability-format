@@ -314,6 +314,8 @@ export type AcfCapability = {
   scope: Scope;
   origin: CapabilityOrigin;
   manifest: Manifest;
+  /** The `acf.yml` or `acf.yaml` the manifest was read from; absent without one or for a foreign format. */
+  manifestPath?: string | undefined;
   capabilityMarkdown?: CapabilityMarkdown | undefined;
   skills: SkillFacet[];
   agents: AgentFacet[];

@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
-import { componentPaths } from "../formats/shared.js";
+import { readClaudeMcp } from "../formats/claude-mcp.js";
+import { CLAUDE_MANIFEST, componentPaths } from "../formats/shared.js";
+import type { TreeFile } from "../hash/tree.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
   capabilityCarrier,
@@ -20,10 +22,14 @@ import type {
   TargetId,
 } from "../types/index.js";
 import { hookEntries } from "../types/index.js";
+import { leavesBase } from "../utils/paths.js";
 import { applyApplicability } from "./index.js";
 import {
+  byRel,
+  componentStrings,
   filesUnder,
   fingerprint,
+  packageRootReferences,
   readSnapshot,
   referencedFiles,
   relativeEntrypoints,
@@ -84,16 +90,22 @@ const kindOrder: readonly ExecutableKind[] = [
  * plugin reader records the same component as foreign remainder (formats/claude-plugin.ts): the
  * default file merges with the paths and value of the manifest key, and `holds` limits a key to
  * values that hold executable entries. Every file under the bin directory is one `bin` component.
+ * MCP servers come from the target's plugin reader of the package's server files and `mcp.key`.
  */
 const pluginExecutables: Partial<
-  Record<TargetId, { components: readonly PluginComponentSpec[]; binDir: string }>
+  Record<
+    TargetId,
+    {
+      components: readonly PluginComponentSpec[];
+      binDir: string;
+      mcp: { key: string; read: typeof readClaudeMcp };
+    }
+  >
 > = {
   claude: {
-    components: [
-      ...claudePluginComponents.filter((spec) => spec.executes),
-      { kind: "mcp-server", name: "mcpServers", key: "mcpServers", executes: true },
-    ],
+    components: claudePluginComponents.filter((spec) => spec.executes),
     binDir: CLAUDE_PLUGIN_BIN_DIR,
+    mcp: { key: "mcpServers", read: readClaudeMcp },
   },
 };
 
@@ -102,7 +114,8 @@ const pluginExecutables: Partial<
  * applicability (`only`/`except`) for that target: stdio MCP servers, hooks on targets that run
  * hooks, executable native remainder of a format `target` writes, the executable configuration a
  * plugin carrier writes from `native/<target>/` files and `targets.<target>.native` keys
- * (classified like the same package's foreign remainder), and files with the executable bit. A
+ * (classified like the same component of a foreign package, one MCP server at a time, a native
+ * server replacing the capability's server of its name), and files with the executable bit. A
  * file under a skill follows that skill's applicability, a file under `native/<t>/` reaches only
  * `t` through its plugin carrier (loose writers drop the tree), and files of a foreign package
  * reach only the target of its format or a plugin carrier, which copies the package's support
@@ -127,20 +140,25 @@ export async function executableComponents(
     snapshot: await readSnapshot(filtered.root),
     base: { scope: filtered.scope, capability: filtered.manifest.name, target },
   };
-  const servers = await stdioServerExecutables(inventory);
   const hooks = await hookExecutables(inventory);
   const remainder = await remainderExecutables(inventory);
-  const pluginConfig = inventory.pluginCarried
-    ? await pluginConfigExecutables(inventory)
-    : { components: [], claimed: [] };
+  const none: NativeServers = { components: [], claimed: [], names: new Set() };
+  const pluginConfig = inventory.pluginCarried ? await pluginConfigExecutables(inventory) : none;
+  const nativeServers = inventory.pluginCarried ? await nativeServerExecutables(inventory) : none;
+  // A native server replaces the capability's server of the same name, as the host merges them.
+  const servers = (await stdioServerExecutables(inventory)).filter(
+    (server) => !nativeServers.names.has(server.name),
+  );
   const components = [
     ...servers,
     ...hooks,
     ...remainder.components,
     ...pluginConfig.components,
+    ...nativeServers.components,
     ...(await executableFiles(inventory, capability.skills, [
       ...remainder.claimed,
       ...pluginConfig.claimed,
+      ...nativeServers.claimed,
     ])),
   ];
   return components.sort(byKindThenName);
@@ -237,7 +255,9 @@ async function remainderExecutables({
         ...component.paths,
         ...(component.manifestKeys ?? []).map((key) => `${manifestPaths[component.format]}#${key}`),
       ].join(", "),
-      fingerprint: await fingerprint(
+      fingerprint: await runningFingerprint(
+        snapshot,
+        [relativeTo(snapshot.root, packageRoot)],
         await manifestValues(packageRoot, component),
         filesUnder(snapshot, prefixes),
       ),
@@ -261,17 +281,132 @@ async function pluginConfigExecutables({
       kind: component.kind,
       name: component.name,
       detail: component.detail,
-      fingerprint: await fingerprint(
+      fingerprint: await runningFingerprint(
+        snapshot,
+        // The plugin carrier copies native/<target>/ over the capability's own files.
+        [component.dir, ""],
         component.definition,
-        filesUnder(snapshot, component.prefixes).map((file) => ({
-          ...file,
-          // Package-relative, as the same file in a foreign package is fingerprinted.
-          rel: file.rel.slice(component.dir.length + 1),
-        })),
+        filesUnder(snapshot, component.prefixes),
+        component.dir,
       ),
     });
   }
   return result;
+}
+
+/** {@link ClaimingComponents} plus the name of every server the package declares, executable or not. */
+type NativeServers = ClaimingComponents & { names: ReadonlySet<string> };
+
+/**
+ * MCP servers a plugin carrier for `target` writes from the `native/<target>/` server files (the
+ * default `.mcp.json` and files the key names) and the package-level `targets.<target>.native`
+ * server key, read by the target's plugin reader so each server is classified and fingerprinted
+ * as the same server of a foreign package: a projected stdio server by its command and the
+ * package files it names, and a server the reader keeps whole by its declaration, when it
+ * launches a local process. Remote servers start no code and are left out.
+ */
+async function nativeServerExecutables({
+  capability,
+  target,
+  snapshot,
+  base,
+}: Inventory): Promise<NativeServers> {
+  const result: ClaimingComponents = { components: [], claimed: [] };
+  const plugin = pluginExecutables[target];
+  if (plugin === undefined) return { ...result, names: new Set() };
+  const dir = `${NATIVE_FILES_DIR}/${target}`;
+  const key = plugin.mcp.key;
+  const value = nativeExtras(capability.manifest.targets, target)[key];
+  const manifest = value === undefined ? {} : { [key]: value };
+  const remainder: NativeRemainderComponent[] = [];
+  // Diagnostics belong to validation; the inventory only lists what would run.
+  const mcp = await plugin.mcp.read(path.join(snapshot.root, dir), manifest, [], remainder);
+  const bases = [dir, ""];
+  for (const server of mcp?.servers ?? []) {
+    if (server.transport !== "stdio") continue;
+    const { command, args, env, cwd } = server;
+    result.components.push({
+      ...base,
+      kind: "mcp-server",
+      name: server.name,
+      detail: commandLine(command, args),
+      // As a projected foreign server is fingerprinted: the reader maps the plugin root to
+      // ${ACF_CAPABILITY_DIR} and keeps no cwd.
+      fingerprint: await nativePackageFingerprint(
+        dir,
+        { command, args, env, cwd },
+        packageRootReferences(snapshot, bases, ["ACF_CAPABILITY_DIR"], [command, ...(args ?? [])]),
+      ),
+    });
+  }
+  for (const component of remainder) {
+    // A server declared inline under the key lives in the generated manifest, not a package file.
+    const prefixes = component.paths
+      .filter((item) => item !== CLAUDE_MANIFEST)
+      .map((item) => `${dir}/${item}`);
+    result.claimed.push(...prefixes);
+    if (!component.executable) continue;
+    const fromKey = (component.manifestKeys ?? []).length > 0;
+    result.components.push({
+      ...base,
+      kind: component.kind,
+      name: component.name,
+      detail: [...prefixes, ...(fromKey ? [`targets.${target}.native.${key}`] : [])].join(", "),
+      fingerprint: await runningFingerprint(
+        snapshot,
+        bases,
+        fromKey ? { [key]: value } : null,
+        filesUnder(snapshot, prefixes),
+        dir,
+      ),
+    });
+  }
+  const names = [...(mcp?.servers ?? []), ...remainder].map((item) => item.name);
+  return { ...result, names: new Set(names) };
+}
+
+/** Placeholders that name a plugin package's root in each remainder format. */
+const packageRootPlaceholders: readonly string[] = ["CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT"];
+
+/**
+ * Fingerprint of a plugin configuration component: its definition, its own files, and the files
+ * its definition or files run through a package-root placeholder (`${CLAUDE_PLUGIN_ROOT}/...`),
+ * resolved in `bases` ({@link packageRootReferences}). With `packageDir`, the package is built
+ * from a native ACF capability's `native/<target>/` directory ({@link nativePackageFingerprint}).
+ */
+async function runningFingerprint(
+  snapshot: Snapshot,
+  bases: readonly string[],
+  definition: unknown,
+  files: readonly TreeFile[],
+  packageDir?: string,
+): Promise<string> {
+  const strings = await componentStrings(definition, files);
+  const referenced = packageRootReferences(snapshot, bases, packageRootPlaceholders, strings);
+  const all = union(snapshot, files, referenced);
+  return packageDir === undefined
+    ? await fingerprint(definition, all)
+    : await nativePackageFingerprint(packageDir, definition, all);
+}
+
+/**
+ * Fingerprint of `definition` and `files` of the package a plugin carrier builds from the
+ * capability's `native/<target>/` directory `packageDir` over its own files: files are hashed
+ * package-relative and in byte order, as the same files of a foreign package are, and files in
+ * the other targets' `native/` directories, which the package does not copy, are left out.
+ */
+async function nativePackageFingerprint(
+  packageDir: string,
+  definition: unknown,
+  files: readonly TreeFile[],
+): Promise<string> {
+  const prefix = `${packageDir}/`;
+  const packageFiles = files
+    .filter((file) => !underAny(file.rel, [NATIVE_FILES_DIR]) || file.rel.startsWith(prefix))
+    .map((file) =>
+      file.rel.startsWith(prefix) ? { ...file, rel: file.rel.slice(prefix.length) } : file,
+    );
+  return await fingerprint(definition, byRel(packageFiles));
 }
 
 /**
@@ -461,7 +596,7 @@ function configPaths(
   const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
   for (const relative of value === undefined ? [] : componentPaths(value)) {
     const normalized = path.posix.normalize(relative);
-    if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
+    if (leavesBase(normalized)) continue;
     if (!paths.includes(normalized)) paths.push(normalized);
   }
   return paths;

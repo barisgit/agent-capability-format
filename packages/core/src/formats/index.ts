@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Diagnostic, SourceFormat } from "../types/index.js";
 import { isRecord } from "../utils/guards.js";
+import { leavesBase } from "../utils/paths.js";
 import { agentPluginsSchemaVersion, readAgentPluginsPackage } from "./agent-plugins.js";
 import { readClaudePluginPackage } from "./claude-plugin.js";
 import type { ForeignReadOptions, ForeignReadResult } from "./package.js";
@@ -151,7 +152,7 @@ function marketplacePluginPaths(marketplace: unknown): string[] {
     const relative = localPluginSource(plugin, pluginRoot);
     if (relative === undefined) continue;
     const normalized = path.posix.normalize(relative).replace(/\/$/, "");
-    if (normalized !== "." && !normalized.startsWith("..")) paths.add(normalized);
+    if (normalized !== "." && !leavesBase(normalized)) paths.add(normalized);
   }
   return [...paths].sort();
 }

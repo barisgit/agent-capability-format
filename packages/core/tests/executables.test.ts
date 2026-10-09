@@ -128,6 +128,31 @@ describe("executableComponents", () => {
   });
 });
 
+/** The Claude plugin package `files` read as a foreign capability. */
+async function foreignPlugin(files: Record<string, string>): Promise<AcfCapability> {
+  const dir = await tempDir();
+  dirs.push(dir);
+  await makeCapability(dir, {
+    ".claude-plugin/plugin.json": '{"name":"test-cap","version":"1.0.0"}\n',
+    ...files,
+  });
+  const { capability: cap } = await readClaudePluginPackage(dir, {
+    scope: "project",
+    origin: { kind: "local", directory: dir },
+    revision: null,
+  });
+  if (cap === undefined) throw new Error("the plugin did not read as a capability");
+  return cap;
+}
+
+/** `change kind name` for every component that differs between the two Claude inventories. */
+async function claudeChanges(before: AcfCapability, after: AcfCapability): Promise<string[]> {
+  return executableChanges(
+    await executableComponents(before, "claude"),
+    await executableComponents(after, "claude"),
+  ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+}
+
 describe("native ACF executable configuration", () => {
   const hooksJson = (script: string): string =>
     `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/${script}"}]}]}}\n`;
@@ -200,6 +225,133 @@ describe("native ACF executable configuration", () => {
     // Loose writers drop native/<target>/ files and package extras, so nothing of them runs there.
     expect(await executableComponents(before, "claude", "loose")).toEqual([]);
     expect(await executableComponents(before, "codex")).toEqual([]);
+  });
+});
+
+describe("native Claude MCP servers", () => {
+  const mcpJson = `{"mcpServers":{"files":{"command":"node","args":["${pluginRoot}/server.js"]},"web":{"type":"http","url":"https://example.com/mcp"}}}\n`;
+  const inventory = async (cap: AcfCapability) =>
+    (await executableComponents(cap, "claude")).map(({ kind, name, detail, fingerprint }) => ({
+      kind,
+      name,
+      detail,
+      fingerprint,
+    }));
+
+  test("a native .mcp.json stdio server is listed as the same foreign plugin lists it", async () => {
+    const native = async (code: string) =>
+      await capability({
+        "acf.yml": baseManifest,
+        "native/claude/.mcp.json": mcpJson,
+        "native/claude/server.js": code,
+      });
+    const foreign = await foreignPlugin({ ".mcp.json": mcpJson, "server.js": "one()\n" });
+    const expected = await inventory(foreign);
+    expect(expected.map(({ kind, name, detail }) => `${kind} ${name} ${detail}`)).toEqual([
+      `mcp-server files node ${capabilityDir}/server.js`,
+    ]);
+    const before = await native("one()\n");
+    expect(await inventory(before)).toEqual(expected);
+    expect(await claudeChanges(before, await native("two()\n"))).toEqual([
+      "changed mcp-server files",
+    ]);
+    expect(await executableComponents(before, "claude", "loose")).toEqual([]);
+  });
+
+  test("a native mcpServers key is classified per server like a foreign manifest key", async () => {
+    const servers = {
+      files: { command: "node", args: ["--stdio"] },
+      auth: { command: "x", oauth: {} },
+    };
+    const native = await capability({
+      "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      mcpServers: ${JSON.stringify(servers)}\n`,
+    });
+    const foreign = await foreignPlugin({
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "test-cap",
+        version: "1.0.0",
+        mcpServers: servers,
+      }),
+    });
+    const expected = await inventory(foreign);
+    expect(expected.map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "mcp-server auth",
+      "mcp-server files",
+    ]);
+    const listed = await inventory(native);
+    // The server kept whole is declared in acf.yml, not in a package manifest file.
+    expect(listed.map(({ kind, name, detail }) => `${kind} ${name} ${detail}`)).toEqual([
+      "mcp-server auth targets.claude.native.mcpServers",
+      "mcp-server files node --stdio",
+    ]);
+    expect(listed[1]?.fingerprint).toBe(expected[1]?.fingerprint);
+  });
+});
+
+test("a native mcpServers server replaces the capability's server of the same name", async () => {
+  const cap = await capability({
+    "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      mcpServers: {"docs":{"type":"http","url":"https://example.com/mcp"}}\n`,
+    "mcp/mcp.yml": stdioServer,
+  });
+  expect(await executableComponents(cap, "claude")).toEqual([]);
+  expect((await executableComponents(cap, "claude", "loose")).map((item) => item.name)).toEqual([
+    "docs",
+  ]);
+});
+
+describe("files a plugin configuration runs through CLAUDE_PLUGIN_ROOT", () => {
+  const hookValue = {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: "command", command: `node ${pluginRoot}/scripts/start.js` }] },
+      ],
+    },
+  };
+  const hooks = `${JSON.stringify(hookValue)}\n`;
+
+  test("a changed script a foreign plugin hook runs changes the hook", async () => {
+    const plugin = async (code: string) =>
+      await foreignPlugin({ "hooks/hooks.json": hooks, "scripts/start.js": code });
+    expect(await claudeChanges(await plugin("one()\n"), await plugin("two()\n"))).toEqual([
+      "changed hook hooks",
+    ]);
+  });
+
+  test("a changed script a native hook runs changes the hook, wherever the plugin takes it from", async () => {
+    for (const script of ["native/claude/scripts/start.js", "scripts/start.js"]) {
+      const native = async (code: string) =>
+        await capability({
+          "acf.yml": baseManifest,
+          "native/claude/hooks/hooks.json": hooks,
+          [script]: code,
+        });
+      expect(await claudeChanges(await native("one()\n"), await native("two()\n"))).toEqual([
+        "changed hook hooks",
+      ]);
+    }
+    const foreign = await foreignPlugin({
+      "hooks/hooks.json": hooks,
+      "scripts/start.js": "one()\n",
+    });
+    const native = await capability({
+      "acf.yml": baseManifest,
+      "native/claude/hooks/hooks.json": hooks,
+      "scripts/start.js": "one()\n",
+    });
+    const fingerprints = async (cap: AcfCapability) =>
+      (await executableComponents(cap, "claude")).map((item) => item.fingerprint);
+    expect(await fingerprints(native)).toEqual(await fingerprints(foreign));
+  });
+
+  test("a script a native manifest-key hook runs counts toward the hook", async () => {
+    const native = async (code: string) =>
+      await capability({
+        "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      hooks: ${JSON.stringify(hookValue)}\n`,
+        "native/claude/scripts/start.js": code,
+      });
+    expect(await claudeChanges(await native("one()\n"), await native("two()\n"))).toEqual([
+      "changed hook hooks",
+    ]);
   });
 });
 
@@ -340,4 +492,28 @@ describe("executableChanges", () => {
     ];
     expect(await executableComponents(cap, "claude")).toEqual([]);
   });
+});
+
+test("a placeholder path whose first name starts with two dots counts toward the server", async () => {
+  const server = async (code: string): Promise<AcfCapability> =>
+    await capability({
+      "acf.yml": baseManifest,
+      "mcp/mcp.yml": `servers:\n  - name: docs\n    transport: stdio\n    command: node\n    args: ['${capabilityDir}/..server.js']\n`,
+      "..server.js": code,
+    });
+  expect(
+    executableChanges(
+      await executableComponents(await server("one()\n"), "claude"),
+      await executableComponents(await server("two()\n"), "claude"),
+    ).map(({ change, name }) => `${change} ${name}`),
+  ).toEqual(["changed docs"]);
+});
+
+test("a native manifest-key path that normalizes to .. names no package file", async () => {
+  const cap = await capability({
+    "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      hooks: 'a/../..'\n`,
+  });
+  expect((await executableComponents(cap, "claude")).map((item) => item.detail)).toEqual([
+    "targets.claude.native.hooks",
+  ]);
 });

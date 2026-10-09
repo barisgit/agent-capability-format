@@ -269,6 +269,7 @@ export type AcfCapability = {
   scope: Scope                         // resolved scope ("user" | "project")
   origin: CapabilityOrigin             // how this capability was obtained
   manifest: Manifest
+  manifestPath?: string                // acf.yml or acf.yaml read; absent without one
   capabilityMarkdown?: CapabilityMarkdown // ACF.md if present
   skills: SkillFacet[]
   agents: AgentFacet[]
@@ -340,7 +341,7 @@ export type NativeRemainderComponent = {
 export type NativeFileExtra = {
   target: TargetId
   path: string               // relative to native/<target>/ and to the generated package
-  executable: boolean
+  executable: boolean        // owner execute bit (0o100), as everywhere in core
 }
 ```
 
@@ -1447,10 +1448,18 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   `bin/` entries for the change report and `--json` `executables`. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
-  component in a foreign Claude plugin, so both report alike. A stdio server's
+  component in a foreign Claude plugin, so both report alike; MCP servers from
+  `native/claude/.mcp.json` (and files the key names) and
+  `targets.claude.native.mcpServers` go through the Claude plugin reader, so each
+  server is listed by name, and a native server replaces the capability's
+  server of the same name. A stdio server's
   fingerprint covers the packaged files its command and arguments name through
   an ACF path placeholder or by a relative path under its `cwd` (exact files
-  only, inside the snapshot).
+  only, inside the snapshot). A plugin configuration component's fingerprint
+  (a Claude hook, LSP server, monitor or pending server, foreign or from
+  `native/claude/`) also covers the files its definition or files name
+  through `${CLAUDE_PLUGIN_ROOT}/<path>`, resolved in the generated package:
+  `native/claude/<path>` first, then the capability's own `<path>`.
 
 ### 4.9 Claude plugin carrier and host port
 
@@ -2298,7 +2307,10 @@ warnings and recursive portable-asset collection while leaving the upstream
 interactive choices and resolver selectors cannot disagree.
 
 The snapshot copies every regular file of the package root except `.git/`,
-including hidden files, and keeps the executable bit. Symlinks, special
+including hidden files, and keeps the executable bit. Core counts a file as
+executable by the owner execute bit (`0o100`, `isExecutableMode` in
+`hash/tree.ts`) everywhere: the payload digest (SPEC.md §19.6), `native/<target>/`
+files, remainder classification and the executable report. Symlinks, special
 files, and paths that collide after NFC normalization or case folding reject
 the source with `acf.source.snapshot-rejected`. Both digests are computed
 over this unfiltered snapshot (§7.5).
@@ -2717,7 +2729,7 @@ acf.schema.invalid-yaml                      # malformed YAML or frontmatter, or
 
 # Manifest
 acf.manifest.invalid-name
-acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...)
+acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...), or the root is not a mapping
 acf.manifest.acf-version-unknown
 acf.manifest.only-and-except
 acf.manifest.duplicate-file                  # acf.yml AND acf.yaml both present

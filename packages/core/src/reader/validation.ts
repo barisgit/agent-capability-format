@@ -14,7 +14,7 @@ import type {
 } from "../types/index.js";
 import { hookEffectMatrix, hookEntries, hookMatchRequired } from "../types/index.js";
 import { validateInlineExtras, validateNativeFileCollisions } from "./extras-rules.js";
-import { counts } from "./helpers.js";
+import { counts, manifestFile } from "./helpers.js";
 import { validateMcpServerValues } from "./mcp-rules.js";
 
 export function validateCapability(cap: AcfCapability): void {
@@ -144,7 +144,7 @@ function validateOnlyExceptTargets(cap: AcfCapability): void {
     except?: string[] | undefined;
     path?: string | undefined;
     family?: FacetFamily | undefined;
-  }> = [{ ...cap.manifest, path: path.join(cap.root, "acf.yml") }];
+  }> = [{ ...cap.manifest, path: manifestFile(cap) }];
   for (const facet of [...cap.skills, ...cap.agents, ...cap.commands, ...cap.instructions]) {
     decls.push({
       ...facet.frontmatter,
@@ -178,9 +178,7 @@ function validateTargetExtensions(cap: AcfCapability): void {
     family: FacetFamily | "capability";
     targets?: TargetExtensions | undefined;
     path?: string | undefined;
-  }> = [
-    { family: "capability", targets: cap.manifest.targets, path: path.join(cap.root, "acf.yml") },
-  ];
+  }> = [{ family: "capability", targets: cap.manifest.targets, path: manifestFile(cap) }];
   for (const facet of [...cap.skills, ...cap.agents, ...cap.commands, ...cap.instructions]) {
     checks.push({
       family: facet.family,

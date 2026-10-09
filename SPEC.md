@@ -583,9 +583,10 @@ non-SemVer version, as the package value of the source format's target.
 A capability MAY contain `native/<target>/`. A plugin carrier of that target
 copies its files byte- and mode-exact to the same relative paths inside the
 generated package. Paths MUST stay inside the package after normalization;
-a path that collides with a generated file (such as
-`native/claude/.claude-plugin/plugin.json`) is the `error`
-`acf.native.collision`. Every other target, and every loose carrier, drops
+a path that collides with a generated path (equals it, lies inside a
+generated directory, or is a file where a generated path needs a
+directory, such as `native/claude/.claude-plugin/plugin.json` or
+`native/claude/skills/<skill>`) is the `error` `acf.native.collision`. Every other target, and every loose carrier, drops
 the tree with `acf.extras.dropped`. Files under `native/` are never read as
 ACF facets.
 

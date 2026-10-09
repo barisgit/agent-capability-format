@@ -267,3 +267,46 @@ test("a skill or server with a native value its host rejects is left out with a 
     ["warn", "acf.source.component-invalid", true],
   ]);
 });
+
+test("a placeholder named like an Object.prototype property keeps the server native", async () => {
+  const { capability } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    ".mcp.json": JSON.stringify({
+      mcpServers: { files: { command: "npx", args: [`${DOLLAR}{constructor}`] } },
+    }),
+  });
+  expect(capability?.mcp?.servers ?? []).toEqual([]);
+  expect(capability?.remainder?.map((item) => [item.kind, item.name])).toEqual([
+    ["mcp-server", "files"],
+  ]);
+});
+
+test("a component path whose first name starts with two dots stays inside the plugin", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", skills: "./..skills" }),
+    "..skills/triage/SKILL.md": "---\nname: triage\ndescription: Triage\n---\n",
+  });
+  expect(diagnostics).toEqual([]);
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["triage"]);
+});
+
+test("a remainder file is executable only with the owner execute bit", async () => {
+  const root = await tempDir();
+  dirs.push(root);
+  await makeCapability(root, {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "agents/group.md": "---\nname: group\n---\n",
+    "commands/owner.md": "Owner\n",
+  });
+  await chmod(path.join(root, "agents/group.md"), 0o654);
+  await chmod(path.join(root, "commands/owner.md"), 0o744);
+  const { capability } = await readClaudePluginPackage(root, {
+    scope: "project",
+    origin: { kind: "local", directory: root },
+    revision: null,
+  });
+  expect(capability?.remainder?.map((item) => [item.kind, item.executable])).toEqual([
+    ["agent", false],
+    ["command", true],
+  ]);
+});

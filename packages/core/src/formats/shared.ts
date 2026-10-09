@@ -5,6 +5,7 @@
  */
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { isExecutableMode } from "../hash/tree.js";
 import { nativeValueProblem } from "../targets/native-keys.js";
 import type {
   CapabilityEntry,
@@ -17,6 +18,7 @@ import type {
   TargetId,
 } from "../types/index.js";
 import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
+import { leavesBase } from "../utils/paths.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 
 // SemVer 2.0.0, the regular expression published at semver.org.
@@ -118,7 +120,7 @@ async function anyExecutable(root: string, paths: readonly string[]): Promise<bo
       ? await filesUnder(root, path.join(root, relative))
       : [relative]) {
       try {
-        if (((await lstat(path.join(root, file))).mode & 0o111) !== 0) return true;
+        if (isExecutableMode((await lstat(path.join(root, file))).mode)) return true;
       } catch {
         // A path named by a manifest but absent from the package executes nothing.
       }
@@ -296,8 +298,11 @@ export function mapPlaceholders(
   value: string,
   mapping: Readonly<Record<string, string>>,
 ): string | undefined {
-  if (placeholderNames(value).some((name) => mapping[name] === undefined)) return undefined;
-  return value.replace(/\$\{([^}]*)\}/g, (_whole, name: string) => mapping[name] ?? "");
+  // Own properties only: `${constructor}` must not resolve through Object.prototype.
+  const mapped = (name: string): string | undefined =>
+    Object.hasOwn(mapping, name) ? mapping[name] : undefined;
+  if (placeholderNames(value).some((name) => mapped(name) === undefined)) return undefined;
+  return value.replace(/\$\{([^}]*)\}/g, (_whole, name: string) => mapped(name) ?? "");
 }
 
 /** Manifest of a Claude plugin, relative to the plugin root. */
@@ -313,7 +318,7 @@ export function componentPaths(value: unknown): string[] {
 export function contained(root: string, relative: string): string | undefined {
   const resolved = path.resolve(root, relative);
   const back = path.relative(root, resolved);
-  return back.startsWith("..") || path.isAbsolute(back) ? undefined : resolved;
+  return leavesBase(back) ? undefined : resolved;
 }
 
 /** The warning for a Claude manifest component path that escapes the plugin directory. */

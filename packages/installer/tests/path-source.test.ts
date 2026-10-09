@@ -450,3 +450,17 @@ test("resolver reuses a prefetched source inventory", async () => {
     await cleanup(dir);
   }
 });
+
+test("a capability path whose first name starts with two dots stays inside its source", async () => {
+  const dir = await tempDir("acf-installer-dots-");
+  try {
+    await cp(fixture, path.join(dir, "..cap"), { recursive: true });
+    const fetched = await fetchCapability(
+      { source: { kind: "path", location: dir }, path: "..cap" },
+      { cacheDir: path.join(dir, ".cache") },
+    );
+    expect(fetched.root).toBe(path.join(dir, "..cap"));
+  } finally {
+    await cleanup(dir);
+  }
+});

@@ -11,6 +11,15 @@ export type TreeFile = {
 };
 
 /**
+ * Whether a file mode counts as executable: the owner execute bit (`0o100`), as git records it
+ * and the payload digest frames it (SPEC.md §19.6). Every executable classification in core
+ * uses this, so a file is executable to the reader, the digest and the change report alike.
+ */
+export function isExecutableMode(mode: number): boolean {
+  return (mode & 0o100) !== 0;
+}
+
+/**
  * Lists every regular file under `root` sorted by the bytes of its NFC relative path.
  * Symlinks and special files are rejected (SPEC.md §19.5 step 1); duplicates after NFC
  * normalization are kept, so callers decide whether a collision is an error.
@@ -25,8 +34,7 @@ export async function listTreeFiles(root: string): Promise<TreeFile[]> {
     files.map(async (absPath) => ({
       absPath,
       rel: path.relative(absRoot, absPath).split(path.sep).join("/").normalize("NFC"),
-      // Git's notion of executable: the owner execute bit.
-      executable: ((await lstat(absPath)).mode & 0o100) !== 0,
+      executable: isExecutableMode((await lstat(absPath)).mode),
     })),
   );
   return entries.sort((a, b) =>
