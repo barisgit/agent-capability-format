@@ -214,44 +214,53 @@ function validateExtensions(
 ): void {
   if (targets === undefined) return;
   for (const [id, payload] of Object.entries(targets)) {
-    if (id === AGENT_PLUGINS_DIALECT && readerOutput) {
-      if (!agentPluginsExtension.safeParse(payload).success) {
-        diagnostics.push({
-          severity: "error",
-          code: "acf.target.extension.unknown-field",
-          message: `${id} extras hold only a native mapping`,
-          path: file,
-        });
-      }
-      continue;
-    }
-    if (!isTargetId(id)) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.target.unknown-id",
-        message:
-          id === AGENT_PLUGINS_DIALECT
-            ? `unknown target id: ${id} is an extras dialect that only format readers write`
-            : `unknown target id: ${id}`,
-        path: file,
-        targetId: id,
-      });
-      continue;
-    }
-    const result = targetMap[id]?.extensions[family]?.safeParse(payload);
-    if (result !== undefined && !result.success) {
-      diagnostics.push(
-        makeDiagnostic({
-          severity: "error",
-          code: "acf.target.extension.unknown-field",
-          message: result.error.issues[0]?.message ?? "invalid target extension",
-          path: file,
-          targetId: id,
-          family: family === "capability" ? undefined : family,
-        }),
-      );
-    }
+    const diagnostic = extensionDiagnostic(family, id, payload, file, readerOutput);
+    if (diagnostic !== undefined) diagnostics.push(diagnostic);
   }
+}
+
+/**
+ * The problem with one `targets.<id>` extension: an agent-plugins block from a reader that holds
+ * more than `native`, an unknown target id, or a payload the target's extension schema rejects.
+ */
+function extensionDiagnostic(
+  family: FacetFamily | "capability",
+  id: string,
+  payload: unknown,
+  file: string | undefined,
+  readerOutput: boolean,
+): Diagnostic | undefined {
+  if (id === AGENT_PLUGINS_DIALECT && readerOutput) {
+    if (agentPluginsExtension.safeParse(payload).success) return undefined;
+    return {
+      severity: "error",
+      code: "acf.target.extension.unknown-field",
+      message: `${id} extras hold only a native mapping`,
+      path: file,
+    };
+  }
+  if (!isTargetId(id)) {
+    return {
+      severity: "error",
+      code: "acf.target.unknown-id",
+      message:
+        id === AGENT_PLUGINS_DIALECT
+          ? `unknown target id: ${id} is an extras dialect that only format readers write`
+          : `unknown target id: ${id}`,
+      path: file,
+      targetId: id,
+    };
+  }
+  const result = targetMap[id]?.extensions[family]?.safeParse(payload);
+  if (result === undefined || result.success) return undefined;
+  return makeDiagnostic({
+    severity: "error",
+    code: "acf.target.extension.unknown-field",
+    message: result.error.issues[0]?.message ?? "invalid target extension",
+    path: file,
+    targetId: id,
+    family: family === "capability" ? undefined : family,
+  });
 }
 
 function validateApplicability(cap: AcfCapability): void {
