@@ -1956,7 +1956,13 @@ Each family has explicit discovery rules.
 ### 6.1 Skills
 
 ```ts
-async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<SkillFacet[]> {
+// `imported`: a bare skill import keeps every frontmatter key (core, a target's
+// extra, or an agent-plugins extra) instead of reporting unknown keys.
+async function readSkills(
+  root: string,
+  diagnostics: Diagnostic[],
+  imported = false,
+): Promise<SkillFacet[]> {
   const dir = path.join(root, "skills")
   if (!(await exists(dir))) return []
 
@@ -1964,6 +1970,7 @@ async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<Skil
   const skills: SkillFacet[] = []
 
   for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue
     if (!entry.isDirectory()) {
       diagnostics.push({
         severity: "error",
@@ -1973,11 +1980,11 @@ async function readSkills(root: string, diagnostics: Diagnostic[]): Promise<Skil
       })
       continue
     }
-    const skill = await readSkillDir(path.join(dir, entry.name), diagnostics)
+    const skill = await readSkill(path.join(dir, entry.name), entry.name, imported, diagnostics)
     if (skill) skills.push(skill)
   }
 
-  return skills
+  return skills.sort(byName)
 }
 ```
 
