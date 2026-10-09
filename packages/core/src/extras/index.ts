@@ -105,7 +105,7 @@ export function withNativeExtras(
 /** Directory of a capability that holds per-target file extras, one subdirectory per target. */
 export const NATIVE_FILES_DIR = "native";
 
-/** Files under `native/<target>/` of the capability, sorted by path; empty when none. */
+/** Files under `native/<target>/` of the capability, in reader order; empty when none. */
 export function nativeFiles(
   capability: Pick<AcfCapability, "nativeFiles">,
   target: TargetId,
