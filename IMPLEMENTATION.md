@@ -942,7 +942,9 @@ adapter that needs them:
   it.
 - `replaceMarkedBlock`, `removeMarkedBlock`, `extractMarkedBlock`, and
   `markerSyntaxOf` edit one `acf:begin`/`acf:end` region of a text file
-  (HTML comment markers by default, `#` markers in TOML).
+  (HTML comment markers by default, `#` markers in TOML). A marker counts
+  only as a whole line, so `mcp_servers.foo` never matches the markers of
+  `mcp_servers.foobar`.
 - `makeFileDiff(path, before, after, owns, modes?)` builds a `FileDiff`.
 
 ```ts

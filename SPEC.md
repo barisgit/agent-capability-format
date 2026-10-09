@@ -2811,7 +2811,7 @@ Instruction trigger support is summarized as one of:
 
 On loose carriers caplet owns each server entry, not the file: JSON
 entries by JSON pointer, Codex tables by a `# acf:begin`/`# acf:end` marker
-region per server. A plugin's `.mcp.json` is a whole file of the package,
+region per server, each marker a whole line. A plugin's `.mcp.json` is a whole file of the package,
 and package-level `targets.claude.native.mcpServers` go into its
 `plugin.json` (§13a.4.1). Claude reads user-scope MCP servers only from
 `~/.claude.json`, a state file Claude rewrites, so the loose Claude carrier
