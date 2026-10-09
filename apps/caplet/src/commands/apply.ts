@@ -187,18 +187,17 @@ async function settleAndReport(
   printReach(run, run.reach);
 }
 
-/** Reports a dry run's plan with the Claude host commands it would run; nothing is written. */
+/**
+ * Reports a dry run's plan with the Claude host commands it would run; nothing is written. A
+ * failed read of Claude's state fails the dry run as it would fail apply.
+ */
 function reportDryRun(run: ApplyRun, claude: ClaudeReport | undefined): void {
   const previewed = claude?.diagnostics ?? [];
+  const all = [...run.diagnostics, ...previewed];
+  const code = exitCodeForDiagnostics(all, run.args);
+  process.exitCode = code;
   if (run.json) {
-    const planCode = exitCodeForDiagnostics(run.diagnostics, run.args);
-    const after = { reach: run.reach, claude };
-    printJson(
-      "apply",
-      planCode === 0,
-      [...run.diagnostics, ...previewed],
-      envelope(run, null, after),
-    );
+    printJson("apply", code === 0, all, envelope(run, null, { reach: run.reach, claude }));
     return;
   }
   const count = run.view.fileCount;

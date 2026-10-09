@@ -460,6 +460,22 @@ test("dry run reads host state and shows the commands without running them", asy
   expect(result.stdout).toContain(INSTALL);
 });
 
+test("a dry run whose Claude state read fails reports the error and exits 2", async () => {
+  const scope = await reviewScope("user");
+  // No transcript matches `claude plugin list --json`, so the fake claude exits non-zero.
+  const host = await userHost(scope, []);
+
+  const human = await apply(scope, host.env, ["--dry-run"]);
+  const machine = await apply(scope, host.env, ["--dry-run", "--json"]);
+
+  expect(human.exitCode).toBe(2);
+  expect(human.stderr).toContain("acf.claude.command-failed");
+  expect(machine.exitCode).toBe(2);
+  const json = JSON.parse(machine.stdout) as ApplyJson;
+  expect(json.ok).toBe(false);
+  expect(json.diagnostics.map((d) => d.code)).toContain("acf.claude.command-failed");
+});
+
 test("status lists no pending command for a registered, unchanged plugin", async () => {
   const scope = await reviewScope("user");
   const version = await applyWithoutCli(scope);
