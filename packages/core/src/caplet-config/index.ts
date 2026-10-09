@@ -4,6 +4,7 @@ import { pushZodIssues } from "../diagnostics/index.js";
 import { capletConfigSchema } from "../schemas/index.js";
 import type { CapletConfig, Diagnostic } from "../types/index.js";
 import { exists, readText } from "../utils/fs.js";
+import { isRecord } from "../utils/guards.js";
 import { parseYaml } from "../yaml.js";
 
 export { capletConfigSchema } from "../schemas/index.js";
@@ -54,7 +55,7 @@ async function readConfigFile(file: string, diagnostics: Diagnostic[]): Promise<
 
 function deepMerge(base: unknown, override: unknown): unknown {
   if (Array.isArray(base) || Array.isArray(override)) return override ?? base;
-  if (isPlainObject(base) && isPlainObject(override)) {
+  if (isRecord(base) && isRecord(override)) {
     const out: Record<string, unknown> = { ...base };
     for (const [key, value] of Object.entries(override)) {
       out[key] = key in out ? deepMerge(out[key], value) : value;
@@ -62,8 +63,4 @@ function deepMerge(base: unknown, override: unknown): unknown {
     return out;
   }
   return override ?? base;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

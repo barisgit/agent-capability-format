@@ -4,11 +4,11 @@
  * list of these), later names overriding earlier ones as Claude does.
  */
 import path from "node:path";
+import { CLAUDE_PLUGIN_MANIFEST } from "../targets/plugin-layout.js";
 import type { Diagnostic, McpFile, NativeRemainderComponent } from "../types/index.js";
 import { isRecord } from "../utils/guards.js";
 import { projectClaudeServer } from "./mcp.js";
 import {
-  CLAUDE_MANIFEST,
   componentPaths,
   contained,
   isFile,
@@ -53,7 +53,7 @@ export async function readClaudeMcp(
     const server = await projectDeclared(root, name, entry, sink);
     if (server !== undefined) servers.push(server);
   }
-  return { path: path.join(root, found.sources[0] ?? CLAUDE_MANIFEST), servers };
+  return { path: path.join(root, found.sources[0] ?? CLAUDE_PLUGIN_MANIFEST), servers };
 }
 
 function merge(
@@ -97,7 +97,7 @@ async function readManifestEntry(
   sink: Sink,
 ): Promise<void> {
   if (isRecord(entry)) {
-    merge(found, serverMap(entry) ?? {}, CLAUDE_MANIFEST, true);
+    merge(found, serverMap(entry) ?? {}, CLAUDE_PLUGIN_MANIFEST, true);
     return;
   }
   for (const relative of componentPaths(entry)) {

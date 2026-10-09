@@ -4,11 +4,6 @@
  * instead of naming an entry; `ownValue` and `setOwn` treat every key as an entry.
  */
 
-/** True for a plain object value: not null and not an array. */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** The value `record` itself holds under `key`; inherited properties read as undefined. */
 export function ownValue(record: object, key: string): unknown {
   return Object.hasOwn(record, key) ? (record as Record<string, unknown>)[key] : undefined;

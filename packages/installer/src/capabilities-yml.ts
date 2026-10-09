@@ -5,12 +5,12 @@ import {
   CREDENTIAL_IN_URL,
   capabilitiesYmlSchema,
   type Diagnostic,
+  isErrno,
   parseYaml,
   pushZodIssues,
   selectorKeys,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
-import { isErrno } from "./errno.js";
 import { entrySourceId } from "./lockfile.js";
 
 /**

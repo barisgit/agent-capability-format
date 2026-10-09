@@ -1,6 +1,6 @@
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
-import type { AcfOwnership } from "@caplet/core";
+import { type AcfOwnership, isErrno } from "@caplet/core";
 
 /**
  * Where one target may write for one scope: whole directory trees (`roots`) and single files
@@ -103,8 +103,4 @@ export function isStrictlyInside(candidate: string, root: string): boolean {
     !relative.startsWith(`..${path.sep}`) &&
     !path.isAbsolute(relative)
   );
-}
-
-function isErrno(error: unknown, code: string): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

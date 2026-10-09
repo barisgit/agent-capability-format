@@ -1,12 +1,13 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { isErrno } from "./guards.js";
 
 export async function exists(absPath: string): Promise<boolean> {
   try {
     await lstat(absPath);
     return true;
   } catch (error) {
-    if (isNotFound(error)) return false;
+    if (isErrno(error, "ENOENT")) return false;
     throw error;
   }
 }
@@ -23,7 +24,7 @@ export async function listDir(absPath: string): Promise<string[]> {
   try {
     return (await readdir(absPath)).sort();
   } catch (error) {
-    if (isNotFound(error)) return [];
+    if (isErrno(error, "ENOENT")) return [];
     throw error;
   }
 }
@@ -60,8 +61,4 @@ async function walk(
     }
     if (options.rejectSpecial === true) throw new Error(`special file not allowed: ${full}`);
   }
-}
-
-function isNotFound(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }

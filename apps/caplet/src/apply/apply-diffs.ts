@@ -6,12 +6,13 @@ import {
   mergeJson,
   replaceMarkedBlock,
 } from "@caplet/adapters/common";
-import type {
-  AcfManagedSidecar,
-  AcfOwnership,
-  Diagnostic,
-  FileContent,
-  FileDiff,
+import {
+  type AcfManagedSidecar,
+  type AcfOwnership,
+  type Diagnostic,
+  type FileContent,
+  type FileDiff,
+  isErrno,
 } from "@caplet/core";
 import { getJsonPointer, hasJsonPointer } from "./json-pointer.js";
 import {
@@ -350,8 +351,4 @@ export function resolveDiffPath(installRoot: string, diffPath: string): string {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

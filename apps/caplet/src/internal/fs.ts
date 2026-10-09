@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import type { ReadOnlyFs } from "@caplet/core";
+import { isErrno, type ReadOnlyFs } from "@caplet/core";
 
 export function diskReadOnlyFs(): ReadOnlyFs {
   return {
@@ -60,8 +60,4 @@ async function directoryExists(filePath: string): Promise<boolean> {
     if (isErrno(error, "ENOENT")) return false;
     throw error;
   }
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

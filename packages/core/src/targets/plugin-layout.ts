@@ -23,6 +23,9 @@ export function pluginPackageDir(installRoot: string, name: string): string {
   return path.join(pluginMarketplaceDir(installRoot), "plugins", name);
 }
 
+/** Manifest of a Claude plugin, relative to the plugin root. */
+export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
+
 /** What a capability contributes to one target's plugin: emitted skill names and any server. */
 export type PluginContents = { skills: readonly string[]; mcp: boolean };
 
@@ -33,7 +36,7 @@ export type PluginContents = { skills: readonly string[]; mcp: boolean };
 export function generatedPluginPaths(target: TargetId, contents: PluginContents): string[] {
   if (target !== "claude") return [];
   return [
-    ".claude-plugin/plugin.json",
+    CLAUDE_PLUGIN_MANIFEST,
     ...contents.skills.map((skill) => `skills/${skill}/`),
     ...(contents.mcp ? [".mcp.json"] : []),
   ];

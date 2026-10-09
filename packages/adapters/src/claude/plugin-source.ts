@@ -5,9 +5,14 @@
  * with them. MCP bundle references stay manifest entries, since `.mcp.json` cannot hold one.
  */
 import path from "node:path";
-import type { AcfCapability, NativeRemainderComponent, ReadOnlyFs } from "@caplet/core";
-import { isRecord } from "../common/records.js";
-import { CLAUDE_MANIFEST_PATH, MAPPED_MANIFEST_KEYS } from "./manifest.js";
+import {
+  type AcfCapability,
+  CLAUDE_PLUGIN_MANIFEST,
+  isRecord,
+  type NativeRemainderComponent,
+  type ReadOnlyFs,
+} from "@caplet/core";
+import { MAPPED_MANIFEST_KEYS } from "./manifest.js";
 
 /** Manifest keys the plugin writer generates from core fields or projected components. */
 const PROJECTED_MANIFEST_KEYS = new Set<string>([...MAPPED_MANIFEST_KEYS, "skills", "mcpServers"]);
@@ -117,7 +122,7 @@ export async function rawServerEntry(
   const file = component.paths[0];
   if (file === undefined) return undefined;
   const declared =
-    file === CLAUDE_MANIFEST_PATH
+    file === CLAUDE_PLUGIN_MANIFEST
       ? rawManifest.mcpServers
       : parseJsonObject(await fs.readText(path.join(capability.root, ...file.split("/"))));
   if (!isRecord(declared)) return undefined;

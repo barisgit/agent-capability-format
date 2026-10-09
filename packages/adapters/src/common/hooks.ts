@@ -17,6 +17,7 @@ import {
   type HookEntry,
   type HookRun,
   hookEffectMatrix,
+  isRecord,
   type ReadOnlyFs,
   type TargetId,
   targetMap,
@@ -31,7 +32,6 @@ import {
   substituteStringArray,
   substituteStringRecord,
 } from "./placeholders.js";
-import { isRecord } from "./records.js";
 
 /**
  * Writes the capability's hooks for `layout.targetId`: canonical hook types through the target's

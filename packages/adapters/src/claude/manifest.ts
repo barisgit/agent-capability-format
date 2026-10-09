@@ -17,9 +17,6 @@ import {
 import { setOwn } from "../common/records.js";
 import { considerField, type EmitReport, emptyReport } from "../common/support-report.js";
 
-/** Path of the manifest inside a Claude plugin package. */
-export const CLAUDE_MANIFEST_PATH = ".claude-plugin/plugin.json";
-
 /** Manifest keys generated from core metadata, in Claude's documented order. */
 export const MAPPED_MANIFEST_KEYS = [
   "name",

@@ -97,7 +97,10 @@ Owns:
 - the asset reference resolver (§9),
 - the applicability cascade (§10),
 - **per-target extension schemas** (§4.5) for `targets.<target>` validation,
-- **canonical `EmitOptions`** type (§4.2).
+- **canonical `EmitOptions`** type (§4.2),
+- the shared shape guards (`isRecord`, `isStringArray`, `isStringMap`,
+  `isSlug`, `isErrno`) and `stableJson`, which the other packages import
+  rather than copy.
 
 Core invariants:
 

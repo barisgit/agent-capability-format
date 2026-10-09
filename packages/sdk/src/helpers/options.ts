@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   type Diagnostic,
   discoverScopes,
+  isErrno,
   isTargetId,
   makeDiagnostic,
   type Scope,
@@ -84,10 +85,6 @@ async function isDirectory(candidate: string): Promise<boolean> {
     if (isErrno(error, "ENOENT")) return false;
     throw error;
   }
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 export type ScopeBuckets = Record<Scope, ScopeRoot[]>;

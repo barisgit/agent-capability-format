@@ -10,7 +10,10 @@ import {
   type Diagnostic,
   type FacetFamily,
   type FileContent,
+  isErrno,
+  isRecord,
   type SidecarTarget,
+  stableJson,
   targetIds,
 } from "@caplet/core";
 import { containmentViolation, fileOwnership, type OutputBoundary } from "./containment.js";
@@ -357,17 +360,6 @@ function regionContent(content: FileContent | null, own: AcfOwnership): FileCont
   return hasJsonPointer(parsed, own.pointer) ? stableJson(getJsonPointer(parsed, own.pointer)) : "";
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (isRecord(value)) {
-    const parts = Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`);
-    return `{${parts.join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function groupByPath(entries: ManagedEntry[]): Map<string, ManagedEntry[]> {
   const grouped = new Map<string, ManagedEntry[]>();
   for (const entry of entries) {
@@ -387,10 +379,6 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isSidecarTarget(value: unknown): value is SidecarTarget {
   return value === "canonical" || targetIds.some((id) => id === value);
 }
@@ -404,8 +392,4 @@ function isFacetFamily(value: unknown): value is FacetFamily {
     value === "hook" ||
     value === "mcp"
   );
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return isRecord(error) && error.code === code;
 }

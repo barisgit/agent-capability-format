@@ -10,6 +10,7 @@ import { withPackageValues } from "../extras/index.js";
 import { nativeKeyClass, nativeKeyInfo, strictestClass } from "../targets/native-keys.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
+  CLAUDE_PLUGIN_MANIFEST,
   claudePluginComponents,
   type PluginComponentSpec,
 } from "../targets/plugin-layout.js";
@@ -32,7 +33,6 @@ import {
 } from "./package.js";
 import {
   AUTHOR_KEYS,
-  CLAUDE_MANIFEST,
   componentPaths,
   contained,
   coreManifest,
@@ -65,7 +65,7 @@ export async function readClaudePluginPackage(
   root: string,
   options: ForeignReadOptions,
 ): Promise<ForeignReadResult> {
-  const manifestPath = path.join(root, CLAUDE_MANIFEST);
+  const manifestPath = path.join(root, CLAUDE_PLUGIN_MANIFEST);
   const read = await readJson(manifestPath, "acf.source.manifest-invalid", "error");
   if (!read.ok) return { capability: undefined, diagnostics: [read.diagnostic] };
   const raw = read.value;

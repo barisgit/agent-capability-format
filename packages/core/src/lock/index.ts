@@ -13,7 +13,7 @@ import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
-import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
+import { isErrno, isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
 export type LockedCapability = {
@@ -369,8 +369,4 @@ function isCapabilitySelectorMap(value: unknown): value is Record<string, string
       ([name, selector]) => isSlug(name) && typeof selector === "string" && selector.length > 0,
     )
   );
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return isRecord(error) && error.code === code;
 }

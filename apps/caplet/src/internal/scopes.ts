@@ -1,7 +1,7 @@
 import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { type ScopeRoot, scopeRoot } from "@caplet/core";
+import { isErrno, type ScopeRoot, scopeRoot } from "@caplet/core";
 import type { ScopeSelection } from "./args.js";
 
 /**
@@ -63,10 +63,6 @@ async function directoryExists(dir: string): Promise<boolean> {
     if (isErrno(error, "ENOENT")) return false;
     throw error;
   }
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 /** The explicit scope, else project when a project `.agents` exists above `cwd`, else user. */

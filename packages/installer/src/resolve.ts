@@ -5,11 +5,11 @@ import {
   type CapabilityEntry,
   type Diagnostic,
   digestMismatchDiagnostic,
+  isErrno,
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
-import { isErrno } from "./errno.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
 import type { SourceInventory } from "./inventory.js";
 import {

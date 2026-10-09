@@ -4,6 +4,7 @@ import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js"
 import { componentPaths } from "../formats/shared.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
+  CLAUDE_PLUGIN_MANIFEST,
   capabilityCarrier,
   claudePluginComponents,
   type PluginComponentSpec,
@@ -64,7 +65,7 @@ export type ExecutableChange = Omit<ExecutableComponent, "fingerprint"> & {
 
 /** Package manifest holding a format's manifest keys, relative to the package root. */
 const manifestPaths: Readonly<Record<NativeRemainderComponent["format"], string>> = {
-  "claude-plugin": ".claude-plugin/plugin.json",
+  "claude-plugin": CLAUDE_PLUGIN_MANIFEST,
   "agent-plugins": "plugin.json",
 };
 

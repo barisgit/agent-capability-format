@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isRecord } from "@caplet/core";
 
 const execFileAsync = promisify(execFile);
 
@@ -153,8 +154,4 @@ function gitErrorMessage(error: unknown): string {
   if (stderr.length > 0) return stderr;
   if (typeof message === "string") return message;
   return String(error);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

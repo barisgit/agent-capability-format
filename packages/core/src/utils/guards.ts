@@ -18,6 +18,14 @@ export function isStringMap(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
+/**
+ * True when `error` is a Node.js system error carrying `code` (for example `ENOENT`), the check
+ * a caller makes before treating that one failure as an expected outcome.
+ */
+export function isErrno(error: unknown, code: string): error is { code: string } {
+  return isRecord(error) && error.code === code;
+}
+
 /** True when `value` is an ACF slug ({@link SLUG_PATTERN}). */
 export function isSlug(value: string): boolean {
   return SLUG_PATTERN.test(value);

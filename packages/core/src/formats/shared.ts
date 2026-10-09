@@ -6,6 +6,7 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { nativeValueProblem } from "../targets/native-keys.js";
+import { CLAUDE_PLUGIN_MANIFEST } from "../targets/plugin-layout.js";
 import type {
   CapabilityEntry,
   Diagnostic,
@@ -300,9 +301,6 @@ export function mapPlaceholders(
   return value.replace(/\$\{([^}]*)\}/g, (_whole, name: string) => mapping[name] ?? "");
 }
 
-/** Manifest of a Claude plugin, relative to the plugin root. */
-export const CLAUDE_MANIFEST = ".claude-plugin/plugin.json";
-
 /** Component paths of a manifest value: a path or a list of paths; other entries ignored. */
 export function componentPaths(value: unknown): string[] {
   const values = Array.isArray(value) ? value : [value];
@@ -322,6 +320,6 @@ export function outsidePackage(root: string, key: string, relative: string): Dia
     severity: "warn",
     code: "acf.source.component-invalid",
     message: `plugin.json ${key} path ${relative} leaves the plugin directory and is ignored`,
-    path: path.join(root, CLAUDE_MANIFEST),
+    path: path.join(root, CLAUDE_PLUGIN_MANIFEST),
   };
 }

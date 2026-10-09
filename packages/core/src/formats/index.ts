@@ -6,12 +6,13 @@
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { CLAUDE_PLUGIN_MANIFEST } from "../targets/plugin-layout.js";
 import type { Diagnostic, SourceFormat } from "../types/index.js";
 import { isRecord } from "../utils/guards.js";
 import { agentPluginsSchemaVersion, readAgentPluginsPackage } from "./agent-plugins.js";
 import { readClaudePluginPackage } from "./claude-plugin.js";
 import type { ForeignReadOptions, ForeignReadResult } from "./package.js";
-import { CLAUDE_MANIFEST, isDirectory, isFile } from "./shared.js";
+import { isDirectory, isFile } from "./shared.js";
 
 export {
   AGENT_PLUGINS_MCP_SCHEMA,
@@ -58,8 +59,8 @@ export async function recognizedFormats(root: string): Promise<RecognizedFormat[
     found.push({ format: "acf", manifest: "acf/" });
   if (agentPluginsSchemaVersion(await parsedJson(path.join(root, "plugin.json"))) !== undefined)
     found.push({ format: "agent-plugins", manifest: "plugin.json" });
-  if (await isFile(path.join(root, CLAUDE_MANIFEST)))
-    found.push({ format: "claude-plugin", manifest: CLAUDE_MANIFEST });
+  if (await isFile(path.join(root, CLAUDE_PLUGIN_MANIFEST)))
+    found.push({ format: "claude-plugin", manifest: CLAUDE_PLUGIN_MANIFEST });
   return found;
 }
 
