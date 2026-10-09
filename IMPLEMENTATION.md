@@ -970,8 +970,12 @@ Apply compares every file with the plan-time `before` content (or the
 plan-time hash of its owned regions) immediately before writing. A file that
 changed in between is skipped with an `acf.apply.drift` warning and keeps its
 sidecar entry. Entries whose path or region is no longer desired are swept on
-the next apply; canonical-root entries are kept while their capability and
-facet exist and the facet was not planned into that root. Before writing,
+the next apply, except one whose owned content no longer hashes to the
+recorded `hash`: the user edited it, so the plan keeps the file and the
+entry and reports `acf.apply.drift` until the content is deleted or
+restored (retired loose Claude output is released instead, §4.9).
+Canonical-root entries are kept while their capability and facet exist and
+the facet was not planned into that root. Before writing,
 each install root is checked against its output boundary (the root, a
 target's native skills root, and its MCP file); an escape through a symlinked
 parent fails that root with `acf.apply.outside-root`. `caplet remove` checks
@@ -2683,7 +2687,7 @@ acf.lock.unsupported-version
 
 # Apply
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
-acf.apply.drift                              # owned content changed since planning; skipped (warn)
+acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
 
 # Source formats and snapshots

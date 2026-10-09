@@ -2803,6 +2803,9 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   between is left untouched, keeps its sidecar entry, and is reported as
   drift. On each apply, ACF-owned paths and regions no longer in the
   desired plan are removed, even when their capability and facet remain.
+  One whose owned content no longer matches the recorded hash was edited
+  by the user: it is kept with its sidecar entry and reported as drift
+  until the user deletes or restores it.
 - Every write and delete MUST resolve, after following existing parent
   directories, inside the declared output root of its target and scope.
   A symlinked parent that leads outside fails that target before any
