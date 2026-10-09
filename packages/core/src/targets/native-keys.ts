@@ -450,7 +450,13 @@ export function nativeKeyClass(info: NativeKeyInfo | undefined, value?: unknown)
   if (value !== undefined) {
     return conditions.find((condition) => condition.value === value)?.class ?? info.class;
   }
-  return conditions
-    .map((condition) => condition.class)
-    .reduce((worst, next) => (DROP_RANK[next] > DROP_RANK[worst] ? next : worst), info.class);
+  return strictestClass([info.class, ...conditions.map((condition) => condition.class)]);
+}
+
+/** The class in `classes` whose loss is most consequential; `descriptive` for none. */
+export function strictestClass(classes: readonly SafetyClass[]): SafetyClass {
+  return classes.reduce<SafetyClass>(
+    (worst, next) => (DROP_RANK[next] > DROP_RANK[worst] ? next : worst),
+    "descriptive",
+  );
 }

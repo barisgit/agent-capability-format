@@ -7,7 +7,7 @@
  */
 import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
-import { nativeKeyClass, nativeKeyInfo } from "../targets/native-keys.js";
+import { nativeKeyClass, nativeKeyInfo, strictestClass } from "../targets/native-keys.js";
 import {
   CLAUDE_PLUGIN_BIN_DIR,
   claudePluginComponents,
@@ -193,25 +193,16 @@ async function readSkills(
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-const CLASS_RANK: Record<SafetyClass, number> = {
-  descriptive: 0,
-  granting: 1,
-  functional: 2,
-  restricting: 3,
-};
-
 /**
  * The strictest registry class of manifest keys `keys` under their values in `raw`; unknown
  * keys are functional.
  */
 function keyClass(raw: Record<string, unknown>, keys: readonly string[]): SafetyClass {
-  return keys
-    .map((key) => nativeKeyClass(nativeKeyInfo("claude", "package", key), raw[key]))
-    .map((found) => (found === "unclassified" ? "functional" : found))
-    .reduce<SafetyClass>(
-      (strictest, next) => (CLASS_RANK[next] > CLASS_RANK[strictest] ? next : strictest),
-      "descriptive",
-    );
+  return strictestClass(
+    keys
+      .map((key) => nativeKeyClass(nativeKeyInfo("claude", "package", key), raw[key]))
+      .map((found) => (found === "unclassified" ? "functional" : found)),
+  );
 }
 
 const LISTING_KEYS = [
