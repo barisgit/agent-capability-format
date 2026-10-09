@@ -10,7 +10,7 @@ import {
   readLockfile,
   resolveCapabilities,
 } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const fixture = fileURLToPath(new URL("./fixtures/local-cap", import.meta.url));
 
@@ -26,7 +26,7 @@ test("path source resolves into scope capabilities and is idempotent", async () 
     );
 
     const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(first.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    expect(errors(first)).toEqual([]);
     expect(first.capabilities).toHaveLength(1);
     expect(first.capabilities[0]?.name).toBe("local-cap");
 
@@ -74,7 +74,7 @@ test("path collections select exact and globbed capabilities and reconcile remov
     );
 
     const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(first.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(first)).toEqual([]);
     expect(first.capabilities.map((item) => item.name)).toEqual(["cap1", "cap3"]);
     expect(first.lockfile.entries[0]?.capabilities).toEqual(["cap1", "group1/*"]);
 
@@ -83,7 +83,7 @@ test("path collections select exact and globbed capabilities and reconcile remov
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [group1/**, group1/cap3]\n`,
     );
     const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(second.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(second)).toEqual([]);
     expect(second.capabilities.map((item) => item.name)).toEqual(["cap3", "cap4"]);
     await expect(access(path.join(scopeRoot.capabilitiesDir, "cap1"))).rejects.toThrow();
   } finally {
@@ -110,7 +110,7 @@ test("globstar selectors include top-level and nested capabilities", async () =>
     );
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["nested", "top"]);
   } finally {
     await cleanup(dir);
@@ -129,7 +129,7 @@ test("selectors can name a direct capability source", async () => {
     );
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["direct"]);
     await access(path.join(scopeRoot.capabilitiesDir, "direct"));
   } finally {
@@ -288,7 +288,7 @@ test("bare skills resolve as independent synthesized snapshots of their skill di
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
 
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
     expect(result.diagnostics.map((item) => item.code)).toContain(
       "acf.import.skill-description-missing",
     );
@@ -334,7 +334,7 @@ test("synthesized capability selectors narrow by generated capability name", asy
       `acf: 1\ncapabilities:\n  - source: path:${repo}\n    capabilities: [pdf]\n`,
     );
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["pdf"]);
     expect(result.lockfile.entries[0]?.capabilities).toEqual(["pdf"]);
   } finally {
@@ -444,7 +444,7 @@ test("resolver reuses a prefetched source inventory", async () => {
       prefetchedSources: new Map([[id, { fetched, inventory }]]),
     });
 
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
     expect(result.capabilities.map((item) => item.name)).toEqual(["prefetched"]);
   } finally {
     await cleanup(dir);

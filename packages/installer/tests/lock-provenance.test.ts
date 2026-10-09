@@ -6,7 +6,7 @@ import { computeContentHash, computePayloadDigest } from "@caplet/core/hash";
 import { serializeLock } from "@caplet/core/lock";
 import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
 import { readLockfile, resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const fixtures = fileURLToPath(new URL("./fixtures/locks", import.meta.url));
 const golden = goldenCase(import.meta.dir, "multi-capability-lock");
@@ -29,7 +29,7 @@ test("a multi-capability source locks each capability's provenance and digests",
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
 
     const records = result.lockfile.entries[0]?.resolvedCapabilities ?? [];
     expect(records.map((record) => record.name)).toEqual(["alpha", "beta"]);
