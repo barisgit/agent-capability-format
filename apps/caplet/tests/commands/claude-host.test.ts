@@ -1,22 +1,30 @@
 /**
  * Claude host registration end to end (claude-plugin-output): `caplet apply` writes the plugin
- * files, then registers, updates and uninstalls the plugins through the `claude` CLI. A shim on
- * `PATH` replays the CLI transcripts recorded in task 5.1; the policy transcript is synthetic.
+ * files, then registers and updates the plugins through the `claude` CLI. A shim on `PATH`
+ * replays the CLI transcripts recorded in task 5.1; the policy transcript is synthetic. Uninstalls
+ * are in claude-host-uninstall.test.ts.
  */
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Diagnostic } from "@caplet/core";
-import type { ClaudeScopeStatus } from "../../src/internal/claude-host-flow.js";
+import { runCaplet, writeText } from "../helpers.js";
 import {
-  cleanup,
-  makeScope,
-  type RunResult,
-  readText,
-  runCaplet,
-  type TestScope,
-  writeText,
-} from "../helpers.js";
+  type ApplyJson,
+  addMarketplace,
+  apply,
+  applyJson,
+  applyWithoutCli,
+  cleanupReviewScopes,
+  INSTALL,
+  NAME,
+  pluginDir,
+  READ,
+  reviewScope,
+  selectReview,
+  userArgs,
+  userHost,
+  writeSkill,
+} from "../support/claude-review.js";
 import {
   atVersion,
   claudeMarketplaceDir,
@@ -24,89 +32,8 @@ import {
   localPluginList,
   plannedVersion,
 } from "../support/claude-scenario.js";
-import type { FakeTranscript } from "../support/fake-claude-cli.js";
 
-const scopes: TestScope[] = [];
-
-afterEach(async () => {
-  await Promise.all(scopes.splice(0).map(cleanup));
-});
-
-const NAME = "review";
-const INSTALL = `claude plugin install ${NAME}@acf-user --scope user`;
-const READ = ["claude plugin list --json", "claude plugin marketplace list --json"];
-
-type ApplyJson = { ok: boolean; diagnostics: Diagnostic[]; claude?: ClaudeScopeStatus[] };
-
-/** Writes capability `review` (a skill and an HTTP server) and selects it in the scope. */
-async function reviewScope(acfScope: "user" | "project"): Promise<TestScope> {
-  const scope = await makeScope();
-  scopes.push(scope);
-  const source = path.join(scope.sourceRoot, NAME);
-  await writeText(
-    path.join(source, "acf.yml"),
-    `acf: 1\nname: ${NAME}\nversion: 1.0.0\ndescription: Review changes\n`,
-  );
-  await writeSkill(scope, "Read the diff first.");
-  await writeText(
-    path.join(source, "mcp", "mcp.yml"),
-    "servers:\n  - name: diff\n    transport: http\n    url: https://mcp.example.com/diff\n",
-  );
-  const agents = acfScope === "user" ? path.join(scope.home, ".agents") : scope.agentsDir;
-  await writeText(path.join(agents, "caplet.yml"), "targets:\n  claude:\n    carrier: plugin\n");
-  await selectReview(scope, agents, true);
-  return scope;
-}
-
-async function writeSkill(scope: TestScope, body: string): Promise<void> {
-  await writeText(
-    path.join(scope.sourceRoot, NAME, "skills", NAME, "SKILL.md"),
-    `---\nname: ${NAME}\ndescription: Review a change\n---\n${body}\n`,
-  );
-}
-
-async function selectReview(scope: TestScope, agents: string, selected: boolean): Promise<void> {
-  const entries = selected ? `\n  - source: path:${path.join(scope.sourceRoot, NAME)}\n` : " []\n";
-  await writeText(path.join(agents, "capabilities.yml"), `acf: 1\ncapabilities:${entries}`);
-}
-
-function userArgs(scope: TestScope): string[] {
-  return ["--cwd", scope.cwd, "--scope", "user", "--target", "claude"];
-}
-
-function pluginDir(scope: TestScope): string {
-  return path.join(claudeMarketplaceDir(scope, "user"), "plugins", NAME);
-}
-
-function addMarketplace(scope: TestScope): string {
-  return `claude plugin marketplace add ${claudeMarketplaceDir(scope, "user")} --scope user`;
-}
-
-async function apply(
-  scope: TestScope,
-  env: Record<string, string> = {},
-  extra: string[] = [],
-): Promise<RunResult> {
-  return await runCaplet(scope, ["apply", ...userArgs(scope), ...extra], env);
-}
-
-async function applyJson(
-  scope: TestScope,
-  env: Record<string, string> = {},
-): Promise<{ exitCode: number; json: ApplyJson }> {
-  const result = await apply(scope, env, ["--json"]);
-  return { exitCode: result.exitCode, json: JSON.parse(result.stdout) as ApplyJson };
-}
-
-/** Writes the plugin files without registering them, as an apply without Claude Code does. */
-async function applyWithoutCli(scope: TestScope): Promise<string> {
-  expect((await apply(scope)).exitCode).toBe(0);
-  return await plannedVersion(scope, userArgs(scope), NAME);
-}
-
-async function userHost(scope: TestScope, transcripts: FakeTranscript[]) {
-  return await claudeScenarioShim(scope, "user", NAME, transcripts);
-}
+afterEach(cleanupReviewScopes);
 
 test("apply installs a new plugin after adding the marketplace", async () => {
   const scope = await reviewScope("user");
@@ -217,194 +144,6 @@ test("apply says in human output that it updated a plugin", async () => {
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toMatch(new RegExp(`${NAME} +registered +files current +updated\n`));
-});
-
-test("apply uninstalls a deselected plugin and removes the marketplace before deleting files", async () => {
-  const scope = await reviewScope("user");
-  const version = await applyWithoutCli(scope);
-  await selectReview(scope, path.join(scope.home, ".agents"), false);
-  const host = await userHost(scope, [
-    atVersion("list-json-installed", version),
-    "marketplace-list-json",
-    "uninstall-user",
-    "marketplace-remove",
-    "list-json-empty",
-  ]);
-
-  const { exitCode, json } = await applyJson(scope, host.env);
-
-  expect(exitCode).toBe(0);
-  expect(await host.calls()).toEqual([
-    ...READ,
-    `claude plugin uninstall ${NAME}@acf-user --scope user`,
-    "claude plugin marketplace remove acf-user",
-    "claude plugin list --json",
-  ]);
-  expect(json.diagnostics).toEqual([]);
-  expect(existsSync(claudeMarketplaceDir(scope, "user"))).toBe(false);
-  const sidecar = JSON.parse(await readText(path.join(scope.home, ".claude", ".acf-managed.json")));
-  expect(sidecar.marketplace).toBeUndefined();
-});
-
-test("without the CLI a deselected plugin keeps its files and the warning lists the uninstall", async () => {
-  const scope = await reviewScope("user");
-  await applyWithoutCli(scope);
-  await selectReview(scope, path.join(scope.home, ".agents"), false);
-
-  const { exitCode, json } = await applyJson(scope);
-
-  expect(exitCode).toBe(0);
-  expect(existsSync(pluginDir(scope))).toBe(true);
-  const warning = json.diagnostics.find((d) => d.code === "acf.claude.cli-unavailable");
-  expect(warning?.message).toContain(`claude plugin uninstall ${NAME}@acf-user --scope user`);
-  expect(warning?.message).toContain("claude plugin marketplace remove acf-user");
-});
-
-test("remove uninstalls the plugin and removes the marketplace before deleting files", async () => {
-  const scope = await reviewScope("user");
-  const version = await applyWithoutCli(scope);
-  const host = await userHost(scope, [
-    atVersion("list-json-installed", version),
-    "marketplace-list-json",
-    "uninstall-user",
-    "marketplace-remove",
-    "list-json-empty",
-  ]);
-
-  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"], host.env);
-
-  expect(result.exitCode).toBe(0);
-  expect(await host.calls()).toEqual([
-    ...READ,
-    `claude plugin uninstall ${NAME}@acf-user --scope user`,
-    "claude plugin marketplace remove acf-user",
-    "claude plugin list --json",
-  ]);
-  const json = JSON.parse(result.stdout) as ApplyJson;
-  expect(json.diagnostics).toEqual([]);
-  expect(existsSync(claudeMarketplaceDir(scope, "user"))).toBe(false);
-  const sidecar = JSON.parse(await readText(path.join(scope.home, ".claude", ".acf-managed.json")));
-  expect(sidecar.marketplace).toBeUndefined();
-  expect(sidecar.managed.map((entry: { capability: string }) => entry.capability)).not.toContain(
-    NAME,
-  );
-});
-
-test("remove run from the home directory removes the marketplace only caplet's registration declares", async () => {
-  const scope = await reviewScope("user");
-  const version = await applyWithoutCli(scope);
-  // What `marketplace add --scope user` wrote. From the home directory the project settings file
-  // is the user settings file, so it is caplet's own declaration, not another file's.
-  await writeText(
-    path.join(scope.home, ".claude", "settings.json"),
-    JSON.stringify({
-      extraKnownMarketplaces: {
-        "acf-user": {
-          source: { source: "directory", path: claudeMarketplaceDir(scope, "user") },
-        },
-      },
-    }),
-  );
-  const host = await userHost(scope, [
-    atVersion("list-json-installed", version),
-    "marketplace-list-json",
-    "uninstall-user",
-    "marketplace-remove",
-    "list-json-empty",
-  ]);
-
-  const result = await runCaplet(
-    scope,
-    ["remove", NAME, "--cwd", scope.home, "--scope", "user", "--target", "claude", "--json"],
-    host.env,
-  );
-
-  expect(result.exitCode).toBe(0);
-  expect(await host.calls()).toEqual([
-    ...READ,
-    `claude plugin uninstall ${NAME}@acf-user --scope user`,
-    "claude plugin marketplace remove acf-user",
-    "claude plugin list --json",
-  ]);
-  expect((JSON.parse(result.stdout) as ApplyJson).diagnostics).toEqual([]);
-  expect(existsSync(claudeMarketplaceDir(scope, "user"))).toBe(false);
-});
-
-test("remove keeps a marketplace another Claude settings file declares, with an empty catalog", async () => {
-  const scope = await reviewScope("user");
-  const version = await applyWithoutCli(scope);
-  // `marketplace remove` run from the working directory would also drop this declaration.
-  const projectSettings = path.join(scope.cwd, ".claude", "settings.json");
-  await writeText(
-    projectSettings,
-    JSON.stringify({ extraKnownMarketplaces: { "acf-user": { source: { source: "directory" } } } }),
-  );
-  const host = await userHost(scope, [
-    atVersion("list-json-installed", version),
-    "marketplace-list-json",
-    "uninstall-user",
-    "list-json-empty",
-  ]);
-
-  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"], host.env);
-
-  expect(result.exitCode).toBe(0);
-  expect(await host.calls()).toEqual([
-    ...READ,
-    `claude plugin uninstall ${NAME}@acf-user --scope user`,
-    "claude plugin list --json",
-  ]);
-  const json = JSON.parse(result.stdout) as ApplyJson;
-  const kept = json.diagnostics.find((d) => d.code === "acf.claude.marketplace-kept");
-  expect(kept?.severity).toBe("warn");
-  expect(kept?.message).toContain(projectSettings);
-  expect(kept?.message).toContain("claude plugin marketplace remove acf-user");
-  expect(existsSync(pluginDir(scope))).toBe(false);
-  const catalog = JSON.parse(
-    await readText(
-      path.join(claudeMarketplaceDir(scope, "user"), ".claude-plugin", "marketplace.json"),
-    ),
-  );
-  expect(catalog).toMatchObject({ name: "acf-user", plugins: [] });
-  const sidecar = JSON.parse(await readText(path.join(scope.home, ".claude", ".acf-managed.json")));
-  expect(sidecar.marketplace).toEqual({ name: "acf-user", scope: "user" });
-});
-
-test("without the CLI remove keeps the plugin files and the warning lists the uninstall", async () => {
-  const scope = await reviewScope("user");
-  await applyWithoutCli(scope);
-
-  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"]);
-
-  expect(result.exitCode).toBe(0);
-  expect(existsSync(pluginDir(scope))).toBe(true);
-  const json = JSON.parse(result.stdout) as ApplyJson;
-  const warning = json.diagnostics.find((d) => d.code === "acf.claude.cli-unavailable");
-  expect(warning?.message).toContain(`claude plugin uninstall ${NAME}@acf-user --scope user`);
-  expect(warning?.message).toContain("claude plugin marketplace remove acf-user");
-});
-
-test("without the CLI remove names what keeps the marketplace registered", async () => {
-  const scope = await reviewScope("user");
-  await applyWithoutCli(scope);
-  const projectSettings = path.join(scope.cwd, ".claude", "settings.json");
-  await writeText(
-    projectSettings,
-    JSON.stringify({ extraKnownMarketplaces: { "acf-user": { source: { source: "directory" } } } }),
-  );
-
-  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"]);
-
-  expect(result.exitCode).toBe(0);
-  const json = JSON.parse(result.stdout) as ApplyJson;
-  const warning = json.diagnostics.find((d) => d.code === "acf.claude.cli-unavailable");
-  expect(warning?.message).toContain(`claude plugin uninstall ${NAME}@acf-user --scope user`);
-  expect(warning?.message).not.toContain("marketplace remove");
-  const kept = json.diagnostics.find((d) => d.code === "acf.claude.marketplace-kept");
-  expect(kept?.message).toContain(projectSettings);
-  expect(kept?.message).toContain("claude plugin marketplace remove acf-user");
-  // The plugin is still installed, so its catalog entry stays.
-  expect(kept?.message).not.toContain("empty catalog");
 });
 
 test("a plugin the user disabled is updated and stays disabled", async () => {
