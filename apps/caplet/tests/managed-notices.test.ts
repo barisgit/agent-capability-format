@@ -57,3 +57,16 @@ test("root inventory is deterministic, concise, and explicit about shared owners
   expect(forward.match(/skills\/diagnose/g)).toHaveLength(1);
   expect(forward).not.toContain(".acf-managed.json");
 });
+
+test("root inventory lists a capability's artifacts by code units, not by locale", () => {
+  const artifact = (file: string): RootInventoryArtifact => ({
+    capability: "alpha-tools",
+    kind: "file",
+    path: file,
+    ownership: ["file"],
+  });
+  const lines = renderRootInventory([artifact("agents/b.md"), artifact("agents/B.md")])
+    .split("\n")
+    .filter((line) => line.startsWith("- "));
+  expect(lines).toEqual(["- `agents/B.md` (whole file)", "- `agents/b.md` (whole file)"]);
+});

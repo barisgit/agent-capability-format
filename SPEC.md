@@ -2367,7 +2367,8 @@ for each entry in `capabilities.yml`. It exists so that:
 ### 19.3 Lockfile shape
 
 The lockfile is deterministic JSON: entries sorted by `sourceId`, selector
-values sorted, no generation timestamp outside `resolvedAt`.
+values sorted (strings by UTF-16 code unit, independent of locale), no
+generation timestamp outside `resolvedAt`.
 
 ```json
 {

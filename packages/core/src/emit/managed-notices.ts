@@ -1,4 +1,5 @@
 import type { AcfOwnership, FacetFamily } from "../types/index.js";
+import { compareCodeUnits } from "../utils/compare.js";
 
 export const MANAGEMENT_NOTICE_FILENAME = "ACF-MANAGED.md";
 export const ACF_SYSTEM_OWNER = "acf-system";
@@ -60,7 +61,8 @@ function deduplicateArtifacts(input: readonly RootInventoryArtifact[]): RootInve
     unique.set(key, normalized);
   }
   return [...unique.values()].sort((left, right) =>
-    `${left.capability}\0${left.path}\0${left.kind}`.localeCompare(
+    compareCodeUnits(
+      `${left.capability}\0${left.path}\0${left.kind}`,
       `${right.capability}\0${right.path}\0${right.kind}`,
     ),
   );

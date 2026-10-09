@@ -131,3 +131,27 @@ test("sidecar entries record target, carrier and mode, and old entries are upgra
     await cleanup(scope);
   }
 });
+
+test("sidecar entries and their regions sort by code units, not by locale", async () => {
+  const scope = await makeScope();
+  try {
+    const sidecarPath = path.join(scope.cwd, ".claude", ".acf-managed.json");
+    const entry = (file: string) => ({
+      path: file,
+      owns: [
+        { kind: "marker" as const, name: "b" },
+        { kind: "marker" as const, name: "B" },
+      ],
+      capability: "alpha-cap",
+      hash: "sha256-x",
+    });
+    await writeSidecar(sidecarPath, { acf: 1, managed: [entry("a.md"), entry("B.md")] });
+    const written = JSON.parse(await readText(sidecarPath)) as {
+      managed: Array<{ path: string; owns: Array<{ name: string }> }>;
+    };
+    expect(written.managed.map((item) => item.path)).toEqual(["B.md", "a.md"]);
+    expect(written.managed[0]?.owns.map((own) => own.name)).toEqual(["B", "b"]);
+  } finally {
+    await cleanup(scope);
+  }
+});

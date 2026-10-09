@@ -7,6 +7,7 @@ import {
   type AcfManagedSidecar,
   type AcfOwnership,
   type Carrier,
+  compareCodeUnits,
   type Diagnostic,
   type FacetFamily,
   type FileContent,
@@ -201,7 +202,7 @@ export function hashOwnedRegions(
   owns: readonly AcfOwnership[],
 ): string {
   const hash = createHash("sha256");
-  for (const own of [...owns].sort((a, b) => ownershipKey(a).localeCompare(ownershipKey(b)))) {
+  for (const own of [...owns].sort(byOwnershipKey)) {
     hash.update(ownershipKey(own));
     hash.update(Buffer.from([0]));
     hash.update(regionContent(content, own));
@@ -310,7 +311,7 @@ function canonicalEntry(entry: ManagedEntry): ManagedEntry {
   // Insertion order is the serialized order.
   return {
     path: entry.path,
-    owns: [...entry.owns].sort((a, b) => ownershipKey(a).localeCompare(ownershipKey(b))),
+    owns: [...entry.owns].sort(byOwnershipKey),
     capability: entry.capability,
     ...(entry.facet === undefined ? {} : { facet: entry.facet }),
     ...(entry.target === undefined ? {} : { target: entry.target }),
@@ -321,7 +322,11 @@ function canonicalEntry(entry: ManagedEntry): ManagedEntry {
 }
 
 function sortEntries(entries: ManagedEntry[]): ManagedEntry[] {
-  return [...entries].sort((a, b) => entryIdentity(a).localeCompare(entryIdentity(b)));
+  return [...entries].sort((a, b) => compareCodeUnits(entryIdentity(a), entryIdentity(b)));
+}
+
+function byOwnershipKey(a: AcfOwnership, b: AcfOwnership): number {
+  return compareCodeUnits(ownershipKey(a), ownershipKey(b));
 }
 
 function entryIdentity(entry: ManagedEntry): string {

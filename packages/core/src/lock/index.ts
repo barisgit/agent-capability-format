@@ -13,6 +13,7 @@ import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
 import { type CapabilityEntry, type Diagnostic, selectorKeys } from "../types/model.js";
+import { compareCodeUnits } from "../utils/compare.js";
 import { isErrno, isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
 
 /** Provenance and integrity of one capability a lock entry produced. */
@@ -101,7 +102,9 @@ export function canonicalizeLock(lock: CapabilitiesLock): CapabilitiesLock {
 
 /** Sorts entries by `sourceId` and canonicalizes each one. */
 export function sortLockEntries(entries: LockEntry[]): LockEntry[] {
-  return [...entries].sort((a, b) => a.sourceId.localeCompare(b.sourceId)).map(canonicalizeEntry);
+  return [...entries]
+    .sort((a, b) => compareCodeUnits(a.sourceId, b.sourceId))
+    .map(canonicalizeEntry);
 }
 
 /** Finds the lock record of an installed capability by its final name. */
@@ -220,7 +223,7 @@ function canonicalizeRecord(record: LockedCapability): LockedCapability {
 }
 
 function byName(a: LockedCapability, b: LockedCapability): number {
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  return compareCodeUnits(a.name, b.name);
 }
 
 function sortSelector(

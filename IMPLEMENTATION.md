@@ -2296,7 +2296,8 @@ export type LockedCapability = {
 ```
 
 The lockfile is JSON written canonically by `packages/core/src/lock/`:
-entries sorted by `sourceId`, keys in a fixed order, selector values sorted.
+entries sorted by `sourceId`, keys in a fixed order, selector values sorted,
+all by UTF-16 code unit (`compareCodeUnits`), never by locale.
 Parsing is strict for names and digests and lenient for optional
 bookkeeping, so older lockfiles keep reading.
 

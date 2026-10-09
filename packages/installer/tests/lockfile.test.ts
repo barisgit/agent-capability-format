@@ -70,6 +70,29 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
   }
 });
 
+test("lockfile entries sort by the code units of their source id, not by locale", async () => {
+  const dir = await tempDir("acf-installer-lock-order-");
+  try {
+    const lockPath = path.join(dir, "capabilities.lock");
+    const entry = (owner: string) => ({
+      sourceId: `github:${owner}/repo`,
+      source: `github:${owner}/repo`,
+      ref: "main",
+      resolvedSha: "aaaa",
+      resolvedAt: "2026-05-28T00:00:00.000Z",
+      capabilityHash: `sha256-${"a".repeat(64)}`,
+      capabilityNames: [owner.toLowerCase()],
+    });
+    await writeLockfile(lockPath, { acf: 1, entries: [entry("a"), entry("B")] });
+    const parsed = JSON.parse(await readFile(lockPath, "utf8")) as {
+      entries: Array<{ sourceId: string }>;
+    };
+    expect(parsed.entries.map((item) => item.sourceId)).toEqual(["github:B/repo", "github:a/repo"]);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
 test("lockfiles reject capability names that could escape the snapshot root", async () => {
   const dir = await tempDir("acf-installer-lock-unsafe-");
   try {
