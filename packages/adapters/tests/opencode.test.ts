@@ -11,7 +11,11 @@ test("opencode maps canonical hook events to native event names", async () => {
     string,
     unknown[]
   >;
-  expect(JSON.stringify(hooks["session.compact.before"])).toContain("acf:test-cap:compact");
-  expect(JSON.stringify(hooks["permission.asked"])).toContain("acf:test-cap:ask");
-  expect(JSON.stringify(hooks["tool.execute.before"])).toContain("acf:test-cap:guard");
+  expect(JSON.stringify(hooks["session.compact.before"])).toContain(
+    "acf:test-cap:pre_compact:compact",
+  );
+  expect(JSON.stringify(hooks["permission.asked"])).toContain(
+    "acf:test-cap:permission_request:ask",
+  );
+  expect(JSON.stringify(hooks["tool.execute.before"])).toContain("acf:test-cap:pre_tool:guard");
 });
