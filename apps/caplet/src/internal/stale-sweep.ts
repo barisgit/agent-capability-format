@@ -138,21 +138,24 @@ type SweepAccumulator = SweepResult & { forcedPaths: Set<string> };
 type DesiredOwnership = {
   /** `<path key>\0<capability>\0<ownership key>` */
   owns: ReadonlySet<string>;
-  /** `<path key>\0<ownership key>`, whichever capability owns it. */
-  ownsAnyCapability: ReadonlySet<string>;
+  /** The capabilities that own each `<path key>\0<ownership key>`. */
+  owners: ReadonlyMap<string, ReadonlySet<string>>;
   /** `<install root>\0<capability>\0<family>\0<name>` */
   facets: ReadonlySet<string>;
 };
 
 function desiredOwnership(desired: readonly EmittedDiff[]): DesiredOwnership {
   const owns = new Set<string>();
-  const ownsAnyCapability = new Set<string>();
+  const owners = new Map<string, Set<string>>();
   const facets = new Set<string>();
   for (const item of desired) {
     const key = diffPathKey(item);
     for (const own of item.diff.owns) {
       owns.add(`${key}\u0000${item.capabilityName}\u0000${ownershipKey(own)}`);
-      ownsAnyCapability.add(`${key}\u0000${ownershipKey(own)}`);
+      const regionKey = `${key}\u0000${ownershipKey(own)}`;
+      const regionOwners = owners.get(regionKey) ?? new Set<string>();
+      regionOwners.add(item.capabilityName);
+      owners.set(regionKey, regionOwners);
     }
     const facet = item.diff.facet;
     if (facet !== undefined) {
@@ -161,7 +164,7 @@ function desiredOwnership(desired: readonly EmittedDiff[]): DesiredOwnership {
       );
     }
   }
-  return { owns, ownsAnyCapability, facets };
+  return { owns, owners, facets };
 }
 
 /** Sweeps one sidecar entry of `root` into `result`, as {@link sweepStaleSidecarEntries} describes. */
@@ -197,9 +200,12 @@ function sweepEntry(
   ) {
     return;
   }
-  const orphaned = stale.filter(
-    (own) => !desired.ownsAnyCapability.has(`${pathKey}\u0000${ownershipKey(own)}`),
-  );
+  const recipients = new Set<string>();
+  const orphaned = stale.filter((own) => {
+    const owners = desired.owners.get(`${pathKey}\u0000${ownershipKey(own)}`);
+    for (const owner of owners ?? []) recipients.add(owner);
+    return owners === undefined;
+  });
   let removal: EmittedDiff | undefined;
   if (orphaned.length > 0) {
     const planned = plannedRemoval({
@@ -224,6 +230,7 @@ function sweepEntry(
     capability: entry.capability,
     owns: entry.owns,
     owner: sidecarOwner({ ...context, carrier: entry.carrier ?? "loose" }),
+    ...(recipients.size === 0 ? {} : { recipients: [...recipients].sort() }),
   });
   // Regions the entry keeps, or that another capability now owns, are re-recorded at the path.
   if (orphaned.length < entry.owns.length) result.forcedPaths.add(pathKey);

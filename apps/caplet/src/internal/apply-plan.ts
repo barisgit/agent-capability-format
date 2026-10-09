@@ -81,9 +81,7 @@ export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary>
   const claude = await applyGatedChanges(progress, plan, hostRoots);
   await removeStaleSidecarEntries(
     plan.staleEntries.filter(
-      (entry) =>
-        !blockedRoots.has(entry.installRoot) &&
-        !progress.skipped.has(skipKey(entry.installRoot, entry.path, entry.capability)),
+      (entry) => !blockedRoots.has(entry.installRoot) && staleEntrySettled(progress, entry),
     ),
   );
   await rewriteHeldBackInventories(progress);
@@ -107,6 +105,17 @@ type ApplyProgress = {
 
 function skipKey(installRoot: string, relativePath: string, capability: string): string {
   return `${installRoot}\u0000${relativePath}\u0000${capability}`;
+}
+
+/**
+ * Whether a stale entry can leave the sidecar: its own capability's change at the path applied,
+ * and so did the change of every capability taking over one of its regions, which recorded the
+ * new owner. Otherwise the entry stays and the next plan sweeps it again.
+ */
+function staleEntrySettled(progress: ApplyProgress, entry: StaleSidecarEntry): boolean {
+  return [entry.capability, ...(entry.recipients ?? [])].every(
+    (capability) => !progress.skipped.has(skipKey(entry.installRoot, entry.path, capability)),
+  );
 }
 
 /** Applies `items` grouped by root, capability and owner, outside the blocked roots. */

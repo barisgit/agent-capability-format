@@ -45,11 +45,15 @@ Source URLs containing userinfo, and query parameters or fragments that look lik
 - **THEN** the command fails, the message redacts the credential, and no file contains it
 
 ### Requirement: Ownership-safe apply
-Sidecar entries SHALL record `target`, `carrier`, `capability`, `facet`, `path`, `owns` and the file mode in addition to `hash`. Each planned delete or modification SHALL carry the expected current hash, and apply SHALL skip a change whose target content no longer matches with a drift warning instead of overwriting or deleting it. Stale-entry sweeping SHALL remove entries whose path is no longer desired even when the capability and facet still exist.
+Sidecar entries SHALL record `target`, `carrier`, `capability`, `facet`, `path`, `owns` and the file mode in addition to `hash`. Each planned delete or modification SHALL carry the expected current hash, and apply SHALL skip a change whose target content no longer matches with a drift warning instead of overwriting or deleting it. When a region passes from one capability to another and the new owner's change is skipped, apply SHALL keep the previous owner's sidecar entry, so the region stays owned. Stale-entry sweeping SHALL remove entries whose path is no longer desired even when the capability and facet still exist.
 
 #### Scenario: File edited between plan and apply
 - **WHEN** a user edits an owned file after the plan is computed and before apply writes it
 - **THEN** apply leaves the file unchanged and reports drift
+
+#### Scenario: Handover whose write is skipped
+- **WHEN** an MCP server moves from one capability to another and the user edits it after the plan is computed and before apply writes it
+- **THEN** the previous owner's sidecar entry keeps the server, and the next apply hands it over without an ownership conflict
 
 #### Scenario: Renamed skill leaves no orphan
 - **WHEN** a capability renames a skill and apply runs

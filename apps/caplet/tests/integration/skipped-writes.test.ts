@@ -9,7 +9,15 @@ import path from "node:path";
 import { resolveDiffPath } from "../../src/apply/apply-diffs";
 import { applyEmitPlan } from "../../src/internal/apply-plan";
 import { buildEmitPlan } from "../../src/internal/emit-plan";
-import { applyProject, cleanup, makeScope, readText, type TestScope, writeText } from "../helpers";
+import {
+  applyProject,
+  cleanup,
+  makeScope,
+  readText,
+  runCaplet,
+  type TestScope,
+  writeText,
+} from "../helpers";
 import { pathWithoutClaude } from "../support/claude-path";
 import { claudeScenarioShim, localPluginList } from "../support/claude-scenario";
 
@@ -111,3 +119,54 @@ test("a skipped plugin package write holds back the install and the loose retire
   const sidecar = await readText(path.join(scope.cwd, ".claude", ".acf-managed.json"));
   expect(sidecar).toContain('"skills/review/SKILL.md"');
 });
+
+test("a server handed to a capability whose write is skipped stays owned", async () => {
+  await writeText(
+    path.join(scope.agentsDir, "caplet.yml"),
+    "targets:\n  claude:\n    carrier: loose\n",
+  );
+  const server = (name: string) =>
+    `  - name: ${name}\n    transport: stdio\n    command: node\n    args: [server.js]\n`;
+  const mcpYml = (capability: string) => path.join(scope.sourceRoot, capability, "mcp", "mcp.yml");
+  await writeText(mcpYml("alpha"), `servers:\n${server("alpha-server")}${server("shared")}`);
+  expect((await applyProject(scope)).exitCode).toBe(0);
+  // The server moves from alpha-cap to beta-cap.
+  await writeText(mcpYml("alpha"), `servers:\n${server("alpha-server")}`);
+  await writeText(mcpYml("beta"), `servers:\n${server("beta-server")}${server("shared")}`);
+  const update = ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"];
+  expect((await runCaplet(scope, update)).exitCode).toBe(0);
+  const plan = await buildEmitPlan(planArgs());
+  // The user edits the server between plan and apply, so beta-cap's write is skipped.
+  const mcpFile = path.join(scope.cwd, ".mcp.json");
+  const mcp = JSON.parse(await readText(mcpFile)) as {
+    mcpServers: Record<string, { args: string[] }>;
+  };
+  const shared = mcp.mcpServers.shared;
+  if (shared === undefined) throw new Error("shared server not written");
+  shared.args = ["edited.js"];
+  await writeText(mcpFile, `${JSON.stringify(mcp, null, 2)}\n`);
+
+  const summary = await applyEmitPlan(plan);
+
+  expect(summary.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "acf.apply.drift", capability: { name: "beta-cap" } }),
+  );
+  expect(await sharedOwners()).toEqual(["alpha-cap"]);
+
+  // The next apply hands the server over instead of treating it as the user's own.
+  const again = await applyProject(scope);
+
+  expect(again.exitCode).toBe(0);
+  expect(`${again.stdout}${again.stderr}`).not.toContain("acf.mcp.config-conflict");
+  expect(await sharedOwners()).toEqual(["beta-cap"]);
+});
+
+/** The capabilities whose Claude sidecar entries own the `shared` server. */
+async function sharedOwners(): Promise<string[]> {
+  const sidecar = JSON.parse(
+    await readText(path.join(scope.cwd, ".claude", ".acf-managed.json")),
+  ) as { managed: Array<{ capability: string; owns: Array<{ pointer?: string }> }> };
+  return sidecar.managed
+    .filter((entry) => entry.owns.some((own) => own.pointer === "/mcpServers/shared"))
+    .map((entry) => entry.capability);
+}

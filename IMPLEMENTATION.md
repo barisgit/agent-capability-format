@@ -1488,7 +1488,9 @@ install root with the host, except a root where one of those plugin-carrier
 writes was skipped (`acf.claude.host-deferred`), whose gated changes all
 stay closed; apply each gated change whose gate opened and
 hold back the rest with their sidecar entries; drop the stale sidecar entries
-that were not held back and regenerate the inventory of roots with held-back
+that were not held back and whose path's write landed for their capability and
+for every capability taking over one of their regions (the entry's
+`recipients`), and regenerate the inventory of roots with held-back
 changes; finally `recordClaudeMarketplaces`.
 
 After the plan, human output prints one block per scope:

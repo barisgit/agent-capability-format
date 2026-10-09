@@ -2856,7 +2856,9 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
 - When applying a plan, the emit driver MUST check that each file still
   matches the state the plan was computed from. A file that changed in
   between is left untouched, keeps its sidecar entry, and is reported as
-  drift. On each apply, ACF-owned paths and regions no longer in the
+  drift. A region one capability hands to another keeps its old owner's
+  entry until the new owner's write lands, so it is never left unowned.
+  On each apply, ACF-owned paths and regions no longer in the
   desired plan are removed, even when their capability and facet remain.
   One whose owned content no longer matches the recorded hash was edited
   by the user: it is kept with its sidecar entry and reported as drift
