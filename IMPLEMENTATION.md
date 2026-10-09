@@ -117,8 +117,8 @@ Owns:
 - built-in target adapters (`claude`, `codex`, `cursor`, `opencode`, `pi`),
 - per-target install paths for user and project scope,
 - per-target hook event / instruction trigger / MCP location mapping tables,
-- **shared file utilities** under `src/common/` (`patchJson`, `patchYaml`,
-  `appendSection`, `FileDiff` type) — used by adapters; not in core.
+- the shared loose writers and **shared file utilities** under `src/common/`
+  (§4.2.1, §4.8) — used by adapters; not in core.
 
 For v1 all built-in adapters live together. They MAY be split into
 `@caplet/adapter-claude` etc. only when dependency boundaries justify it.
@@ -126,11 +126,14 @@ For v1 all built-in adapters live together. They MAY be split into
 Adapters import `@caplet/core` for types, capability shape, and the per-target
 extension schemas defined there. Adding a target requires:
 
-1. an entry in `@caplet/core/targets/registry.ts` (id + extension schema), and
-2. an adapter file in `@caplet/adapters/<id>/adapter.ts`.
+1. an entry in `packages/core/src/targets/registry.ts` (id + extension
+   schema), and
+2. an adapter module `packages/adapters/src/<id>/index.ts` that calls
+   `registerAdapter` and is listed in `packages/adapters/src/index.ts`.
 
-The registry uses a TypeScript exhaustiveness check so a missing pair fails
-typecheck (§4.4).
+`TargetId` is `string`, so a missing pair is not a type error;
+`registerAdapter` throws for an id the registry lacks, and the adapter
+contract test runs every entry of `adapters`.
 
 ### packages/installer
 
@@ -930,30 +933,27 @@ Adapters share read-modify-serialize utilities. They live in
 `packages/adapters/src/common/` (not in core) and are imported by every
 adapter that needs them:
 
-```ts
-import {
-  patchJson,
-  patchYaml,
-  patchToml,
-  appendSection,
-  removeJsonPointer,
-  removeMarkerSection,
-  type FileDiff,
-  type AcfOwnership,
-} from "@caplet/adapters/common"
+- `mergeJson(text, pointer, value)` sets one JSON pointer and keeps the rest
+  of the text byte for byte; `readJsonObject` and `jsonPointerEscape` go with
+  it.
+- `replaceMarkedBlock`, `removeMarkedBlock`, `extractMarkedBlock`, and
+  `markerSyntaxOf` edit one `acf:begin`/`acf:end` region of a text file
+  (HTML comment markers by default, `#` markers in TOML).
+- `makeFileDiff(path, before, after, owns, modes?)` builds a `FileDiff`.
 
-// Example: insert an MCP server entry into Cursor's mcp.json
-const before = await fs.readText(`${installRoot}/mcp.json`)
-const after = patchJson(before ?? "{}", "/mcpServers/my-server", { command: "x" })
-const diff: FileDiff = {
-  path: `${installRoot}/mcp.json`,
-  before,
-  after,
-  owns: [{ kind: "json-pointer", pointer: "/mcpServers/my-server" }],
-}
+```ts
+import { makeFileDiff, mcpServerPointer, mergeJson } from "@caplet/adapters/common"
+
+// Illustrative: insert one MCP server entry into Cursor's mcp.json
+const file = `${installRoot}/mcp.json`
+const pointer = mcpServerPointer("cursor", "my-server")
+const before = await fs.readText(file)
+const after = mergeJson(before, pointer, { command: "x" })
+const diff = makeFileDiff(file, before, after, [{ kind: "json-pointer", pointer }])
 ```
 
-Utilities preserve comments in YAML/TOML where the parser supports it.
+Codex TOML tables are rendered by `renderTomlTable` and checked for a
+user-defined duplicate by `tomlDefinesTable` (`src/common/toml.ts`, internal).
 Adapters MUST NOT reformat parts of the file outside their owned pointers/
 markers.
 
@@ -1411,6 +1411,13 @@ generates from a core field is an `acf.extras.conflict` error.
 
 ### 4.8 Writer emit contract
 
+The loose writers live in `packages/adapters/src/common/`: `target.ts`
+(`emitTarget`, which runs the others for one target and reports
+package-level drops), `skills.ts`, `mcp.ts`, `emitter.ts` (agents, commands,
+instructions), and `hooks.ts`. The Claude plugin writer is
+`packages/adapters/src/claude/plugin.ts`, with source selection in
+`plugin-source.ts` and manifest mapping in `manifest.ts`.
+
 - **Skills.** The shared `.agents/skills` copy is written only when
   `canonicalSkillReaders` is non-empty (or `skills.canonical` forces it), and
   only when every reader applies the skill, none refuses it, none is in
@@ -1490,7 +1497,8 @@ A foreign Claude plugin source carries `CapabilitySource.projected`
 (`{skills, servers, remainder}`: projected skill and server names and the
 native remainder, recorded by `foreignCapability` in
 `packages/core/src/formats/package.ts` before `rename`, selection, and
-applicability). `isUnchangedClaudePlugin` compares it and `renamedFrom` with
+applicability). `isUnchangedClaudePlugin`
+(`packages/adapters/src/claude/plugin-source.ts`) compares it and `renamedFrom` with
 the capability the writer receives: an unchanged package is copied
 byte-identically except the `plugin.json` `version` value; a transformed one
 gets a regenerated manifest, skills, and `.mcp.json`, and loses the files and
@@ -2993,29 +3001,27 @@ Adapters MUST:
 - declare `AcfOwnership` for every `FileDiff` so caplet can track ACF-owned
   regions.
 
-Recommended adapter file shape:
+A loose-only target delegates to the shared writers through `emitTarget`,
+passing only its `AdapterOptions` variations (as in
+`packages/adapters/src/codex/index.ts`):
 
 ```ts
-import type { TargetAdapter } from "@caplet/adapters"
-import { patchJson } from "@caplet/adapters/common"
+import { registerAdapter, type TargetAdapter, targetMap } from "@caplet/core"
+import { emitTarget } from "../common/target.js"
 
-export const claudeAdapter: TargetAdapter<"claude"> = {
-  id: "claude",
-  async emit({ capability, scope, installRoot }, fs) {
-    const diffs: FileDiff[] = []
-    const diagnostics: Diagnostic[] = []
+const target = targetMap.codex
+if (target === undefined) throw new Error("missing target definition for codex")
 
-    diffs.push(...await emitClaudeSkills(capability, installRoot, fs, diagnostics))
-    diffs.push(...await emitClaudeAgents(capability, installRoot, fs, diagnostics))
-    diffs.push(...await emitClaudeCommands(capability, installRoot, fs, diagnostics))
-    diffs.push(...await emitClaudeInstructions(capability, installRoot, fs, diagnostics))
-    diffs.push(...await emitClaudeHooks(capability, installRoot, scope, fs, diagnostics))
-    diffs.push(...await emitClaudeMcp(capability, installRoot, scope, fs, diagnostics))
-
-    return { diffs, diagnostics }
-  },
+export const codexAdapter: TargetAdapter<"codex"> = {
+  id: "codex",
+  emit: (input, fs) => emitTarget(input, fs, target, { lossyPartialFamilies: ["command"] }),
 }
+
+registerAdapter("codex", codexAdapter)
 ```
+
+A target with its own carrier chooses it in `emit`, as the Claude adapter
+does between `emitClaudePlugin` and `emitTarget` (§4.9).
 
 Adapters should consult `targetMap[targetId].mappings` for canonical-to-native
 event/trigger translation; they SHOULD NOT hardcode the table locally.
