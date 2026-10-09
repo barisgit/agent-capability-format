@@ -240,8 +240,13 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     const [scope] = report.scopes;
     expect(scope?.plugins[0]).toMatchObject({ action: "install", state: "registration required" });
     expect(scope?.commands).toEqual([
-      { command: `claude plugin marketplace add ${userDir} --scope user`, status: "not run" },
       {
+        op: "marketplace add",
+        command: `claude plugin marketplace add ${userDir} --scope user`,
+        status: "not run",
+      },
+      {
+        op: "install",
         command: "claude plugin install probe@acf-user --scope user",
         plugin: "probe@acf-user",
         status: "not run",

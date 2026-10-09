@@ -53,6 +53,11 @@ export type ClaudeScopePlan = {
   plugins: PlannedClaudePlugin[];
   /** Installs of this marketplace at other Claude scopes; reported, never changed. */
   otherScopeInstalls: ClaudeInstalledPlugin[];
+  /**
+   * Whether Claude already lists the marketplace. `marketplace list` does not say at which
+   * scope, so the planned `marketplace add` still runs, as a no-op when it is registered.
+   */
+  marketplaceKnown: boolean;
 };
 
 /**
@@ -135,5 +140,6 @@ export function planClaudeScope(
     steps,
     plugins,
     otherScopeInstalls,
+    marketplaceKnown: known,
   };
 }

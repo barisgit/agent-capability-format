@@ -349,7 +349,25 @@ test("dry run reads host state and shows the commands without running them", asy
   expect(await host.calls()).toEqual(READ);
   expect(existsSync(pluginDir(scope))).toBe(false);
   expect(result.stdout).toContain("would run");
+  expect(result.stdout).toContain(addMarketplace(scope));
   expect(result.stdout).toContain(INSTALL);
+});
+
+test("status lists no pending command for a registered, unchanged plugin", async () => {
+  const scope = await reviewScope("user");
+  const version = await applyWithoutCli(scope);
+  const host = await userHost(scope, [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+  ]);
+
+  const result = await runCaplet(scope, ["status", ...userArgs(scope).slice(0, 4)], host.env);
+
+  expect(await host.calls()).toEqual(READ);
+  expect(result.stdout).toMatch(new RegExp(`${NAME} +registered +files current`));
+  // Apply re-runs the idempotent marketplace add, but it changes nothing Claude already lists.
+  expect(result.stdout).not.toContain("would run");
+  expect(result.stdout).not.toContain("marketplace add");
 });
 
 test("status reports host and file state without changing the host", async () => {

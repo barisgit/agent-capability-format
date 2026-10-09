@@ -1486,15 +1486,19 @@ After the plan, human output prints one block per scope:
 host state, `files <state>` and, after apply, `installed`, `updated` or
 `uninstalled` when that command succeeded, the note
 `registered for this checkout only, at Claude local scope (.claude/settings.local.json)`
-for a project, `would run` and the planned commands on a dry run, then
+for a project, `would run` and the planned commands on a dry run or
+`status` (leaving out the `marketplace add` of a marketplace Claude already
+lists: apply still runs it, because `marketplace list` does not say at which
+scope it is registered, but it is then a no-op), then
 `Claude skills are now invoked through their plugins` with one
 `/<skill> -> /<capability>:<skill>` line per rename. The `--json` envelopes
 of `apply` (also with `--dry-run`), `status`, and applying `add` and
 `update` carry `claude: ClaudeScopeStatus[]` when the plan has a Claude
 install root (`scope`, `claudeScope`, `marketplace`, `marketplaceDir`,
 `plugins[]` with `name`, `id`, `action`, `state`, `version`,
-`desiredVersion`, `message`, `files`, `commands[]` with `command`, `plugin`,
-`status`, `message`, `otherScopeInstalls`, `local`, `stateRead`), and
+`desiredVersion`, `message`, `files`, `commands[]` with `op`, `command`,
+`plugin`, `status`, `message`, `otherScopeInstalls`, `marketplaceKnown`,
+`local`, `stateRead`), and
 `renames: [{scope, capability, from, to}]` when a rename applies. `caplet
 status` and dry runs read host state and run no command.
 

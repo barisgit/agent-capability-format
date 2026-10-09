@@ -196,7 +196,12 @@ export function claudeLines(report: ClaudeReport, mode: "applied" | "planned"): 
         ),
       );
     }
-    const planned = scope.commands.filter((command) => command.status === "not run");
+    // The add of a marketplace Claude already lists is a no-op re-registration, not pending work.
+    const planned = scope.commands.filter(
+      (command) =>
+        command.status === "not run" &&
+        !(scope.marketplaceKnown && command.op === "marketplace add"),
+    );
     if (mode === "planned" && planned.length > 0) {
       lines.push(colors.dim("  would run"));
       for (const command of planned) lines.push(`    ${command.command}`);

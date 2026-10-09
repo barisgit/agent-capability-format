@@ -43,6 +43,7 @@ export type ClaudePluginReport = {
 export type ClaudeCommandStatus = "succeeded" | "failed" | "skipped" | "not run";
 
 export type ClaudeCommandReport = {
+  op: ClaudeCommand["op"];
   command: string;
   plugin?: string | undefined;
   status: ClaudeCommandStatus;
@@ -65,6 +66,8 @@ export type ClaudeScopeReport = {
   commands: ClaudeCommandReport[];
   /** Installs of caplet's marketplace at other Claude scopes, left unchanged. */
   otherScopeInstalls: { id: string; scope: string; enabled: boolean; version: string }[];
+  /** Whether Claude listed caplet's marketplace before any command ran. */
+  marketplaceKnown: boolean;
   /** Project scope only. */
   local?: ClaudeLocalRegistration | undefined;
   /** Whether plugin states come from `claude plugin list` read after the commands ran. */
@@ -248,6 +251,7 @@ function scopeReport(
       enabled: p.enabled,
       version: p.version,
     })),
+    marketplaceKnown: plan.marketplaceKnown,
     stateRead: installed !== undefined,
   };
   if (plan.target.scope === "project" && installed !== undefined) {
@@ -284,6 +288,7 @@ function commandReport(
   result: StepResult | undefined,
 ): ClaudeCommandReport {
   const report: ClaudeCommandReport = {
+    op: command.op,
     command: formatClaudeCommand(command),
     status: result?.status ?? "not run",
   };
