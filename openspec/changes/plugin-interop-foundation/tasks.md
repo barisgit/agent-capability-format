@@ -52,7 +52,7 @@ Every task starts with a failing test and ends when it passes. "Golden" means a 
 
 ## 7. Verification
 
-- [ ] 7.1 Run focused package tests and `bun run ci`.
-- [ ] 7.2 Run `openspec validate plugin-interop-foundation --strict` and `git diff --check`.
+- [x] 7.1 Run focused package tests and `bun run ci`.
+- [x] 7.2 Run `openspec validate plugin-interop-foundation --strict` and `git diff --check`.
 - [x] 7.3 Dogfood: install one public Claude plugin and one public Agent Plugins package for Claude at user and project scope and for Codex loose; migrate a loose Claude install; record results. Recorded in `research/plugin-interop/dogfood-7.3.md`; Codex loading and model invocation remain UNKNOWN (Codex not installed; no authenticated Claude session).
-- [ ] 7.4 Run an independent review of the branch against this change and the code-review standards.
+- [x] 7.4 Run an independent review of the branch against this change and the code-review standards. Three spec reviews (core and readers, writers and Claude carrier, CLI and host) plus two re-reviews; a refine pass per package. Every finding was fixed with a failing test first except the last re-review's three Medium findings, which were fixed test-first but not re-reviewed. Follow-ups are recorded in `backlog.md`.
