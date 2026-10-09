@@ -2,7 +2,7 @@
  * Migration from loose Claude output to plugins (claude-plugin-output): once Claude reports the
  * plugin registered, apply retires the loose files caplet wrote unchanged, releases the ones the
  * user edited, keeps everything while registration fails, and announces the new invocation names
- * once per install root. Switching back to the loose carrier uninstalls the plugin.
+ * on the apply that retires the loose skills. Switching back to the loose carrier uninstalls the plugin.
  */
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -131,11 +131,9 @@ async function snapshot(scope: TestScope, result: RunResult) {
   if (existsSync(mcp)) files["project/.mcp.json"] = await readText(mcp);
   const sidecar = JSON.parse(await readText(path.join(claudeRoot, ".acf-managed.json"))) as {
     managed: { path: string; capability: string; carrier?: string }[];
-    renameNoticeShown?: true;
   };
   files["sidecar.json"] = `${JSON.stringify(
     {
-      renameNoticeShown: sidecar.renameNoticeShown ?? false,
       managed: sidecar.managed.map((entry) => `${entry.path} ${entry.capability} ${entry.carrier}`),
     },
     null,
@@ -257,4 +255,18 @@ test("switching Claude to the loose carrier uninstalls the plugin and writes loo
   ) as { marketplace?: unknown; managed: { carrier?: string }[] };
   expect(sidecar.marketplace).toBeUndefined();
   expect(sidecar.managed.some((entry) => entry.carrier === "plugin")).toBe(false);
+});
+
+test("a capability that migrates again later in the same install root announces its rename again", async () => {
+  const scope = await looseProject();
+  const { version } = await migrate(scope, "ok");
+  expect((await switchToLoose(scope, version)).exitCode).toBe(0);
+  await writeText(path.join(scope.agentsDir, "caplet.yml"), "acf: 1\n");
+
+  const { applied } = await migrate(scope, "ok");
+
+  expect(applied.exitCode).toBe(0);
+  expect(applied.stdout).toContain(NOTICE);
+  expect(applied.stdout).toContain(`/${NAME} -> /${NAME}:${NAME}`);
+  expect(existsSync(looseSkill(scope))).toBe(false);
 });

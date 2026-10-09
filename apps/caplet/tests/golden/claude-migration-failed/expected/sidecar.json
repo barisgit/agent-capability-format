@@ -1,5 +1,4 @@
 {
-  "renameNoticeShown": false,
   "managed": [
     "../.mcp.json review loose",
     ".acf/marketplace/.claude-plugin/marketplace.json acf-system plugin",

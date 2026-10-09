@@ -85,11 +85,15 @@ When a capability moves from the loose Claude carrier to the plugin carrier (fir
 - **THEN** the loose artifacts remain installed and owned, and the next apply retries the migration
 
 ### Requirement: One-time invocation rename notice
-The migration SHALL move Claude skills to plugin-qualified invocation names (`/<skill>` becomes `/<capability>:<skill>`). The plan and apply output of the first migrating apply for an install root SHALL show one notice listing each old and new invocation name; the sidecar SHALL record that the notice was shown, and later applies SHALL NOT repeat it. `--json` output SHALL carry the renames as structured data on that apply.
+The migration SHALL move Claude skills to plugin-qualified invocation names (`/<skill>` becomes `/<capability>:<skill>`). The plan and apply output of the apply that retires a capability's loose Claude skills SHALL show one notice listing each old and new invocation name, and `--json` output SHALL carry the renames as structured data on that apply. Retirement happens once per migration, so later applies SHALL NOT repeat the notice, and a capability that migrates after others of its install root, or again after a switch back to `loose`, SHALL get its own notice. Caplet SHALL NOT record shown notices in the sidecar, because such a record would suppress the notice of a later migration in the same install root.
 
 #### Scenario: Notice shown once
 - **WHEN** a project with loose Claude skill `review` from capability `review-kit` is migrated, and apply runs again afterwards
 - **THEN** the first apply shows `/review -> /review-kit:review` and the second apply shows no rename notice
+
+#### Scenario: Later migration in the same install root
+- **WHEN** capability `review-kit` migrated earlier and capability `lint`, loose until now because it had a hook, drops the hook and is applied
+- **THEN** that apply shows `/lint -> /lint:lint`
 
 ### Requirement: Managed notices outside plugin packages
 SPEC.md §14.7 SHALL be amended: caplet SHALL NOT write `ACF-MANAGED.md` inside generated plugin packages or preserved foreign payloads. The install-root `ACF-MANAGED.md` inventory SHALL list each generated plugin directory and the marketplace directory as caplet-owned, and the per-artifact notices of retired loose skill directories SHALL be removed with those directories.

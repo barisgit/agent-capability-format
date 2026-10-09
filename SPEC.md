@@ -2899,9 +2899,11 @@ discovers. A drifted loose artifact is left in place, its sidecar entry is
 released, and the warning `acf.migration.drifted` names the path, the
 duplicate, and the command that removes it. When migration fails, the
 loose output stays and the next apply retries. Because plugin skills are
-namespaced, apply shows a one-time rename notice per capability (for
-example `/review` to `/review-kit:review`), records that it was shown in
-the sidecar, and lists the renames in `--json` output.
+namespaced, the apply that retires a capability's loose skills shows each
+rename (for example `/review` to `/review-kit:review`) and lists them in
+`--json` `renames`. Retirement happens once per migration, so later
+applies stay silent and a capability that migrates later in the same
+install root still gets its notice.
 
 ## 22b. Direct ACF consumers (informative)
 
