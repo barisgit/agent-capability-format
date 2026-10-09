@@ -126,6 +126,26 @@ test("a skill excluded for one discovering target is not written to the shared r
   expect(fileText(pi, ".pi/skills/review/SKILL.md")).toBeDefined();
 });
 
+test("a server another discovering target refuses keeps the skill out of the shared root", async () => {
+  const capability = capabilityModel({
+    skills: [skillFacet({ name: "review", description: "Review code" })],
+    servers: [
+      {
+        name: "search",
+        transport: "stdio",
+        command: "search-server",
+        targets: { codex: { native: { disabled_tools: ["delete"] } } },
+      },
+    ],
+  });
+  const options = { canonicalSkillReaders: ["codex", "pi"] };
+  const codex = await emitModel(codexAdapter, capability, ".codex", options);
+  const pi = await emitModel(piAdapter, capability, ".pi", options);
+  expect(withCode(pi, "acf.support.refused")[0]?.data?.component).toBe("search");
+  expect(codex.diffs.some((diff) => diff.path.includes(".agents/skills"))).toBe(false);
+  expect(fileText(codex, ".codex/skills/review/SKILL.md")).toContain("name: review");
+});
+
 test("Claude-only selection writes no canonical copy", async () => {
   const capability = capabilityModel({ skills: [manualOnly] });
   const result = await emitModel(claudeAdapter, capability, ".claude", {

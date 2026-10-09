@@ -3,13 +3,14 @@ import path from "node:path";
 import {
   type AcfCapability,
   applicableTargets,
+  capabilityBlocked,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
   type FileDiff,
   MANAGEMENT_NOTICE_FILENAME,
   type ReadOnlyFs,
-  remainderRefuses,
+  remainderSupport,
   renderArtifactNotice,
   type Scope,
   type SkillFacet,
@@ -18,6 +19,7 @@ import {
 } from "@caplet/core";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
+import { mcpSupport } from "./mcp.js";
 import { ownValue, setOwn } from "./records.js";
 import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
@@ -31,7 +33,8 @@ type SkillCopy = { root: string; rendering: NativeSkill };
  * `.agents/skills` root writes its skills there when one rendering satisfies every selected
  * reader of that root (`options.canonicalSkillReaders`); otherwise, and for targets that do not
  * discover it, skills go to the target's native skill root. `options.skills` overrides both
- * defaults. Refused skills are not written anywhere for the target.
+ * defaults. Refused skills are not written anywhere for the target, and no skill goes to the
+ * shared root while a refusal blocks the capability for one of its readers.
  */
 export async function emitSkills(
   input: EmitInput,
@@ -42,9 +45,13 @@ export async function emitSkills(
   const cap = input.capability;
   const diffs: FileDiff[] = [];
   const emittedPaths = new Set<string>();
+  const readers = sharedRootReaders(input, target);
+  // A reader blocked by any refusal writes nothing of the capability, so a shared copy would
+  // still reach it through discovery; every discovering target then uses its native root.
+  const sharedReaders = readers.some((reader) => blocksCapability(cap, reader)) ? null : readers;
 
   for (const skill of [...cap.skills].sort((a, b) => a.name.localeCompare(b.name))) {
-    const copies = renderedCopies(input, target, skill, report);
+    const copies = renderedCopies(input, target, skill, sharedReaders, report);
     if (copies.length === 0) continue;
     const assets = await readSkillAssets(cap, skill, fs);
     for (const copy of copies) {
@@ -59,6 +66,7 @@ function renderedCopies(
   input: EmitInput,
   target: TargetDefinition,
   skill: SkillFacet,
+  readers: readonly TargetId[] | null,
   report: EmitReport,
 ): SkillCopy[] {
   const own = renderNativeSkill(input.capability, skill, target.id);
@@ -68,12 +76,12 @@ function renderedCopies(
 
   const discovers = target.discoversCanonicalSkills === true;
   const writeShared = input.options.skills?.canonical ?? discovers;
-  const readers = sharedRootReaders(input, target);
-  const shared = writeShared
-    ? readers.length === 0
-      ? own
-      : sharedRendering(input.capability, skill, readers)
-    : null;
+  const shared =
+    writeShared && readers !== null
+      ? readers.length === 0
+        ? own
+        : sharedRendering(input.capability, skill, readers)
+      : null;
   // A discovering target relies on the shared copy; when none can be written it falls back to
   // its native root, which other readers of the shared root do not discover.
   const fallback = discovers && writeShared && shared === null;
@@ -110,10 +118,9 @@ function sharedRootReaders(input: EmitInput, target: TargetDefinition): TargetId
 
 /**
  * The one rendering of `skill` for the shared root that every reader accepts, or null when
- * there is none: a reader excludes or refuses the skill or the whole package, the readers' own
- * extras differ (an
- * extra in a shared file counts as emitted to every reader), or two renderings disagree on a
- * key. Core translations of different readers are merged, since each states the same meaning.
+ * there is none: a reader excludes the skill, the readers' own extras differ (an extra in a
+ * shared file counts as emitted to every reader), or two renderings disagree on a key. The
+ * caller has ruled out readers blocked by a refusal, this skill's included. Core translations of different readers are merged, since each states the same meaning.
  */
 function sharedRendering(
   cap: AcfCapability,
@@ -122,9 +129,7 @@ function sharedRendering(
 ): NativeSkill | null {
   const applicable = applicableTargets(cap, skill.frontmatter);
   if (!readers.every((reader) => applicable.includes(reader))) return null;
-  if (readers.some((reader) => remainderRefuses(cap, reader))) return null;
   const renderings = readers.map((reader) => renderNativeSkill(cap, skill, reader));
-  if (renderings.some((rendering) => rendering.refused)) return null;
   const extras = new Set(renderings.map((rendering) => stableJson(rendering.extras)));
   if (extras.size > 1) return null;
 
@@ -141,6 +146,18 @@ function sharedRendering(
     if (!mergeInto(merged.files, rendering.files)) return null;
   }
   return merged;
+}
+
+/**
+ * True when a refusal blocks the whole capability for `reader` on the loose carrier: one from its
+ * native remainder, or from a skill or MCP server that applies to `reader`.
+ */
+function blocksCapability(cap: AcfCapability, reader: TargetId): boolean {
+  const skills = cap.skills
+    .filter((skill) => applicableTargets(cap, skill.frontmatter).includes(reader))
+    .flatMap((skill) => renderNativeSkill(cap, skill, reader).diagnostics);
+  const support = [...remainderSupport(cap, reader), ...skills, ...mcpSupport(cap, reader)];
+  return capabilityBlocked(support, reader);
 }
 
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): boolean {
