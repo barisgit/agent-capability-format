@@ -1,3 +1,4 @@
+import type { Diagnostic, ExecutableChange } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import {
   appliedCounts,
@@ -10,7 +11,7 @@ import {
 } from "../internal/apply-flow.js";
 import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
-import { previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
+import { type ClaudeReport, previewClaude, previewedDiffs } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { buildEmitPlan } from "../internal/emit-plan.js";
 import {
@@ -23,178 +24,221 @@ import {
   blockingExitCode,
   exitCodeForDiagnostics,
   printDiagnostics,
+  type Reporter,
   reporter,
 } from "../internal/output.js";
-import { buildPlanView, planToJson, reachBlock, reachToJson } from "../internal/plan-view.js";
+import {
+  buildPlanView,
+  type PlanView,
+  planToJson,
+  reachBlock,
+  reachToJson,
+} from "../internal/plan-view.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { collectReach } from "../internal/workflow.js";
+import { collectReach, type EmitPlan, type Reach } from "../internal/workflow.js";
 
 export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
   args: specToCittyArgs("apply") as ArgsDef,
   async run(context) {
     await runCommandSafely("apply", context.args, async () => {
-      const json = readJson(context.args);
-      const dryRun = context.args["dry-run"] === true;
-      const frozen = context.args.frozen === true;
-      const simulate = dryRun && !frozen;
-      const installed = await installedExecutables(context.args);
-      const fetched =
-        dryRun && frozen
-          ? { scopes: [], results: [], diagnostics: [] }
-          : await fetchScopes(context.args, readFetchMode(context.args), undefined, {
-              frozen,
-              ...(simulate ? { updateLock: false } : {}),
-            });
-      // A simulated apply plans against the previewed lock and snapshots, then discards them.
-      const previews = fetched.scopes.flatMap((scopeRoot, index) => {
-        const result = fetched.results[index];
-        return result?.preview === undefined
-          ? []
-          : [{ scopeRoot, result, preview: result.preview }];
-      });
-      let plan: Awaited<ReturnType<typeof buildEmitPlan>>;
-      try {
-        plan = await buildEmitPlan(
-          context.args,
-          simulate
-            ? {
-                locks: new Map(
-                  previews.map((item) => [item.scopeRoot.scope, item.result.lockfile]),
-                ),
-                capabilitiesDirs: new Map(
-                  previews.map((item) => [item.scopeRoot.scope, item.preview.capabilitiesDir]),
-                ),
-              }
-            : undefined,
-        );
-      } finally {
-        await Promise.all(previews.map((item) => item.preview.dispose()));
-      }
-      const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
-      if (!json) printDiagnostics(diagnostics, context.args);
+      const args = context.args;
+      const json = readJson(args);
+      const dryRun = args["dry-run"] === true;
+      const frozen = args.frozen === true;
+      const installed = await installedExecutables(args);
+      const { plan, diagnostics } = await planApply(args, dryRun, frozen);
+      if (!json) printDiagnostics(diagnostics, args);
       const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
-      const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, context.args);
-      // Refused capabilities are already out of the plan for their targets; the rest applies.
-      const planCode = exitCodeForDiagnostics(diagnostics, context.args);
+      const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, args);
       // A dry run shows the changes as apply will make them once the host has run.
       const preview = dryRun && blocking === 0 ? await previewClaude(plan) : undefined;
-      const view = buildPlanView(previewedDiffs(plan, preview), {
-        verbose: readVerbose(context.args),
-      });
-      const reach = await collectReach(plan);
-      const out = reporter(context.args);
-      const executables = plannedExecutableChanges(installed, plan);
-      const outcomes = { outcomes: plan.outcomes, executables };
+      const view = buildPlanView(previewedDiffs(plan, preview), { verbose: readVerbose(args) });
+      const run: ApplyRun = {
+        args,
+        json,
+        out: reporter(args),
+        plan,
+        diagnostics,
+        view,
+        executables: plannedExecutableChanges(installed, plan),
+        reach: await collectReach(plan),
+      };
       if (blocking !== 0) {
-        if (json) {
-          printJson("apply", false, diagnostics, { plan: planToJson(view), ...outcomes });
-        } else {
-          out.compatibility(plan.outcomes, plan.targets);
-        }
+        if (json) printJson("apply", false, diagnostics, envelope(run, undefined));
+        else run.out.compatibility(plan.outcomes, plan.targets);
         process.exitCode = blocking;
         return;
       }
-      process.exitCode = planCode;
+      // Refused capabilities are already out of the plan for their targets; the rest applies.
+      process.exitCode = exitCodeForDiagnostics(diagnostics, args);
       if (view.fileCount === 0) {
-        const settled = await settleEmptyPlan(plan, dryRun, preview);
-        const all = [...diagnostics, ...settled.diagnostics];
-        const code = exitCodeForDiagnostics(all, context.args);
-        process.exitCode = code;
-        if (json) {
-          printJson("apply", code === 0, all, {
-            plan: planToJson(view),
-            applied: settled.applied,
-            ...outcomes,
-            ...reachToJson(reach),
-            ...claudeJson(settled.claude),
-          });
-          return;
-        }
-        printDiagnostics(settled.diagnostics, context.args);
-        printCompatibility(out, plan, view.fileCount);
-        reportEmptyPlan(out, plan, dryRun);
-        out.executables(executables);
-        printClaude(out, settled.claude, dryRun ? "planned" : "applied");
-        for (const line of reachBlock(
-          reach,
-          plan.scopes.map((scopeRoot) => scopeRoot.scope),
-        ))
-          out.log(line);
+        await settleAndReport(run, dryRun, preview);
         return;
       }
       if (!json) {
-        printCompatibility(out, plan, view.fileCount);
-        out.plan(view);
-        out.executables(executables);
+        printCompatibility(run.out, plan, view.fileCount);
+        run.out.plan(view);
+        run.out.executables(run.executables);
       }
-      if (dryRun) {
-        const claude = preview;
-        const previewed = claude?.diagnostics ?? [];
-        if (json) {
-          printJson("apply", planCode === 0, [...diagnostics, ...previewed], {
-            plan: planToJson(view),
-            applied: null,
-            ...outcomes,
-            ...reachToJson(reach),
-            ...claudeJson(claude),
-          });
-        } else {
-          printDiagnostics(previewed, context.args);
-          printClaude(out, claude, "planned");
-          out.pending(
-            `Dry run: ${view.fileCount} ${view.fileCount === 1 ? "change" : "changes"} not applied`,
-          );
-          for (const line of reachBlock(
-            reach,
-            plan.scopes.map((scopeRoot) => scopeRoot.scope),
-          ))
-            out.log(line);
-        }
-        return;
-      }
-      const deletions = view.totals.reduce((sum, item) => sum + item.delete, 0);
-      if (deletions > 0 && !json && !readYes(context.args)) {
-        const proceed = await confirm(
-          `This plan deletes ${deletions} ${deletions === 1 ? "file" : "files"}. Continue?`,
-        );
-        if (!proceed) {
-          out.log("Aborted.");
-          process.exitCode = 1;
-          return;
-        }
-      }
-      const applied = await applyEmitPlan(plan);
-      const counts = appliedCounts(applied);
-      const appliedReach = await collectReach(plan);
-      const applyCode = exitCodeForDiagnostics(
-        [...diagnostics, ...applied.diagnostics],
-        context.args,
-      );
-      process.exitCode = applyCode;
-      if (json) {
-        printJson("apply", applyCode === 0, [...diagnostics, ...applied.diagnostics], {
-          plan: planToJson(view),
-          applied: counts,
-          ...outcomes,
-          ...reachToJson(appliedReach),
-          ...claudeJson(applied.claude),
-        });
-        return;
-      }
-      printDiagnostics(applied.diagnostics, context.args);
-      out.log("");
-      out.done(appliedLine(counts, view.fileCount));
-      printClaude(out, applied.claude, "applied");
-      out.log("");
-      for (const line of reachBlock(
-        appliedReach,
-        plan.scopes.map((scopeRoot) => scopeRoot.scope),
-      ))
-        out.log(line);
-      if (!readVerbose(context.args) && !readQuiet(context.args)) {
-        out.log(`  ${"Full list: --verbose"}`);
-      }
+      if (dryRun) reportDryRun(run, preview);
+      else if (await deletionsConfirmed(run)) await applyAndReport(run);
     });
   },
 });
+
+/** What every outcome of one `caplet apply` reports once the plan is built. */
+type ApplyRun = {
+  args: Record<string, unknown>;
+  json: boolean;
+  out: Reporter;
+  plan: EmitPlan;
+  /** Fetch and plan diagnostics. */
+  diagnostics: readonly Diagnostic[];
+  view: PlanView;
+  executables: ExecutableChange[];
+  reach: Reach;
+};
+
+/**
+ * Fetches the sources (unless a frozen dry run, which plans what is installed) and plans them.
+ * A dry run that is not frozen plans against the previewed lock and snapshots, then discards them.
+ */
+async function planApply(
+  args: Record<string, unknown>,
+  dryRun: boolean,
+  frozen: boolean,
+): Promise<{ plan: EmitPlan; diagnostics: Diagnostic[] }> {
+  const simulate = dryRun && !frozen;
+  const fetched =
+    dryRun && frozen
+      ? { scopes: [], results: [], diagnostics: [] }
+      : await fetchScopes(args, readFetchMode(args), undefined, {
+          frozen,
+          ...(simulate ? { updateLock: false } : {}),
+        });
+  const previews = fetched.scopes.flatMap((scopeRoot, index) => {
+    const result = fetched.results[index];
+    return result?.preview === undefined ? [] : [{ scopeRoot, result, preview: result.preview }];
+  });
+  try {
+    const plan = await buildEmitPlan(
+      args,
+      simulate
+        ? {
+            locks: new Map(previews.map((item) => [item.scopeRoot.scope, item.result.lockfile])),
+            capabilitiesDirs: new Map(
+              previews.map((item) => [item.scopeRoot.scope, item.preview.capabilitiesDir]),
+            ),
+          }
+        : undefined,
+    );
+    return { plan, diagnostics: [...fetched.diagnostics, ...plan.diagnostics] };
+  } finally {
+    await Promise.all(previews.map((item) => item.preview.dispose()));
+  }
+}
+
+/** The `--json` envelope fields; `reach` and `claude` are left out while the plan is blocked. */
+function envelope(
+  run: ApplyRun,
+  applied: unknown,
+  after?: { reach: Reach; claude: ClaudeReport | undefined },
+): Record<string, unknown> {
+  return {
+    plan: planToJson(run.view),
+    ...(applied === undefined ? {} : { applied }),
+    outcomes: run.plan.outcomes,
+    executables: run.executables,
+    ...(after === undefined ? {} : { ...reachToJson(after.reach), ...claudeJson(after.claude) }),
+  };
+}
+
+function printReach(run: ApplyRun, reach: Reach): void {
+  const scopes = run.plan.scopes.map((scopeRoot) => scopeRoot.scope);
+  for (const line of reachBlock(reach, scopes)) run.out.log(line);
+}
+
+/** Settles and reports a plan with no file to write ({@link settleEmptyPlan}). */
+async function settleAndReport(
+  run: ApplyRun,
+  dryRun: boolean,
+  preview: ClaudeReport | undefined,
+): Promise<void> {
+  const { args, out, plan } = run;
+  const settled = await settleEmptyPlan(plan, dryRun, preview);
+  const all = [...run.diagnostics, ...settled.diagnostics];
+  const code = exitCodeForDiagnostics(all, args);
+  process.exitCode = code;
+  if (run.json) {
+    const after = { reach: run.reach, claude: settled.claude };
+    printJson("apply", code === 0, all, envelope(run, settled.applied, after));
+    return;
+  }
+  printDiagnostics(settled.diagnostics, args);
+  printCompatibility(out, plan, run.view.fileCount);
+  reportEmptyPlan(out, plan, dryRun);
+  out.executables(run.executables);
+  printClaude(out, settled.claude, dryRun ? "planned" : "applied");
+  printReach(run, run.reach);
+}
+
+/** Reports a dry run's plan with the Claude host commands it would run; nothing is written. */
+function reportDryRun(run: ApplyRun, claude: ClaudeReport | undefined): void {
+  const previewed = claude?.diagnostics ?? [];
+  if (run.json) {
+    const planCode = exitCodeForDiagnostics(run.diagnostics, run.args);
+    const after = { reach: run.reach, claude };
+    printJson(
+      "apply",
+      planCode === 0,
+      [...run.diagnostics, ...previewed],
+      envelope(run, null, after),
+    );
+    return;
+  }
+  const count = run.view.fileCount;
+  printDiagnostics(previewed, run.args);
+  printClaude(run.out, claude, "planned");
+  run.out.pending(`Dry run: ${count} ${count === 1 ? "change" : "changes"} not applied`);
+  printReach(run, run.reach);
+}
+
+/**
+ * Whether apply may go ahead: a plan that deletes files asks first, unless `--yes` or `--json`.
+ * Declining prints `Aborted.` and exits 1.
+ */
+async function deletionsConfirmed(run: ApplyRun): Promise<boolean> {
+  const deletions = run.view.totals.reduce((sum, item) => sum + item.delete, 0);
+  if (deletions === 0 || run.json || readYes(run.args)) return true;
+  const proceed = await confirm(
+    `This plan deletes ${deletions} ${deletions === 1 ? "file" : "files"}. Continue?`,
+  );
+  if (!proceed) {
+    run.out.log("Aborted.");
+    process.exitCode = 1;
+  }
+  return proceed;
+}
+
+/** Applies the plan and reports what was written, the host block and the reach afterwards. */
+async function applyAndReport(run: ApplyRun): Promise<void> {
+  const { args, out, plan } = run;
+  const applied = await applyEmitPlan(plan);
+  const counts = appliedCounts(applied);
+  const reach = await collectReach(plan);
+  const all = [...run.diagnostics, ...applied.diagnostics];
+  const code = exitCodeForDiagnostics(all, args);
+  process.exitCode = code;
+  if (run.json) {
+    printJson("apply", code === 0, all, envelope(run, counts, { reach, claude: applied.claude }));
+    return;
+  }
+  printDiagnostics(applied.diagnostics, args);
+  out.log("");
+  out.done(appliedLine(counts, run.view.fileCount));
+  printClaude(out, applied.claude, "applied");
+  out.log("");
+  printReach(run, reach);
+  if (!readVerbose(args) && !readQuiet(args)) out.log("  Full list: --verbose");
+}
