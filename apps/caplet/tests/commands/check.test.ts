@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
 
@@ -41,6 +42,33 @@ test("caplet check fails on a component apply refuses, with the plan diagnostic"
     expect(parsed.ok).toBe(false);
     expect(parsed.result).toBe("invalid");
     expect(parsed.diagnostics.map((item) => item.code)).toContain("acf.support.refused");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet check --frozen reads a relative path source from the manifest directory", async () => {
+  const scope = await makeScope();
+  try {
+    const relative = path.relative(scope.agentsDir, path.join(scope.sourceRoot, "alpha"));
+    await writeFile(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${relative}\n`,
+      "utf8",
+    );
+    await fetchProject(scope);
+
+    const result = await runCaplet(scope, [
+      "check",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--frozen",
+    ]);
+
+    expect(result.stdout + result.stderr).not.toContain("acf.lock.");
+    expect(result.exitCode).not.toBe(3);
   } finally {
     await cleanup(scope);
   }
