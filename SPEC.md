@@ -1695,8 +1695,10 @@ The path placeholders defined in §13.6.3 (`${ACF_CAPABILITY_DIR}`,
 `${ACF_PACKAGE_DIR}`, `${ACF_HOOK_DIR}`) MAY appear in `command`, `args`,
 `env`, and `cwd` values for stdio servers and are substituted before
 emission (a Claude plugin keeps `${CLAUDE_PLUGIN_ROOT}` instead of an
-absolute path). A path placeholder in `url` or `headers` is refused on every
-target, because no tool shares a meaning for a filesystem path in a URL.
+absolute path). In an MCP value `${ACF_HOOK_DIR}` names the directory of
+the capability's MCP file. A path placeholder in `url` or `headers` is
+refused on every target, because no tool shares a meaning for a filesystem
+path in a URL.
 
 `${ACF_DATA_DIR}` is a persistent, writable directory per capability and
 install scope that survives updates. It MAY appear in stdio `command`,
@@ -1749,7 +1751,15 @@ carriers unless a cell names the plugin carrier. Pi refers to the
 | `command`, `args`, `env`, `url`, literal `headers` | N                                          | N (`http_headers`)       | N        | T `environment` for `env`    | N        |
 | `cwd`                                         | R                                               | N                        | R        | N                            | N        |
 | `${ACF_CAPABILITY_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_ROOT}` (plugin), absolute (loose) | T absolute | T absolute | T absolute             | T absolute |
+| `${ACF_CAPABILITY_DIR}` in `url`, `headers`   | R                                               | R                        | R        | R                            | R        |
 | `${ACF_DATA_DIR}` in `command`, `args`, `env`, `cwd` | T `${CLAUDE_PLUGIN_DATA}` (plugin), caplet dir (loose) | T caplet dir      | T caplet dir | T caplet dir             | T caplet dir |
+
+The `${ACF_CAPABILITY_DIR}` rows apply to each path placeholder:
+`${ACF_PACKAGE_DIR}` translates the same way, and `${ACF_HOOK_DIR}` becomes
+`${CLAUDE_PLUGIN_ROOT}/<directory of the MCP file>` in a Claude plugin and
+that directory's absolute path on loose carriers. A `${ACF_CAPABILITY_DIR}`
+row follows the row of its field: where `cwd` is refused, so is every
+placeholder in it.
 
 The Claude `cwd` refusal is verified (Claude 2.1.97): Claude ignores the
 key and a POSIX `cd` wrapper would change the executed command and fail on
