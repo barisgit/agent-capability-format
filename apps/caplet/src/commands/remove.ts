@@ -1,92 +1,79 @@
 import path from "node:path";
-import {
-  ACF_SYSTEM_OWNER,
-  type AcfManagedSidecar,
-  readCapletConfig,
-  targetIds,
-} from "@caplet/core";
+import { readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
-import { applyDiffs } from "../apply/apply-diffs.js";
-import type { OutputBoundary } from "../apply/containment.js";
-import {
-  ownedPathViolations,
-  readSidecar,
-  removeOwnedRegions,
-  writeSidecar,
-} from "../apply/sidecar.js";
+import { ownedPathViolations, readSidecar } from "../apply/sidecar.js";
+import { appliedCounts, claudeJson, printClaude } from "../internal/apply-flow.js";
 import { readCwd, readExplicitScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
-import { diskReadOnlyFs } from "../internal/fs.js";
-import { rootNoticeDiffFromSidecar } from "../internal/managed-notices.js";
-import { removeManifestEntry } from "../internal/manifest.js";
-import { reporter } from "../internal/output.js";
+import { printJson, readJson } from "../internal/json.js";
+import { removeManifestEntries } from "../internal/manifest.js";
+import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/output.js";
+import { planRemoval, removalRoots } from "../internal/removal.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { installRootFor, outputBoundary, requestedTargets } from "../internal/workflow.js";
+import { applyEmitPlan, requestedTargets } from "../internal/workflow.js";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },
   args: specToCittyArgs("remove") as ArgsDef,
   async run(context) {
     await runCommandSafely(context.args, async () => {
-      const name = context.args.name;
-      if (typeof name !== "string" || name.length === 0) throw validationError("name is required");
+      const names = removalNames(context.args);
       const cwd = readCwd(context.args);
       process.chdir(cwd);
+      const json = readJson(context.args);
       const scope = await inferScope(readExplicitScope(context.args), cwd);
       const root = (await resolveScopeRoots(scope, cwd))[0];
       if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
       const config = (await readCapletConfig(cwd)).config;
-      const selectedTargets = requestedTargets(context.args) ?? [...targetIds];
+      const targets = requestedTargets(context.args) ?? [...targetIds];
       const resolvedCwd = path.resolve(cwd);
-      const boundaries = new Map<string, OutputBoundary>([
-        [root.agentsDir, { roots: [root.agentsDir], files: [] }],
-      ]);
-      for (const targetId of selectedTargets) {
-        const installRoot = installRootFor(targetId, root, config, resolvedCwd);
-        if (installRoot === null || boundaries.has(installRoot)) continue;
-        const context = { scopeRoot: root, targetId, destination: "native" as const, installRoot };
-        boundaries.set(installRoot, outputBoundary(context, resolvedCwd));
-      }
+      const roots = removalRoots({ scopeRoot: root, targets, config, cwd: resolvedCwd });
       // Check every root before changing anything so a refused removal leaves the manifest,
       // the outputs and the sidecars as they were.
-      const sidecars = new Map<string, AcfManagedSidecar>();
       const violations: string[] = [];
-      for (const [installRoot, boundary] of boundaries) {
+      for (const { installRoot, boundary } of roots) {
         const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
-        sidecars.set(installRoot, sidecar);
-        violations.push(...(await ownedPathViolations(sidecar, installRoot, name, boundary)));
+        for (const name of names) {
+          violations.push(...(await ownedPathViolations(sidecar, installRoot, name, boundary)));
+        }
       }
       if (violations.length > 0) {
-        throw validationError(`refusing to remove ${name}: ${violations.join("; ")}`);
+        throw validationError(`refusing to remove ${names.join(", ")}: ${violations.join("; ")}`);
       }
-      await removeManifestEntry(root, name);
-      let cleaned = 0;
-      for (const [installRoot, sidecar] of sidecars) {
-        const sidecarPath = path.join(installRoot, ".acf-managed.json");
-        const result = await removeOwnedRegions(sidecar, installRoot, name);
-        await writeSidecar(sidecarPath, result.sidecar);
-        const rootNotice = await rootNoticeDiffFromSidecar(
-          installRoot,
-          result.sidecar,
-          diskReadOnlyFs(),
-        );
-        const noticeResult = await applyDiffs([rootNotice], {
-          installRoot,
-          capabilityName: ACF_SYSTEM_OWNER,
-          sidecarPath,
+      const plan = await planRemoval({ cwd: resolvedCwd, roots, names });
+      await removeManifestEntries(root, names);
+      const applied = await applyEmitPlan(plan);
+      const diagnostics = [...plan.diagnostics, ...applied.diagnostics];
+      const exitCode = exitCodeForDiagnostics(diagnostics, context.args);
+      if (json) {
+        printJson("remove", exitCode === 0, diagnostics, {
+          removed: names,
+          scope,
+          applied: appliedCounts(applied),
+          ...claudeJson(applied.claude),
         });
-        cleaned +=
-          result.written.length +
-          result.deleted.length +
-          noticeResult.written.length +
-          noticeResult.deleted.length;
+      } else {
+        const out = reporter(context.args);
+        const { files } = appliedCounts(applied);
+        out.done(`Removed ${names.join(", ")} (${scope} scope)`);
+        out.details([["Managed", `${files} managed ${files === 1 ? "file" : "files"} cleaned`]]);
+        printClaude(out, applied.claude, "applied");
+        printDiagnostics(diagnostics, context.args);
       }
-      const out = reporter(context.args);
-      out.done(`Removed ${name} (${scope} scope)`);
-      out.details([
-        ["Managed", `${cleaned} managed ${cleaned === 1 ? "region" : "regions"} cleaned`],
-      ]);
+      if (exitCode !== 0) process.exitCode = exitCode;
     });
   },
 });
+
+/** The capability names given to `caplet remove`, each once; at least one is required. */
+function removalNames(args: Record<string, unknown>): string[] {
+  const positionals = Array.isArray(args._) ? args._ : [args.name];
+  const names = [
+    ...new Set(
+      positionals.filter((value): value is string => typeof value === "string" && value !== ""),
+    ),
+  ];
+  if (names.length === 0) throw validationError("name is required");
+  return names;
+}

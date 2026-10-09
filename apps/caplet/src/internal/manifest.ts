@@ -91,7 +91,16 @@ export async function addManifestEntry(
   return entry;
 }
 
-export async function removeManifestEntry(root: ScopeRoot, name: string): Promise<void> {
+/**
+ * Drops every capability in `names` from the scope's capabilities.yml, narrowing a shared source
+ * entry to its survivors, updates the lockfile to match and deletes their installed snapshots. All
+ * names must be installed: an unknown one throws before anything is written.
+ */
+export async function removeManifestEntries(
+  root: ScopeRoot,
+  names: readonly string[],
+): Promise<void> {
+  const removing = new Set(names);
   const manifest = await readManifestForMutation(root);
   const lock = await readLockfile(root.lockPath);
   const sourceIdsToRemove = new Set<string>();
@@ -104,17 +113,19 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
       rename?: CapabilityEntry["rename"];
     }
   >();
-  let found = false;
+  const found = new Set<string>();
   const kept = manifest.capabilities.flatMap((entry) => {
     const id = entrySourceId(entry, path.dirname(root.manifestPath));
     const legacyId = sourceId(entry.source, path.dirname(root.manifestPath));
     const lockEntry = lock?.entries.find(
       (candidate) => candidate.sourceId === id || candidate.sourceId === legacyId,
     );
-    const names = lockEntry?.capabilityNames ?? namesFromEntry(entry);
-    if (!names.includes(name) && entry.rename !== name) return [entry];
-    found = true;
-    const survivors = names.filter((candidate) => candidate !== name);
+    const installed = lockEntry?.capabilityNames ?? namesFromEntry(entry);
+    const matched = installed.filter((candidate) => removing.has(candidate));
+    if (typeof entry.rename === "string" && removing.has(entry.rename)) matched.push(entry.rename);
+    if (matched.length === 0) return [entry];
+    for (const candidate of matched) found.add(candidate);
+    const survivors = installed.filter((candidate) => !removing.has(candidate));
     if (survivors.length === 0) {
       sourceIdsToRemove.add(id);
       sourceIdsToRemove.add(legacyId);
@@ -167,7 +178,12 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
     }
     return [next];
   });
-  if (!found) throw validationError(`unknown capability: ${name}`);
+  const unknown = names.filter((name) => !found.has(name));
+  if (unknown.length > 0) {
+    throw validationError(
+      `unknown ${unknown.length === 1 ? "capability" : "capabilities"}: ${unknown.join(", ")}`,
+    );
+  }
   await writeCapabilitiesYml(root, { ...manifest, capabilities: kept });
   if (lock !== null) {
     await writeLockfile(root.lockPath, {
@@ -183,7 +199,9 @@ export async function removeManifestEntry(root: ScopeRoot, name: string): Promis
         }),
     });
   }
-  await rm(path.join(root.capabilitiesDir, name), { recursive: true, force: true });
+  for (const name of names) {
+    await rm(path.join(root.capabilitiesDir, name), { recursive: true, force: true });
+  }
 }
 
 /**

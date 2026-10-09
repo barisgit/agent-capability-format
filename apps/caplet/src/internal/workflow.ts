@@ -640,24 +640,18 @@ async function sweepStaleSidecarEntries(input: SweepInput): Promise<SweepResult>
         );
         let removal: EmittedDiff | undefined;
         if (orphaned.length > 0) {
-          const before = wholeFile ? readBytesOrNull(absolutePath) : readTextOrNull(absolutePath);
-          const diff: FileDiff = { path: absolutePath, before, after: null, owns: orphaned };
-          if (entry.facet !== undefined) diff.facet = entry.facet;
-          removal = {
-            ...context,
+          const planned = plannedRemoval({
+            entry,
+            owns: orphaned,
             installRoot: candidate.installRoot,
-            capabilityName: entry.capability,
-            carrier: entry.carrier ?? "loose",
-            diff,
-            drifted: removalChanges(before, orphaned) && ownedRegionsDrifted(before, entry),
-          };
-          if (
-            removal.drifted === true &&
-            claudeGate(removal, input.claudeRoots)?.kind !== "registered"
-          ) {
-            diagnostics.push(keptDriftedDiagnostic(removal));
+            context,
+            claudeRoots: input.claudeRoots,
+          });
+          if ("kept" in planned) {
+            diagnostics.push(planned.kept);
             continue;
           }
+          removal = planned.removal;
         }
         const bucket = staleByRoot.get(candidate.installRoot) ?? new Set<string>();
         bucket.add(`${entry.capability}\u0000${entry.path}`);
@@ -676,6 +670,41 @@ async function sweepStaleSidecarEntries(input: SweepInput): Promise<SweepResult>
     }
   }
   return { deletes, diagnostics, forcedPaths, staleByRoot, staleEntries, rootContexts };
+}
+
+/**
+ * Plans removing `owns`, regions of sidecar `entry` under `installRoot`, with the plan-time disk
+ * content as its precondition. When the user edited those regions since caplet wrote them, the
+ * removal is not planned and `kept` carries the `acf.apply.drift` warning instead; retiring loose
+ * Claude output for a capability that became a plugin (a `registered` gate) is still planned,
+ * flagged `drifted`, for the migration to release.
+ */
+export function plannedRemoval(input: {
+  entry: ManagedEntry;
+  owns: AcfOwnership[];
+  installRoot: string;
+  context: RootContext;
+  claudeRoots: readonly ClaudeRootPlan[];
+}): { removal: EmittedDiff } | { kept: Diagnostic } {
+  const { entry, owns, installRoot } = input;
+  const absolutePath = path.resolve(installRoot, entry.path);
+  const before = owns.some((own) => own.kind === "file")
+    ? readBytesOrNull(absolutePath)
+    : readTextOrNull(absolutePath);
+  const diff: FileDiff = { path: absolutePath, before, after: null, owns };
+  if (entry.facet !== undefined) diff.facet = entry.facet;
+  const removal: EmittedDiff = {
+    ...input.context,
+    installRoot,
+    capabilityName: entry.capability,
+    carrier: entry.carrier ?? "loose",
+    diff,
+    drifted: removalChanges(before, owns) && ownedRegionsDrifted(before, entry),
+  };
+  if (removal.drifted && claudeGate(removal, input.claudeRoots)?.kind !== "registered") {
+    return { kept: keptDriftedDiagnostic(removal) };
+  }
+  return { removal };
 }
 
 /**
@@ -790,7 +819,13 @@ function isErrnoCode(error: unknown, code: string): boolean {
  * them), then the gated changes whose host state allows them. A held-back change keeps its sidecar
  * entry, so the next apply retries it, and the root's inventory is rebuilt from the sidecar.
  */
-export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
+/** The parts of a plan `applyEmitPlan` carries out; `caplet remove` builds them without emitting. */
+export type ApplicablePlan = Pick<
+  EmitPlan,
+  "cwd" | "diffs" | "claude" | "migration" | "staleEntries"
+>;
+
+export async function applyEmitPlan(plan: ApplicablePlan): Promise<ApplySummary> {
   const results: ApplyResult[] = [];
   const diagnostics: Diagnostic[] = [];
   const blockedRoots = new Set<string>();
@@ -925,7 +960,8 @@ function isInsideOrEqual(candidate: string, root: string): boolean {
   );
 }
 
-function sidecarOwner(
+/** The sidecar owner of a plan item: its target, or `canonical`, and its carrier. */
+export function sidecarOwner(
   context: Pick<EmittedDiff, "targetId" | "destination" | "carrier">,
 ): SidecarOwner {
   return {
@@ -1086,7 +1122,7 @@ async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {
   });
 }
 
-function fileDiffChanged(diff: FileDiff): boolean {
+export function fileDiffChanged(diff: FileDiff): boolean {
   if (diff.beforeMode !== diff.afterMode) {
     const hasMode = diff.beforeMode !== undefined || diff.afterMode !== undefined;
     if (hasMode) return true;

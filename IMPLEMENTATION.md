@@ -3209,8 +3209,16 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`
   select all.
-- `caplet remove <name> [--scope …]` updates `capabilities.yml` and removes
-  sidecar-owned output. For an entry selecting several capabilities, it retains
+- `caplet remove <name>... [--scope …] [--target …]` updates `capabilities.yml`
+  and removes the sidecar-owned output of the named capabilities; an unknown
+  name exits 2 before anything changes. It cleans only roots whose sidecar
+  exists and applies like an apply that deselected those capabilities
+  (`apps/caplet/src/internal/removal.ts`): an output the user edited stays and
+  is reported as drift, other capabilities' pending changes stay pending, and
+  the Claude host step uninstalls their plugins and updates or retires the
+  marketplace before the plugin files go. Without the `claude` CLI the plugin
+  files stay and `acf.claude.cli-unavailable` lists the commands; the next
+  apply retries. For an entry selecting several capabilities, it retains
   sibling selectors and removes the source entry only when none remain. A legacy
   lock without exact selector mappings must be refreshed with
   `caplet update --no-apply` before ambiguous collection narrowing.

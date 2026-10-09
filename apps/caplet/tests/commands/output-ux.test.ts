@@ -287,7 +287,7 @@ test("remove reports both manifest removal and managed cleanup", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("ok Removed alpha-cap (project scope)");
-    expect(result.stdout).toMatch(/Managed {2}\d+ managed regions cleaned/);
+    expect(result.stdout).toMatch(/Managed {2}\d+ managed files cleaned/);
   } finally {
     await cleanup(scope);
   }

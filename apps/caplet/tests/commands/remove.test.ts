@@ -1,8 +1,17 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
 import { readLockfile, scopeRoot } from "@caplet/core";
-import { removeManifestEntry } from "../../src/internal/manifest";
+import { removeManifestEntries } from "../../src/internal/manifest";
 import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+
+/** Every `.acf-managed.json` under `dir`, relative to it. */
+async function sidecarFiles(dir: string): Promise<string[]> {
+  const files: string[] = [];
+  for await (const file of new Bun.Glob("**/.acf-managed.json").scan({ cwd: dir, dot: true })) {
+    files.push(file);
+  }
+  return files.sort();
+}
 
 test("caplet remove updates manifest and cleans sidecar-owned output", async () => {
   const scope = await makeScope();
@@ -38,6 +47,76 @@ test("caplet remove updates manifest and cleans sidecar-owned output", async () 
           entry.path === "ACF-MANAGED.md" && entry.capability === "acf-system",
       ),
     ).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet remove removes every named capability", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+
+    const result = await runCaplet(scope, ["remove", "alpha-cap", "beta-cap", ...args]);
+
+    expect(result.exitCode).toBe(0);
+    const manifest = await readText(path.join(scope.agentsDir, "capabilities.yml"));
+    expect(manifest).not.toContain("alpha");
+    expect(manifest).not.toContain("beta");
+    const mcp = await readText(path.join(scope.cwd, ".mcp.json"));
+    expect(mcp).not.toContain("alpha-server");
+    expect(mcp).not.toContain("beta-server");
+    expect(
+      await Bun.file(path.join(scope.cwd, ".claude", "agents", "beta-helper.md")).exists(),
+    ).toBe(false);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet remove with an unknown name changes nothing", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const manifest = await readText(path.join(scope.agentsDir, "capabilities.yml"));
+
+    const result = await runCaplet(scope, [
+      "remove",
+      "alpha-cap",
+      "nope",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("nope");
+    expect(await readText(path.join(scope.agentsDir, "capabilities.yml"))).toBe(manifest);
+    expect(await readText(path.join(scope.cwd, ".mcp.json"))).toContain("alpha-server");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet remove without --target writes no sidecar for a target it never wrote", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const before = await sidecarFiles(scope.cwd);
+
+    const result = await runCaplet(scope, [
+      "remove",
+      "alpha-cap",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(await sidecarFiles(scope.cwd)).toEqual(before);
   } finally {
     await cleanup(scope);
   }
@@ -85,7 +164,7 @@ test("caplet remove preserves a collection selector that differs from its capabi
       )}\n`,
     );
 
-    await removeManifestEntry(root, "alpha-cap");
+    await removeManifestEntries(root, ["alpha-cap"]);
 
     const manifest = await readText(path.join(scope.agentsDir, "capabilities.yml"));
     expect(manifest).toContain("capabilities: group/two");
@@ -136,7 +215,7 @@ test("caplet remove refuses to corrupt nested selectors from a legacy lock", asy
     await Bun.write(manifestPath, manifest);
     await Bun.write(lockPath, lock);
 
-    await expect(removeManifestEntry(root, "alpha-cap")).rejects.toThrow(
+    await expect(removeManifestEntries(root, ["alpha-cap"])).rejects.toThrow(
       "run caplet update --no-apply, then retry",
     );
     expect(await readText(manifestPath)).toBe(manifest);
@@ -176,7 +255,7 @@ test("caplet remove keeps sibling selectors from a shared source entry", async (
       )}\n`,
     );
 
-    await removeManifestEntry(root, "beta-cap");
+    await removeManifestEntries(root, ["beta-cap"]);
 
     const manifest = await readText(manifestPath);
     expect(manifest).toContain("alpha-cap");
@@ -221,7 +300,7 @@ test("caplet remove narrows an install-all entry to surviving capabilities", asy
       )}\n`,
     );
 
-    await removeManifestEntry(root, "alpha-cap");
+    await removeManifestEntries(root, ["alpha-cap"]);
 
     const manifest = await readText(manifestPath);
     expect(manifest).toContain("capabilities: beta-cap");
@@ -251,7 +330,7 @@ test("caplet remove narrows per-capability lock records with the names", async (
     const before = (await readLockfile(root.lockPath))?.entries[0]?.resolvedCapabilities ?? [];
     const beta = before.find((record) => record.name === "beta-cap");
 
-    await removeManifestEntry(root, "alpha-cap");
+    await removeManifestEntries(root, ["alpha-cap"]);
 
     const entry = (await readLockfile(root.lockPath))?.entries[0];
     expect(entry?.resolvedCapabilities).toEqual(beta === undefined ? [] : [beta]);
