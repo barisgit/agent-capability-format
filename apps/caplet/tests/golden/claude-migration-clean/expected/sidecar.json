@@ -1,5 +1,4 @@
 {
-  "renameNoticeShown": true,
   "managed": [
     ".acf/marketplace/.claude-plugin/marketplace.json acf-system plugin",
     ".acf/marketplace/plugins/review/.claude-plugin/plugin.json review plugin",

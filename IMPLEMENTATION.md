@@ -317,6 +317,11 @@ export type CapabilitySource = {
   path: string               // package root relative to the source root, "." for the root
   snapshotRoot: string       // immutable materialized snapshot of that root
   renamedFrom?: string       // manifest name when the entry's rename replaced it
+  projected?: {              // foreign packages only, as read before rename,
+    skills: string[]         // selection, and applicability (§4.9)
+    servers: string[]
+    remainder: NativeRemainderComponent[]
+  }
 }
 
 export type NativeRemainderComponent = {
@@ -717,7 +722,11 @@ hook `run.args[i]`, hook `run.env[k]`, MCP `command`, MCP `args[i]`, MCP
 `env[k]`, MCP `cwd`, MCP `url`, and MCP `headers[k]`. No other interpolation
 is performed by ACF, and validation rejects any other `${...}` reference in
 those MCP values (`acf.mcp.placeholder.pending`) because hosts such as Claude
-would expand it.
+would expand it. Loose carriers substitute absolute paths. The Claude plugin
+carrier writes `${CLAUDE_PLUGIN_ROOT}` for `${ACF_CAPABILITY_DIR}` and
+`${ACF_PACKAGE_DIR}`, and `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`,
+where `<dir>` is the directory of the MCP file inside the capability (hooks
+keep a capability loose for Claude).
 
 `acfDataDirPlaceholder` (`${ACF_DATA_DIR}`) is MCP-only: a persistent,
 writable directory per capability and install scope that survives updates.
@@ -838,7 +847,8 @@ export type EmitOptions = {
   // Selected targets in this scope that discover .agents/skills. The shared
   // copy must satisfy all of them; absent = this writer is the only reader.
   canonicalSkillReaders?: readonly TargetId[]
-  // Claude plugin writer only: absent = the target's default carrier.
+  // Configured carrier; absent = the target default (carriersOf). Claude still
+  // writes loose for a capability with legacy families (§4.9).
   carrier?: Carrier
 }
 
@@ -850,7 +860,8 @@ export type EmitResult = {
    *  `componentOutcomes`; support diagnostics come from the helpers in
    *  `targets/support-diagnostics.ts`, which read the registry cells. */
   outcomes?: ComponentOutcome[]
-  /** Plugin packages the Claude plugin writer generated (§4.9). */
+  /** Plugin packages the Claude plugin writer generated (§4.9); absent or empty
+   *  for loose output. Every diff of a result with a plugin lies inside its `dir`. */
   plugins?: EmittedPlugin[]
 }
 
@@ -953,13 +964,14 @@ Shape:
 ```ts
 export type AcfManagedSidecar = {
   acf: 1
+  marketplace?: { name: string; scope: "user" | "local" } // Claude install root whose marketplace caplet keeps
   managed: Array<{
     path: string             // relative to the sidecar directory
     owns: AcfOwnership[]
     capability: string       // capability name that produced this entry
     facet?: { family: FacetFamily; name: string }
     target?: TargetId | "canonical" // root owner; filled in on the next write
-    carrier?: Carrier        // "plugin" inside a generated Claude plugin, else "loose"
+    carrier?: Carrier        // "plugin" for a generated Claude plugin or its marketplace file, else "loose"
     mode?: number            // POSIX permission bits of a whole-file entry
     hash: string             // sha256 of the rendered content for drift detection
   }>
@@ -1411,38 +1423,96 @@ generates from a core field is an `acf.extras.conflict` error.
 
 ### 4.9 Claude plugin carrier and host port
 
-The Claude plugin writer builds one package per capability at
-`pluginPackageDir(installRoot, name)`, which is
-`<claude-install-root>/.acf/marketplace/plugins/<capability>/`, and the
-marketplace at `pluginMarketplaceDir(installRoot)` with
-`.claude-plugin/marketplace.json` listing `./plugins/<capability>`.
-Plugin diffs set `artifactRoot` to the package directory and sidecar
-entries record `carrier: plugin`. `EmitResult.plugins` reports each package:
+`capabilityCarrier(capability, target, configured?)`
+(`packages/core/src/targets/capability-carrier.ts`) decides the carrier of a
+capability already filtered by applicability for `target`: the configured
+carrier, else the target default, except that Claude falls back to `loose`
+when `claudeLegacyFamilies` finds agents, commands, non-empty hook buckets,
+or instructions. The Claude writer, the executable inventory
+(`packages/core/src/emit/executables.ts`), and caplet's MCP conflict check
+(`apps/caplet/src/internal/mcp-conflicts.ts`) all call it, so reports and
+output agree. `targets.<id>.carrier` is validated against `carriersOf` when
+`caplet.yml` loads, and caplet passes it as `EmitOptions.carrier` only when
+set.
+
+The Claude plugin writer (`packages/adapters/src/claude/plugin.ts`) builds
+one package per capability at `pluginPackageDir(installRoot, name)`, which
+is `<claude-install-root>/.acf/marketplace/plugins/<capability>/`, inside
+`pluginMarketplaceDir(installRoot)` (both in
+`packages/core/src/targets/plugin-layout.ts`). Plugin diffs set
+`artifactRoot` to the package directory, so no `ACF-MANAGED.md` is written
+inside it; the install-root inventory lists `.acf/marketplace/` in the
+`acf-system` section and `.acf/marketplace/plugins/<capability>/` under each
+capability. From a native ACF root the writer leaves out `.claude-plugin/`,
+`.mcp.json`, `.lsp.json`, `settings.json`, and `output-styles/` with
+`acf.claude.plugin-file-ignored` (info) and copies every other file outside
+ACF-defined paths. `EmitResult.plugins` reports each package:
 
 ```ts
 export type EmittedPlugin = {
   target: TargetId
   scope: Scope
   name: string       // capability slug = plugin name
-  version: string    // <base>+acf.<d>
+  version: string    // <base>+acf.<d>, or <base>.acf.<d> when <base> contains "+"
   dir: string        // absolute package directory
 }
 ```
 
 `d` is the first 12 hex characters of the acf-tree-2 digest of the generated
 package with `plugin.json` written at the base version, so the suffix does
-not feed back into the digest. `targets.<id>.carrier` in `caplet.yml` is
-validated against `carriersOf` at load.
+not feed back into the digest.
+
+A foreign Claude plugin source carries `CapabilitySource.projected`
+(`{skills, servers, remainder}`: projected skill and server names and the
+native remainder, recorded by `foreignCapability` in
+`packages/core/src/formats/package.ts` before `rename`, selection, and
+applicability). `isUnchangedClaudePlugin` compares it and `renamedFrom` with
+the capability the writer receives: an unchanged package is copied
+byte-identically except the `plugin.json` `version` value; a transformed one
+gets a regenerated manifest, skills, and `.mcp.json`, and loses the files and
+manifest keys that only removed remainder components used.
+
+Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
+
+| Module | Role |
+| --- | --- |
+| `claude-marketplace.ts` | `planClaudeMarketplaces` returns a `ClaudeRootPlan` per Claude install root that lists a plugin or whose sidecar shows an earlier marketplace or plugin (`leftover` names plugins the sidecar still owns but the plan dropped), plus the diff of `marketplaceFile(installRoot)`, `<claude-install-root>/.acf/marketplace/.claude-plugin/marketplace.json`, owned by `acf-system` with `carrier: plugin`. It lists `{name, source: "./plugins/<capability>"}` for every plugin of the plan and the installed plugin of a capability a refusal blocks. `recordClaudeMarketplaces` keeps the sidecar's `marketplace` record in line with ownership of that file. |
+| `claude-host-flow.ts` | `claudeGate` marks a planned change that waits on the host: `registered` (retiring loose Claude files of a capability that is now a plugin), `uninstalled` (deleting a removed plugin's files), `retired` (deleting `marketplace.json`). `gateOpen` decides from the host report; `registered` opens on `registered` or `disabled by user`. `reconcileClaude` and `previewClaude` call the host port and add each plugin's file state (`current`, `drifted`, `missing`) from its `carrier: plugin` sidecar entries; `claudeLines` renders the host block. |
+| `claude-migration.ts` | `planClaudeMigration` turns gated retirements of drifted loose artifacts into releases (reported by `driftedWarning` as `acf.migration.drifted`) and each retired skill into a `/<skill> -> /<capability>:<skill>` rename. Renames are not recorded: retirement happens once, so the apply that performs it is the only one that announces them. |
+
+`applyPlan` (`workflow.ts`) runs in this order: write every change without a
+gate (plugin files, `marketplace.json`, loose files); reconcile each Claude
+install root with the host; apply each gated change whose gate opened and
+hold back the rest with their sidecar entries; drop the stale sidecar entries
+that were not held back and regenerate the inventory of roots with held-back
+changes; finally `recordClaudeMarketplaces`.
+
+After the plan, human output prints one block per scope:
+`Claude plugins <scope> scope · <marketplace>`, a row per plugin with its
+host state and `files <state>`, the note
+`registered for this checkout only, at Claude local scope (.claude/settings.local.json)`
+for a project, `would run` and the planned commands on a dry run, then
+`Claude skills are now invoked through their plugins` with one
+`/<skill> -> /<capability>:<skill>` line per rename. The `--json` envelopes
+of `apply` (also with `--dry-run`), `status`, and applying `add` and
+`update` carry `claude: ClaudeScopeStatus[]` when the plan has a Claude
+install root (`scope`, `claudeScope`, `marketplace`, `marketplaceDir`,
+`plugins[]` with `name`, `id`, `action`, `state`, `version`,
+`desiredVersion`, `message`, `files`, `commands[]` with `command`, `plugin`,
+`status`, `message`, `otherScopeInstalls`, `local`, `stateRead`), and
+`renames: [{scope, capability, from, to}]` when a rename applies. `caplet
+status` and dry runs read host state and run no command.
 
 The host port in `apps/caplet/src/hosts/claude/` registers packages:
 
 | Module | Role |
 | --- | --- |
 | `scope.ts` | `claudeScopeFor` maps ACF `user` to Claude `user` and ACF `project` to Claude `local`; `claudeMarketplaceName` gives `acf-user` or `acf-project-<h>` (first 8 hex of the SHA-256 of the project root's real path, because Claude keeps one marketplace record per name for the whole user); `resolveClaudeScopeTarget` resolves that real path. |
-| `cli.ts` | `execClaudeCli` runs `claude` with an argv array and an explicit `cwd`, never a shell. |
-| `host.ts` | `ClaudeHost` port and `createClaudeHost`; tests inject a fake CLI. |
+| `cli.ts` | `execClaudeCli` runs `claude` with an argv array and an explicit `cwd`, never a shell. A missing binary is `unavailable` with Node's spawn message, `spawn claude ENOENT`. |
+| `host.ts` | `ClaudeHost` port and `createClaudeHost`; tests inject a fake CLI. `classifyClaudeFailure` recognizes the policy-block messages of the 2.1.97 binary. |
+| `commands.ts`, `state.ts` | `ClaudeCommand` and its argv form; parsing of `claude plugin list --json` and `claude plugin marketplace list --json`. |
 | `plan.ts` | `planClaudeScope` diffs `claude plugin list --json` against desired plugins into marketplace add, install, update, and uninstall steps, always with `--scope`. An installed plugin is never re-`install`ed, because that re-enables a plugin the user disabled. The marketplace is removed only when no scope still has plugins from it, because `marketplace remove` uninstalls them everywhere. |
-| `reconcile.ts` | `reconcileClaudeHost` runs the plan and reports `acf.claude.cli-unavailable`, `.state-unreadable`, `.policy-blocked`, `.version-mismatch` (warnings), `.command-failed` (error), and `.other-scope` (info). |
+| `reconcile.ts` | `reconcileClaudeHost` runs the plan; a failed step skips only the steps that depend on it. It reports a `ClaudeHostState` per plugin (`registered`, `disabled by user`, `not installed`, `registration required`, `blocked by host policy`, `unknown`; SPEC §22.8.4) and `acf.claude.cli-unavailable`, `.state-unreadable`, `.policy-blocked`, `.version-mismatch` (warnings), `.command-failed` (error, apply exits 2), and `.other-scope` (info). Without the CLI the warning reads ``Claude plugin registration was not updated: spawn claude ENOENT. Install Claude Code and re-run `caplet apply`, or run:`` followed by each command, indented two spaces. `previewClaudeHost` reports the same states without running a command or warning about a missing CLI. |
 
 ## 5. Reader and validation pipeline
 
@@ -2733,6 +2803,7 @@ acf.mcp.config-conflict                      # server name claimed twice or user
 
 # Claude carrier and host
 acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
+acf.claude.plugin-file-ignored               # Claude config in a native ACF root left out of its plugin (info)
 acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
 acf.claude.state-unreadable                  # plugin list unreadable (warn)
 acf.claude.command-failed                    # claude plugin command failed (error)

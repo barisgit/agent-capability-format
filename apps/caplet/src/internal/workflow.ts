@@ -70,12 +70,7 @@ import {
   planClaudeMarketplaces,
   recordClaudeMarketplaces,
 } from "./claude-marketplace.js";
-import {
-  type ClaudeMigration,
-  driftedWarning,
-  planClaudeMigration,
-  recordRenameNotices,
-} from "./claude-migration.js";
+import { type ClaudeMigration, driftedWarning, planClaudeMigration } from "./claude-migration.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices, rootNoticeDiffFromSidecar } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
@@ -443,7 +438,7 @@ export async function buildEmitPlan(
     const gate = claudeGate(item, claude.roots);
     if (gate !== undefined) item.gate = gate;
   }
-  const migration = await planClaudeMigration(diffs);
+  const migration = planClaudeMigration(diffs);
   return {
     cwd,
     config: configResult.config,
@@ -865,9 +860,7 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
       if (gateOpen(release.gate, report)) diagnostics.push(driftedWarning(release));
       else holdBack(release.item);
     }
-    const shown = renames.filter((rename) => gateOpen(rename.gate, report));
-    await recordRenameNotices(shown);
-    claude.renames = shown;
+    claude.renames = renames.filter((rename) => gateOpen(rename.gate, report));
   } else {
     for (const release of releases) holdBack(release.item);
   }
