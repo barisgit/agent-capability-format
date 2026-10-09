@@ -29,6 +29,7 @@ import { makeFileDiff } from "./diff.js";
 import { jsonPointerEscape, mergeJson } from "./json-merge.js";
 import { removeMarkedBlock, replaceMarkedBlock } from "./markers.js";
 import { substitutePlaceholders } from "./placeholders.js";
+import { setOwn } from "./records.js";
 import {
   type ComponentReport,
   considerField,
@@ -140,7 +141,7 @@ export function renderNativeMcpServer(
   for (const [key, value] of Object.entries(nativeExtras(server.targets, target))) {
     // Core fields own their generated keys; validation reports an extra that repeats one.
     if (nativeKeyInfo(target, "mcp", key)?.generatedFrom !== undefined) continue;
-    extras[key] = value;
+    setOwn(extras, key, value);
   }
   reportForeignExtras(report, subject, server.targets);
 

@@ -18,6 +18,7 @@ import {
 } from "@caplet/core";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
+import { ownValue, setOwn } from "./records.js";
 import { type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
@@ -144,8 +145,9 @@ function sharedRendering(
 
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(source)) {
-    if (key in target && stableJson(target[key]) !== stableJson(value)) return false;
-    target[key] = value;
+    if (Object.hasOwn(target, key) && stableJson(ownValue(target, key)) !== stableJson(value))
+      return false;
+    setOwn(target, key, value);
   }
   return true;
 }

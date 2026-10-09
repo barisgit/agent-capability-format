@@ -194,3 +194,22 @@ test("Claude body placeholders are reported where the target does not expand the
   const claude = await emitModel(claudeAdapter, capability, "/project/.claude");
   expect(withCode(claude, "acf.skill.placeholder-unexpanded")).toEqual([]);
 });
+
+test("a dotted Codex extra naming __proto__ is written as its own key, not through the prototype", async () => {
+  const capability = capabilityModel({
+    skills: [
+      skillFacet({
+        name: "review",
+        description: "Review",
+        targets: { codex: { native: { "__proto__.reviewPolluted": "yes", "constructor.x": 1 } } },
+      }),
+    ],
+  });
+  const result = await emitModel(codexAdapter, capability, ".codex", {
+    canonicalSkillReaders: ["codex"],
+  });
+  expect(Object.hasOwn(Object.prototype, "reviewPolluted")).toBe(false);
+  expect(fileText(result, ".agents/skills/review/agents/openai.yaml")).toBe(
+    "__proto__:\n  reviewPolluted: yes\nconstructor:\n  x: 1\n",
+  );
+});

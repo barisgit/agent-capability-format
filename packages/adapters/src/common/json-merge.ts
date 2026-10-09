@@ -1,3 +1,5 @@
+import { ownValue, setOwn } from "./records.js";
+
 type JsonContainer = Record<string, unknown> | unknown[];
 
 type ObjectProperty = { key: string; propStart: number; valueStart: number; valueEnd: number };
@@ -309,7 +311,7 @@ function readChild(container: JsonContainer, segment: string): unknown {
     if (!Number.isInteger(index) || index < 0) return undefined;
     return container[index];
   }
-  return container[segment];
+  return ownValue(container, segment);
 }
 
 function assign(container: JsonContainer, segment: string, value: unknown): void {
@@ -323,7 +325,7 @@ function assign(container: JsonContainer, segment: string, value: unknown): void
     container[index] = value;
     return;
   }
-  container[segment] = value;
+  setOwn(container, segment, value);
 }
 
 function formatValue(value: unknown, indent: string): string {

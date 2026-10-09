@@ -14,6 +14,7 @@ import {
   packageValues,
   type SupportSubject,
 } from "@caplet/core";
+import { setOwn } from "../common/records.js";
 import { considerField, type EmitReport, emptyReport } from "../common/support-report.js";
 
 /** Path of the manifest inside a Claude plugin package. */
@@ -85,7 +86,8 @@ export function pluginManifest(
   if (manifest.keywords !== undefined && carried("package.keywords"))
     mapped.keywords = manifest.keywords;
   const values = packageValues(manifest, "claude");
-  for (const [key, value] of Object.entries(values)) if (key !== "version") mapped[key] = value;
+  for (const [key, value] of Object.entries(values))
+    if (key !== "version") setOwn(mapped, key, value);
   report.diagnostics.push(...fields.diagnostics);
   report.outcomes.push(...fields.outcomes);
 
