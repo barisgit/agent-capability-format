@@ -36,8 +36,6 @@ import {
 import { readForeignSkill, skillAssets, skillDirectories } from "./skills.js";
 
 const SCHEMA_BASE = "https://agent-plugins.org/schemas/";
-/** The only plugin schema this reader accepts. */
-export const AGENT_PLUGINS_PLUGIN_SCHEMA = `${SCHEMA_BASE}1.0.0/plugin.schema.json`;
 export const AGENT_PLUGINS_MCP_SCHEMA = `${SCHEMA_BASE}1.0.0/mcp.schema.json`;
 
 /**

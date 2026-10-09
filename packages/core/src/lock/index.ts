@@ -244,7 +244,7 @@ function sortStringRecord(record: Record<string, string>): Record<string, string
 }
 
 /** Validates parsed JSON as a lockfile; `lockPath` only labels errors. */
-export function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
+function parseLock(value: unknown, lockPath: string): CapabilitiesLock {
   if (!isRecord(value)) throw new Error(`invalid capabilities.lock at ${lockPath}`);
   if (typeof value.acf !== "number") {
     throw new Error(`invalid capabilities.lock acf at ${lockPath}`);

@@ -15,7 +15,6 @@ import { CLAUDE_MANIFEST, isDirectory, isFile } from "./shared.js";
 
 export {
   AGENT_PLUGINS_MCP_SCHEMA,
-  AGENT_PLUGINS_PLUGIN_SCHEMA,
   agentPluginsSchemaVersion,
   readAgentPluginsPackage,
 } from "./agent-plugins.js";

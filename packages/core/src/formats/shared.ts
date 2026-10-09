@@ -32,7 +32,7 @@ const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
 /** True when `value` is a SemVer 2.0.0 version. */
-export function isSemVer(value: string): boolean {
+function isSemVer(value: string): boolean {
   return SEMVER.test(value);
 }
 
@@ -115,12 +115,12 @@ export async function filesUnder(root: string, dir: string): Promise<string[]> {
 }
 
 /** `file` relative to `root` with POSIX separators; `.` for the root itself. */
-export function posixRelative(root: string, file: string): string {
+function posixRelative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/") || ".";
 }
 
 /** True when any of `paths` (relative to `root`) is a file with an executable bit. */
-export async function anyExecutable(root: string, paths: readonly string[]): Promise<boolean> {
+async function anyExecutable(root: string, paths: readonly string[]): Promise<boolean> {
   for (const relative of paths) {
     for (const file of (await isDirectory(path.join(root, relative)))
       ? await filesUnder(root, path.join(root, relative))
@@ -239,7 +239,7 @@ export function packageAuthor(author: PackageAuthor): PackageAuthor {
 }
 
 /** Inner text of every `${...}` placeholder in `value` (`NAME`, or `NAME:-default`). */
-export function placeholderNames(value: string): string[] {
+function placeholderNames(value: string): string[] {
   return [...value.matchAll(/\$\{([^}]*)\}/g)].map((match) => match[1] ?? "");
 }
 
