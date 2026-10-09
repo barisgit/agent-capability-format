@@ -4,6 +4,7 @@ import { ACF_DIAGNOSTIC_CODES, type Diagnostic, pushZodIssues } from "../src";
 
 const coveredByFixtures = new Set([
   "acf.manifest.invalid-name",
+  "acf.manifest.invalid-field",
   "acf.manifest.acf-version-unknown",
   "acf.manifest.only-and-except",
   "acf.manifest.duplicate-file",

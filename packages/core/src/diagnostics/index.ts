@@ -5,6 +5,7 @@ export type { Diagnostic } from "../types/index.js";
 
 export const ACF_DIAGNOSTIC_CODES = [
   "acf.manifest.invalid-name",
+  "acf.manifest.invalid-field",
   "acf.manifest.acf-version-unknown",
   "acf.manifest.only-and-except",
   "acf.manifest.duplicate-file",
@@ -122,19 +123,25 @@ export function makeDiagnostic(input: {
 /**
  * Pushes one `error` per zod issue in `error`, coded by the issue: `unknownKeyCode` names the
  * code for a key the file's schema does not allow, since only the caller knows which file and
- * location it parsed; `baseCode` is the code for an issue no more specific code covers.
+ * location it parsed; `baseCode` is the code for an issue no more specific code covers; `codeFor`
+ * decides an issue's code ahead of every generic rule when it returns one.
  */
 export function pushZodIssues(
   diagnostics: Diagnostic[],
   error: ZodError,
   filePath?: string,
-  options: { baseCode?: string; unknownKeyCode?: string; family?: FacetFamily } = {},
+  options: {
+    baseCode?: string;
+    unknownKeyCode?: string;
+    family?: FacetFamily;
+    codeFor?: (issue: ZodIssue) => string | undefined;
+  } = {},
 ): void {
   for (const issue of error.issues) {
     diagnostics.push(
       makeDiagnostic({
         severity: "error",
-        code: deriveZodCode(issue, options),
+        code: options.codeFor?.(issue) ?? deriveZodCode(issue, options),
         message: issue.message,
         path: filePath,
         family: options.family,

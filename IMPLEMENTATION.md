@@ -2708,6 +2708,7 @@ collapse listed codes into more generic ones.
 ```txt
 # Manifest
 acf.manifest.invalid-name
+acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...)
 acf.manifest.acf-version-unknown
 acf.manifest.only-and-except
 acf.manifest.duplicate-file                  # acf.yml AND acf.yaml both present

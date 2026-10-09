@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import type { ZodIssue } from "zod";
 import { computeSet } from "../applicability/index.js";
 import { collectImportedSkillAssets, collectReferencedAssets } from "../assets/index.js";
 import { pushZodIssues } from "../diagnostics/index.js";
@@ -179,13 +180,26 @@ export async function readManifest(
   pushUnknownFields(raw, manifestKeys, diagnostics, file);
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
-    pushZodIssues(diagnostics, parsed.error, file, { baseCode: "acf.manifest.invalid-name" });
+    pushZodIssues(diagnostics, parsed.error, file, { codeFor: manifestIssueCode });
     return undefined;
   }
   const unknown = collectUnknown(raw, manifestKeys);
   const manifest = parsed.data as Manifest;
   if (Object.keys(unknown).length > 0) manifest.unknown = unknown;
   return manifest;
+}
+
+/**
+ * The code of a manifest schema issue, by the top-level field it is in: `name` and `acf` have
+ * their own codes, any other field `acf.manifest.invalid-field` (so `authors[].name` is not the
+ * capability name). A whole-manifest issue such as `only` with `except` takes the generic code.
+ */
+function manifestIssueCode(issue: ZodIssue): string | undefined {
+  const [field] = issue.path;
+  if (field === undefined) return undefined;
+  if (field === "name") return "acf.manifest.invalid-name";
+  if (field === "acf") return "acf.manifest.acf-version-unknown";
+  return "acf.manifest.invalid-field";
 }
 
 export async function readAcfMd(

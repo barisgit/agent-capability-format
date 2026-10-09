@@ -37,3 +37,28 @@ test("only and except are mutually exclusive", async () => {
     await cleanup(dir);
   }
 });
+
+test("each manifest schema error takes the code of the field it is in", async () => {
+  const header = "acf: 1\nname: test-cap\n";
+  for (const [body, code] of [
+    ["acf: 2\nname: test-cap\nversion: 1.0.0\n", "acf.manifest.acf-version-unknown"],
+    ["acf: 1\nname: Bad_Name\nversion: 1.0.0\n", "acf.manifest.invalid-name"],
+    [`${header}version: nope\n`, "acf.manifest.invalid-field"],
+    [header, "acf.manifest.invalid-field"],
+    [`${header}version: 1.0.0\nhomepage: not-a-url\n`, "acf.manifest.invalid-field"],
+    [
+      `${header}version: 1.0.0\nauthors:\n  - name: Ann\n    bogus: 1\n`,
+      "acf.manifest.invalid-field",
+    ],
+    // An author's name is not the capability name.
+    [`${header}version: 1.0.0\nauthors:\n  - name: ''\n`, "acf.manifest.invalid-field"],
+    [`${header}version: 1.0.0\nkeywords: one\n`, "acf.manifest.invalid-field"],
+  ] as const) {
+    const { cap, dir } = await readTempCapability({ "acf.yml": body });
+    try {
+      expect({ body, codes: codes(cap) }).toEqual({ body, codes: [code] });
+    } finally {
+      await cleanup(dir);
+    }
+  }
+});
