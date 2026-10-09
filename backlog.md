@@ -192,6 +192,8 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Claude plugin retention depends on the sidecar.** `apps/caplet/src/hosts/claude/plan.ts` `planClaudeScope`: an install at caplet's identity that the plan does not want is uninstalled without `--keep-data` unless it is retained or kept, and both need the sidecar to record the plugin. If a still-selected capability's sidecar entries are lost, its plugin is treated as deselected and Claude's saved data is deleted. Needs an identity source besides the sidecar (for example the selection itself).
+- **A held or refused plugin with a readable version is still reinstalled or updated** when Claude's copy is missing or differs (`claude-marketplace.ts` `listedPlugins`). Arguably it should stay exactly as installed.
 - **Same-name Claude plugin components in different folders share one outcome row.** `packages/core/src/targets/plugin-layout.ts` `perFileComponentName`: agents, commands and output styles keep Claude's basename name, so `agents/a/x.md` and `agents/b/x.md` are both `x` in outcome rows (workflows and `bin` entries are path-named since e3f971b). Also `targets.claude.native.workflows: .` resolves to `native/claude/.` and matches no snapshot file (`emit/plugin-executables.ts`, `emit/snapshot.ts` `layeredPath`).
 - **Caplet files in a source tree can reach a Claude plugin.** `packages/adapters/src/claude/plugin.ts`: plugin copies exclude `acf.yml` and `.acf-import.json` but not a sidecar `.acf-managed.json` or `ACF-MANAGED.md` that a source tree happens to contain (the unchanged-plugin copy in particular). Suspected fix: one caplet-owned file list in core used by every plugin copy.
 
