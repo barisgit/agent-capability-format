@@ -456,7 +456,7 @@ test("a project registers at Claude local scope from the project root", async ()
   expect(result.stdout).toContain(".claude/settings.local.json");
 });
 
-test("status prints each diagnostic once", async () => {
+test("status prints each diagnostic once and one blank line after the Claude block", async () => {
   const scope = await reviewScope("user");
   await writeText(
     path.join(scope.home, ".agents", "capabilities.yml"),
@@ -467,6 +467,8 @@ test("status prints each diagnostic once", async () => {
 
   const result = await runCaplet(scope, ["status", ...userArgs(scope).slice(0, 4)], host.env);
 
+  expect(result.stdout).toContain("would run");
   const output = `${result.stdout}${result.stderr}`;
   expect(output.split("missing").length - 1).toBe(1);
+  expect(result.stdout).toMatch(/--scope user\n\n\S/);
 });

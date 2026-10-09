@@ -85,11 +85,12 @@ export const statusCommand = defineCommand({
         }
       }
       printClaude(out, claude, "planned");
-      out.log("");
       if (view.fileCount === 0) {
+        out.log("");
         out.done("Everything up to date");
         return;
       }
+      // pending() starts with its own blank line.
       out.pending(`${view.fileCount} ${view.fileCount === 1 ? "change" : "changes"} pending`);
       out.hint("Preview: caplet apply -n · apply: caplet apply");
     });
