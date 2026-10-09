@@ -39,7 +39,12 @@ import {
   resolveCapabilities,
   sourceId,
 } from "@caplet/installer";
-import { type ApplyResult, applyDiffs, resolveDiffPath } from "../apply/apply-diffs.js";
+import {
+  type ApplyResult,
+  applyDiffs,
+  contentEquals,
+  resolveDiffPath,
+} from "../apply/apply-diffs.js";
 import { containmentViolation, type OutputBoundary } from "../apply/containment.js";
 import {
   detectDrift,
@@ -866,10 +871,7 @@ function fileDiffChanged(diff: FileDiff): boolean {
     const hasMode = diff.beforeMode !== undefined || diff.afterMode !== undefined;
     if (hasMode) return true;
   }
-  const { before, after } = diff;
-  if (before === null || after === null) return before !== after;
-  if (typeof before === "string" || typeof after === "string") return before !== after;
-  return before.length !== after.length || before.some((byte, index) => byte !== after[index]);
+  return !contentEquals(diff.before, diff.after);
 }
 
 type ApplyGroup = {

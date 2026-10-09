@@ -7,7 +7,14 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
 import { claudeMarketplaceName, resolveClaudeScopeTarget } from "../../src/hosts/claude/scope.js";
-import { applyProject, cleanup, makeScope, type TestScope, writeText } from "../helpers.js";
+import {
+  applyProject,
+  cleanup,
+  makeScope,
+  runCaplet,
+  type TestScope,
+  writeText,
+} from "../helpers.js";
 
 const testsDir = path.resolve(import.meta.dir, "..");
 const scopes: TestScope[] = [];
@@ -101,6 +108,19 @@ test("apply writes a Claude plugin and lists it in the install-root inventory", 
     goldenCase(testsDir, "apply-claude-plugin").expected,
   );
   await expect(stat(path.join(scope.cwd, ".mcp.json"))).rejects.toThrow();
+
+  const rerun = await runCaplet(scope, [
+    "apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+    "--target",
+    "claude",
+    "--dry-run",
+    "--json",
+  ]);
+  expect(JSON.parse(rerun.stdout).plan.changes).toEqual([]);
 
   const again = await applyProject(scope);
   expect(again.exitCode).toBe(0);

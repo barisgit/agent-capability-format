@@ -292,10 +292,18 @@ function textContent(content: FileContent | null): string | null {
   throw new Error("structured ownership requires text content");
 }
 
-function contentEquals(left: FileContent | null, right: FileContent | null): boolean {
+/**
+ * Whether two contents hold the same bytes. Text and bytes compare by their UTF-8 bytes, because
+ * a file read from disk as bytes may be the same file an adapter produced as text.
+ */
+export function contentEquals(left: FileContent | null, right: FileContent | null): boolean {
   if (left === null || right === null) return left === right;
-  if (typeof left === "string" || typeof right === "string") return left === right;
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
+  if (typeof left === "string" && typeof right === "string") return left === right;
+  return Buffer.from(bytesOf(left)).equals(bytesOf(right));
+}
+
+function bytesOf(content: FileContent): Uint8Array {
+  return typeof content === "string" ? Buffer.from(content, "utf8") : content;
 }
 
 export function resolveDiffPath(installRoot: string, diffPath: string): string {
