@@ -344,6 +344,29 @@ test("without the CLI remove keeps the plugin files and the warning lists the un
   expect(warning?.message).toContain("claude plugin marketplace remove acf-user");
 });
 
+test("without the CLI remove names what keeps the marketplace registered", async () => {
+  const scope = await reviewScope("user");
+  await applyWithoutCli(scope);
+  const projectSettings = path.join(scope.cwd, ".claude", "settings.json");
+  await writeText(
+    projectSettings,
+    JSON.stringify({ extraKnownMarketplaces: { "acf-user": { source: { source: "directory" } } } }),
+  );
+
+  const result = await runCaplet(scope, ["remove", NAME, ...userArgs(scope), "--json"]);
+
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(result.stdout) as ApplyJson;
+  const warning = json.diagnostics.find((d) => d.code === "acf.claude.cli-unavailable");
+  expect(warning?.message).toContain(`claude plugin uninstall ${NAME}@acf-user --scope user`);
+  expect(warning?.message).not.toContain("marketplace remove");
+  const kept = json.diagnostics.find((d) => d.code === "acf.claude.marketplace-kept");
+  expect(kept?.message).toContain(projectSettings);
+  expect(kept?.message).toContain("claude plugin marketplace remove acf-user");
+  // The plugin is still installed, so its catalog entry stays.
+  expect(kept?.message).not.toContain("empty catalog");
+});
+
 test("a plugin the user disabled is updated and stays disabled", async () => {
   const scope = await reviewScope("user");
   const version = await applyWithoutCli(scope);

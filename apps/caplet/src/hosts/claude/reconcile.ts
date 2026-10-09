@@ -178,10 +178,7 @@ export async function previewClaudeHost(
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
   const state = await readClaudeHostState(host);
-  if (!state.ok) {
-    const report = await notRun(desired, state, host);
-    return state.failure.kind === "unavailable" ? { ...report, diagnostics: [] } : report;
-  }
+  if (!state.ok) return await notRun(desired, state, host, { preview: true });
   const diagnostics: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
     scopeReport(
@@ -244,7 +241,7 @@ function scopeReport(
   const atScope = new Map(installs.managed.map((p) => [p.id, p]));
   const others = installs.otherScope;
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
-  if (plan.keptBy.length > 0) diagnostics.push(keptDiagnostic(plan));
+  if (plan.keptBy.length > 0) diagnostics.push(keptDiagnostic(plan, installed !== undefined));
 
   const plugins = plan.plugins.map((plugin): ClaudePluginReport => {
     const index = plan.steps.findIndex((step) => step.plugin === plugin.id);
@@ -368,33 +365,38 @@ function failureState(failure: ClaudeHostFailure): ClaudeHostState {
 }
 
 /**
- * The CLI could not report state: plan against an empty host, run nothing, and report each
- * planned command as `not run`.
+ * The CLI could not report state: plan against the assumed host ({@link assumedState}), run
+ * nothing, and report each planned command as `not run`, followed by the scopes' own diagnostics
+ * (a marketplace the settings keep registered). A missing CLI is a warning listing the commands,
+ * except in a `preview`, which reports them as planned.
  */
 async function notRun(
   desired: readonly DesiredClaudeScope[],
   read: { failure: ClaudeHostFailure; command: string },
   host: ClaudeHost,
+  options: { preview?: boolean } = {},
 ): Promise<ClaudeHostReport> {
   const { failure } = read;
   const state = failureState(failure);
   const settings = await host.readSettings();
-  const ignored: Diagnostic[] = [];
+  const scopeDiagnostics: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
     scopeReport(
       planClaudeScope(scope, assumedState(scope, host.projectDir, settings)),
       [],
       undefined,
       state,
-      ignored,
+      scopeDiagnostics,
     ),
   );
-  if (failure.kind !== "unavailable") {
-    return { scopes, diagnostics: [stateReadFailure(read.command, failure, false)] };
-  }
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
-  if (commands.length === 0) return { scopes, diagnostics: [] };
-  return { scopes, diagnostics: [cliUnavailable(failure, commands, "updated")] };
+  const diagnostics: Diagnostic[] = [];
+  if (failure.kind !== "unavailable") {
+    diagnostics.push(stateReadFailure(read.command, failure, false));
+  } else if (commands.length > 0 && options.preview !== true) {
+    diagnostics.push(cliUnavailable(failure, commands, "updated"));
+  }
+  return { scopes, diagnostics: [...diagnostics, ...scopeDiagnostics] };
 }
 
 /** The `claude` CLI is missing or does not start; `commands` are the ones left to run. */
@@ -550,14 +552,17 @@ function otherScopeDiagnostic(plan: ClaudeScopePlan, other: ClaudeInstalledPlugi
   };
 }
 
-/** The marketplace stays registered because removing it would change more than caplet's own. */
-function keptDiagnostic(plan: ClaudeScopePlan): Diagnostic {
+/**
+ * The marketplace stays registered because removing it would change more than caplet's own.
+ * `emptied`: the host state was read, so apply rewrites the catalog with no plugins.
+ */
+function keptDiagnostic(plan: ClaudeScopePlan, emptied: boolean): Diagnostic {
   const command = formatClaudeCommand({ op: "marketplace remove", marketplace: plan.marketplace });
   return {
     severity: "warn",
     code: "acf.claude.marketplace-kept",
     targetId: "claude",
-    message: `Claude marketplace \`${plan.marketplace}\` stays registered with an empty catalog, because \`${command}\` would also change what caplet does not own:\n${indent(plan.keptBy)}\nRun \`${command}\` yourself to remove it everywhere.`,
+    message: `Claude marketplace \`${plan.marketplace}\` stays registered${emptied ? " with an empty catalog" : ""}, because \`${command}\` would also change what caplet does not own:\n${indent(plan.keptBy)}\nRun \`${command}\` yourself to remove it everywhere.`,
     data: { marketplace: plan.marketplace, keptBy: plan.keptBy, command },
   };
 }
