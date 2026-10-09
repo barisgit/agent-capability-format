@@ -212,7 +212,7 @@ test("a Codex server the user already defines outside caplet's markers is a conf
     expect(config).toBeUndefined();
     const [conflict] = withCode(result, "acf.mcp.config-conflict");
     expect(conflict?.severity).toBe("error");
-    expect(conflict?.data?.server).toBe("tools");
+    expect(conflict?.data).toEqual({ server: "tools", owners: ["user-defined"] });
     expect(conflict?.message).toContain("/project/.codex/config.toml");
   }
 });

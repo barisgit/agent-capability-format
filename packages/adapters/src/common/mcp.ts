@@ -184,14 +184,22 @@ export async function emitMcp(
       // A second [mcp_servers.<name>] table, or one inside an inline mcp_servers value, makes
       // config.toml invalid; the user's own definition wins and the server is not written.
       if (tomlDefinesTable(removeMarkedBlock(after, name), ["mcp_servers", server.name])) {
-        report.diagnostics.push(configConflict(file, server.name, target));
+        report.diagnostics.push(
+          mcpConfigConflict({
+            file,
+            server: server.name,
+            target,
+            capability,
+            owners: "user-defined",
+          }),
+        );
         continue;
       }
       const table = renderTomlTable(["mcp_servers", server.name], rendered.entry);
       after = replaceMarkedBlock(after, name, table, "hash");
       owns.push({ kind: "marker", name });
     } else {
-      const pointer = `/${target === "opencode" ? "mcp" : "mcpServers"}/${jsonPointerEscape(server.name)}`;
+      const pointer = mcpServerPointer(target, server.name);
       after = mergeJson(after, pointer, rendered.entry);
       owns.push({ kind: "json-pointer", pointer });
     }
@@ -205,19 +213,42 @@ export async function emitMcp(
   return diffs;
 }
 
+/** The JSON pointer of MCP server `name` in a JSON-config target's MCP file. */
+export function mcpServerPointer(target: TargetId, name: string): string {
+  return `/${target === "opencode" ? "mcp" : "mcpServers"}/${jsonPointerEscape(name)}`;
+}
+
+/** Who else claims an MCP server name in one target's MCP file. */
+export type McpConflict = {
+  file: string;
+  server: string;
+  target: TargetId;
+  capability: AcfCapability;
+  /** The user's own definition, or the other capabilities declaring the same name. */
+  owners: "user-defined" | readonly string[];
+};
+
 /**
- * `acf.mcp.config-conflict` (error): the host config already defines server `name` outside
- * caplet's ownership, so writing caplet's entry would clash with the user's.
+ * `acf.mcp.config-conflict` (error): writing `capability`'s server would overwrite one caplet
+ * does not own for it, so caplet writes nothing for that server on that target.
  */
-function configConflict(file: string, name: string, target: TargetId): Diagnostic {
+export function mcpConfigConflict(conflict: McpConflict): Diagnostic {
+  const { file, server, target, capability, owners } = conflict;
+  const name = capability.manifest.name;
+  const recovery = `exclude: { mcp: [${server}] }`;
+  const message =
+    owners === "user-defined"
+      ? `${file} already defines MCP server ${server} (user-defined), so caplet does not write ${name}'s server over it; rename or remove that definition, or use ${recovery}`
+      : `MCP server ${server} of ${name} is also declared by ${owners.join(", ")} for ${target}, so caplet writes it for none of them; keep it in one capability with ${recovery} on the others`;
   return {
     severity: "error",
     code: "acf.mcp.config-conflict",
-    message: `${file} already defines MCP server ${name} outside caplet's markers; rename or remove that definition, or exclude the server for ${target}`,
+    message,
     targetId: target,
     family: "mcp",
+    capability: { name, version: capability.manifest.version },
     path: file,
-    data: { server: name },
+    data: { server, owners: owners === "user-defined" ? [owners] : [...owners] },
   };
 }
 
