@@ -2,7 +2,7 @@ import path from "node:path";
 import { pushZodIssues } from "../diagnostics/index.js";
 import { mcpFileSchema } from "../schemas/index.js";
 import { isTargetId } from "../targets/registry.js";
-import type { Diagnostic, McpFile, McpServer } from "../types/index.js";
+import type { Diagnostic, McpFile, McpServer, TargetId } from "../types/index.js";
 import { narrowToTarget, parseYamlFile, pickFamilyYaml } from "./helpers.js";
 
 /**
@@ -68,17 +68,30 @@ function serverList(
       report("acf.target.unknown-id", `unknown target id: ${target}`);
       continue;
     }
-    const seen = new Set<string>();
-    for (const entry of block.servers ?? []) {
-      const server = narrowToTarget(entry, target, (id) =>
-        report("acf.target.unknown-id", `unknown target id: ${id}`),
-      );
-      if (canonicalNames.has(server.name)) duplicate(server.name, "a canonical server");
-      else if (seen.has(server.name))
-        duplicate(server.name, `another targets.${target}.servers entry`);
-      else out.push(server as McpServer);
-      seen.add(server.name);
-    }
+    out.push(...targetServers(target, block.servers ?? [], canonicalNames, report, duplicate));
+  }
+  return out;
+}
+
+/** The `targets.<target>.servers` entries narrowed to `target`, without repeated names. */
+function targetServers(
+  target: TargetId,
+  entries: readonly McpServer[],
+  canonicalNames: ReadonlySet<string>,
+  report: (code: string, message: string) => void,
+  duplicate: (name: string, of: string) => void,
+): McpServer[] {
+  const out: McpServer[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const server = narrowToTarget(entry, target, (id) =>
+      report("acf.target.unknown-id", `unknown target id: ${id}`),
+    );
+    if (canonicalNames.has(server.name)) duplicate(server.name, "a canonical server");
+    else if (seen.has(server.name))
+      duplicate(server.name, `another targets.${target}.servers entry`);
+    else out.push(server as McpServer);
+    seen.add(server.name);
   }
   return out;
 }
