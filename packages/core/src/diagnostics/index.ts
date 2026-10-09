@@ -109,6 +109,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.migration.drifted",
   "acf.cli.partial-implementation",
   "acf.cli.usage",
+  "acf.cli.internal",
   "acf.caplet.not-found",
   "acf.doctor.git-missing",
   "acf.doctor.agents-unreadable",

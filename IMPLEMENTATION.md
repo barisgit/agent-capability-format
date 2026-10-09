@@ -2867,6 +2867,7 @@ acf.migration.drifted                        # edited loose artifact left in pla
 # CLI
 acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
 acf.cli.usage                                # bad command input: flag value, name, missing argument (error, exit 2)
+acf.cli.internal                             # unexpected failure no command handles (error, exit 1)
 acf.caplet.not-found                         # `caplet show` names no installed capability (error)
 acf.doctor.git-missing                       # git is not on PATH (error)
 acf.doctor.agents-unreadable                 # .agents directory missing (warn) or unreadable (error)
@@ -3183,7 +3184,9 @@ takes comma-separated ids, and an unknown id exits 2. Unknown commands and flags
 did-you-mean hint when one is close, and so does a missing required argument. Under `--json`
 every such usage error prints the command's envelope on stdout with `ok: false` and one
 `acf.cli.usage` error diagnostic (`reportCommandFailure` in
-`apps/caplet/src/internal/command.ts`).
+`apps/caplet/src/internal/command.ts`). An error no command handles exits 1 with its stack on
+stderr; under `--json` stdout still gets the envelope, with one `acf.cli.internal` error
+(`internalFailure` in `apps/caplet/src/bin.ts`).
 
 Stubs that exit 0 without doing anything are forbidden — the first audit
 caught this and it lets agents fake-pass. A command that cannot do its job

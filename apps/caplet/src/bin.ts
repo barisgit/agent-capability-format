@@ -2,7 +2,7 @@
 import { runCommand } from "citty";
 import { rewriteAlias, rootCommand } from "./cli.js";
 import { renderCommandHelp, renderRootHelp } from "./help.js";
-import { reportCommandFailure } from "./internal/command.js";
+import { INTERNAL_ERROR_CODE, reportCommandFailure } from "./internal/command.js";
 import { CAPLET_VERSION } from "./internal/json.js";
 import { commandSpec, unknownFlagError } from "./internal/spec.js";
 
@@ -47,5 +47,24 @@ try {
   if (error instanceof Error && error.name === "CLIError") {
     usageFailure(error.message, `See ${helpTarget} for usage.`);
   }
-  throw error;
+  internalFailure(error);
+}
+
+/**
+ * Ends a run that failed unexpectedly: exit 1, the error with its stack on stderr, and under
+ * `--json` the command's envelope with an `acf.cli.internal` error so stdout always parses.
+ */
+function internalFailure(error: unknown): never {
+  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  process.stderr.write(`${detail}\n`);
+  if (argv.includes("--json")) {
+    const message = error instanceof Error ? error.message : String(error);
+    reportCommandFailure(
+      command ?? "caplet",
+      { json: true },
+      `internal error: ${message}`,
+      INTERNAL_ERROR_CODE,
+    );
+  }
+  process.exit(1);
 }

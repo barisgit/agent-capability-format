@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import packageJson from "../../package.json" with { type: "json" };
 import { cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
@@ -190,6 +191,27 @@ test("usage errors under --json print the command's envelope with an error diagn
       expect(diagnostics[0]).toMatchObject({ severity: "error", code: "acf.cli.usage" });
       expect(diagnostics[0]?.message).toContain(item.message);
     }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("an unexpected failure under --json still prints the envelope and exits 1", async () => {
+  const scope = await makeScope();
+  try {
+    // A directory where the lockfile belongs makes the lockfile read throw EISDIR, which no
+    // command handles.
+    await mkdir(path.join(scope.agentsDir, "capabilities.lock"));
+    const result = await runCaplet(scope, ["status", "--json", "--cwd", scope.cwd]);
+
+    expect(result.exitCode).toBe(1);
+    const envelope = parseEnvelope(result.stdout);
+    expect(envelope.command).toBe("status");
+    expect(envelope.ok).toBe(false);
+    expect(envelope.diagnostics).toEqual([
+      expect.objectContaining({ severity: "error", code: "acf.cli.internal" }),
+    ]);
+    expect(result.stderr).toContain("EISDIR");
   } finally {
     await cleanup(scope);
   }

@@ -6,6 +6,9 @@ import { reporter } from "./output.js";
 /** Diagnostic code of a command invoked wrongly: bad flag values, unknown names, missing input. */
 export const USAGE_ERROR_CODE = "acf.cli.usage";
 
+/** Diagnostic code of an error no command handles: a caplet bug or an unforeseen environment. */
+export const INTERNAL_ERROR_CODE = "acf.cli.internal";
+
 /** An error a command throws to stop with `exitCode`; `code` is its diagnostic code. */
 export type CommandError = Error & { exitCode: 1 | 2 | 4; code?: string | undefined };
 
