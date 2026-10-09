@@ -7,6 +7,7 @@ import {
   executableChanges,
   executableComponents,
   type NativeRemainderComponent,
+  readAgentPluginsPackage,
   readCapability,
 } from "../src";
 import { baseManifest, cleanup, makeCapability, tempDir } from "./helpers";
@@ -78,6 +79,33 @@ describe("executableComponents", () => {
       { kind: "hook", name: "session_start/greet", detail: "./greet.sh --hello" },
     ]);
     expect(await executableComponents(cap, "cursor")).toEqual([]);
+  });
+
+  test("lists a foreign package's executable support files where a plugin carries them", async () => {
+    const dir = await tempDir();
+    dirs.push(dir);
+    await makeCapability(dir, {
+      "plugin.json": JSON.stringify({
+        $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+        name: "docs-kit",
+        version: "1.0.0",
+      }),
+      "skills/write/SKILL.md": "---\nname: write\ndescription: Write\n---\nWrite.\n",
+      "bin/tool.sh": "#!/bin/sh\n",
+    });
+    await chmod(path.join(dir, "bin/tool.sh"), 0o755);
+    const { capability: cap } = await readAgentPluginsPackage(dir, {
+      scope: "project",
+      origin: { kind: "local", directory: dir },
+      revision: null,
+    });
+    if (cap === undefined) throw new Error("the package did not read as a capability");
+    const names = async (target: "claude" | "codex", carrier?: "plugin" | "loose") =>
+      (await executableComponents(cap, target, carrier)).map((item) => item.name);
+    // The Claude plugin copies the package's support files; loose files and other targets do not.
+    expect(await names("claude")).toEqual(["bin/tool.sh"]);
+    expect(await names("claude", "loose")).toEqual([]);
+    expect(await names("codex")).toEqual([]);
   });
 
   test("returns nothing for a target the capability does not apply to", async () => {

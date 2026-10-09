@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
-import { remainderTargets, targetMap } from "../targets/index.js";
+import { capabilityCarrier, remainderTargets, targetMap } from "../targets/index.js";
 import type {
   AcfCapability,
+  Carrier,
   HookEntry,
   NativeRemainderComponent,
   NativeRemainderKind,
@@ -72,8 +73,10 @@ type Snapshot = {
  * applicability (`only`/`except`) for that target: stdio MCP servers, hooks on targets that run
  * hooks, executable native remainder of a format `target` writes, and files with the executable
  * bit. A file under a skill follows that skill's applicability, a file under `native/<t>/`
- * reaches only `t`, and files of a foreign package reach only the target of its format. Files
- * belonging to a remainder component count toward that component, not as separate files.
+ * reaches only `t`, and files of a foreign package reach only the target of its format or a plugin
+ * carrier, which copies the package's support files. Files belonging to a remainder component
+ * count toward that component, not as separate files. `carrier` is the configured
+ * `targets.<t>.carrier`; absent means the target default ({@link capabilityCarrier}).
  *
  * Reads the capability's snapshot to fingerprint referenced and executable files, so call it
  * while the snapshot still exists. Results are sorted by kind, then name.
@@ -81,9 +84,11 @@ type Snapshot = {
 export async function executableComponents(
   capability: AcfCapability,
   target: TargetId,
+  carrier?: Carrier,
 ): Promise<ExecutableComponent[]> {
   const filtered = applyApplicability(capability, target);
   if (filtered === null) return [];
+  const pluginCarried = capabilityCarrier(filtered, target, carrier) === "plugin";
   const snapshot = await readSnapshot(filtered.root);
   const base = { scope: filtered.scope, capability: filtered.manifest.name, target };
   const components: ExecutableComponent[] = [];
@@ -171,7 +176,9 @@ export async function executableComponents(
     if (skill !== undefined && !keptSkills.has(skill[1])) continue;
     const nativeTarget = /^native\/([^/]+)\//.exec(file.rel)?.[1];
     if (nativeTarget !== undefined && nativeTarget !== target) continue;
-    if (foreign && skill === undefined && !foreignTargets.includes(target)) continue;
+    if (foreign && skill === undefined && !foreignTargets.includes(target) && !pluginCarried) {
+      continue;
+    }
     components.push({
       ...base,
       kind: "file",

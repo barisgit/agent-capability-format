@@ -297,7 +297,11 @@ export async function buildEmitPlan(
       }
       diagnostics.push(...(await driftDiagnostics(installRoot)));
       for (const capability of resolved.capabilities) {
-        const capabilityExecutables = await executableComponents(capability, targetId);
+        const capabilityExecutables = await executableComponents(
+          capability,
+          targetId,
+          configResult.config.targets?.[targetId]?.carrier,
+        );
         const filtered = applyApplicability(capability, targetId);
         if (filtered === null) {
           executables.push(...capabilityExecutables);
@@ -443,7 +447,13 @@ export async function installedExecutables(
     for (const targetId of targets) {
       if (installRootFor(targetId, scopeRoot, config, cwd) === null) continue;
       for (const capability of capabilities) {
-        executables.push(...(await executableComponents(capability, targetId)));
+        executables.push(
+          ...(await executableComponents(
+            capability,
+            targetId,
+            config.targets?.[targetId]?.carrier,
+          )),
+        );
       }
     }
   }

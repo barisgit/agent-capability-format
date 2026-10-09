@@ -1,3 +1,4 @@
+export * from "./capability-carrier.js";
 export * from "./extensions.js";
 export * from "./field-support.js";
 export * from "./native-keys.js";

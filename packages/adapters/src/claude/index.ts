@@ -1,6 +1,8 @@
 import {
   type AcfCapability,
+  capabilityCarrier,
   carriersOf,
+  claudeLegacyFamilies,
   type Diagnostic,
   type EmitInput,
   packageRefused,
@@ -23,11 +25,13 @@ if (target === undefined) throw new Error("missing target definition for claude"
 export const claudeAdapter: TargetAdapter<"claude"> = {
   id: "claude",
   emit: async (input, fs: ReadOnlyFs) => {
-    const carrier = input.options.carrier ?? carriersOf("claude").default;
-    if (carrier === "plugin") {
-      const legacy = legacyComponents(input.capability);
-      if (legacy.length === 0) return await emitClaudePlugin(input, fs);
+    const configured = input.options.carrier ?? carriersOf("claude").default;
+    if (capabilityCarrier(input.capability, "claude", configured) === "plugin") {
+      return await emitClaudePlugin(input, fs);
+    }
+    if (configured === "plugin") {
       const result = await emitTarget(input, fs, target);
+      const legacy = claudeLegacyFamilies(input.capability);
       return {
         ...result,
         diagnostics: [legacyCarrier(input.capability, legacy), ...result.diagnostics],
@@ -40,20 +44,6 @@ export const claudeAdapter: TargetAdapter<"claude"> = {
 };
 
 registerAdapter("claude", claudeAdapter);
-
-/** Component families the Claude plugin writer does not generate yet. */
-function legacyComponents(capability: AcfCapability): string[] {
-  const families: string[] = [];
-  if (capability.agents.length > 0) families.push("agents");
-  if (capability.commands.length > 0) families.push("commands");
-  if (
-    capability.hooks !== undefined &&
-    Object.values(capability.hooks.buckets).some((entries) => (entries?.length ?? 0) > 0)
-  )
-    families.push("hooks");
-  if (capability.instructions.length > 0) families.push("instructions");
-  return families;
-}
 
 function legacyCarrier(capability: AcfCapability, families: readonly string[]): Diagnostic {
   return {
