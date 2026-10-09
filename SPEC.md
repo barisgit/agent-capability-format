@@ -1958,11 +1958,13 @@ A native plugin package MAY be installed through a declared format reader
 as a foreign source (§20.6); it is then projected into a capability, never
 accepted as ACF source. Inside a native ACF capability, native files live
 only under `native/<target>/` (§7.7). When the Claude plugin writer
-generates a plugin from a native ACF capability, it leaves out the root
-entries Claude would read as plugin configuration (`.claude-plugin/`,
-`.mcp.json`, `.lsp.json`, `settings.json`, `output-styles/`) and reports
-each with the `info` diagnostic `acf.claude.plugin-file-ignored`, which
-points to `native/claude/`.
+generates a plugin from a capability not read as a Claude plugin, it leaves
+out the entries Claude would read as plugin configuration without a
+manifest naming them (`.claude-plugin/`, `.mcp.json`, `.lsp.json`,
+`settings.json`, `agents/`, `commands/`, `hooks/hooks.json`,
+`output-styles/`, `workflows/`) and reports each with the `info` diagnostic
+`acf.claude.plugin-file-ignored`, which points a native ACF capability to
+`native/claude/`.
 
 Install paths and native artifact layout per target are owned by the
 target adapter and are documented in §22 and `IMPLEMENTATION.md`.

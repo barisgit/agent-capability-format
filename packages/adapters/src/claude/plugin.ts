@@ -79,15 +79,21 @@ const ACF_OWNED = new Set([
 ]);
 
 /**
- * Root paths Claude reads from a plugin. In a native ACF capability they are not Claude
- * configuration, so they are left out of the plugin with a hint toward `native/claude/`.
+ * Paths Claude reads from a plugin without a manifest naming them. In a source not read as a
+ * Claude plugin they are not that source's configuration, so copying them would activate content
+ * its reader ignored; they are left out of the plugin with a hint. `bin/` stays: it only puts the
+ * package's own executables on PATH, which its servers may run.
  */
 const CLAUDE_DISCOVERED = new Set([
   ".claude-plugin",
   MCP_PATH,
   ".lsp.json",
   "settings.json",
+  "agents",
+  "commands",
+  "hooks/hooks.json",
   "output-styles",
+  "workflows",
 ]);
 
 /** One file of the plugin package, relative to its root. */
@@ -425,7 +431,7 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Claude configuration in a native ACF root is left out with a hint.
+ * Claude configuration in a source not read as a Claude plugin is left out with a hint.
  */
 async function supportFiles(
   capability: AcfCapability,
@@ -455,11 +461,14 @@ async function supportFiles(
         path.posix.basename(relativePath) === MANAGEMENT_NOTICE_FILENAME
       )
         return true;
-      if (format !== "acf" || !CLAUDE_DISCOVERED.has(relativePath)) return false;
+      if (format === "claude-plugin" || !CLAUDE_DISCOVERED.has(relativePath)) return false;
       diagnostics.push({
         severity: "info",
         code: "acf.claude.plugin-file-ignored",
-        message: `${relativePath} is not read from ACF capability ${capability.manifest.name}; put files for its Claude plugin under native/claude/`,
+        message:
+          format === "acf"
+            ? `${relativePath} is not read from ACF capability ${capability.manifest.name}; put files for its Claude plugin under native/claude/`
+            : `${relativePath} is Claude configuration that the ${format} reader of ${capability.manifest.name} does not read; it is left out of its Claude plugin (format: claude-plugin reads the source as a Claude plugin)`,
         path: path.join(capability.root, relativePath),
         targetId: "claude",
         capability: { name: capability.manifest.name },

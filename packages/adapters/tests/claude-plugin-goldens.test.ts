@@ -239,6 +239,50 @@ test("an Agent Plugins package is translated into a Claude plugin", async () => 
   await assertGoldenTree(pluginTree(result, golden.input), golden.expected);
 });
 
+test("an Agent Plugins package leaves out the Claude configuration Claude would discover", async () => {
+  const input = await mkdtemp(path.join(tmpdir(), "agent-plugins-claude-files-"));
+  try {
+    const schema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+    const files: Record<string, string> = {
+      "plugin.json": `${JSON.stringify({ $schema: schema, name: "kit", version: "1.0.0" })}\n`,
+      ".claude-plugin/plugin.json": `${JSON.stringify({ name: "kit", hooks: "./hooks/hooks.json" })}\n`,
+      ".mcp.json": `${JSON.stringify({ mcpServers: { run: { command: "./run.sh" } } })}\n`,
+      "agents/helper.md": "---\nname: helper\ndescription: Helper\n---\nHelp.\n",
+      "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
+      "settings.json": `${JSON.stringify({ agent: "helper" })}\n`,
+      "run.sh": "#!/bin/sh\n",
+      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+    };
+    for (const [relative, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
+      await writeFile(path.join(input, relative), text);
+    }
+    const capability = await readInput(input, "agent-plugins");
+
+    const result = await emit(claudeAdapter, capability, INSTALL_ROOT, await inputFs(input));
+
+    expect([...pluginTree(result, input).keys()].sort()).toEqual([
+      ".claude-plugin/plugin.json",
+      "report.json",
+      "run.sh",
+      "skills/review/SKILL.md",
+    ]);
+    expect(
+      result.diagnostics
+        .filter((diagnostic) => diagnostic.code === "acf.claude.plugin-file-ignored")
+        .map((diagnostic) => [diagnostic.severity, path.relative(input, diagnostic.path ?? "")]),
+    ).toEqual([
+      ["info", ".claude-plugin"],
+      ["info", ".mcp.json"],
+      ["info", "agents"],
+      ["info", "hooks/hooks.json"],
+      ["info", "settings.json"],
+    ]);
+  } finally {
+    await rm(input, { recursive: true, force: true });
+  }
+});
+
 test("a Claude plugin with remainder is refused on loose Claude files", async () => {
   const golden = goldenCase(testsDir, "claude-plugin-loose-refused");
   const capability = await readInput(golden.input, "claude-plugin");
