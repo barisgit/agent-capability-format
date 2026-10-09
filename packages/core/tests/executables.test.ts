@@ -205,6 +205,52 @@ describe("native ACF executable configuration", () => {
     expect(await inventory(await nativeCapability())).toEqual(expected);
   });
 
+  test("bin entries are identified by their path under bin/", async () => {
+    async function foreign(files: Record<string, string>): Promise<AcfCapability> {
+      const dir = await tempDir();
+      dirs.push(dir);
+      await makeCapability(dir, {
+        ".claude-plugin/plugin.json": JSON.stringify({ name: "test-cap", version: "1.0.0" }),
+        ...files,
+      });
+      const { capability: cap } = await readClaudePluginPackage(dir, {
+        scope: "project",
+        origin: { kind: "local", directory: dir },
+        revision: null,
+      });
+      if (cap === undefined) throw new Error("the plugin did not read as a capability");
+      return cap;
+    }
+    const before = await foreign({ "bin/tool": "#!/bin/sh\n", "bin/lib/tool": "#!/bin/sh\n" });
+    const inventory = async (cap: AcfCapability) =>
+      (await executableComponents(cap, "claude")).map(({ kind, name, fingerprint }) => ({
+        kind,
+        name,
+        fingerprint,
+      }));
+    expect((await inventory(before)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "bin lib/tool",
+      "bin tool",
+    ]);
+    const native = await capability({
+      "acf.yml": baseManifest,
+      "native/claude/bin/tool": "#!/bin/sh\n",
+      "native/claude/bin/lib/tool": "#!/bin/sh\n",
+    });
+    expect(await inventory(native)).toEqual(await inventory(before));
+    const changes = async (after: AcfCapability) =>
+      executableChanges(
+        await executableComponents(before, "claude"),
+        await executableComponents(after, "claude"),
+      ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+    expect(
+      await changes(await foreign({ "bin/tool": "#!/bin/sh\n", "bin/lib/tool": "#!/bin/sh\nx\n" })),
+    ).toEqual(["changed bin lib/tool"]);
+    expect(await changes(await foreign({ "bin/tool": "#!/bin/sh\n" }))).toEqual([
+      "removed bin lib/tool",
+    ]);
+  });
+
   test("reports changed native hooks and manifest keys only where the plugin carries them", async () => {
     const before = await nativeCapability();
     const changes = async (after: AcfCapability) =>
@@ -231,12 +277,20 @@ describe("native ACF executable configuration", () => {
 describe("Claude plugin workflows", () => {
   const workflow = (step: string): string => `export default { steps: ["${step}"] }\n`;
 
-  async function foreignPlugin(step: string): Promise<AcfCapability> {
+  async function foreignPlugin(
+    step: string,
+    files: Record<string, string> = { "workflows/release.js": workflow(step) },
+    manifest: Record<string, unknown> = {},
+  ): Promise<AcfCapability> {
     const dir = await tempDir();
     dirs.push(dir);
     await makeCapability(dir, {
-      ".claude-plugin/plugin.json": JSON.stringify({ name: "test-cap", version: "1.0.0" }),
-      "workflows/release.js": workflow(step),
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "test-cap",
+        version: "1.0.0",
+        ...manifest,
+      }),
+      ...files,
     });
     const { capability: cap } = await readClaudePluginPackage(dir, {
       scope: "project",
@@ -257,15 +311,55 @@ describe("Claude plugin workflows", () => {
   test("a workflow module without the executable bit is an executing component", async () => {
     const before = await foreignPlugin("build");
     expect((await inventory(before)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
-      "workflow release",
+      "workflow workflows/release.js",
     ]);
     const changes = executableChanges(
       await executableComponents(before, "claude"),
       await executableComponents(await foreignPlugin("deploy"), "claude"),
     );
     expect(changes.map(({ change, kind, name }) => `${change} ${kind} ${name}`)).toEqual([
-      "changed workflow release",
+      "changed workflow workflows/release.js",
     ]);
+  });
+
+  const changeLines = async (before: AcfCapability, after: AcfCapability) =>
+    executableChanges(
+      await executableComponents(before, "claude"),
+      await executableComponents(after, "claude"),
+    ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+
+  test("workflows are identified by package path, so equal file names do not collide", async () => {
+    const files = (ship: string, release?: string) => ({
+      "workflows/release.js": workflow("build"),
+      "workflows/ops/release.js": workflow(ship),
+      ...(release === undefined ? {} : { "workflows/ci/release.js": workflow(release) }),
+    });
+    const before = await foreignPlugin("", files("ship", "test"));
+    expect((await inventory(before)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "workflow workflows/ci/release.js",
+      "workflow workflows/ops/release.js",
+      "workflow workflows/release.js",
+    ]);
+    expect(await changeLines(before, await foreignPlugin("", files("ship", "test")))).toEqual([]);
+    expect(await changeLines(before, await foreignPlugin("", files("deploy", "test")))).toEqual([
+      "changed workflow workflows/ops/release.js",
+    ]);
+    expect(await changeLines(before, await foreignPlugin("", files("ship")))).toEqual([
+      "removed workflow workflows/ci/release.js",
+    ]);
+  });
+
+  test("a workflow the manifest names twice is one component", async () => {
+    const workflows = ["./workflows", "./workflows/release.js", "workflows/release.js"];
+    const foreign = await foreignPlugin("build", undefined, { workflows });
+    expect((await inventory(foreign)).map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "workflow workflows/release.js",
+    ]);
+    const native = await capability({
+      "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      workflows: [${workflows.join(", ")}]\n`,
+      "native/claude/workflows/release.js": workflow("build"),
+    });
+    expect(await inventory(native)).toEqual(await inventory(foreign));
   });
 
   test("a native workflow is listed as the same foreign plugin lists it", async () => {
@@ -281,7 +375,7 @@ describe("Claude plugin workflows", () => {
     });
     expect(
       (await executableComponents(declared, "claude")).map((item) => `${item.kind} ${item.name}`),
-    ).toEqual(["workflow ship"]);
+    ).toEqual(["workflow flows/ship.js"]);
     expect(await executableComponents(native, "claude", "loose")).toEqual([]);
   });
 });

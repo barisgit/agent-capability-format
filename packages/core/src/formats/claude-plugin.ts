@@ -9,6 +9,7 @@ import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
 import { nativeKeyClass, nativeKeyInfo, strictestClass } from "../targets/native-keys.js";
 import {
+  binComponentName,
   CLAUDE_PLUGIN_BIN_DIR,
   CLAUDE_PLUGIN_MANIFEST,
   claudePluginComponents,
@@ -286,7 +287,7 @@ async function fileComponents(
     for (const file of await sourceFiles(root, sources)) {
       inputs.push({
         kind: spec.kind,
-        name: perFileComponentName(file),
+        name: perFileComponentName(spec, file),
         paths: [file],
         manifestKeys: value === undefined ? [] : [spec.key],
         class: componentClass,
@@ -297,7 +298,10 @@ async function fileComponents(
   return inputs;
 }
 
-/** Package-relative files of each contained source: a directory's files, or the file itself. */
+/**
+ * Package-relative files of each contained source, a directory's files or the file itself, each
+ * once though several sources name it.
+ */
 async function sourceFiles(root: string, sources: readonly string[]): Promise<string[]> {
   const files: string[] = [];
   for (const relative of sources) {
@@ -307,7 +311,7 @@ async function sourceFiles(root: string, sources: readonly string[]): Promise<st
     else if (await isFile(resolved))
       files.push(path.relative(root, resolved).split(path.sep).join("/"));
   }
-  return files;
+  return [...new Set(files)];
 }
 
 /** One component per {@link MERGED_COMPONENTS} kind the package has a file or manifest key for. */
@@ -342,7 +346,7 @@ async function binComponents(root: string): Promise<RemainderInput[]> {
   const files = await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR));
   return files.map((file) => ({
     kind: "bin",
-    name: path.posix.basename(file),
+    name: binComponentName(file),
     paths: [file],
     class: "functional",
     executable: true,
