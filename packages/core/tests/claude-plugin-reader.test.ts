@@ -284,6 +284,26 @@ test("a non-boolean invocation key leaves the skill out instead of becoming an e
   ]);
 });
 
+test("a core skill key with a value outside Claude's domain leaves the skill out", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "skills/licensed/SKILL.md": "---\nname: licensed\ndescription: L\nlicense: 5\n---\n",
+    "skills/compat/SKILL.md": "---\nname: compat\ndescription: C\ncompatibility: [a]\n---\n",
+    "skills/meta/SKILL.md": "---\nname: meta\ndescription: M\nmetadata:\n  n: 1\n---\n",
+    "skills/hint/SKILL.md": "---\nname: hint\ndescription: H\nargument-hint: [file]\n---\n",
+    "skills/fine/SKILL.md":
+      "---\nname: fine\ndescription: F\nlicense: MIT\nmetadata:\n  n: one\nargument-hint: <file>\n---\n",
+  });
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["fine"]);
+  expect(capability?.skills[0]?.frontmatter.targets).toBeUndefined();
+  expect(diagnostics.map((d) => [d.severity, d.code, d.message.split(":")[0]])).toEqual([
+    ["warn", "acf.source.component-invalid", "skill compat is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill hint is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill licensed is not loaded"],
+    ["warn", "acf.source.component-invalid", "skill meta is not loaded"],
+  ]);
+});
+
 test("a placeholder named like an Object.prototype property keeps the server native", async () => {
   const { capability } = await read({
     ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),

@@ -93,13 +93,17 @@ const offRestricts = (spec: KeySpec): KeySpec => ({
   valueClasses: [{ value: false, class: "restricting" }],
 });
 
-/** Skill keys every Agent Skills reader shares, written from core fields. */
+/**
+ * Skill keys every Agent Skills reader shares, written from core fields. The optional ones carry
+ * the core field's value domain (`skillFrontmatterSchema`), so a foreign reader projects exactly
+ * the values the core can hold and leaves a skill with any other value out (design D27.4).
+ */
 const AGENT_SKILLS_KEYS = {
   name: gen("functional", "skill.name"),
   description: gen("functional", "skill.description"),
-  license: gen("descriptive", "skill.license"),
-  compatibility: gen("descriptive", "skill.compatibility"),
-  metadata: gen("descriptive", "skill.metadata"),
+  license: gen("descriptive", "skill.license", str),
+  compatibility: gen("descriptive", "skill.compatibility", str.max(500)),
+  metadata: gen("descriptive", "skill.metadata", strMap),
 } satisfies Record<string, KeySpec>;
 
 const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
@@ -107,7 +111,7 @@ const skillKeys: Record<TargetId, Record<string, KeySpec>> = {
   claude: {
     ...AGENT_SKILLS_KEYS,
     when_to_use: descriptive(str),
-    "argument-hint": gen("descriptive", "skill.argument-hint"),
+    "argument-hint": gen("descriptive", "skill.argument-hint", str),
     arguments: pend("functional", "skill.arguments", strOrList),
     "disable-model-invocation": gen("restricting", "skill.invocation.model=false", bool),
     "user-invocable": gen("restricting", "skill.invocation.user=false", bool),
@@ -420,8 +424,9 @@ export function nativeKeyInfo(
 /**
  * Why `value` is outside the native value domain of a known key, or undefined when it is inside
  * (capability-model-layers, Inline native extras). Unknown keys have no domain and are accepted as
- * written; a generated key is checked only when it declares a domain (the invocation booleans),
- * and authoring one in native ACF stays a conflict whatever its value.
+ * written; a generated key is checked only when it declares a domain (the invocation booleans and
+ * the optional Agent Skills fields), and authoring one in native ACF stays a conflict whatever its
+ * value.
  */
 export function nativeValueProblem(
   target: TargetId,
