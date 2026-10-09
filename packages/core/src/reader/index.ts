@@ -404,65 +404,55 @@ export async function readMcp(
     pushZodIssues(diagnostics, parsed.error, file, { family: "mcp" });
     return undefined;
   }
-  const servers = parsed.data.servers as McpServer[];
   const targets = parsed.data.targets as Record<string, { servers?: McpServer[] }> | undefined;
   return {
     path: file,
-    servers: [...servers, ...targetServers(servers, targets, file, diagnostics)],
+    servers: serverList(parsed.data.servers as McpServer[], targets, file, diagnostics),
   };
 }
 
 /**
- * The family-level `targets.<target>.servers` (SPEC.md §13a.5) as servers that apply to
- * `<target>` only, so selection, every writer, the support registry, conflict checks and
- * executable fingerprints see them in the one server list. A server's own `only`/`except`
+ * The canonical servers, then the family-level `targets.<target>.servers` (SPEC.md §13a.5) as
+ * servers that apply to `<target>` only, so selection, every writer, the support registry,
+ * conflict checks and executable fingerprints see one list. An entry's own `only`/`except`
  * still narrows it: its applicability becomes the intersection with `[<target>]`, possibly
- * empty. Reports an unknown block or entry target id, and a name that repeats a canonical
- * server or another server of the same target's list, since a target would then receive two
- * servers under one name.
+ * empty. A server whose name repeats a canonical server, or another entry of the same target,
+ * is reported and left out, since a target would otherwise receive two servers under one name;
+ * so is an unknown block target id. Unknown entry target ids are reported here because the
+ * entry's own `only`/`except` does not survive into the list.
  */
-function targetServers(
+function serverList(
   canonical: McpServer[],
   targets: Record<string, { servers?: McpServer[] }> | undefined,
   file: string,
   diagnostics: Diagnostic[],
 ): McpServer[] {
-  const unknownTarget = (id: string): void => {
-    diagnostics.push({
-      severity: "error",
-      code: "acf.target.unknown-id",
-      message: `unknown target id: ${id}`,
-      path: file,
-      family: "mcp",
-    });
+  const report = (code: string, message: string): void => {
+    diagnostics.push({ severity: "error", code, message, path: file, family: "mcp" });
   };
-  const canonicalNames = new Set(canonical.map((server) => server.name));
+  const duplicate = (name: string, of: string): void =>
+    report("acf.facet.duplicate", `duplicate mcp server: ${name} repeats the name of ${of}`);
   const out: McpServer[] = [];
+  const canonicalNames = new Set<string>();
+  for (const server of canonical) {
+    if (canonicalNames.has(server.name)) duplicate(server.name, "another canonical server");
+    else out.push(server);
+    canonicalNames.add(server.name);
+  }
   for (const [target, block] of Object.entries(targets ?? {})) {
     if (!isTargetId(target)) {
-      unknownTarget(target);
+      report("acf.target.unknown-id", `unknown target id: ${target}`);
       continue;
     }
     const seen = new Set<string>();
     for (const { only, except, ...server } of block.servers ?? []) {
-      for (const id of [...(only ?? []), ...(except ?? [])]) if (!isTargetId(id)) unknownTarget(id);
-      const clash = canonicalNames.has(server.name)
-        ? "a canonical server"
-        : seen.has(server.name)
-          ? `another targets.${target}.servers entry`
-          : undefined;
+      for (const id of [...(only ?? []), ...(except ?? [])])
+        if (!isTargetId(id)) report("acf.target.unknown-id", `unknown target id: ${id}`);
+      if (canonicalNames.has(server.name)) duplicate(server.name, "a canonical server");
+      else if (seen.has(server.name))
+        duplicate(server.name, `another targets.${target}.servers entry`);
+      else out.push({ ...server, only: computeSet({ only, except }, [target]) } as McpServer);
       seen.add(server.name);
-      if (clash !== undefined) {
-        diagnostics.push({
-          severity: "error",
-          code: "acf.facet.duplicate",
-          message: `duplicate mcp server: targets.${target}.servers entry ${server.name} has the name of ${clash}`,
-          path: file,
-          family: "mcp",
-        });
-        continue;
-      }
-      out.push({ ...server, only: computeSet({ only, except }, [target]) } as McpServer);
     }
   }
   return out;

@@ -326,10 +326,11 @@ test("a family-level native server joins the server list for its own target only
   });
 });
 
-test("a family-level native server may not reuse a name its target already receives", async () => {
+test("a server may not reuse a name its target already receives", async () => {
   const stdio = "        transport: stdio\n        command: srv\n";
   const canonical = "servers:\n  - name: tools\n    transport: stdio\n    command: srv\n";
   for (const body of [
+    `${canonical}  - name: tools\n    transport: http\n    url: https://example.com/mcp\n`,
     `${canonical}targets:\n  codex:\n    servers:\n      - name: tools\n${stdio}`,
     `targets:\n  codex:\n    servers:\n      - name: tools\n${stdio}      - name: tools\n${stdio}`,
   ]) {

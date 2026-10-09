@@ -1659,7 +1659,7 @@ targets:
 
 | Field         | Type        | Required | Notes                                                              |
 | ------------- | ----------- | -------- | ------------------------------------------------------------------ |
-| `name`        | slug string | yes      | MCP server identity within the capability.                         |
+| `name`        | slug string | yes      | MCP server identity within the capability; unique among `servers[]` (`acf.facet.duplicate`). |
 | `description` | string      | no       | Short description.                                                 |
 | `transport`   | enum        | yes      | `stdio` \| `http` \| `sse`.                                        |
 | `command`     | string      | conditional | REQUIRED for `transport: stdio`. Forbidden for `http`/`sse`.    |
