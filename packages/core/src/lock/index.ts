@@ -264,7 +264,22 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   if (!isCapabilityNameArray(capabilityNames)) throw new Error("invalid lock capabilityNames");
   if (typeof source !== "string") throw new Error("invalid lock source");
   if (typeof sourceId !== "string") throw new Error("invalid lock sourceId");
-  const entry: MutableLockEntry = { capabilityHash, capabilityNames, source, sourceId };
+  const entry: MutableLockEntry = {
+    capabilityHash,
+    capabilityNames,
+    source,
+    sourceId,
+    ...optionalEntryFields(value, capabilityNames),
+  };
+  return entry as LockEntry;
+}
+
+/** The optional fields of a lock entry that hold a valid value; others are dropped. */
+function optionalEntryFields(
+  value: Record<string, unknown>,
+  capabilityNames: readonly string[],
+): MutableLockEntry {
+  const entry: MutableLockEntry = {};
   if (isStringArray(value.capabilities) && value.capabilities.length > 0) {
     entry.capabilities = value.capabilities;
   }
@@ -287,7 +302,7 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   }
   if (typeof value.resolvedSha === "string") entry.resolvedSha = value.resolvedSha;
   if (value.synthesized === true) entry.synthesized = true;
-  return entry as LockEntry;
+  return entry;
 }
 
 // Records gate emission, so a malformed record fails the read instead of being dropped.
