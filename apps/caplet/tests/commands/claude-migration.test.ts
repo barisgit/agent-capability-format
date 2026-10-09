@@ -2,7 +2,7 @@
  * Migration from loose Claude output to plugins (claude-plugin-output): once Claude reports the
  * plugin registered, apply retires the loose files caplet wrote unchanged, releases the ones the
  * user edited, keeps everything while registration fails, and announces the new invocation names
- * once per install root.
+ * once per install root. Switching back to the loose carrier uninstalls the plugin.
  */
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -219,4 +219,42 @@ test("a failed registration keeps the loose files managed until a later apply re
     { scope: "project", capability: NAME, from: `/${NAME}`, to: `/${NAME}:${NAME}` },
   ]);
   expect(existsSync(looseSkill(scope))).toBe(false);
+});
+
+/** Switches the project's Claude carrier to loose and applies; the plugin is installed at `version`. */
+async function switchToLoose(scope: TestScope, version: string) {
+  await writeText(
+    path.join(scope.agentsDir, "caplet.yml"),
+    "targets:\n  claude:\n    carrier: loose\n",
+  );
+  const host = await claudeHost(scope, "project", NAME, [
+    localPluginList(version),
+    "marketplace-list-json",
+    "uninstall-local",
+    "list-json-empty",
+    "marketplace-remove",
+  ]);
+  const applied = await runCaplet(scope, args(scope), host.env);
+  expect(await host.unused()).toEqual([]);
+  expect(await host.unexpected()).toEqual([]);
+  return applied;
+}
+
+test("switching Claude to the loose carrier uninstalls the plugin and writes loose files", async () => {
+  const scope = await looseProject();
+  const { version } = await migrate(scope, "ok");
+  const marketplaceDir = path.join(scope.cwd, ".claude", ".acf", "marketplace");
+  expect(existsSync(path.join(marketplaceDir, "plugins", NAME))).toBe(true);
+
+  const applied = await switchToLoose(scope, version);
+
+  expect(applied.exitCode).toBe(0);
+  expect(existsSync(looseSkill(scope))).toBe(true);
+  expect(await readText(path.join(scope.cwd, ".mcp.json"))).toContain('"diff"');
+  expect(existsSync(marketplaceDir)).toBe(false);
+  const sidecar = JSON.parse(
+    await readText(path.join(scope.cwd, ".claude", ".acf-managed.json")),
+  ) as { marketplace?: unknown; managed: { carrier?: string }[] };
+  expect(sidecar.marketplace).toBeUndefined();
+  expect(sidecar.managed.some((entry) => entry.carrier === "plugin")).toBe(false);
 });
