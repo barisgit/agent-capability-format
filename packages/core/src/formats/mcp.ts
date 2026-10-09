@@ -48,18 +48,9 @@ export function projectAgentPluginsServer(name: string, raw: unknown): ServerPro
 }
 
 function agentPluginsStdio(name: string, raw: Record<string, unknown>): ServerProjection {
-  const unknown = unknownKey(raw, ["type", "command", "args", "env", "cwd"]);
-  if (unknown !== undefined) return invalid(`unknown key ${unknown}`);
-  const { command, args, env, cwd } = raw;
-  if (typeof command !== "string" || command.length === 0) return invalid("command is required");
-  if (!command.startsWith("./") && /[/\\]/.test(command))
-    return invalid("command must be a bare name or a ./ path");
-  if (args !== undefined && !isStringArray(args)) return invalid("args must be strings");
-  if (env !== undefined && !isStringMap(env)) return invalid("env must map strings to strings");
-  if (env !== undefined && ("PLUGIN_ROOT" in env || "PLUGIN_DATA" in env))
-    return invalid("env must not set PLUGIN_ROOT or PLUGIN_DATA");
-  if (cwd !== undefined && (typeof cwd !== "string" || !validAgentPluginsCwd(cwd)))
-    return invalid("cwd must start with ./ or the PLUGIN_ROOT or PLUGIN_DATA placeholder");
+  const fields = agentPluginsStdioFields(raw);
+  if (typeof fields === "string") return invalid(fields);
+  const { command, args, env, cwd } = fields;
 
   // Agent Plugins expands nothing in `command`, so a placeholder there is literal text
   // that a target could expand differently: keep the server whole.
@@ -75,6 +66,30 @@ function agentPluginsStdio(name: string, raw: Record<string, unknown>): ServerPr
   if (env !== undefined) server.env = map.record(env);
   if (!map.ok) return pending("uses a placeholder core cannot express", true);
   return named(name, server, true);
+}
+
+type AgentPluginsStdioFields = {
+  command: string;
+  args: string[] | undefined;
+  env: Record<string, string> | undefined;
+  cwd: string | undefined;
+};
+
+/** The stdio fields of an Agent Plugins server, or why the format rejects them. */
+function agentPluginsStdioFields(raw: Record<string, unknown>): AgentPluginsStdioFields | string {
+  const unknown = unknownKey(raw, ["type", "command", "args", "env", "cwd"]);
+  if (unknown !== undefined) return `unknown key ${unknown}`;
+  const { command, args, env, cwd } = raw;
+  if (typeof command !== "string" || command.length === 0) return "command is required";
+  if (!command.startsWith("./") && /[/\\]/.test(command))
+    return "command must be a bare name or a ./ path";
+  if (args !== undefined && !isStringArray(args)) return "args must be strings";
+  if (env !== undefined && !isStringMap(env)) return "env must map strings to strings";
+  if (env !== undefined && ("PLUGIN_ROOT" in env || "PLUGIN_DATA" in env))
+    return "env must not set PLUGIN_ROOT or PLUGIN_DATA";
+  if (cwd !== undefined && (typeof cwd !== "string" || !validAgentPluginsCwd(cwd)))
+    return "cwd must start with ./ or the PLUGIN_ROOT or PLUGIN_DATA placeholder";
+  return { command, args, env, cwd };
 }
 
 function agentPluginsRemote(name: string, raw: Record<string, unknown>): ServerProjection {
@@ -118,40 +133,47 @@ export function projectClaudeServer(name: string, raw: unknown): ServerProjectio
   if (raw.headersHelper !== undefined) return pending("uses headersHelper", stdio);
   if (raw.oauth !== undefined) return pending("uses OAuth", stdio);
 
-  let server: McpServer;
-  if (stdio) {
-    const { command, args, env } = raw;
-    if (typeof command !== "string" || command.length === 0) return invalid("command is required");
-    if (args !== undefined && !isStringArray(args)) return invalid("args must be strings");
-    if (env !== undefined && !isStringMap(env)) return invalid("env must map strings to strings");
-    const map = placeholderMapper(CLAUDE_PLACEHOLDERS);
-    server = { name, transport: "stdio", command: map.one(command) };
-    if (args !== undefined) server.args = map.list(args);
-    if (env !== undefined) server.env = map.record(env);
-    if (!map.ok) return pending("uses a placeholder core cannot express", true);
-  } else if (raw.type === "http" || raw.type === "streamable-http" || raw.type === "sse") {
-    const { url, headers } = raw;
-    if (typeof url !== "string") return invalid("url is required");
-    if (headers !== undefined && !isStringMap(headers))
-      return invalid("headers must map strings to strings");
-    const map = placeholderMapper(CLAUDE_PLACEHOLDERS);
-    const mappedUrl = map.one(url);
-    const mappedHeaders = headers === undefined ? undefined : map.record(headers);
-    if (!map.ok) return pending("uses a placeholder core cannot express", false);
-    const problem = urlProblem(mappedUrl, true);
-    if (problem !== undefined) return pending(`url ${problem}`, false);
-    server = {
-      name,
-      transport: raw.type === "sse" ? "sse" : "http",
-      url: mappedUrl,
-      ...(mappedHeaders === undefined ? {} : { headers: mappedHeaders }),
-    };
-  } else {
-    return pending(`transport ${String(raw.type)} has no canonical form`, false);
-  }
+  const built = stdio ? claudeStdio(name, raw) : claudeRemote(name, raw);
+  if (built.kind !== "server") return built;
+  const { server } = built;
   if (Object.keys(extras).length > 0)
     server.targets = withNativeExtras(undefined, "claude", extras);
   return named(name, server, stdio);
+}
+
+function claudeStdio(name: string, raw: Record<string, unknown>): ServerProjection {
+  const { command, args, env } = raw;
+  if (typeof command !== "string" || command.length === 0) return invalid("command is required");
+  if (args !== undefined && !isStringArray(args)) return invalid("args must be strings");
+  if (env !== undefined && !isStringMap(env)) return invalid("env must map strings to strings");
+  const map = placeholderMapper(CLAUDE_PLACEHOLDERS);
+  const server: McpServer = { name, transport: "stdio", command: map.one(command) };
+  if (args !== undefined) server.args = map.list(args);
+  if (env !== undefined) server.env = map.record(env);
+  if (!map.ok) return pending("uses a placeholder core cannot express", true);
+  return { kind: "server", server };
+}
+
+function claudeRemote(name: string, raw: Record<string, unknown>): ServerProjection {
+  if (raw.type !== "http" && raw.type !== "streamable-http" && raw.type !== "sse")
+    return pending(`transport ${String(raw.type)} has no canonical form`, false);
+  const { url, headers } = raw;
+  if (typeof url !== "string") return invalid("url is required");
+  if (headers !== undefined && !isStringMap(headers))
+    return invalid("headers must map strings to strings");
+  const map = placeholderMapper(CLAUDE_PLACEHOLDERS);
+  const mappedUrl = map.one(url);
+  const mappedHeaders = headers === undefined ? undefined : map.record(headers);
+  if (!map.ok) return pending("uses a placeholder core cannot express", false);
+  const problem = urlProblem(mappedUrl, true);
+  if (problem !== undefined) return pending(`url ${problem}`, false);
+  const server: McpServer = {
+    name,
+    transport: raw.type === "sse" ? "sse" : "http",
+    url: mappedUrl,
+    ...(mappedHeaders === undefined ? {} : { headers: mappedHeaders }),
+  };
+  return { kind: "server", server };
 }
 
 function named(name: string, server: McpServer, executable: boolean): ServerProjection {
