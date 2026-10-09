@@ -114,6 +114,7 @@ test("offline and frozen applies keep a changed ref as drift and write nothing",
 
     const offline = await apply(scope, ["--offline"]);
     expect(offline.stdout + offline.stderr).toContain("acf.lock.drift");
+    expect(offline.stderr).toContain("capabilities.yml ref differs from lock");
     expect(offline.exitCode).not.toBe(0);
 
     const frozen = await apply(scope, ["--frozen"]);

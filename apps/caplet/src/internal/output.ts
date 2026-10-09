@@ -1,4 +1,10 @@
-import type { ComponentOutcome, Diagnostic, ExecutableChange, TargetId } from "@caplet/core";
+import {
+  type ComponentOutcome,
+  type Diagnostic,
+  type ExecutableChange,
+  type TargetId,
+  targetIds,
+} from "@caplet/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
 import { renderCompatibility } from "./compatibility.js";
@@ -68,7 +74,7 @@ export function reporter(args: Record<string, unknown>): Reporter {
             ? ["i", colors.blue]
             : [glyphSet.warn, colors.yellow];
       const lines = [
-        `${colors.bold(color(glyph))} ${colors.bold(sentenceCase(diagnostic.message))}`,
+        `${colors.bold(color(glyph))} ${colors.bold(sentenceCase(diagnostic.message, diagnostic.capability?.name))}`,
         `    ${colors.dim("code")}  ${diagnostic.code}`,
       ];
       if (diagnostic.path !== undefined)
@@ -204,8 +210,15 @@ export function finishWithDiagnostics(
   return code;
 }
 
-function sentenceCase(value: string): string {
-  return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
+/**
+ * Capitalizes a message's first word for display when it is an ordinary word. A leading identifier
+ * stays as written: a target id, the diagnostic's capability, or a word joined to punctuation such
+ * as `opencode:`, `capabilities.yml` or `acf.lock`.
+ */
+function sentenceCase(value: string, capability?: string): string {
+  const word = /^[a-z]+(?=[\s,]|$)/.exec(value)?.[0];
+  if (word === undefined || word === capability || targetIds.includes(word)) return value;
+  return word.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function renderPlan(view: PlanView, options: { quiet: boolean }): string[] {

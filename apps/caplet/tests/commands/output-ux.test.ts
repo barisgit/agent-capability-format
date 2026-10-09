@@ -107,6 +107,26 @@ test("diagnostics separate the code, message, and recovery context", async () =>
   }
 });
 
+test("diagnostics keep a leading target id or file name as written", async () => {
+  const scope = await makeScope();
+  try {
+    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "apply",
+      "-n",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+
+    expect(result.stdout + result.stderr).toContain("warn cursor does not natively support agent");
+    expect(result.stdout + result.stderr).not.toContain("Cursor does");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("emit dry-run uses the same change language without writing", async () => {
   const scope = await makeScope();
   try {
