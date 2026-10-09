@@ -1,5 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { applicableTargets, applyEntrySelection, readClaudePluginPackage } from "../src";
+import {
+  type AcfCapability,
+  applicableTargets,
+  applyEntrySelection,
+  type FacetFamily,
+  type NativeRemainderKind,
+  readClaudePluginPackage,
+  remainderFamilies,
+  remainderSupport,
+  selectorKeys,
+} from "../src";
 import { baseManifest, cleanup, makeCapability, readTempCapability, tempDir } from "./helpers";
 
 const dirs: string[] = [];
@@ -145,4 +155,35 @@ test("entry only/except intersect with the capability's own applicability", asyn
   expect(targets).not.toContain("cursor");
   expect(targets).toContain("claude");
   expect(applicableTargets(cap, {})).toContain("codex");
+});
+
+test("selection reaches the remainder kinds the support report files under a family, and no others", async () => {
+  const kinds: NativeRemainderKind[] = ["agent", "command", "hook", "mcp-server", "workflow"];
+  for (const kind of kinds) {
+    const { cap, dir } = await readTempCapability({ "acf.yml": baseManifest });
+    dirs.push(dir);
+    const capability: AcfCapability = {
+      ...cap,
+      source: { format: "claude-plugin", path: ".", snapshotRoot: cap.root },
+      remainder: [
+        {
+          format: "claude-plugin",
+          kind,
+          name: "x",
+          paths: [],
+          class: "functional",
+          executable: false,
+        },
+      ],
+    };
+    const family: FacetFamily | undefined = remainderFamilies[kind];
+    const reported = remainderSupport(capability, "codex").map((item) => item.data?.family);
+    expect(reported).toEqual([family ?? "remainder"]);
+    const excluded = (Object.keys(selectorKeys) as FacetFamily[]).filter(
+      (candidate) =>
+        applyEntrySelection(capability, { exclude: { [selectorKeys[candidate]]: ["x"] } })
+          .capability.remainder?.length === 0,
+    );
+    expect(excluded).toEqual(family === undefined ? [] : [family]);
+  }
 });
