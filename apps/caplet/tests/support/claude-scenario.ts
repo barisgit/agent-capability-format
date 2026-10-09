@@ -35,7 +35,7 @@ export async function claudeMarketplace(scope: TestScope, acfScope: Scope): Prom
  * becomes `<plugin>@acf-user`; at project scope `local1@acf-project-spike` becomes
  * `<plugin>@acf-project-<h>`.
  */
-export async function claudeHost(
+export async function claudeScenarioShim(
   scope: TestScope,
   acfScope: Scope,
   plugin: string,

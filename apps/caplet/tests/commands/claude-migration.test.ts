@@ -20,8 +20,8 @@ import {
   writeText,
 } from "../helpers.js";
 import {
-  claudeHost,
   claudeMarketplace,
+  claudeScenarioShim,
   localPluginList,
   plannedVersion,
 } from "../support/claude-scenario.js";
@@ -91,7 +91,7 @@ async function installHost(scope: TestScope, version: string, result: "ok" | "fa
           { fixture: "install-unknown-plugin", replace: { nope: NAME, user: "local" } },
           "list-json-empty",
         ];
-  return await claudeHost(scope, "project", NAME, [
+  return await claudeScenarioShim(scope, "project", NAME, [
     "list-json-empty",
     "marketplace-list-json-empty",
     "marketplace-add-local",
@@ -101,7 +101,7 @@ async function installHost(scope: TestScope, version: string, result: "ok" | "fa
 
 /** A shim on which the plugin is installed at `version` and the marketplace known. */
 async function registeredHost(scope: TestScope, version: string) {
-  return await claudeHost(scope, "project", NAME, [
+  return await claudeScenarioShim(scope, "project", NAME, [
     localPluginList(version),
     "marketplace-list-json",
     "marketplace-add-local",
@@ -204,7 +204,7 @@ test("a failed registration keeps the loose files managed until a later apply re
     goldenCase(testsDir, "claude-migration-failed").expected,
   );
 
-  const host = await claudeHost(scope, "project", NAME, [
+  const host = await claudeScenarioShim(scope, "project", NAME, [
     "list-json-empty",
     "marketplace-list-json",
     "marketplace-add-local",
@@ -224,7 +224,7 @@ test("a plugin installed only at another Claude scope does not retire the loose 
   const version = await plannedVersion(scope, args(scope).slice(1), NAME);
   const marketplace = await claudeMarketplace(scope, "project");
   // Claude lists the plugin at Claude project scope, which caplet leaves alone, and not at local.
-  const host = await claudeHost(scope, "project", NAME, [
+  const host = await claudeScenarioShim(scope, "project", NAME, [
     {
       fixture: "list-json-project-and-local",
       replace: {
@@ -252,7 +252,7 @@ async function switchToLoose(scope: TestScope, version: string) {
     path.join(scope.agentsDir, "caplet.yml"),
     "targets:\n  claude:\n    carrier: loose\n",
   );
-  const host = await claudeHost(scope, "project", NAME, [
+  const host = await claudeScenarioShim(scope, "project", NAME, [
     localPluginList(version),
     "marketplace-list-json",
     "uninstall-local",
