@@ -90,6 +90,27 @@ test("a native key the writer generates from a core field is acf.extras.conflict
   );
 });
 
+test("a known native key outside its native value domain is acf.extras.native-value-invalid", async () => {
+  for (const files of [
+    skill("targets:\n  claude:\n    native:\n      paths: 42\n"),
+    skill("targets:\n  claude:\n    native:\n      effort: extreme\n"),
+    server('    targets:\n      codex:\n        native:\n          enabled: "no"\n'),
+    {
+      "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      defaultEnabled: yes please\n`,
+    },
+  ]) {
+    await withCapability(files, (cap) => {
+      expect(errorCodes(cap)).toEqual(["acf.extras.native-value-invalid"]);
+      expect(only(cap, "acf.core.pending")).toEqual([]);
+    });
+  }
+  await withCapability(skill("targets:\n  claude:\n    native:\n      paths: 42\n"), (cap) =>
+    expect(only(cap, "acf.extras.native-value-invalid")[0]?.message).toContain(
+      "targets.claude.native.paths",
+    ),
+  );
+});
+
 test("a pending meaning authored as an extra reports acf.core.pending naming the future field", async () => {
   await withCapability(
     skill(

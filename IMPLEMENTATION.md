@@ -1363,7 +1363,7 @@ carrier, not per family. The tables live in `packages/core/src/targets/`:
 | Module | Exports | Role |
 | --- | --- | --- |
 | `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
-| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `pendingCoreFields` | Known native keys per target and attachment point, with class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
+| `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
 | `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field. |
 | `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data.field`, consequence, and recovery stay uniform. |
 | `remainder-support.ts` | `remainderTargets`, `remainderSupport`, `remainderRefuses` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
@@ -2810,6 +2810,7 @@ acf.extras.dropped                           # native extra not carried by this 
 acf.extras.conflict                          # extra sets a key the writer generates (error)
 acf.extras.unclassified                      # native key unknown to the registry (info)
 acf.extras.package-value-invalid             # invalid targets.<target>.package value (error)
+acf.extras.native-value-invalid              # known targets.<target>.native key with a value outside its native domain (error)
 acf.core.pending                             # extra for a pending core meaning (info)
 acf.native.unknown-target                    # native/<dir> is not a target id (error)
 acf.native.unsupported-entry                 # symlink or special file under native/ (error)

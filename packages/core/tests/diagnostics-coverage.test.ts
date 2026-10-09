@@ -36,6 +36,7 @@ const coveredByFixtures = new Set([
   "acf.extras.conflict",
   "acf.extras.unclassified",
   "acf.extras.package-value-invalid",
+  "acf.extras.native-value-invalid",
   "acf.native.unknown-target",
   "acf.native.unsupported-entry",
   "acf.native.collision",

@@ -2,7 +2,8 @@
  * Validation of authored extras (capability-model-layers, Inline native extras and File-level
  * native extras; canonical-package-metadata, Per-target package values). The target extension
  * schemas check the shape; this module classifies each native key through the registry, checks
- * per-target package values in the target's own value domain, and rejects `native/<target>/`
+ * known native values and per-target package values in the target's own value domain, and
+ * rejects `native/<target>/`
  * files that would overwrite generated plugin output.
  */
 import path from "node:path";
@@ -20,6 +21,7 @@ import {
   generatedPluginPaths,
   isTargetId,
   nativeKeyInfo,
+  nativeValueProblem,
   packageValueProblem,
   packageValueSchemas,
 } from "../targets/index.js";
@@ -65,14 +67,16 @@ function attachmentPoints(cap: AcfCapability): AttachmentPoint[] {
 /**
  * Classifies every inline native key and checks every per-target package value. Unknown keys
  * are accepted with `acf.extras.unclassified` (info), keys a writer generates from a core field
- * are `acf.extras.conflict` (error), keys carrying a pending meaning report `acf.core.pending`
- * (info), and package values outside the target's domain are `acf.extras.package-value-invalid`.
+ * are `acf.extras.conflict` (error), known keys with a value outside their native domain are
+ * `acf.extras.native-value-invalid` (error), keys carrying a pending meaning report
+ * `acf.core.pending` (info), and package values outside the target's domain are
+ * `acf.extras.package-value-invalid`.
  */
 export function validateInlineExtras(cap: AcfCapability): void {
   for (const point of attachmentPoints(cap)) {
     for (const target of Object.keys(point.targets ?? {}).filter(isTargetId)) {
-      for (const key of Object.keys(nativeExtras(point.targets, target))) {
-        const diagnostic = nativeKeyDiagnostic(cap, point, target, key);
+      for (const [key, value] of Object.entries(nativeExtras(point.targets, target))) {
+        const diagnostic = nativeKeyDiagnostic(cap, point, target, key, value);
         if (diagnostic !== undefined) cap.diagnostics.push(diagnostic);
       }
     }
@@ -98,6 +102,7 @@ function nativeKeyDiagnostic(
   point: AttachmentPoint,
   target: TargetId,
   key: string,
+  value: unknown,
 ): Diagnostic | undefined {
   const source = `targets.${target}.native.${key}`;
   const family = point.family === "package" ? undefined : point.family;
@@ -122,6 +127,17 @@ function nativeKeyDiagnostic(
       severity: "error",
       code: "acf.extras.conflict",
       message: `${source} on ${label} conflicts with ${info.generatedFrom}, from which ${target} writes ${key}; ${instead}`,
+      path: point.file,
+      targetId: target,
+      family,
+    };
+  }
+  const problem = nativeValueProblem(target, point.family, key, value);
+  if (problem !== undefined) {
+    return {
+      severity: "error",
+      code: "acf.extras.native-value-invalid",
+      message: `${source} on ${label} is not a valid ${target} value: ${problem}`,
       path: point.file,
       targetId: target,
       family,
