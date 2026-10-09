@@ -14,7 +14,7 @@ import type {
   SourceFormat,
   TargetId,
 } from "../types/index.js";
-import { hookEntries } from "../types/index.js";
+import { acfCapabilityDirPlaceholder, hookEntries } from "../types/index.js";
 import { applyApplicability } from "./index.js";
 
 /** What kind of executing code a component is: a remainder kind, or a file with the executable bit. */
@@ -24,7 +24,8 @@ export type ExecutableKind = NativeRemainderKind | "file";
  * One component of a capability that executes code on one target (install-integrity,
  * Executable change report): a stdio MCP server, a hook, a file with the executable bit, or an
  * executable native remainder component. `fingerprint` changes whenever the code that runs or
- * how it is started changes, including files the command references inside the capability.
+ * how it is started changes, including files the command references inside the capability
+ * through an ACF path placeholder or, for a stdio server, a relative path under its `cwd`.
  */
 export type ExecutableComponent = {
   scope: Scope;
@@ -140,7 +141,11 @@ export async function executableComponents(
       detail: commandLine(server.command, server.args),
       fingerprint: await fingerprint(
         { command: server.command, args: server.args, env: server.env, cwd: server.cwd },
-        referencedFiles(snapshot, mcpDir, [server.command, ...(server.args ?? [])]),
+        union(
+          snapshot,
+          referencedFiles(snapshot, mcpDir, [server.command, ...(server.args ?? [])]),
+          relativeEntrypoints(snapshot, server.cwd, server.command, server.args ?? []),
+        ),
       ),
     });
   }
@@ -370,6 +375,48 @@ function pluginConfigComponents(
     }
   }
   return components;
+}
+
+/**
+ * Snapshot files a stdio server's `command` or `args` name by a relative path, resolved under a
+ * working directory inside the capability (`${ACF_CAPABILITY_DIR}[/dir]` or `./dir`). Only exact
+ * files count, so a directory argument does not pull in a tree; `--option=value` contributes its
+ * value. A command without `/` runs from PATH, not the working directory, and an omitted or
+ * data-directory `cwd` resolves nothing because the server then assumes no packaged directory.
+ */
+function relativeEntrypoints(
+  snapshot: Snapshot,
+  cwd: string | undefined,
+  command: string,
+  args: readonly string[],
+): TreeFile[] {
+  const dir =
+    cwd === undefined
+      ? undefined
+      : cwd === acfCapabilityDirPlaceholder || cwd.startsWith(`${acfCapabilityDirPlaceholder}/`)
+        ? `.${cwd.slice(acfCapabilityDirPlaceholder.length)}`
+        : cwd === "." || cwd.startsWith("./")
+          ? cwd
+          : undefined;
+  if (dir === undefined) return [];
+  const values = [
+    ...(command.includes("/") ? [command] : []),
+    ...args.map((arg) =>
+      arg.startsWith("-") && arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg,
+    ),
+  ];
+  const named = new Set(
+    values
+      .filter((value) => value !== "" && !value.includes("${") && !path.isAbsolute(value))
+      .map((value) => relativeTo(snapshot.root, path.resolve(snapshot.root, dir, value))),
+  );
+  return snapshot.files.filter((file) => named.has(file.rel));
+}
+
+/** Files in any of `lists`, once each, in snapshot order. */
+function union(snapshot: Snapshot, ...lists: readonly (readonly TreeFile[])[]): TreeFile[] {
+  const chosen = new Set(lists.flat());
+  return snapshot.files.filter((file) => chosen.has(file));
 }
 
 function filesUnder(snapshot: Snapshot, prefixes: readonly string[]): TreeFile[] {

@@ -1428,7 +1428,10 @@ generates from a core field is an `acf.extras.conflict` error.
   `bin/` entries for the change report and `--json` `executables`. The
   plugin carrier's executable configuration from `native/claude/` files and
   `targets.claude.native` keys is classified and fingerprinted like the same
-  component in a foreign Claude plugin, so both report alike.
+  component in a foreign Claude plugin, so both report alike. A stdio server's
+  fingerprint covers the packaged files its command and arguments name through
+  an ACF path placeholder or by a relative path under its `cwd` (exact files
+  only, inside the snapshot).
 
 ### 4.9 Claude plugin carrier and host port
 

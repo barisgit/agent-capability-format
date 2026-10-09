@@ -252,6 +252,24 @@ describe("executableChanges", () => {
     });
   });
 
+  test("a relative entrypoint under the server's working directory counts toward the server", async () => {
+    const server = async (cwd: string, entry: string, code: string): Promise<AcfCapability> =>
+      await capability({
+        "acf.yml": baseManifest,
+        "mcp/mcp.yml": `servers:\n  - name: docs\n    transport: stdio\n    command: node\n    args: ['${entry}', '--config=./config.json']\n    cwd: '${cwd}'\n`,
+        "server.js": code,
+        "srv/dist/index.js": code,
+        "config.json": "{}\n",
+      });
+    const changed = async (cwd: string, entry: string) =>
+      executableChanges(
+        await executableComponents(await server(cwd, entry, "one()\n"), "codex"),
+        await executableComponents(await server(cwd, entry, "two()\n"), "codex"),
+      ).map(({ change, name }) => `${change} ${name}`);
+    expect(await changed(capabilityDir, "./server.js")).toEqual(["changed docs"]);
+    expect(await changed("./srv", "dist/index.js")).toEqual(["changed docs"]);
+  });
+
   test("a changed Claude plugin hook in the native remainder is reported for Claude only", async () => {
     const pluginCapability = async (hookScript: string): Promise<AcfCapability> => {
       const cap = await capability(
