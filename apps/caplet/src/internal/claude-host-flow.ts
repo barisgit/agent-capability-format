@@ -8,10 +8,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER, type Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
-import { hashOwnedRegions, type ManagedEntry, readSidecar } from "../apply/sidecar.js";
+import {
+  hashOwnedRegions,
+  type ManagedEntry,
+  readSidecar,
+  SIDECAR_FILENAME,
+} from "../apply/sidecar.js";
 import { execClaudeCli } from "../hosts/claude/cli.js";
 import { createClaudeHost } from "../hosts/claude/host.js";
-import type { ClaudePluginAction, DesiredClaudeScope } from "../hosts/claude/plan.js";
+import type { ClaudePluginAction } from "../hosts/claude/plan.js";
 import {
   type ClaudeCommandReport,
   type ClaudeHostReport,
@@ -188,10 +193,7 @@ export async function reconcileClaude(
   roots: readonly ClaudeRootPlan[],
   cwd: string,
 ): Promise<ClaudeReport> {
-  return await withFileStates(
-    await reconcileClaudeHost(claudeHost(roots, cwd), desiredScopes(roots)),
-    roots,
-  );
+  return await withFileStates(await reconcileClaudeHost(claudeHost(roots, cwd), roots), roots);
 }
 
 /**
@@ -204,7 +206,7 @@ export async function previewClaude(
   const roots = plan.claude;
   if (roots.length === 0) return undefined;
   const report = await withFileStates(
-    await previewClaudeHost(claudeHost(roots, plan.cwd), desiredScopes(roots)),
+    await previewClaudeHost(claudeHost(roots, plan.cwd), roots),
     roots,
   );
   report.renames = plan.migration.renames;
@@ -222,7 +224,7 @@ async function withFileStates(
     const managed =
       root === undefined
         ? []
-        : (await readSidecar(path.join(root.installRoot, ".acf-managed.json"))).managed;
+        : (await readSidecar(path.join(root.installRoot, SIDECAR_FILENAME))).managed;
     const plugins: ClaudePluginStatus[] = [];
     for (const plugin of scope.plugins) {
       if (root === undefined || plugin.action === "uninstall") {
@@ -301,15 +303,6 @@ function claudeHost(roots: readonly ClaudeRootPlan[], cwd: string) {
     projectDir: projectRoot,
     configDir,
   });
-}
-
-function desiredScopes(roots: readonly ClaudeRootPlan[]): DesiredClaudeScope[] {
-  return roots.map((root) => ({
-    target: root.target,
-    marketplaceDir: root.marketplaceDir,
-    plugins: root.plugins,
-    leftover: root.leftover,
-  }));
 }
 
 async function fileState(

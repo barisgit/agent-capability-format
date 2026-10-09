@@ -13,7 +13,7 @@ import {
   type TargetId,
 } from "@caplet/core";
 import type { OutputBoundary } from "../apply/containment.js";
-import { readSidecar } from "../apply/sidecar.js";
+import { readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
 import { claudeGate } from "./claude-host-flow.js";
 import { planClaudeMarketplaces } from "./claude-marketplace.js";
 import { planClaudeMigration } from "./claude-migration.js";
@@ -62,7 +62,7 @@ export function removalRoots(input: {
   const roots: RemovalRoot[] = [];
   for (const candidate of candidates) {
     if (roots.some((root) => root.installRoot === candidate.installRoot)) continue;
-    if (!existsSync(path.join(candidate.installRoot, ".acf-managed.json"))) continue;
+    if (!existsSync(path.join(candidate.installRoot, SIDECAR_FILENAME))) continue;
     const boundary = outputBoundary(
       { ...candidate.context, installRoot: candidate.installRoot },
       cwd,
@@ -91,7 +91,7 @@ export async function planRemoval(input: {
         async (root) =>
           [
             root.installRoot,
-            await readSidecar(path.join(root.installRoot, ".acf-managed.json")),
+            await readSidecar(path.join(root.installRoot, SIDECAR_FILENAME)),
           ] as const,
       ),
     ),

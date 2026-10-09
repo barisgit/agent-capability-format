@@ -12,7 +12,12 @@ import {
   pluginPackageDir,
   type ScopeRoot,
 } from "@caplet/core";
-import { readSidecar, relativeSidecarPath, writeSidecar } from "../apply/sidecar.js";
+import {
+  readSidecar,
+  relativeSidecarPath,
+  SIDECAR_FILENAME,
+  writeSidecar,
+} from "../apply/sidecar.js";
 import type { DesiredClaudePlugin } from "../hosts/claude/plan.js";
 import {
   type ClaudeScopeTarget,
@@ -71,7 +76,7 @@ export async function planClaudeMarketplaces(input: {
       if (version !== undefined) listed.set(item.capability, version);
     }
     const file = marketplaceFile(installRoot);
-    const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
+    const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
     const leftover = [
       ...new Set(
@@ -131,7 +136,7 @@ export async function planClaudeMarketplaces(input: {
  */
 export async function recordClaudeMarketplaces(roots: readonly ClaudeRootPlan[]): Promise<void> {
   for (const root of roots) {
-    const sidecarPath = path.join(root.installRoot, ".acf-managed.json");
+    const sidecarPath = path.join(root.installRoot, SIDECAR_FILENAME);
     const sidecar = await readSidecar(sidecarPath);
     const wanted = ownsMarketplaceFile(sidecar.managed, root.installRoot) ? root.record : undefined;
     const current = sidecar.marketplace;
