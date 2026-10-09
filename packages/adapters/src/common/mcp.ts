@@ -13,6 +13,7 @@ import {
   acfPathPlaceholders,
   applicableTargets,
   type Carrier,
+  carriersOf,
   componentOmitted,
   type Diagnostic,
   type EmitInput,
@@ -295,18 +296,18 @@ export function capabilityDataDir(installRoot: string, capabilityName: string): 
  * The config file a target reads MCP servers from at `scope`: Claude's project `.mcp.json`,
  * Codex `config.toml`, OpenCode's `opencode.json` (project root or user config directory), and
  * `mcp.json` in the install root otherwise. Undefined when no file caplet may write carries
- * servers for that scope: Claude reads user servers only from `~/.claude.json`, a state file
- * Claude itself rewrites, so the loose carrier has no safe place for them.
+ * servers for that scope ({@link HOST_OWNED_MCP_FILES}).
  */
 export function mcpPathFor(
   targetId: TargetId,
   installRoot: string,
   scope: Scope,
 ): string | undefined {
+  if (HOST_OWNED_MCP_FILES[targetId]?.[scope] !== undefined) return undefined;
   const projectRoot = path.dirname(installRoot);
   switch (targetId) {
     case "claude":
-      return scope === "project" ? path.join(projectRoot, ".mcp.json") : undefined;
+      return path.join(projectRoot, ".mcp.json");
     case "codex":
       return path.join(installRoot, "config.toml");
     case "opencode":
@@ -317,8 +318,18 @@ export function mcpPathFor(
 }
 
 /**
+ * The only file a target reads MCP servers from at a scope, where that file belongs to the host
+ * and caplet must not edit it: Claude reads user servers only from `~/.claude.json`, a state
+ * file Claude itself rewrites, so the loose carrier has no safe place for them.
+ */
+const HOST_OWNED_MCP_FILES: Partial<Record<TargetId, Partial<Record<Scope, string>>>> = {
+  claude: { user: "~/.claude.json" },
+};
+
+/**
  * `acf.support.component-omitted` for a server whose target has no writable MCP file at the
- * scope; the Claude plugin carrier installs user-scope servers through the plugin instead.
+ * scope. A target with a plugin carrier, such as Claude, installs the servers through the plugin
+ * instead.
  */
 function unwritableServer(input: EmitInput, target: TargetId, server: McpServer): Diagnostic {
   const subject = {
@@ -328,10 +339,18 @@ function unwritableServer(input: EmitInput, target: TargetId, server: McpServer)
     family: "mcp" as const,
     component: server.name,
   };
+  const file = HOST_OWNED_MCP_FILES[target]?.[input.scope];
+  const recovery = recoveryFor(subject);
   return componentOmitted(
     subject,
-    `${target} reads ${input.scope}-scope MCP servers only from ~/.claude.json, which caplet does not edit`,
-    { recovery: `targets.${target}.carrier: plugin or ${recoveryFor(subject)}` },
+    file === undefined
+      ? `${target} has no ${input.scope}-scope MCP config file caplet may edit`
+      : `${target} reads ${input.scope}-scope MCP servers only from ${file}, which caplet does not edit`,
+    {
+      recovery: carriersOf(target).available.includes("plugin")
+        ? `targets.${target}.carrier: plugin or ${recovery}`
+        : recovery,
+    },
   );
 }
 
