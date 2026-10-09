@@ -17,7 +17,16 @@ import {
   type TargetDefinition,
   type TargetId,
 } from "@caplet/core";
-import { isMap, parse, parseDocument } from "yaml";
+import {
+  type Document,
+  isAlias,
+  isMap,
+  isNode,
+  type Node,
+  parse,
+  parseDocument,
+  visit,
+} from "yaml";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { mcpSupport } from "./mcp.js";
@@ -283,10 +292,48 @@ function mergeYamlMapping(text: string, generated: string): { text: string; conf
   const conflicts: string[] = [];
   for (const [keys, value] of leaves(parse(generated), [])) {
     const existing = valueAt(current, keys);
-    if (existing === undefined) doc.setIn(keys, value);
-    else if (stableJson(existing) !== stableJson(value)) conflicts.push(keys.join("."));
+    if (existing === undefined) {
+      detachPath(doc, keys.slice(0, -1));
+      doc.setIn(keys, value);
+    } else if (stableJson(existing) !== stableJson(value)) conflicts.push(keys.join("."));
   }
   return { text: doc.toString(), conflicts };
+}
+
+/**
+ * Makes each mapping along `path` a node of its own so `doc.setIn` can reach it and the change
+ * stays local: an alias on the path becomes an anchor-free copy of what it names, and every alias
+ * of an anchored mapping on the path becomes such a copy before that mapping changes. Stops at the
+ * first step that is not a mapping; `setIn` creates missing keys.
+ */
+function detachPath(doc: Document, path: readonly string[]): void {
+  let parent: unknown = doc.contents;
+  for (const key of path) {
+    if (!isMap(parent)) return;
+    let node: unknown = parent.get(key, true);
+    if (isAlias(node)) {
+      const target = node.resolve(doc);
+      if (target === undefined) return;
+      node = detachedCopy(target);
+      parent.set(key, node);
+    } else if (isNode(node) && node.anchor !== undefined) {
+      const anchored = node;
+      visit(doc, {
+        Alias: (_key, alias) =>
+          alias.resolve(doc) === anchored ? detachedCopy(anchored) : undefined,
+      });
+    }
+    parent = node;
+  }
+}
+
+/** A deep copy of `node` with its anchors removed, so the copy never redefines one. */
+function detachedCopy(node: Node): Node {
+  const copy = node.clone() as Node;
+  visit(copy, (_key, item) => {
+    if (isNode(item)) delete item.anchor;
+  });
+  return copy;
 }
 
 /** Every non-mapping value of a nested record, with its key path. */

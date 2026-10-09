@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { parse } from "yaml";
 import { claudeAdapter, codexAdapter, opencodeAdapter, piAdapter } from "../src";
 import { CAP_ROOT, capabilityModel, emitModel, fileText, skillFacet, withCode } from "./util/model";
 
@@ -182,6 +183,22 @@ test("a bundled agents/openai.yaml that contradicts a generated key is a conflic
   expect(conflict?.severity).toBe("error");
   expect(conflict?.path).toBe("skills/deploy/agents/openai.yaml");
   expect(conflict?.message).toContain("policy.allow_implicit_invocation");
+});
+
+test("a generated key lands under an aliased mapping without changing the alias's other users", async () => {
+  const viaAlias = await withBundledMetadata("dependencies: &shared {}\npolicy: *shared\n");
+  expect(withCode(viaAlias, "acf.extras.conflict")).toEqual([]);
+  const aliased = parse(fileText(viaAlias, ".agents/skills/deploy/agents/openai.yaml") ?? "");
+  expect(aliased).toEqual({ dependencies: {}, policy: { allow_implicit_invocation: false } });
+
+  const viaAnchor = await withBundledMetadata(
+    "policy: &shared\n  products: [codex]\nmirror: *shared\n",
+  );
+  const anchored = parse(fileText(viaAnchor, ".agents/skills/deploy/agents/openai.yaml") ?? "");
+  expect(anchored).toEqual({
+    policy: { products: ["codex"], allow_implicit_invocation: false },
+    mirror: { products: ["codex"] },
+  });
 });
 
 test("Claude-only selection writes no canonical copy", async () => {
