@@ -66,15 +66,12 @@ export async function inspectSource(
   const selection = await selectSourceFormat(root, options.format);
   if (selection.format === undefined)
     return { candidates: [], diagnostics: selection.diagnostics, synthesized: false };
-  if (isForeignFormat(selection.format)) {
-    const inventory = await foreignInventory(selection.format, root, options);
-    return { ...inventory, diagnostics: [...selection.diagnostics, ...inventory.diagnostics] };
-  }
-  if (selection.format === "acf") {
-    const inventory = await acfInventory(root);
-    return { ...inventory, diagnostics: [...selection.diagnostics, ...inventory.diagnostics] };
-  }
-  return await bareSkillInventory(root);
+  const inventory = isForeignFormat(selection.format)
+    ? await foreignInventory(selection.format, root, options)
+    : selection.format === "acf"
+      ? await acfInventory(root)
+      : await bareSkillInventory(root);
+  return { ...inventory, diagnostics: [...selection.diagnostics, ...inventory.diagnostics] };
 }
 
 /** An Agent Plugins or Claude plugin package: one candidate named as the package declares. */
