@@ -279,10 +279,33 @@ async function pluginConfigExecutables({
  * a foreign package reaches only the target of its format or a plugin carrier.
  */
 async function executableFiles(
-  { capability, target, pluginCarried, snapshot, base }: Inventory,
+  inventory: Inventory,
   allSkills: AcfCapability["skills"],
   claimed: readonly string[],
 ): Promise<ExecutableComponent[]> {
+  const reaches = reachesTarget(inventory, allSkills);
+  const components: ExecutableComponent[] = [];
+  for (const file of inventory.snapshot.files) {
+    if (!file.executable || underAny(file.rel, claimed) || !reaches(file.rel)) continue;
+    components.push({
+      ...inventory.base,
+      kind: "file",
+      name: file.rel,
+      detail: file.rel,
+      fingerprint: await fingerprint({ executable: true }, [file]),
+    });
+  }
+  return components;
+}
+
+/**
+ * Whether a snapshot-relative file reaches the inventory's target, by the rules of
+ * {@link executableFiles}.
+ */
+function reachesTarget(
+  { capability, target, pluginCarried, snapshot }: Inventory,
+  allSkills: AcfCapability["skills"],
+): (rel: string) => boolean {
   const source = capability.source;
   const foreign = source !== undefined && foreignFormats.has(source.format);
   const foreignTargets =
@@ -293,25 +316,13 @@ async function executableFiles(
     allSkills.map((skill) => [relativeTo(snapshot.root, skill.dir), skill.name]),
   );
   const keptSkills = new Set(capability.skills.map((skill) => skill.name));
-  const components: ExecutableComponent[] = [];
-  for (const file of snapshot.files) {
-    if (!file.executable || underAny(file.rel, claimed)) continue;
-    const skill = [...skillDirs].find(([dir]) => underAny(file.rel, [dir]));
-    if (skill !== undefined && !keptSkills.has(skill[1])) continue;
-    const nativeTarget = /^native\/([^/]+)\//.exec(file.rel)?.[1];
-    if (nativeTarget !== undefined && (nativeTarget !== target || !pluginCarried)) continue;
-    if (foreign && skill === undefined && !foreignTargets.includes(target) && !pluginCarried) {
-      continue;
-    }
-    components.push({
-      ...base,
-      kind: "file",
-      name: file.rel,
-      detail: file.rel,
-      fingerprint: await fingerprint({ executable: true }, [file]),
-    });
-  }
-  return components;
+  return (rel) => {
+    const skill = [...skillDirs].find(([dir]) => underAny(rel, [dir]));
+    if (skill !== undefined && !keptSkills.has(skill[1])) return false;
+    const nativeTarget = /^native\/([^/]+)\//.exec(rel)?.[1];
+    if (nativeTarget !== undefined && (nativeTarget !== target || !pluginCarried)) return false;
+    return !foreign || skill !== undefined || foreignTargets.includes(target) || pluginCarried;
+  };
 }
 
 /**
@@ -407,34 +418,15 @@ function pluginConfigComponents(
   capability: AcfCapability,
   target: TargetId,
 ): PluginConfigComponent[] {
+  const plugin = pluginExecutables[target];
+  if (plugin === undefined) return [];
   const dir = `${NATIVE_FILES_DIR}/${target}`;
   const files = nativeFiles(capability, target).map((file) => file.path);
   const extras = nativeExtras(capability.manifest.targets, target);
   const components: PluginConfigComponent[] = [];
-  const plugin = pluginExecutables[target];
-  if (plugin === undefined) return [];
   for (const spec of plugin.components) {
-    const value = extras[spec.key];
-    if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) continue;
-    const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
-    for (const relative of value === undefined ? [] : componentPaths(value)) {
-      const normalized = path.posix.normalize(relative);
-      if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
-      if (!paths.includes(normalized)) paths.push(normalized);
-    }
-    if (paths.length === 0 && value === undefined) continue;
-    const prefixes = paths.map((item) => `${dir}/${item}`);
-    components.push({
-      kind: spec.kind,
-      name: spec.name,
-      detail: [
-        ...prefixes,
-        ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
-      ].join(", "),
-      dir,
-      prefixes,
-      definition: value === undefined ? null : { [spec.key]: value },
-    });
+    const component = configComponent(spec, extras[spec.key], files, dir, target);
+    if (component !== undefined) components.push(component);
   }
   for (const file of files.filter((item) => item.startsWith(`${plugin.binDir}/`))) {
     const prefix = `${dir}/${file}`;
@@ -448,6 +440,49 @@ function pluginConfigComponents(
     });
   }
   return components;
+}
+
+/**
+ * The component `spec` describes when the package has its default file or a
+ * `targets.<target>.native` value `value` that holds it; undefined otherwise.
+ */
+function configComponent(
+  spec: PluginComponentSpec,
+  value: unknown,
+  files: readonly string[],
+  dir: string,
+  target: TargetId,
+): PluginConfigComponent | undefined {
+  if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) return undefined;
+  const paths = configPaths(spec, value, files);
+  if (paths.length === 0 && value === undefined) return undefined;
+  const prefixes = paths.map((item) => `${dir}/${item}`);
+  return {
+    kind: spec.kind,
+    name: spec.name,
+    detail: [
+      ...prefixes,
+      ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
+    ].join(", "),
+    dir,
+    prefixes,
+    definition: value === undefined ? null : { [spec.key]: value },
+  };
+}
+
+/** The spec's default file when present, then each package-relative path `value` names. */
+function configPaths(
+  spec: PluginComponentSpec,
+  value: unknown,
+  files: readonly string[],
+): string[] {
+  const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
+  for (const relative of value === undefined ? [] : componentPaths(value)) {
+    const normalized = path.posix.normalize(relative);
+    if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
+    if (!paths.includes(normalized)) paths.push(normalized);
+  }
+  return paths;
 }
 
 /**
