@@ -25,6 +25,7 @@ import { applyEntrySelection } from "./selection.js";
 
 export { applyEntrySelection, type EntrySelection } from "./selection.js";
 
+/** Options for {@link resolveScopeCapabilities}. */
 export type ResolveScopeOptions = {
   /**
    * Lock describing the installed snapshots; read from `root.lockPath` when omitted. Pass
@@ -33,8 +34,13 @@ export type ResolveScopeOptions = {
   lock?: CapabilitiesLock | null | undefined;
 };
 
+/**
+ * Capability roots found in a repository, sorted, with the diagnostics of the search. `legacy` is
+ * always false.
+ */
 export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[]; legacy: boolean };
 
+/** The capabilities directory, manifest and lock paths of the scope rooted at `agentsDir`. */
 export function scopeRoot(scope: Scope, agentsDir: string): ScopeRoot {
   return {
     scope,
@@ -45,6 +51,10 @@ export function scopeRoot(scope: Scope, agentsDir: string): ScopeRoot {
   };
 }
 
+/**
+ * The user scope (`~/.agents`, when it exists) and then the project scope: the nearest
+ * `.agents` directory at or above `cwd`, unless that is the user directory.
+ */
 export async function discoverScopes(cwd: string): Promise<ScopeRoot[]> {
   const scopes: ScopeRoot[] = [];
   const userDir = path.join(homedir(), ".agents");
@@ -55,10 +65,16 @@ export async function discoverScopes(cwd: string): Promise<ScopeRoot[]> {
   return scopes;
 }
 
+/** The capability roots of {@link discoverRepository}, without its diagnostics. */
 export async function discoverCapabilityRoots(repoRoot: string): Promise<string[]> {
   return (await discoverRepository(repoRoot)).roots;
 }
 
+/**
+ * Finds the capabilities of a repository: the root itself when it has `acf.yml` or `acf.yaml`;
+ * otherwise every outermost directory with one under `acf/`, skipping dot entries. Finding
+ * neither yields no roots and an `acf.resolve.no-capabilities` info diagnostic.
+ */
 export async function discoverRepository(repoRoot: string): Promise<RepositoryDiscovery> {
   const root = path.resolve(repoRoot);
   if (await hasManifest(root)) return { roots: [root], diagnostics: [], legacy: false };
@@ -81,6 +97,10 @@ export async function discoverRepository(repoRoot: string): Promise<RepositoryDi
   };
 }
 
+/**
+ * Reads every capability {@link discoverRepository} finds in `repoRoot`, sorted by name. The
+ * discovery diagnostics are returned and also appended to each capability's own diagnostics.
+ */
 export async function readRepositoryCapabilities(
   repoRoot: string,
   scope: Scope = "project",
@@ -228,6 +248,10 @@ async function skillPackageRoot(dir: string): Promise<string> {
     : dir;
 }
 
+/**
+ * The effective capabilities across scopes, sorted by name: a project capability replaces the
+ * user capability of the same name, with an `acf.capability.shadowed` info diagnostic.
+ */
 export function deduplicateCapabilities(
   user: AcfCapability[],
   project: AcfCapability[],
@@ -248,6 +272,7 @@ export function deduplicateCapabilities(
   return { effective: [...byName.values()].sort(byCapabilityName), diagnostics };
 }
 
+/** An `acf.capability.name-collision` error per capability repeating an earlier one's name. */
 export function sameScopeCollisionDiagnostics(capabilities: AcfCapability[]): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const seen = new Map<string, AcfCapability>();
