@@ -8,6 +8,11 @@
 import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
 import { nativeKeyClass, nativeKeyInfo } from "../targets/native-keys.js";
+import {
+  CLAUDE_PLUGIN_BIN_DIR,
+  claudePluginComponents,
+  type PluginComponentSpec,
+} from "../targets/plugin-layout.js";
 import type { PreservedForeignData } from "../targets/self-check.js";
 import type {
   Diagnostic,
@@ -233,11 +238,11 @@ const FILE_COMPONENTS = [
 ] as const;
 
 /** Components whose default file merges with manifest declarations into one component. */
-const MERGED_COMPONENTS = [
-  { key: "hooks", kind: "hook", name: "hooks", file: "hooks/hooks.json" },
-  { key: "lspServers", kind: "lsp-server", name: "lsp-servers", file: ".lsp.json" },
-  { key: "settings", kind: "settings", name: "settings", file: "settings.json" },
-] as const;
+const MERGED_COMPONENTS = claudePluginComponents.filter(
+  (spec): spec is PluginComponentSpec & { file: string } => spec.file !== undefined,
+);
+/** Keys that hold monitors; any other value of them is an `other` component. */
+const MONITOR_COMPONENTS = claudePluginComponents.filter((spec) => spec.kind === "monitor");
 
 const KEY_COMPONENTS = [
   { key: "userConfig", kind: "user-config" },
@@ -312,7 +317,7 @@ async function remainderComponents(
     });
   }
 
-  for (const file of await filesUnder(root, path.join(root, "bin"))) {
+  for (const file of await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR))) {
     await add({
       kind: "bin",
       name: path.posix.basename(file),
@@ -333,7 +338,6 @@ async function remainderComponents(
     });
   }
 
-  const monitorKeys = ["monitors", ...(isRecord(raw.experimental) ? ["experimental"] : [])];
   const listing = LISTING_KEYS.filter((key) => raw[key] !== undefined);
   if (listing.length > 0) {
     const icon = typeof raw.icon === "string" ? contained(root, raw.icon) : undefined;
@@ -350,7 +354,9 @@ async function remainderComponents(
   }
   for (const key of Object.keys(raw).sort()) {
     if (handled.has(key)) continue;
-    const monitor = monitorKeys.includes(key) && hasMonitors(raw, key);
+    const monitor = MONITOR_COMPONENTS.some(
+      (spec) => spec.key === key && (spec.holds?.(raw[key]) ?? true),
+    );
     await add({
       kind: monitor ? "monitor" : "other",
       name: key,
@@ -371,12 +377,6 @@ async function commandSource(root: string, definition: unknown): Promise<string[
     : [];
 }
 
-function hasMonitors(raw: Record<string, unknown>, key: string): boolean {
-  return (
-    key === "monitors" || (isRecord(raw.experimental) && raw.experimental.monitors !== undefined)
-  );
-}
-
 /**
  * What this reader keeps beyond core fields, derived from the tables it reads with. The registry
  * self-check proves native ACF can author each datum. `mcpServers` stays for bundle and URL
@@ -390,14 +390,13 @@ export const claudePluginPreserved: PreservedForeignData = {
     ...FILE_COMPONENTS.map((spec) => spec.key),
     ...MERGED_COMPONENTS.map((spec) => spec.key),
     ...KEY_COMPONENTS.map((spec) => spec.key),
-    "monitors",
-    "experimental",
+    ...MONITOR_COMPONENTS.map((spec) => spec.key),
     "mcpServers",
   ],
   files: [
     ...FILE_COMPONENTS.map((spec) => `${spec.dir}/`),
     ...MERGED_COMPONENTS.map((spec) => spec.file),
-    "bin/",
+    `${CLAUDE_PLUGIN_BIN_DIR}/`,
   ],
   packageValues: ["version", "author"],
 };
