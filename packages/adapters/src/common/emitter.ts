@@ -1,22 +1,20 @@
+/**
+ * The loose writer for agents, commands, instructions and hooks. Skills (`skills.ts`) and MCP
+ * servers (`mcp.ts`) have their own writers; `emitTarget` (`target.ts`) runs all three.
+ */
 import path from "node:path";
 import {
   type AcfCapability,
   type AcfOwnership,
   type AgentFacet,
-  type CanonicalHookType,
   type CanonicalTriggerName,
   type CommandFacet,
   type Diagnostic,
-  defaultHookTimeoutMs,
   type EmitInput,
   type FacetFamily,
   type FamilySupportFamily,
   type FileDiff,
   familySupportFamilies,
-  type HookEffect,
-  type HookEntry,
-  type HookRun,
-  hookEffectMatrix,
   hookEntries,
   type InstructionFacet,
   type ReadOnlyFs,
@@ -27,17 +25,12 @@ import {
 import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { pushLossy } from "./diagnostics.js";
 import { makeFileDiff } from "./diff.js";
-import { jsonPointerEscape, mergeJson, readJsonObject } from "./json-merge.js";
+import { emitHooks } from "./hooks.js";
 import { replaceMarkedBlock } from "./markers.js";
 import { mcpPathFor } from "./mcp.js";
-import {
-  type PlaceholderValues,
-  substitutePlaceholders,
-  substituteStringArray,
-  substituteStringRecord,
-} from "./placeholders.js";
 import { renderGeneratedMarkdown, renderMarkdownFile } from "./text.js";
 
+/** Where one target's loose files go; an undefined directory means the family is not written. */
 export type AdapterLayout = {
   targetId: TargetId;
   agentDir?: string | undefined;
@@ -51,12 +44,21 @@ export type AdapterLayout = {
   cursorRulesDir?: string | undefined;
 };
 
+/** Per-target variations of the shared loose writer. */
 export type AdapterOptions = {
+  /** Writes instructions only, as Cursor rules, and reports agents and commands unsupported. */
   cursorRulesOnly?: boolean | undefined;
+  /** Writes no hook files; the family-level support diagnostic still reports the hooks. */
   skipUnsupportedHooks?: boolean | undefined;
+  /** Families whose `partial` support is reported lossy (`changed-behavior`). */
   lossyPartialFamilies?: readonly FamilySupportFamily[] | undefined;
 };
 
+/**
+ * The loose layout of `targetId` under `installRoot`. Every target gets the same directory names;
+ * only Claude has an always-on instruction file (`CLAUDE.md`), and `mcpFile` comes from
+ * `mcpPathFor`.
+ */
 export function layoutFor(targetId: TargetId, installRoot: string, scope: Scope): AdapterLayout {
   return {
     targetId,
@@ -71,6 +73,10 @@ export function layoutFor(targetId: TargetId, installRoot: string, scope: Scope)
   };
 }
 
+/**
+ * Writes the capability's agents, commands, instructions and hooks for `layout.targetId` and
+ * pushes family-level support diagnostics to `diagnostics`. Returns the diffs sorted by path.
+ */
 export async function emitStandardAdapter(
   input: EmitInput,
   fs: ReadOnlyFs,
@@ -103,6 +109,7 @@ export async function emitStandardAdapter(
   return diffs.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** Writes each agent or command as `<dir>/<name>.md` with its assets beside it. */
 export async function emitProseFiles(
   cap: AcfCapability,
   facets: readonly (AgentFacet | CommandFacet)[],
@@ -137,6 +144,12 @@ export async function emitProseFiles(
   return diffs;
 }
 
+/**
+ * Writes instructions: `always` ones into marked blocks of the always-on file when the layout has
+ * one (else as files), triggered ones as files under `instructionWhenDir` with their activation
+ * recorded in a comment, or as Cursor rules when `cursorRulesOnly`. Unsupported triggers are
+ * reported lossy.
+ */
 export async function emitInstructions(
   input: EmitInput,
   fs: ReadOnlyFs,
@@ -145,8 +158,7 @@ export async function emitInstructions(
   cursorRulesOnly: boolean,
 ): Promise<FileDiff[]> {
   const diffs: FileDiff[] = [];
-  const markerBodies: string[] = [];
-  const markerNames: string[] = [];
+  const blocks: MarkedBlock[] = [];
   const sorted = [...input.capability.instructions].sort((a, b) => a.name.localeCompare(b.name));
   for (const instruction of sorted) {
     if (instruction.frontmatter.activation === "always") {
@@ -167,8 +179,10 @@ export async function emitInstructions(
         continue;
       }
       if (layout.alwaysInstructionFile !== undefined) {
-        markerBodies.push(instruction.body.trimEnd());
-        markerNames.push(markerName(input.capability, instruction));
+        blocks.push({
+          name: markerName(input.capability, instruction),
+          body: instruction.body.trimEnd(),
+        });
         diffs.push(
           ...(await instructionAssetDiffs(
             input.capability,
@@ -206,110 +220,29 @@ export async function emitInstructions(
       );
     }
   }
-  if (markerBodies.length > 0 && layout.alwaysInstructionFile !== undefined) {
-    const before = await fs.readText(layout.alwaysInstructionFile);
-    let after = before ?? "";
-    for (let index = 0; index < markerBodies.length; index += 1) {
-      const name = markerNames[index];
-      const body = markerBodies[index];
-      if (name === undefined || body === undefined) continue;
-      after = replaceMarkedBlock(after, name, body);
-    }
-    diffs.push(
-      makeFileDiff(
-        layout.alwaysInstructionFile,
-        before,
-        after,
-        markerNames.map((name) => ({ kind: "marker", name }) satisfies AcfOwnership),
-      ),
-    );
-  }
+  if (blocks.length > 0 && layout.alwaysInstructionFile !== undefined)
+    diffs.push(await markedBlocksDiff(fs, layout.alwaysInstructionFile, blocks));
   return diffs;
 }
 
-export async function emitHooks(
-  input: EmitInput,
+/** One caplet-owned region of a shared text file. */
+type MarkedBlock = { name: string; body: string };
+
+/** Writes `blocks` into `file` as marked regions, keeping the rest of the file. */
+async function markedBlocksDiff(
   fs: ReadOnlyFs,
-  layout: AdapterLayout,
-  diagnostics: Diagnostic[],
-): Promise<FileDiff[]> {
-  const hooks = input.capability.hooks;
-  if (hooks === undefined) return [];
-  const hookDir = layout.hookDir;
-  const settingsFile = layout.hookSettingsFile;
-  if (hookDir === undefined || settingsFile === undefined) return [];
-  const diffs: FileDiff[] = [];
-  const beforeSettings = await fs.readText(settingsFile);
-  let settings = beforeSettings;
-  const entriesByNativeEvent = new Map<string, HookSettingsEntry[]>();
-  // Each entry with the native events it is written to: canonical types through the target's
-  // mapping, then target-native events (SPEC.md §13.9) as declared. The capability reaching this
-  // writer is already filtered to the entries that apply to its target.
-  const planned: Array<{
-    type: CanonicalHookType | undefined;
-    entry: HookEntry;
-    nativeEvents: readonly string[];
-  }> = [];
-  for (const type of canonicalHookTypesInOrder()) {
-    const entries = hooks.buckets[type] ?? [];
-    const nativeEvents = targetMap[layout.targetId]?.mappings.hookEvents[type] ?? [];
-    if (entries.length > 0 && nativeEvents.length === 0) {
-      pushLossy(diagnostics, {
-        code: "acf.adapter.hook-event-unsupported",
-        message: `${layout.targetId} does not support hook event ${type}`,
-        targetId: layout.targetId,
-        family: "hook",
-        data: { hookType: type },
-      });
-      continue;
-    }
-    for (const entry of entries) planned.push({ type, entry, nativeEvents });
-  }
-  for (const [event, entries] of Object.entries(hooks.native?.[layout.targetId] ?? {}))
-    for (const entry of entries) planned.push({ type: undefined, entry, nativeEvents: [event] });
-  for (const { type, entry, nativeEvents } of planned) {
-    const effect = degradeEffectIfNeeded(type, entry, layout.targetId, diagnostics);
-    const id = hookIdentity(input.capability, type, nativeEvents, entry);
-    const scriptPath = path.join(hookDir, `${id.script}${hookExtension(entry.run)}`);
-    const scriptBefore = await fs.readText(scriptPath);
-    diffs.push(makeFileDiff(scriptPath, scriptBefore, renderHookScript(entry), [{ kind: "file" }]));
-    for (const eventName of nativeEvents) {
-      const settingsEntry = hookSettingsEntry(
-        input.capability,
-        type,
-        eventName,
-        entry,
-        effect,
-        scriptPath,
-        id.marker,
-      );
-      const bucket = entriesByNativeEvent.get(eventName) ?? [];
-      bucket.push(settingsEntry);
-      entriesByNativeEvent.set(eventName, bucket);
-    }
-  }
-  const owns: AcfOwnership[] = [];
-  for (const [eventName, entries] of [...entriesByNativeEvent.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
-    for (const entry of entries) {
-      const current = readHookEntries(settings, eventName);
-      const markerIndex = (marker: string) =>
-        current.findIndex((item) => isRecord(item) && item.acfMarker === marker);
-      // Entries written before markers named the hook type carry `acf:<capability>:<name>`;
-      // taking over their index keeps the owned pointer the sidecar recorded for them.
-      const ownIndex = markerIndex(entry.acfMarker);
-      const replaceIndex =
-        ownIndex === -1
-          ? markerIndex(`acf:${input.capability.manifest.name}:${entry.name}`)
-          : ownIndex;
-      const index = replaceIndex === -1 ? current.length : replaceIndex;
-      settings = mergeJson(settings, `/hooks/${jsonPointerEscape(eventName)}/${index}`, entry);
-      owns.push({ kind: "json-pointer", pointer: `/hooks/${eventName}/${index}` });
-    }
-  }
-  if (owns.length > 0) diffs.push(makeFileDiff(settingsFile, beforeSettings, settings, owns));
-  return diffs;
+  file: string,
+  blocks: readonly MarkedBlock[],
+): Promise<FileDiff> {
+  const before = await fs.readText(file);
+  let after = before ?? "";
+  for (const { name, body } of blocks) after = replaceMarkedBlock(after, name, body);
+  return makeFileDiff(
+    file,
+    before,
+    after,
+    blocks.map(({ name }) => ({ kind: "marker", name }) satisfies AcfOwnership),
+  );
 }
 
 async function instructionFileDiff(
@@ -496,161 +429,4 @@ function fileContextPaths(trigger: unknown): string[] {
   return Array.isArray(paths)
     ? paths.filter((value): value is string => typeof value === "string")
     : [];
-}
-
-/**
- * The effect `entry` is written with: `observe` when its canonical hook type does not allow the
- * declared effect or the target only partially supports hook effects. A target-native event
- * (`type` undefined) has no canonical effect matrix.
- */
-function degradeEffectIfNeeded(
-  type: CanonicalHookType | undefined,
-  entry: HookEntry,
-  targetId: TargetId,
-  diagnostics: Diagnostic[],
-): HookEffect {
-  if (type !== undefined && !hookEffectMatrix[type].includes(entry.effect)) {
-    pushLossy(diagnostics, {
-      code: "acf.adapter.effect-degraded",
-      message: `${entry.effect} is not portable for ${type}; emitted as observe`,
-      targetId,
-      family: "hook",
-      data: { hook: entry.name, hookType: type, effect: entry.effect },
-    });
-    return "observe";
-  }
-  if (targetMap[targetId]?.support.hook === "partial" && entry.effect !== "observe") {
-    pushLossy(diagnostics, {
-      code: "acf.adapter.effect-degraded",
-      message: `${targetId} only partially supports hook effects; ${entry.effect} emitted as observe`,
-      targetId,
-      family: "hook",
-      data: { hook: entry.name, hookType: type, effect: entry.effect },
-    });
-    return "observe";
-  }
-  return entry.effect;
-}
-
-/**
- * The names one hook entry is written under: its script file in the hook directory (without
- * extension) and its `acfMarker` in the settings file. A hook name is unique only within its
- * canonical type or native event, so both include it: `<capability>__<type>__<name>` and
- * `acf:<capability>:<type>:<name>`, or for a target-native event (SPEC.md §13.9)
- * `<capability>__native-<event>__<name>` and `acf:<capability>:native:<event>:<name>`. The event is
- * percent-encoded in the file name, so every event spelling gives a distinct, portable name.
- */
-function hookIdentity(
-  cap: AcfCapability,
-  type: CanonicalHookType | undefined,
-  nativeEvents: readonly string[],
-  entry: HookEntry,
-): { script: string; marker: string } {
-  const capability = cap.manifest.name;
-  if (type !== undefined)
-    return {
-      script: `${capability}__${type}__${entry.name}`,
-      marker: `acf:${capability}:${type}:${entry.name}`,
-    };
-  const event = nativeEvents[0] ?? "";
-  const fileEvent = encodeURIComponent(event).replace(
-    /[!'()*~]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-  return {
-    script: `${capability}__native-${fileEvent}__${entry.name}`,
-    marker: `acf:${capability}:native:${event}:${entry.name}`,
-  };
-}
-
-function hookExtension(run: HookRun): string {
-  if (run.shell === "powershell") return ".ps1";
-  if (run.shell === "bash") return ".sh";
-  return "";
-}
-
-function renderHookScript(entry: HookEntry): string {
-  if (entry.run.shell === "powershell") return `${entry.run.command.trimEnd()}\n`;
-  if (entry.run.shell === "bash")
-    return `#!/usr/bin/env bash\nset -euo pipefail\n${entry.run.command.trimEnd()}\n`;
-  const args = entry.run.args ?? [];
-  const quoted = [entry.run.command, ...args].map(shellQuote).join(" ");
-  return `#!/usr/bin/env sh\nexec ${quoted} "$@"\n`;
-}
-
-function hookSettingsEntry(
-  cap: AcfCapability,
-  type: CanonicalHookType | undefined,
-  eventName: string,
-  entry: HookEntry,
-  effect: HookEffect,
-  scriptPath: string,
-  acfMarker: string,
-): HookSettingsEntry {
-  const placeholders: PlaceholderValues = {
-    capabilityDir: cap.root,
-    hookDir: cap.hooks === undefined ? cap.root : path.dirname(cap.hooks.path),
-  };
-  const renderedRun: Record<string, unknown> = {
-    command: substitutePlaceholders(entry.run.command, placeholders),
-    script: scriptPath,
-  };
-  const args = substituteStringArray(entry.run.args, placeholders);
-  if (args !== undefined) renderedRun.args = args;
-  if (entry.run.shell !== undefined) renderedRun.shell = entry.run.shell;
-  const env = substituteStringRecord(entry.run.env, placeholders);
-  if (env !== undefined) renderedRun.env = env;
-  const out: HookSettingsEntry = {
-    acfMarker,
-    name: entry.name,
-    ...(type === undefined ? {} : { type }),
-    event: eventName,
-    effect,
-    timeoutMs: entry.timeout ?? defaultHookTimeoutMs,
-    run: renderedRun,
-  };
-  if (entry.description !== undefined) out.description = entry.description;
-  if (entry.match !== undefined) out.match = entry.match;
-  return out;
-}
-
-type HookSettingsEntry = {
-  acfMarker: string;
-  name: string;
-  /** The canonical hook type; absent for a target-native event (SPEC.md §13.9). */
-  type?: CanonicalHookType | undefined;
-  event: string;
-  effect: HookEffect;
-  timeoutMs: number;
-  run: Record<string, unknown>;
-  description?: string | undefined;
-  match?: HookEntry["match"] | undefined;
-};
-
-function readHookEntries(text: string | null, eventName: string): unknown[] {
-  const root = readJsonObject(text);
-  const hooks = root.hooks;
-  if (!isRecord(hooks)) return [];
-  const entries = hooks[eventName];
-  return Array.isArray(entries) ? entries : [];
-}
-
-function canonicalHookTypesInOrder(): CanonicalHookType[] {
-  return [
-    "session_start",
-    "user_prompt_submit",
-    "pre_tool",
-    "permission_request",
-    "post_tool",
-    "stop",
-    "pre_compact",
-  ];
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

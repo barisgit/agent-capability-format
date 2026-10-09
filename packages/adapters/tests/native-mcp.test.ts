@@ -1,7 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import {
   applyApplicability,
   type McpServer,
@@ -10,6 +7,7 @@ import {
 } from "@caplet/core";
 import { claudeAdapter, codexAdapter, cursorAdapter, opencodeAdapter, piAdapter } from "../src";
 import { CAP_ROOT, capabilityModel, emitModel, fileText, withCode } from "./util/model";
+import { withTempPackage } from "./util/temp-package";
 
 // Built from parts: biome forbids `${...}` inside plain string literals.
 const DOLLAR = "$";
@@ -307,31 +305,26 @@ test("a command under any path placeholder is translated, not a bare command", a
 });
 
 test("family-level native servers reach every writer of their own target only", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "acf-native-servers-"));
-  try {
-    await mkdir(path.join(root, "mcp"));
-    await writeFile(path.join(root, "acf.yml"), "acf: 1\nname: demo\nversion: 1.0.0\n");
-    await writeFile(
-      path.join(root, "mcp", "mcp.yml"),
-      [
-        "servers:",
-        "  - name: shared",
-        "    transport: stdio",
-        "    command: shared-server",
-        "targets:",
-        "  codex:",
-        "    servers:",
-        "      - name: codex-only",
-        "        transport: stdio",
-        "        command: codex-server",
-        "  claude:",
-        "    servers:",
-        "      - name: claude-only",
-        "        transport: http",
-        "        url: https://example.com/mcp",
-        "",
-      ].join("\n"),
-    );
+  const mcpYml = [
+    "servers:",
+    "  - name: shared",
+    "    transport: stdio",
+    "    command: shared-server",
+    "targets:",
+    "  codex:",
+    "    servers:",
+    "      - name: codex-only",
+    "        transport: stdio",
+    "        command: codex-server",
+    "  claude:",
+    "    servers:",
+    "      - name: claude-only",
+    "        transport: http",
+    "        url: https://example.com/mcp",
+    "",
+  ].join("\n");
+  const files = { "acf.yml": "acf: 1\nname: demo\nversion: 1.0.0\n", "mcp/mcp.yml": mcpYml };
+  await withTempPackage("acf-native-servers-", files, async (root) => {
     const capability = await readCapability(root, "project", { kind: "local", directory: root });
     expect(capability.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
     const names = async (target: string, carrier: "plugin" | "loose") => {
@@ -353,7 +346,5 @@ test("family-level native servers reach every writer of their own target only", 
     expect(await names("claude", "loose")).toEqual(["claude-only", "shared"]);
     expect(await names("codex", "loose")).toEqual(["codex-only", "shared"]);
     expect(await names("cursor", "loose")).toEqual(["shared"]);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  });
 });

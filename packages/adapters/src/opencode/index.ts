@@ -4,6 +4,7 @@ import { emitTarget } from "../common/target.js";
 const target = targetMap.opencode;
 if (target === undefined) throw new Error("missing target definition for opencode");
 
+/** OpenCode: loose files only; its partial command support is reported lossy. */
 export const opencodeAdapter: TargetAdapter<"opencode"> = {
   id: "opencode",
   emit: (input, fs: ReadOnlyFs) =>

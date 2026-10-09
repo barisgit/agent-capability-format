@@ -49,6 +49,10 @@ export const claudeAdapter: TargetAdapter<"claude"> = {
 
 registerAdapter("claude", claudeAdapter);
 
+/**
+ * `acf.claude.legacy-carrier` (info): the plugin carrier was configured, but `families` keep the
+ * capability on loose files.
+ */
 function legacyCarrier(capability: AcfCapability, families: readonly string[]): Diagnostic {
   return {
     severity: "info",

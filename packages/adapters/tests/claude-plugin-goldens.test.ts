@@ -4,8 +4,6 @@
  * directory) plus `report.json` with `expected/`.
  */
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type AcfCapability,
@@ -29,6 +27,7 @@ import {
 } from "@caplet/golden";
 import { claudeAdapter, codexAdapter, cursorAdapter, opencodeAdapter, piAdapter } from "../src";
 import { makeInMemoryFs } from "./util/in-memory-fs";
+import { withTempPackage } from "./util/temp-package";
 
 const testsDir = import.meta.dir;
 const PROJECT = "/project";
@@ -144,6 +143,11 @@ async function nativeCase(name: string, withOthers = false): Promise<void> {
   await assertGoldenTree(pluginTree(result, golden.input, others), golden.expected);
 }
 
+/** The JSON object in `file` of `tree`. */
+function treeJson(tree: GoldenTree, file: string): Record<string, unknown> {
+  return JSON.parse(new TextDecoder().decode(tree.get(file)?.bytes)) as Record<string, unknown>;
+}
+
 test("an ACF capability becomes a Claude plugin with its native/claude/ files", async () => {
   await nativeCase("claude-plugin-acf");
 });
@@ -186,24 +190,19 @@ test("a renamed Claude plugin without an excluded skill is regenerated around it
 });
 
 test("a Claude plugin leaves out the files and manifest entries of excluded components", async () => {
-  const input = await mkdtemp(path.join(tmpdir(), "claude-selected-"));
-  try {
-    const files: Record<string, string> = {
-      ".claude-plugin/plugin.json": `${JSON.stringify({
-        name: "kit",
-        version: "1.0.0",
-        agents: ["./agents/keep.md", "./agents/drop.md"],
-        hooks: "./hooks/hooks.json",
-      })}\n`,
-      "agents/keep.md": "---\nname: keep\ndescription: Kept\n---\nKeep.\n",
-      "agents/drop.md": "---\nname: drop\ndescription: Dropped\n---\nDrop.\n",
-      "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
-      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
-    };
-    for (const [relative, text] of Object.entries(files)) {
-      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
-      await writeFile(path.join(input, relative), text);
-    }
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": `${JSON.stringify({
+      name: "kit",
+      version: "1.0.0",
+      agents: ["./agents/keep.md", "./agents/drop.md"],
+      hooks: "./hooks/hooks.json",
+    })}\n`,
+    "agents/keep.md": "---\nname: keep\ndescription: Kept\n---\nKeep.\n",
+    "agents/drop.md": "---\nname: drop\ndescription: Dropped\n---\nDrop.\n",
+    "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
+    "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+  };
+  await withTempPackage("claude-selected-", files, async (input) => {
     const selected = applyEntrySelection(await readInput(input, "claude-plugin"), {
       exclude: { agents: ["drop"], hooks: ["hooks"] },
     });
@@ -222,14 +221,10 @@ test("a Claude plugin leaves out the files and manifest entries of excluded comp
       "report.json",
       "skills/review/SKILL.md",
     ]);
-    const manifest = JSON.parse(
-      new TextDecoder().decode(tree.get(".claude-plugin/plugin.json")?.bytes),
-    ) as Record<string, unknown>;
+    const manifest = treeJson(tree, ".claude-plugin/plugin.json");
     expect(manifest.agents).toEqual(["./agents/keep.md"]);
     expect(manifest.hooks).toBeUndefined();
-  } finally {
-    await rm(input, { recursive: true, force: true });
-  }
+  });
 });
 
 test("an Agent Plugins package is translated into a Claude plugin", async () => {
@@ -240,23 +235,18 @@ test("an Agent Plugins package is translated into a Claude plugin", async () => 
 });
 
 test("an Agent Plugins package leaves out the Claude configuration Claude would discover", async () => {
-  const input = await mkdtemp(path.join(tmpdir(), "agent-plugins-claude-files-"));
-  try {
-    const schema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-    const files: Record<string, string> = {
-      "plugin.json": `${JSON.stringify({ $schema: schema, name: "kit", version: "1.0.0" })}\n`,
-      ".claude-plugin/plugin.json": `${JSON.stringify({ name: "kit", hooks: "./hooks/hooks.json" })}\n`,
-      ".mcp.json": `${JSON.stringify({ mcpServers: { run: { command: "./run.sh" } } })}\n`,
-      "agents/helper.md": "---\nname: helper\ndescription: Helper\n---\nHelp.\n",
-      "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
-      "settings.json": `${JSON.stringify({ agent: "helper" })}\n`,
-      "run.sh": "#!/bin/sh\n",
-      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
-    };
-    for (const [relative, text] of Object.entries(files)) {
-      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
-      await writeFile(path.join(input, relative), text);
-    }
+  const schema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+  const files: Record<string, string> = {
+    "plugin.json": `${JSON.stringify({ $schema: schema, name: "kit", version: "1.0.0" })}\n`,
+    ".claude-plugin/plugin.json": `${JSON.stringify({ name: "kit", hooks: "./hooks/hooks.json" })}\n`,
+    ".mcp.json": `${JSON.stringify({ mcpServers: { run: { command: "./run.sh" } } })}\n`,
+    "agents/helper.md": "---\nname: helper\ndescription: Helper\n---\nHelp.\n",
+    "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
+    "settings.json": `${JSON.stringify({ agent: "helper" })}\n`,
+    "run.sh": "#!/bin/sh\n",
+    "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+  };
+  await withTempPackage("agent-plugins-claude-files-", files, async (input) => {
     const capability = await readInput(input, "agent-plugins");
 
     const result = await emit(claudeAdapter, capability, INSTALL_ROOT, await inputFs(input));
@@ -278,31 +268,24 @@ test("an Agent Plugins package leaves out the Claude configuration Claude would 
       ["info", "hooks/hooks.json"],
       ["info", "settings.json"],
     ]);
-  } finally {
-    await rm(input, { recursive: true, force: true });
-  }
+  });
 });
 
 test("a transformed Claude plugin keeps its selected MCP bundle references and bundle files", async () => {
-  const input = await mkdtemp(path.join(tmpdir(), "claude-bundles-"));
-  try {
-    const remote = "https://example.com/remote.mcpb";
-    const files: Record<string, string> = {
-      ".claude-plugin/plugin.json": `${JSON.stringify({
-        name: "kit",
-        version: "1.0.0",
-        mcpServers: ["./mcp/extra.json", "./bundles/tool.mcpb", "./bundles/other.mcpb", remote],
-      })}\n`,
-      ".mcp.json": `${JSON.stringify({ mcpServers: { local: { command: "node", args: ["server.js"] } } })}\n`,
-      "mcp/extra.json": `${JSON.stringify({ mcpServers: { extra: { type: "http", url: "https://example.com/mcp" } } })}\n`,
-      "bundles/tool.mcpb": "tool bundle",
-      "bundles/other.mcpb": "other bundle",
-      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
-    };
-    for (const [relative, text] of Object.entries(files)) {
-      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
-      await writeFile(path.join(input, relative), text);
-    }
+  const remote = "https://example.com/remote.mcpb";
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": `${JSON.stringify({
+      name: "kit",
+      version: "1.0.0",
+      mcpServers: ["./mcp/extra.json", "./bundles/tool.mcpb", "./bundles/other.mcpb", remote],
+    })}\n`,
+    ".mcp.json": `${JSON.stringify({ mcpServers: { local: { command: "node", args: ["server.js"] } } })}\n`,
+    "mcp/extra.json": `${JSON.stringify({ mcpServers: { extra: { type: "http", url: "https://example.com/mcp" } } })}\n`,
+    "bundles/tool.mcpb": "tool bundle",
+    "bundles/other.mcpb": "other bundle",
+    "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+  };
+  await withTempPackage("claude-bundles-", files, async (input) => {
     const selected = applyEntrySelection(await readInput(input, "claude-plugin", "kit2"), {
       exclude: { mcp: ["./bundles/other.mcpb"] },
     });
@@ -315,8 +298,6 @@ test("a transformed Claude plugin keeps its selected MCP bundle references and b
     );
 
     const tree = pluginTree(result, input);
-    const json = (file: string) =>
-      JSON.parse(new TextDecoder().decode(tree.get(file)?.bytes)) as Record<string, unknown>;
     expect([...tree.keys()].sort()).toEqual([
       ".claude-plugin/plugin.json",
       ".mcp.json",
@@ -324,34 +305,33 @@ test("a transformed Claude plugin keeps its selected MCP bundle references and b
       "report.json",
       "skills/review/SKILL.md",
     ]);
-    expect(json(".claude-plugin/plugin.json").mcpServers).toEqual(["./bundles/tool.mcpb", remote]);
-    expect(Object.keys(json(".mcp.json").mcpServers as object).sort()).toEqual(["extra", "local"]);
+    expect(treeJson(tree, ".claude-plugin/plugin.json").mcpServers).toEqual([
+      "./bundles/tool.mcpb",
+      remote,
+    ]);
+    expect(Object.keys(treeJson(tree, ".mcp.json").mcpServers as object).sort()).toEqual([
+      "extra",
+      "local",
+    ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
       "acf.support.component-omitted",
     );
-  } finally {
-    await rm(input, { recursive: true, force: true });
-  }
+  });
 });
 
 test("an excluded command of a manifest commands map leaves the regenerated manifest", async () => {
-  const input = await mkdtemp(path.join(tmpdir(), "claude-command-map-"));
-  try {
-    const safe = { source: "./cmds/safe.md", description: "Safe" };
-    const files: Record<string, string> = {
-      ".claude-plugin/plugin.json": `${JSON.stringify({
-        name: "kit",
-        version: "1.0.0",
-        commands: { danger: { content: "Delete everything", allowedTools: ["Bash"] }, safe },
-      })}\n`,
-      "cmds/safe.md": "Safe\n",
-      "cmds/danger-notes.md": "Notes\n",
-      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
-    };
-    for (const [relative, text] of Object.entries(files)) {
-      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
-      await writeFile(path.join(input, relative), text);
-    }
+  const safe = { source: "./cmds/safe.md", description: "Safe" };
+  const files: Record<string, string> = {
+    ".claude-plugin/plugin.json": `${JSON.stringify({
+      name: "kit",
+      version: "1.0.0",
+      commands: { danger: { content: "Delete everything", allowedTools: ["Bash"] }, safe },
+    })}\n`,
+    "cmds/safe.md": "Safe\n",
+    "cmds/danger-notes.md": "Notes\n",
+    "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+  };
+  await withTempPackage("claude-command-map-", files, async (input) => {
     const selected = applyEntrySelection(await readInput(input, "claude-plugin"), {
       exclude: { commands: ["danger"] },
     });
@@ -367,14 +347,10 @@ test("an excluded command of a manifest commands map leaves the regenerated mani
     );
 
     const tree = pluginTree(result, input);
-    const manifest = JSON.parse(
-      new TextDecoder().decode(tree.get(".claude-plugin/plugin.json")?.bytes),
-    ) as Record<string, unknown>;
+    const manifest = treeJson(tree, ".claude-plugin/plugin.json");
     expect(manifest.commands).toEqual({ safe });
     expect(tree.has("cmds/safe.md")).toBe(true);
-  } finally {
-    await rm(input, { recursive: true, force: true });
-  }
+  });
 });
 
 test("a Claude plugin with remainder is refused on loose Claude files", async () => {

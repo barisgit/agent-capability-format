@@ -1,11 +1,6 @@
 import {
   type EmitInput,
   type EmitResult,
-  extraDropped,
-  extrasDialects,
-  nativeExtras,
-  nativeFileTargets,
-  nativeTreeDropped,
   type ReadOnlyFs,
   remainderSupport,
   type TargetDefinition,
@@ -13,7 +8,7 @@ import {
 import { type AdapterOptions, emitStandardAdapter, layoutFor } from "./emitter.js";
 import { emitMcp } from "./mcp.js";
 import { emitSkills } from "./skills.js";
-import type { EmitReport } from "./support-report.js";
+import { type EmitReport, reportPackageDrops } from "./support-report.js";
 
 /**
  * Emits one capability for one loose target: skills, then agents, commands, instructions and
@@ -45,24 +40,13 @@ export async function emitTarget(
     )),
     ...(await emitMcp(input, fs, target.id, report)),
   ];
-  reportPackageDrops(input, target, report);
-  return { diffs, diagnostics: report.diagnostics, outcomes: report.outcomes };
-}
-
-function reportPackageDrops(input: EmitInput, target: TargetDefinition, report: EmitReport): void {
-  const capability = input.capability;
-  const name = capability.manifest.name;
-  const subject = {
+  const name = input.capability.manifest.name;
+  reportPackageDrops(report, input.capability, {
     capability: name,
     target: target.id,
-    carrier: "loose" as const,
-    family: "package" as const,
+    carrier: "loose",
+    family: "package",
     component: name,
-  };
-  const targets = capability.manifest.targets;
-  for (const dialect of extrasDialects(targets))
-    for (const [key, value] of Object.entries(nativeExtras(targets, dialect)))
-      report.diagnostics.push(extraDropped(subject, { owner: dialect, key, value }));
-  for (const owner of nativeFileTargets(capability))
-    report.diagnostics.push(nativeTreeDropped({ capability: name, target: target.id }, owner));
+  });
+  return { diffs, diagnostics: report.diagnostics, outcomes: report.outcomes };
 }

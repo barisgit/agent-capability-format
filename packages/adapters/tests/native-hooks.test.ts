@@ -1,6 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import path from "node:path";
 import {
   type AcfCapability,
@@ -11,6 +9,7 @@ import {
 } from "@caplet/core";
 import { claudeAdapter, codexAdapter, cursorAdapter, opencodeAdapter, piAdapter } from "../src";
 import { emitModel, fileText, withCode } from "./util/model";
+import { withTempPackage } from "./util/temp-package";
 
 const writers: Record<string, { adapter: TargetAdapter; root: string }> = {
   claude: { adapter: claudeAdapter, root: "/project/.claude" },
@@ -20,26 +19,25 @@ const writers: Record<string, { adapter: TargetAdapter; root: string }> = {
   pi: { adapter: piAdapter, root: "/project/.pi" },
 };
 
-const dirs: string[] = [];
-
 async function readHooksCapability(hooksYml: string): Promise<AcfCapability> {
-  const root = await mkdtemp(path.join(tmpdir(), "acf-native-hooks-"));
-  dirs.push(root);
-  await mkdir(path.join(root, "hooks"));
-  await writeFile(path.join(root, "acf.yml"), "acf: 1\nname: demo\nversion: 1.0.0\n");
-  await writeFile(path.join(root, "hooks", "hooks.yml"), hooksYml);
-  const capability = await readCapability(root, "project", { kind: "local", directory: root });
+  const files = { "acf.yml": "acf: 1\nname: demo\nversion: 1.0.0\n", "hooks/hooks.yml": hooksYml };
+  const capability = await withTempPackage("acf-native-hooks-", files, (root) =>
+    readCapability(root, "project", { kind: "local", directory: root }),
+  );
   expect(capability.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   return capability;
 }
 
-/** The `acf:<capability>:<type or native:event>:<hook>` markers each native event of the target's settings file holds. */
+/**
+ * The `acf:<capability>:<type or native:event>:<hook>` markers each native event of the target's
+ * settings file holds.
+ */
 async function emittedHooks(
   capability: AcfCapability,
   target: string,
 ): Promise<{ markers: Record<string, string[]>; diagnostics: string[] }> {
   const writer = writers[target];
-  const applicable = applyApplicability(capability, target as "claude");
+  const applicable = applyApplicability(capability, target);
   if (writer === undefined || applicable === null) throw new Error(`no writer for ${target}`);
   // As caplet's workflow does, the writer receives what applies to its target.
   const result = await emitModel(writer.adapter, applicable, writer.root);
@@ -59,10 +57,6 @@ async function emittedHooks(
     diagnostics: withCode(result, "acf.adapter.facet-unsupported").map((d) => d.code),
   };
 }
-
-afterAll(async () => {
-  await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
-});
 
 const run = (command: string) => `          run:\n            command: ${command}\n`;
 

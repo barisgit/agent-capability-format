@@ -4,11 +4,14 @@
  * translated outcomes the writer knows positively, and whether anything refuses it.
  */
 import {
+  type AcfCapability,
   type ComponentOutcome,
   type Diagnostic,
   extraDropped,
   extrasDialects,
   nativeExtras,
+  nativeFileTargets,
+  nativeTreeDropped,
   type SupportCell,
   type SupportSubject,
   supportCell,
@@ -52,6 +55,31 @@ export function considerField(
   const translated = translatedOutcome(subject, field);
   if (translated !== undefined) report.outcomes.push(translated);
   return supportCell(field, subject.target, subject.carrier ?? "loose");
+}
+
+/**
+ * Reports the package-level native extras and `native/<target>/` trees that `subject`'s carrier
+ * cannot carry as dropped: on loose files, which have no package manifest or package directory,
+ * those of every target; in a plugin, which carries its own target's, those of every other one.
+ */
+export function reportPackageDrops(
+  report: EmitReport,
+  capability: AcfCapability,
+  subject: SupportSubject & { family: "package" },
+): void {
+  const carried = subject.carrier === "plugin" ? subject.target : undefined;
+  const targets = capability.manifest.targets;
+  for (const dialect of extrasDialects(targets)) {
+    if (dialect === carried) continue;
+    for (const [key, value] of Object.entries(nativeExtras(targets, dialect)))
+      report.diagnostics.push(extraDropped(subject, { owner: dialect, key, value }));
+  }
+  for (const owner of nativeFileTargets(capability)) {
+    if (owner === carried) continue;
+    report.diagnostics.push(
+      nativeTreeDropped({ capability: subject.capability, target: subject.target }, owner),
+    );
+  }
 }
 
 /**

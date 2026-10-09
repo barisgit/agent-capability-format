@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { pluginPackageDir, readClaudePluginPackage } from "@caplet/core";
 import { claudeAdapter, codexAdapter } from "../src";
 import { claudeAuthor } from "../src/claude/manifest";
 import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
+import { withTempPackage } from "./util/temp-package";
 
 const INSTALL_ROOT = path.join(PROJECT, ".claude");
 
@@ -116,45 +115,43 @@ test("the Claude author outcome mentions decoding only when a string was decoded
 });
 
 test("an unchanged Claude plugin without a version gets one inserted and nothing else", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "acf-claude-plugin-"));
   const manifest = '{\n  "name": "notes",\n  "description": "Notes"\n}\n';
   const skill = "---\nname: jot\ndescription: Jot a note\n---\nJot it down.\n";
-  await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
-  await mkdir(path.join(root, "skills", "jot"), { recursive: true });
-  await writeFile(path.join(root, ".claude-plugin", "plugin.json"), manifest);
-  await writeFile(path.join(root, "skills", "jot", "SKILL.md"), skill);
-  const read = await readClaudePluginPackage(root, {
-    scope: "project",
-    origin: { kind: "local", directory: root },
-    revision: null,
-  });
-  if (read.capability === undefined) throw new Error("the plugin did not read");
-  const result = await emitModel(
-    claudeAdapter,
-    read.capability,
-    INSTALL_ROOT,
-    {},
-    {
-      [path.join(root, ".claude-plugin", "plugin.json")]: manifest,
-      [path.join(root, "skills", "jot", "SKILL.md")]: skill,
-    },
-  );
-  const version = result.plugins?.[0]?.version ?? "";
-  const dir = pluginPackageDir(INSTALL_ROOT, "notes");
-  const files = Object.fromEntries(
-    result.diffs.map((diff) => [
-      path.relative(dir, diff.path),
-      typeof diff.after === "string"
-        ? diff.after
-        : new TextDecoder().decode(diff.after ?? undefined),
-    ]),
-  );
-  expect(files).toEqual({
-    ".claude-plugin/plugin.json": manifest.replace(
-      '"description": "Notes"\n',
-      `"description": "Notes",\n  "version": ${JSON.stringify(version)}\n`,
-    ),
-    "skills/jot/SKILL.md": skill,
+  const files = { ".claude-plugin/plugin.json": manifest, "skills/jot/SKILL.md": skill };
+  await withTempPackage("acf-claude-plugin-", files, async (root) => {
+    const read = await readClaudePluginPackage(root, {
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      revision: null,
+    });
+    if (read.capability === undefined) throw new Error("the plugin did not read");
+    const result = await emitModel(
+      claudeAdapter,
+      read.capability,
+      INSTALL_ROOT,
+      {},
+      {
+        [path.join(root, ".claude-plugin", "plugin.json")]: manifest,
+        [path.join(root, "skills", "jot", "SKILL.md")]: skill,
+      },
+    );
+    const version = result.plugins?.[0]?.version ?? "";
+    const dir = pluginPackageDir(INSTALL_ROOT, "notes");
+    const files = Object.fromEntries(
+      result.diffs.map((diff) => [
+        path.relative(dir, diff.path),
+        typeof diff.after === "string"
+          ? diff.after
+          : new TextDecoder().decode(diff.after ?? undefined),
+      ]),
+    );
+    expect(files).toEqual({
+      ".claude-plugin/plugin.json": manifest.replace(
+        '"description": "Notes"\n',
+        `"description": "Notes",\n  "version": ${JSON.stringify(version)}\n`,
+      ),
+      "skills/jot/SKILL.md": skill,
+    });
   });
 });
 

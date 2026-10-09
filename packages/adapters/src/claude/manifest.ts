@@ -21,7 +21,7 @@ import { considerField, type EmitReport, emptyReport } from "../common/support-r
 export const CLAUDE_MANIFEST_PATH = ".claude-plugin/plugin.json";
 
 /** Manifest keys generated from core metadata, in Claude's documented order. */
-const MAPPED_KEYS = [
+export const MAPPED_MANIFEST_KEYS = [
   "name",
   "version",
   "description",
@@ -98,7 +98,7 @@ export function pluginManifest(
     baseVersion: typeof values.version === "string" ? values.version : manifest.version,
     render(version) {
       const entries: Array<readonly [string, unknown]> = [];
-      for (const key of MAPPED_KEYS) {
+      for (const key of MAPPED_MANIFEST_KEYS) {
         const value = key === "version" ? version : mapped[key];
         if (value !== undefined) entries.push([key, value]);
       }
