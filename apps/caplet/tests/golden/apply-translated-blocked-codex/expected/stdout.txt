@@ -28,6 +28,6 @@ Executable changes
   codex
     + MCP server alpha-server: ${ACF_CAPABILITY_DIR}/bin/server  alpha-cap
 
-warn 7 files
+warn Dry run: 7 changes not applied
 targets
     project  (nothing managed yet)

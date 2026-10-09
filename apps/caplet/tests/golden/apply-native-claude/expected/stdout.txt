@@ -18,6 +18,6 @@ Executable changes
     + MCP server alpha-server: node server.js  alpha-cap
     + MCP server beta-server: node server.js   beta-cap
 
-warn 5 files
+warn Dry run: 5 changes not applied
 targets
     project  (nothing managed yet)

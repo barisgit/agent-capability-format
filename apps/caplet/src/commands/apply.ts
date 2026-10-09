@@ -138,7 +138,9 @@ export const applyCommand = defineCommand({
         } else {
           printDiagnostics(previewed, context.args);
           printClaude(out, claude, "planned");
-          out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
+          out.pending(
+            `Dry run: ${view.fileCount} ${view.fileCount === 1 ? "change" : "changes"} not applied`,
+          );
           for (const line of reachBlock(
             reach,
             plan.scopes.map((scopeRoot) => scopeRoot.scope),

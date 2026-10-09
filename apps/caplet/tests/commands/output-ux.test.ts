@@ -36,7 +36,7 @@ test("diff groups file changes and ends with a pending summary", async () => {
     expect(result.stdout).toMatch(/\+ CLAUDE\.md/);
     expect(result.stdout).toContain("alpha-cap, beta-cap");
     expect(result.stdout.match(/CLAUDE\.md/g)).toHaveLength(1);
-    expect(result.stdout).toContain("warn 5 files");
+    expect(result.stdout).toContain("warn Dry run: 5 changes not applied");
   } finally {
     await cleanup(scope);
   }
@@ -144,7 +144,7 @@ test("emit dry-run uses the same change language without writing", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Plan: 5 changes");
-    expect(result.stdout).toContain("warn 5 files");
+    expect(result.stdout).toContain("warn Dry run: 5 changes not applied");
     expect(await Bun.file(`${scope.cwd}/.claude/CLAUDE.md`).exists()).toBe(false);
   } finally {
     await cleanup(scope);

@@ -37,7 +37,7 @@ test("caplet diff shows pending FileDiffs", async () => {
       "claude",
     ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("warn 5 files");
+    expect(result.stdout).toContain("warn Dry run: 5 changes not applied");
     expect(result.stdout).toContain("CLAUDE.md");
   } finally {
     await cleanup(scope);
