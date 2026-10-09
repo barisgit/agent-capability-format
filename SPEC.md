@@ -329,6 +329,10 @@ and Agent Plugins readers (§20.6) apply the inverse mapping:
 | `repository`                                   | `repository` (string)                             | `repository`                           |
 | `authors`                                      | first entry to `author`; further entries dropped (`lossy`) | `author` to a one-entry list  |
 
+A structured author keeps `name`, `email`, and `url`. A string author becomes
+`author.name`, except that a string of the exact form `Name <email>` becomes
+`name` and `email`.
+
 A target-specific value for a key the writer generates from package metadata
 is declared with `targets.<target>.package` (§7.6). Native manifest fields
 with no core meaning (for Claude: `displayName`, `icon`, listing URLs,
