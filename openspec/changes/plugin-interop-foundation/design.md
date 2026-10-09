@@ -152,7 +152,7 @@ Alternative: keep rejecting the top-level key with `acf.skill.native-key-not-cor
 ### D27. Product decisions (user delegated, 2026-10-09)
 
 1. `--target` is not remembered between runs. Default targets come from configuration; a flag narrows one run only.
-2. Codex project config uses paths relative to the config file when Codex resolves them that way; otherwise absolute paths stay, recorded as a follow-up until Codex's behavior is checked.
+2. Codex project config keeps absolute paths. Codex resolves no `[mcp_servers]` path (`command`, `args`, `env`, `cwd`) against the config file or the project root: they load as plain strings, a relative `cwd` is relative to the Codex process, and an omitted one falls back to the session's working directory (openai/codex `2351d9e1b608`; `research/plugin-interop/tools/codex.md`, Relative paths in `[mcp_servers]`). A committed `.codex/config.toml` therefore holds the writing machine's paths until each teammate's `caplet apply` rewrites caplet's marker blocks with their own. A Codex plugin carrier (`agent-plugins-output`) avoids machine paths, because Codex resolves plugin MCP paths against the plugin root.
 3. A capability installed at both user and project scope appears twice in Claude. Caplet cannot hide the user plugin for one project, so it warns.
 4. An invalid native value in a foreign or imported source (bare skill, Agent Plugins package, Claude plugin) leaves out only the invalid component, with a warning, the same way for every source format. Native ACF stays strict: an invalid value is an error.
 

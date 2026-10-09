@@ -227,6 +227,10 @@ Dropped as fixed: `research/plugin-interop/facets/distribution.md` lock-types ro
 ### Product decisions (decided 2026-10-09, design.md D27)
 
 - `-t/--target` is not remembered; default targets come from configuration.
-- Codex project config: relative paths if Codex resolves them against the config file, else absolute paths remain until checked.
+- Codex project config keeps absolute paths: Codex resolves no `[mcp_servers]` path against the config file (checked in source; `research/plugin-interop/tools/codex.md`, Relative paths in `[mcp_servers]`).
 - The same capability at user and project scope appears twice in Claude; caplet warns.
 - Invalid native values: foreign and imported sources leave out only the invalid component with a warning; native ACF stays strict.
+
+### Codex
+
+- **Machine paths in a committed `.codex/config.toml`.** At project scope `packages/adapters/src/common/mcp.ts` writes `${ACF_CAPABILITY_DIR}`, `${ACF_PACKAGE_DIR}`, `${ACF_HOOK_DIR}`, `${ACF_DATA_DIR}` and `./` `cwd` values as absolute paths (all under the project: `.agents/capabilities/<capability>/` and `.codex/.acf/data/<capability>/`). A teammate's clone runs the wrong paths until their `caplet apply` rewrites the block, and the block differs per machine. Codex resolves none of these fields relative to the config file (openai/codex `2351d9e1b608`, `config/src/mcp_types.rs:367-377`, `config/src/loader/mod.rs:1462-1472`). Revisit when Codex resolves `[mcp_servers]` paths per layer, or install through a Codex plugin (`agent-plugins-output`).
