@@ -2424,7 +2424,9 @@ the lock, an implementation recomputes each capability's payload digest
 from its snapshot and fails with `acf.lock.digest-mismatch`, writing nothing
 for that capability, when it differs. A capability counts as installed only
 when its digest verifies. A frozen restore fetches the recorded
-`resolvedSha`, never the moving `ref`.
+`resolvedSha`, never the moving `ref`. A restore MUST reproduce exactly
+the locked capability names and their payload digests; otherwise it fails
+with `acf.lock.digest-mismatch` and installs nothing from that entry.
 
 ### 19.5 Hash computation
 
@@ -2494,9 +2496,12 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   refetching.
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
-  lock entry), and emission does not run.
+  lock entry), and emission does not run. A lock entry whose source
+  `capabilities.yml` no longer declares is a disagreement too.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
-  diagnostic is present.
+  diagnostic is present. Every fetch it makes, including one `--mode force`
+  requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it
+  never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.

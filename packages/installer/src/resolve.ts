@@ -46,7 +46,8 @@ export type ResolveOptions = {
   /**
    * A frozen resolution (SPEC.md §19.7): any disagreement between capabilities.yml and the
    * lock is an error and nothing is fetched or written; a missing snapshot is still restored
-   * from its lock entry.
+   * from its lock entry. Every fetch it makes, including one `force` asks for, is such a
+   * restore that must reproduce the locked commit, names and digests.
    */
   frozen?: boolean | undefined;
 };
@@ -289,7 +290,8 @@ async function fetchNeeded(context: ResolveContext, paired: PairedEntry): Promis
     shouldFetch(opts.mode, entry, locked) ||
     (opts.mode === "auto" &&
       locked !== undefined &&
-      !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)))
+      (locked.capabilityNames.length === 0 ||
+        (await missingSnapshots(locked, opts.scopeRoot.capabilitiesDir)).size > 0))
   );
 }
 
@@ -298,9 +300,11 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
   const { opts, yml, stagingDir } = context;
   const { entry, id, legacyId, locked } = paired;
   const legacyLock = locked !== undefined && locked.sourceId !== id;
-  // Only a missing snapshot triggered this fetch: restore the locked content from the
-  // locked commit rather than wherever the moving ref points now.
-  const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
+  // A frozen resolution, or a fetch only a missing snapshot triggered, restores the locked
+  // content from the locked commit rather than wherever the moving ref points now.
+  const restoring =
+    locked !== undefined &&
+    (opts.frozen === true || (!legacyLock && !shouldFetch(opts.mode, entry, locked)));
   const prefetched = restoring
     ? undefined
     : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));
@@ -338,7 +342,14 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
       ? withSelection(locked, entry)
       : (materialized.lockEntry ?? undefined);
   return {
-    records: materialized.records,
+    records: restoring
+      ? await restoreOnlyMissing(
+          entry,
+          locked,
+          materialized.records,
+          opts.scopeRoot.capabilitiesDir,
+        )
+      : materialized.records,
     lockEntry,
     diagnostics,
     fetched: true,
@@ -430,9 +441,10 @@ function normalizeEntry(entry: CapabilityEntry, manifestDir: string): Capability
 
 /**
  * Drift a fetching resolution reconciles, so it is no error there: a missing entry and a
- * changed ref, capability selectors, rename or format fetch, and a changed selection rewrites
- * the lock. An entry this resolution skips (`sourceIds`) or fails to fetch keeps its old lock
- * entry, so planning against the lock reports its drift.
+ * changed ref, capability selectors, rename or format fetch, a changed selection rewrites
+ * the lock, and a source capabilities.yml no longer declares leaves the next lock. An entry
+ * this resolution skips (`sourceIds`) or fails to fetch keeps its old lock entry, so planning
+ * against the lock reports its drift.
  */
 function reconciledByFetch(diagnostic: Diagnostic): boolean {
   return diagnostic.code === "acf.lock.missing-entry" || diagnostic.code === "acf.lock.drift";
@@ -456,18 +468,35 @@ function withSelection(locked: LockEntry, entry: CapabilityEntry): LockEntry {
   return next;
 }
 
-/** Digest mismatches between restored records and the lock records they must reproduce. */
+/**
+ * How restored records differ from the lock entry they must reproduce: the same capability
+ * names exactly, and each name's locked payload digest when the entry records one. A name the
+ * lock does not record is a mismatch too, since committing it would install a snapshot no lock
+ * record verifies.
+ */
 function restoreMismatches(locked: LockEntry, restored: CapabilityRecord[]): Diagnostic[] {
-  if (locked.resolvedCapabilities === undefined) return [];
+  const absent = "no such capability";
   const actual = new Map(
     restored.map((record) => [record.name, record.lockRecord?.payloadDigest ?? "nothing"]),
   );
-  return locked.resolvedCapabilities.flatMap((expected) => {
-    const digest = actual.get(expected.name) ?? "no such capability";
-    return digest === expected.payloadDigest
+  const expected = new Map(
+    locked.resolvedCapabilities?.map((record) => [record.name, record.payloadDigest]),
+  );
+  const lockedNames = new Set(locked.capabilityNames);
+  const missingOrChanged = locked.capabilityNames.flatMap((name) => {
+    const digest = actual.get(name) ?? absent;
+    const want = expected.get(name);
+    const same = digest !== absent && (want === undefined || want === digest);
+    return same
       ? []
-      : [digestMismatchDiagnostic(expected.name, "restore", expected.payloadDigest, digest)];
+      : [digestMismatchDiagnostic(name, "restore", want ?? "a locked capability", digest)];
   });
+  const unlocked = restored
+    .filter((record) => !lockedNames.has(record.name))
+    .map((record) =>
+      digestMismatchDiagnostic(record.name, "restore", absent, actual.get(record.name) ?? absent),
+    );
+  return [...missingOrChanged, ...unlocked];
 }
 
 function shouldFetch(
@@ -485,22 +514,46 @@ function requiresRef(entry: CapabilityEntry): boolean {
 }
 
 /**
- * Whether every locked snapshot directory exists, deciding only whether a restore is due.
- * Whether a present snapshot still matches its lock is verified where snapshots are read
- * (core `resolveScopeCapabilities`); a modified one is reported, never silently replaced.
+ * The locked capabilities whose snapshot directory is absent, deciding only whether a restore
+ * is due and what it installs. Whether a present snapshot still matches its lock is verified
+ * where snapshots are read (core `resolveScopeCapabilities`); a modified one is reported there,
+ * never silently replaced.
  */
-async function lockInstalled(lockEntry: LockEntry, capabilitiesDir: string): Promise<boolean> {
-  if (lockEntry.capabilityNames.length === 0) return false;
+async function missingSnapshots(
+  lockEntry: LockEntry,
+  capabilitiesDir: string,
+): Promise<Set<string>> {
+  const missing = new Set<string>();
   for (const name of lockEntry.capabilityNames) {
     try {
       const stat = await lstat(path.join(capabilitiesDir, name));
-      if (!stat.isDirectory()) return false;
+      if (!stat.isDirectory()) missing.add(name);
     } catch (error) {
-      if (isErrno(error, "ENOENT")) return false;
-      throw error;
+      if (!isErrno(error, "ENOENT")) throw error;
+      missing.add(name);
     }
   }
-  return true;
+  return missing;
+}
+
+/**
+ * The records a verified restore commits: the staged snapshot of each capability that is
+ * missing, and the installed one of each that is present, so restoring one snapshot never
+ * replaces a present sibling, modified or not.
+ */
+async function restoreOnlyMissing(
+  entry: CapabilityEntry,
+  locked: LockEntry,
+  staged: CapabilityRecord[],
+  capabilitiesDir: string,
+): Promise<CapabilityRecord[]> {
+  const missing = await missingSnapshots(locked, capabilitiesDir);
+  return [
+    ...staged.filter((record) => missing.has(record.name)),
+    ...recordsFromLock(entry, locked, capabilitiesDir).filter(
+      (record) => !missing.has(record.name),
+    ),
+  ];
 }
 
 function fetchOptions(yml: CapabilitiesYml, scopeRoot: ScopeRoot): FetchOptions {

@@ -277,6 +277,15 @@ HTTP helper headers are cached; same-origin POST 401/403 refreshes once and retr
 
 Commands include `codex mcp add <name> --env KEY=VALUE -- <command> ...`, `codex mcp list`, `codex mcp login <name>`; `/mcp` shows connected servers. [CLI mechanics](https://learn.chatgpt.com/docs/extend/mcp#configure-with-the-cli).
 
+### Relative paths in `[mcp_servers]`
+
+Checked in the source (openai/codex `2351d9e1b608`, `codex-rs/`), not at runtime. No `[mcp_servers]` path resolves against the config file or the project root, so a portable relative path cannot be written:
+
+- The loader resolves only `AbsolutePathBuf` fields of a layer against its folder; for a project layer that folder is its `.codex/` (`config/src/loader/mod.rs:1462-1472`, `:1650-1651`).
+- `command`, `args`, `env` and `url` are plain strings, and `cwd` is `LegacyAppPathString` (`config/src/mcp_types.rs:367-377`, `:625`), which deserializes without interpreting the text (`utils/path-uri/src/api_path_string.rs:28-38`).
+- A local stdio server starts in `PathBuf::from(cwd)` passed to `current_dir`, so a relative `cwd` is relative to the Codex process; without `cwd` it starts in the session's working directory (`rmcp-client/src/stdio_server_launcher.rs:277-283`, `codex-mcp/src/rmcp_client.rs:1235-1249`, `core/src/session/mcp.rs:160-177`). On Unix the program is spawned unchanged (`rmcp-client/src/program_resolver.rs:22-29`).
+- Plugin MCP servers differ: Codex resolves a `./` command and the `cwd` against the plugin root (`codex-mcp/src/agent_plugin_config.rs:205-243`).
+
 ### Plugin MCP
 
 Portable root `mcp.json` is a closed schema: required `$schema` and `mcpServers: map<string,server>`. [Schema 1.0.0](https://agent-plugins.org/schemas/1.0.0/mcp.schema.json).
