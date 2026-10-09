@@ -1,11 +1,14 @@
 /**
- * Opt-in real-host test (task 5.9): `CAPLET_HOST_TESTS=claude bun test real-host` drives the
- * installed `claude` through caplet's install, update and uninstall of a fixture plugin.
+ * Opt-in real-host test (task 5.9): `CAPLET_HOST_TESTS=claude bun run test real-host` in
+ * `apps/caplet` drives the installed `claude` through caplet's install, update and uninstall of a
+ * fixture plugin.
  *
  * Safety contract, as in `research/plugin-interop/tools/claude-spike.sh`: caplet and claude run
  * with an empty environment whose HOME and CLAUDE_CONFIG_DIR lie in a fresh `/tmp/claude-spike.*`
  * root, never under the real home; no credentials are copied and no model session starts. The
- * test fails if the real `~/.claude/plugins` tree or `~/.claude/settings.json` changes. Invoking
+ * test fails if the real `~/.claude/plugins` tree or `~/.claude/settings.json` changes; the real
+ * home is `CAPLET_REAL_HOME`, which `scripts/test-home.ts` sets because the test process itself
+ * runs under a throwaway HOME. Invoking
  * the skill or calling the MCP tool through a model needs an authenticated session, so the test
  * stops at what the CLI shows without one: the installed copy and the MCP health check.
  */
@@ -35,9 +38,28 @@ function which(name: string): string {
   throw new Error(`${name} is not on PATH`);
 }
 
+/**
+ * The user's real home, which `os.homedir()` is not: the test process runs under the throwaway
+ * HOME of `scripts/test-home.ts`. Throws when that script did not name a distinct real home, so
+ * the unchanged-state check can never compare a throwaway home with itself.
+ */
+function realHome(): string {
+  const real = process.env.CAPLET_REAL_HOME;
+  if (
+    real === undefined ||
+    !path.isAbsolute(real) ||
+    path.resolve(real) === path.resolve(homedir())
+  ) {
+    throw new Error(
+      `refusing: no real home distinct from the test home ${homedir()} (CAPLET_REAL_HOME=${real ?? "unset"}); run \`bun run test real-host\` in apps/caplet`,
+    );
+  }
+  return real;
+}
+
 /** Fingerprint of the real Claude state that must not change. */
 async function realState(): Promise<string> {
-  const claude = path.join(homedir(), ".claude");
+  const claude = path.join(realHome(), ".claude");
   const hash = createHash("sha256");
   const plugins = path.join(claude, "plugins");
   if (existsSync(plugins)) {
@@ -59,12 +81,13 @@ async function sandbox(): Promise<Sandbox> {
   const root = await mkdtemp("/tmp/claude-spike.");
   roots.push(root);
   const home = path.join(root, "home");
-  const realHome = homedir();
   if (!root.startsWith("/tmp/claude-spike.") || !home.startsWith(`${root}/`)) {
     throw new Error(`refusing: HOME ${home} is not under a /tmp/claude-spike.* root`);
   }
-  if (home === realHome || home.startsWith(`${realHome}/`)) {
-    throw new Error("refusing: HOME inside the real home");
+  for (const forbidden of [realHome(), homedir()]) {
+    if (home === forbidden || home.startsWith(`${forbidden}/`)) {
+      throw new Error(`refusing: HOME inside ${forbidden}`);
+    }
   }
   const bin = path.join(root, "bin");
   await writeText(path.join(bin, ".keep"), "");

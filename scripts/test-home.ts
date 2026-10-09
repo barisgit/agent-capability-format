@@ -6,7 +6,9 @@
  *
  * - Run as a script (each package's `test`), it starts `bun test` with its arguments in the
  *   current directory under a fresh throwaway HOME, with the Claude configuration and XDG base
- *   directories inside it, and removes that home afterwards.
+ *   directories inside it, and removes that home afterwards. It passes the home it replaced in
+ *   `CAPLET_REAL_HOME`, kept from an outer run, for the opt-in tests that must check the real
+ *   home stays unchanged.
  * - Preloaded by each package's `bunfig.toml`, it stops a run that did not start that way, such as
  *   a direct `bun test`, before any test can read the real home.
  */
@@ -18,6 +20,8 @@ import { fileURLToPath } from "node:url";
 
 /** Names the throwaway home of the run this script started. */
 const MARKER = "CAPLET_TEST_HOME";
+/** Names the home the run replaced; a nested run keeps the outer value. */
+const REAL_HOME = "CAPLET_REAL_HOME";
 
 function runIsolated(args: readonly string[]): number {
   const home = mkdtempSync(path.join(tmpdir(), "caplet-test-home-"));
@@ -27,6 +31,7 @@ function runIsolated(args: readonly string[]): number {
       env: {
         ...process.env,
         [MARKER]: home,
+        [REAL_HOME]: process.env[REAL_HOME] || homedir(),
         HOME: home,
         USERPROFILE: home,
         CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
