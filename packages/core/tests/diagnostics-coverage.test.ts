@@ -10,117 +10,34 @@ import {
 } from "../src";
 import { baseManifest, cleanup, readTempCapability, tempDir, writeText } from "./helpers";
 
-const coveredByFixtures = new Set([
-  "acf.manifest.invalid-name",
-  "acf.manifest.invalid-field",
-  "acf.manifest.acf-version-unknown",
-  "acf.manifest.only-and-except",
-  "acf.manifest.duplicate-file",
-  "acf.capability.shadowed",
-  "acf.capability.name-collision",
-  "acf.facet.name-mismatch",
-  "acf.facet.primary-missing",
-  "acf.facet.duplicate",
-  "acf.layout.singular-facet-folder",
-  "acf.skill.shape.not-directory",
-  "acf.instruction.debounce.requires-repeat-always",
-  "acf.instruction.invalid-regex",
-  "acf.applicability.empty",
-  "acf.markdown.unknown-frontmatter-field",
-  "acf.markdown.invalid-frontmatter-field",
-  "acf.hooks.duplicate-file",
-  "acf.hooks.invalid-field",
-  "acf.hook.match.required",
-  "acf.hook.effect.not-allowed",
-  "acf.hook.run.args-and-shell",
-  "acf.mcp.transport.missing-url",
-  "acf.mcp.transport.missing-command",
-  "acf.mcp.invalid-field",
-  "acf.mcp.cwd.invalid",
-  "acf.mcp.url.insecure",
-  "acf.mcp.url.credential-in-url",
-  "acf.mcp.placeholder.unsupported",
-  "acf.mcp.placeholder.pending",
-  "acf.skill.paths-not-core",
-  "acf.skill.native-key-not-core",
-  "acf.core.pending",
-  "acf.extras.conflict",
-  "acf.extras.unclassified",
-  "acf.extras.package-value-invalid",
-  "acf.extras.native-value-invalid",
-  "acf.native.unknown-target",
-  "acf.native.unsupported-entry",
-  "acf.native.collision",
-  "acf.path.absolute",
-  "acf.path.traversal",
-  "acf.assets.missing",
-  "acf.target.unknown-id",
-  "acf.target.extension.unknown-field",
-  "acf.runtime.unknown-operation",
-  "acf.capabilities-yml.source.unknown-scheme",
-  "acf.caplet-yml.invalid",
-]);
+const repoRoot = path.resolve(import.meta.dir, "../../..");
+const registered = new Set<string>(ACF_DIAGNOSTIC_CODES);
 
-const exportedOnly = new Set([
-  "acf.selection.unmatched",
-  "acf.selection.remainder-references",
-  "acf.hook.target-native-event.unknown-schema",
-  "acf.adapter.scope-unsupported",
-  "acf.adapter.effect-degraded",
-  "acf.adapter.hook-event-unsupported",
-  "acf.adapter.trigger-unsupported",
-  "acf.adapter.facet-unsupported",
-  "acf.assets.unsupported",
-  "acf.adapter.not-registered",
-  "acf.adapter.superseded",
-  "acf.scope.project-not-found",
-  "acf.runtime.case-folding",
-  "acf.runtime.turn-granularity",
-  "acf.runtime.family-unsupported",
-  "acf.runtime.trigger-unsupported",
-  "acf.taxonomy.operation.unmapped",
-  "acf.capabilities-yml.duplicate-entry",
-  // Built by the installer from a capabilities.yml value that fails its schema.
-  "acf.capabilities-yml.invalid",
-  // Built from capabilities.yml schema issues; installer/tests/capabilities-yml.test.ts covers it.
-  "acf.capabilities-yml.unknown-key",
-  "acf.resolve.capability-selector-direct-source",
-  "acf.resolve.capability-selector-unmatched",
-  "acf.lock.digest-mismatch",
-  "acf.lock.drift",
-  "acf.lock.missing-entry",
-  "acf.lock.unsupported-version",
-  "acf.source.snapshot-rejected",
-  "acf.source.format-selected",
-  "acf.source.format-not-found",
-  "acf.source.format-version-unsupported",
-  "acf.source.marketplace-unsupported",
-  "acf.source.manifest-invalid",
-  "acf.source.manifest-key-unknown",
-  "acf.source.component-invalid",
-  "acf.source.credential-in-url",
-  "acf.emit.drift",
-  "acf.emit.managed-notice-reserved-path",
-  "acf.emit.managed-notice-destination-collision",
-  "acf.cli.partial-implementation",
-  // Built by targets/support-diagnostics.ts; group-4 writer fixtures cover them end to end.
-  "acf.support.refused",
-  "acf.support.degraded",
-  "acf.support.component-omitted",
-  "acf.extras.dropped",
-  // Built by the Claude plugin writer; packages/adapters/tests/claude-plugin.test.ts covers them.
-  "acf.claude.legacy-carrier",
-  "acf.claude.plugin-file-ignored",
-  "acf.claude.skills-option-ignored",
-  // Built by the Codex MCP writer; adapters/tests/native-mcp.test.ts covers it.
-  "acf.mcp.config-conflict",
-]);
+/** Quoted `acf.<area>.<topic>` literals; two-segment names such as `acf.yml` are file names. */
+const CODE_LITERAL = /["'`](acf\.[a-z0-9-]+\.[a-z0-9.-]*[a-z0-9])["'`]/g;
 
-test("VAL-DIAGNOSTIC-CODES exports every documented code", () => {
-  const exported = [...ACF_DIAGNOSTIC_CODES] as string[];
-  for (const code of [...coveredByFixtures, ...exportedOnly]) expect(exported).toContain(code);
-  for (const code of exported)
-    expect(coveredByFixtures.has(code) || exportedOnly.has(code)).toBe(true);
+test("every diagnostic code the source emits is registered", async () => {
+  const unregistered: string[] = [];
+  for (const root of ["packages/*/src", "apps/caplet/src"]) {
+    let found = 0;
+    for await (const file of new Bun.Glob(`${root}/**/*.ts`).scan({ cwd: repoRoot })) {
+      const text = await Bun.file(path.join(repoRoot, file)).text();
+      for (const [, code] of text.matchAll(CODE_LITERAL)) {
+        found += 1;
+        if (code !== undefined && !registered.has(code)) unregistered.push(`${code} in ${file}`);
+      }
+    }
+    // Guards against a glob that silently matches nothing.
+    expect({ root, found: found > 0 }).toEqual({ root, found: true });
+  }
+  expect(unregistered).toEqual([]);
+});
+
+test("IMPLEMENTATION.md §11.2 documents exactly the registered codes", async () => {
+  const doc = await Bun.file(path.join(repoRoot, "IMPLEMENTATION.md")).text();
+  const section = doc.slice(doc.indexOf("### 11.2"), doc.indexOf("### 11.3"));
+  const documented = [...section.matchAll(/^acf\.[a-z0-9.-]+/gm)].map(([code]) => code);
+  expect(documented.sort()).toEqual([...registered].sort());
 });
 
 test("an unknown key takes the code of the file it was found in", () => {

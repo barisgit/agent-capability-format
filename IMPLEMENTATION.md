@@ -2744,6 +2744,8 @@ acf.layout.singular-facet-folder             # root `skill/`, `agent/`, etc. (er
 
 # Family-specific
 acf.skill.shape.not-directory
+acf.import.skill-description-missing        # bare skill without description; a fallback is used (warn)
+acf.import.skill-frontmatter-invalid         # bare skill frontmatter is malformed or fails its schema; skipped (error)
 acf.instruction.debounce.requires-repeat-always
 acf.instruction.invalid-regex                # `paths` or `conditions` regex doesn't compile (error)
 acf.applicability.empty                      # facet+capability applicability intersection is empty
@@ -2757,11 +2759,13 @@ acf.hook.effect.not-allowed                  # effect not in hook type's matrix
 acf.hook.run.args-and-shell                  # `args` and `shell` are mutually exclusive
 acf.hook.target-native-event.unknown-schema  # `targets.<target>.hooks.<event>` shape unknown
 acf.hooks.invalid-field                      # any other hooks file value fails its schema (error)
+acf.hooks.duplicate-file                     # hooks.yml AND hooks.yaml both present (error)
 
 # MCP
 acf.mcp.transport.missing-url                # http/sse without `url`
 acf.mcp.transport.missing-command            # stdio without `command`
 acf.mcp.invalid-field                        # any other MCP file value fails its schema (error)
+acf.mcp.duplicate-file                       # mcp.yml AND mcp.yaml both present (error)
 
 # Asset references
 acf.path.absolute
@@ -2799,6 +2803,10 @@ acf.capabilities-yml.duplicate-entry
 acf.capabilities-yml.unknown-key             # key capabilities.yml does not define (error)
 acf.capabilities-yml.invalid                 # any other capabilities.yml value fails its schema (error)
 acf.caplet-yml.invalid                       # caplet.yml value fails its schema (error)
+acf.resolve.no-capabilities                  # source has no capability (info when resolving a scope; error when installing)
+acf.resolve.capability-selector-unmatched    # capabilities selector matches no source capability (error)
+acf.resolve.ref-required                     # github or git source without ref (error)
+acf.prune.failed                             # removing unreferenced snapshots failed (error)
 acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version
@@ -2807,6 +2815,8 @@ acf.lock.unsupported-version
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
 acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
+acf.emit.managed-notice-reserved-path        # capability ships a file at the reserved notice name (error)
+acf.emit.managed-notice-destination-collision # reserved notice path holds a file caplet does not own (error)
 
 # Source formats and snapshots
 acf.source.format-selected                   # format chosen by detection or format: (info)
@@ -2864,6 +2874,11 @@ acf.migration.drifted                        # edited loose artifact left in pla
 
 # CLI
 acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
+acf.caplet.not-found                         # `caplet show` names no installed capability (error)
+acf.doctor.git-missing                       # git is not on PATH (error)
+acf.doctor.agents-unreadable                 # .agents directory missing (warn) or unreadable (error)
+acf.doctor.target-unregistered               # configured target has no adapter (error)
+acf.doctor.lockfile-invalid                  # capabilities.lock does not parse (error)
 ```
 
 Codes SHOULD be stable across versions. New codes are additive.
