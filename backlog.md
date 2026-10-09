@@ -192,6 +192,8 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Caplet files in a source tree can reach a Claude plugin.** `packages/adapters/src/claude/plugin.ts`: plugin copies exclude `acf.yml` and `.acf-import.json` but not a sidecar `.acf-managed.json` or `ACF-MANAGED.md` that a source tree happens to contain (the unchanged-plugin copy in particular). Suspected fix: one caplet-owned file list in core used by every plugin copy.
+
 - **Invalid core field in a bare imported skill is an error, while Agent Plugins leaves such a skill out.** `packages/installer/src/inventory.ts` `readBareSkill` rejects the import with `acf.import.skill-frontmatter-invalid`; the Agent Plugins reader leaves the skill out with a warning. D27.4 covers native values only; decide whether core-field failures in foreign sources follow the same rule.
 
 - **Root-level plugin skill copies its package root as support files.** `packages/adapters/src/claude/plugin.ts` `supportFiles`: a foreign skill at the package root (manifest `skills: "."`) maps to an empty relative path, so the package root's files are copied again next to the regenerated `skills/<name>/`. Predates the review round.
