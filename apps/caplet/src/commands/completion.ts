@@ -1,9 +1,10 @@
+import { targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
-import { commandNames, SCOPE_VALUES, specToCittyArgs, TARGET_IDS } from "../internal/spec.js";
+import { commandNames, SCOPE_VALUES, specToCittyArgs } from "../internal/spec.js";
 
 const COMMANDS = [...commandNames(), "ls"].join(" ");
 const SCOPES = SCOPE_VALUES.join(" ");
-const TARGETS = TARGET_IDS.join(" ");
+const TARGETS = targetIds.join(" ");
 
 const BASH = [
   "_caplet_completions() {",

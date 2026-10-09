@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { targetIds } from "@caplet/core";
 import { cleanup, makeScope, runCaplet } from "../helpers";
 
 test("root help groups commands and lists global flags", async () => {
@@ -78,6 +79,19 @@ test("caplet help <command> works and unknown commands exit 2", async () => {
     const bad = await runCaplet(scope, ["frobnicate"]);
     expect(bad.exitCode).toBe(2);
     expect(bad.stderr).toContain("unknown command: frobnicate");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("help and completions offer every registry target", async () => {
+  const scope = await makeScope();
+  try {
+    const help = await runCaplet(scope, ["apply", "--help"]);
+    const completion = await runCaplet(scope, ["completion", "fish"]);
+    const offered = completion.stdout.match(/-l target -x -a "([^"]*)"/)?.[1]?.split(" ");
+    expect(offered).toEqual([...targetIds]);
+    expect(help.stdout).toContain(`limit targets: ${targetIds.join(", ")} (`);
   } finally {
     await cleanup(scope);
   }

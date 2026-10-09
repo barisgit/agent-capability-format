@@ -1,3 +1,5 @@
+import { targetIds } from "@caplet/core";
+
 export type FlagSpec = {
   name: string;
   short?: string;
@@ -86,10 +88,9 @@ export const TARGET_FLAG: FlagSpec = {
   short: "t",
   arg: "<id>",
   type: "string",
-  description: "limit targets: claude, codex, opencode, pi (repeatable or comma-separated)",
+  description: `limit targets: ${targetIds.join(", ")} (repeatable or comma-separated)`,
 };
 
-export const TARGET_IDS = ["claude", "codex", "opencode", "pi"] as const;
 export const SCOPE_VALUES = ["user", "project"] as const;
 
 export const COMMAND_SPECS: CommandSpec[] = [
