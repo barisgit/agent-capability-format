@@ -41,9 +41,10 @@ const remainderFamilies: Partial<Record<NativeRemainderKind, FacetFamily>> = {
  * Diagnostics for the native remainder of `capability` on `target` when the target does not
  * write the remainder's format ({@link remainderTargets}): a restricting component refuses the
  * whole package (`acf.support.refused`), since dropping it would run the package without the
- * restriction; any other component of an ACF family is omitted with a lossy
- * `acf.support.component-omitted`. Remainder kinds outside the ACF families (settings, output
- * styles, LSP servers, ...) are not reported yet. Empty for a target that carries the remainder.
+ * restriction; any other component is omitted with a lossy `acf.support.component-omitted`,
+ * reported under its ACF family or, for kinds outside them (settings, output styles, LSP
+ * servers, ...), under the `remainder` outcome family. Empty for a target that carries the
+ * remainder.
  */
 export function remainderSupport(capability: AcfCapability, target: TargetId): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
@@ -69,6 +70,14 @@ export function remainderSupport(capability: AcfCapability, target: TargetId): D
         componentOmitted(
           { ...subject, family, component: component.name },
           `${target} does not translate ${format} ${component.kind}s`,
+        ),
+      );
+    } else {
+      diagnostics.push(
+        componentOmitted(
+          { ...subject, family: "remainder", component: component.name },
+          `${target} does not carry ${format} ${component.kind} components`,
+          `${format} ${component.kind}`,
         ),
       );
     }

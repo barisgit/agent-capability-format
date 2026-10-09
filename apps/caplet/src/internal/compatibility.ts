@@ -15,6 +15,7 @@ const familyOrder: readonly OutcomeFamily[] = [
   "instruction",
   "hook",
   "mcp",
+  "remainder",
 ];
 
 /**

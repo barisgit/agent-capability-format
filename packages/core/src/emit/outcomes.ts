@@ -99,7 +99,9 @@ function blockedByRefusals(
   const refused = outcomes.filter((item) => item.outcome === "blocked");
   if (refused.length === 0) return [...outcomes];
   const excludable = refused.flatMap((item) =>
-    item.family === "package" ? [] : [{ family: item.family, component: item.component }],
+    item.family === "package" || item.family === "remainder"
+      ? []
+      : [{ family: item.family, component: item.component }],
   );
   const recovery =
     excludable.length === refused.length

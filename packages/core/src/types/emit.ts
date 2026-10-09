@@ -96,8 +96,12 @@ export type ComponentOutcomeKind =
   | "omitted"
   | "blocked";
 
-/** Component families of the compatibility report; `package` covers manifest-level data. */
-export type OutcomeFamily = FacetFamily | "package";
+/**
+ * Component families of the compatibility report; `package` covers manifest-level data and
+ * `remainder` a foreign package's native components outside the ACF families (output styles,
+ * LSP servers, settings, ...), which selection cannot name.
+ */
+export type OutcomeFamily = FacetFamily | "package" | "remainder";
 
 /**
  * The compatibility-report record for one component of one capability on one target.
