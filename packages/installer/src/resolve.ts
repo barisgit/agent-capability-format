@@ -289,7 +289,8 @@ async function fetchNeeded(context: ResolveContext, paired: PairedEntry): Promis
     shouldFetch(opts.mode, entry, locked) ||
     (opts.mode === "auto" &&
       locked !== undefined &&
-      !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)))
+      (locked.capabilityNames.length === 0 ||
+        (await missingSnapshots(locked, opts.scopeRoot.capabilitiesDir)).size > 0))
   );
 }
 
@@ -338,7 +339,14 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
       ? withSelection(locked, entry)
       : (materialized.lockEntry ?? undefined);
   return {
-    records: materialized.records,
+    records: restoring
+      ? await restoreOnlyMissing(
+          entry,
+          locked,
+          materialized.records,
+          opts.scopeRoot.capabilitiesDir,
+        )
+      : materialized.records,
     lockEntry,
     diagnostics,
     fetched: true,
@@ -502,22 +510,46 @@ function requiresRef(entry: CapabilityEntry): boolean {
 }
 
 /**
- * Whether every locked snapshot directory exists, deciding only whether a restore is due.
- * Whether a present snapshot still matches its lock is verified where snapshots are read
- * (core `resolveScopeCapabilities`); a modified one is reported, never silently replaced.
+ * The locked capabilities whose snapshot directory is absent, deciding only whether a restore
+ * is due and what it installs. Whether a present snapshot still matches its lock is verified
+ * where snapshots are read (core `resolveScopeCapabilities`); a modified one is reported there,
+ * never silently replaced.
  */
-async function lockInstalled(lockEntry: LockEntry, capabilitiesDir: string): Promise<boolean> {
-  if (lockEntry.capabilityNames.length === 0) return false;
+async function missingSnapshots(
+  lockEntry: LockEntry,
+  capabilitiesDir: string,
+): Promise<Set<string>> {
+  const missing = new Set<string>();
   for (const name of lockEntry.capabilityNames) {
     try {
       const stat = await lstat(path.join(capabilitiesDir, name));
-      if (!stat.isDirectory()) return false;
+      if (!stat.isDirectory()) missing.add(name);
     } catch (error) {
-      if (isErrno(error, "ENOENT")) return false;
-      throw error;
+      if (!isErrno(error, "ENOENT")) throw error;
+      missing.add(name);
     }
   }
-  return true;
+  return missing;
+}
+
+/**
+ * The records a verified restore commits: the staged snapshot of each capability that is
+ * missing, and the installed one of each that is present, so restoring one snapshot never
+ * replaces a present sibling, modified or not.
+ */
+async function restoreOnlyMissing(
+  entry: CapabilityEntry,
+  locked: LockEntry,
+  staged: CapabilityRecord[],
+  capabilitiesDir: string,
+): Promise<CapabilityRecord[]> {
+  const missing = await missingSnapshots(locked, capabilitiesDir);
+  return [
+    ...staged.filter((record) => missing.has(record.name)),
+    ...recordsFromLock(entry, locked, capabilitiesDir).filter(
+      (record) => !missing.has(record.name),
+    ),
+  ];
 }
 
 function fetchOptions(yml: CapabilitiesYml, scopeRoot: ScopeRoot): FetchOptions {

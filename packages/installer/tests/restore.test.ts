@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveScopeCapabilities } from "@caplet/core";
 import { resolveCapabilities } from "../src";
 import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
@@ -55,3 +56,30 @@ for (const records of [true, false]) {
     }
   });
 }
+
+test("restoring a missing sibling leaves a modified present snapshot as it is and reported", async () => {
+  const dir = await tempDir("acf-restore-sibling-");
+  try {
+    const { scopeRoot } = await installCollection(dir, ["alpha", "beta"]);
+    const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
+    await rm(path.join(scopeRoot.capabilitiesDir, "alpha"), { recursive: true });
+    const tampered = path.join(scopeRoot.capabilitiesDir, "beta", "notes.md");
+    await writeText(tampered, "tampered\n");
+
+    const result = await resolveCapabilities({ scopeRoot, mode: "auto" });
+
+    expect(errors(result)).toEqual([]);
+    expect(await readFile(scopeRoot.lockPath, "utf8")).toBe(lockBefore);
+    expect(await readFile(path.join(scopeRoot.capabilitiesDir, "alpha", "notes.md"), "utf8")).toBe(
+      "alpha\n",
+    );
+    expect(await readFile(tampered, "utf8")).toBe("tampered\n");
+    const resolved = await resolveScopeCapabilities(scopeRoot);
+    expect(resolved.capabilities.map((capability) => capability.manifest.name)).toEqual(["alpha"]);
+    expect(resolved.diagnostics.map((item) => [item.code, item.data?.name])).toEqual([
+      ["acf.lock.digest-mismatch", "beta"],
+    ]);
+  } finally {
+    await cleanup(dir);
+  }
+});
