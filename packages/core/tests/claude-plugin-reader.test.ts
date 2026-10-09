@@ -79,6 +79,7 @@ describe("Claude plugin reader", () => {
       name: "review-kit",
       skills: ["review", "triage"],
       servers: capability?.mcp?.servers.map((server) => server.name) ?? [],
+      remainder: capability?.remainder ?? [],
     });
     expect(capability?.source?.projected?.servers.length).toBeGreaterThan(0);
   });

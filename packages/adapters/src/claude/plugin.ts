@@ -169,7 +169,7 @@ class PackageFiles implements Iterable<[string, PackageFile]> {
 
 /**
  * True for a Claude plugin source that reaches Claude as its reader projected it: no rename and
- * no skill or server removed by selection or applicability.
+ * no skill, server or remainder component removed by selection or applicability.
  */
 function isUnchangedClaudePlugin(capability: AcfCapability): boolean {
   const projected =
@@ -180,8 +180,63 @@ function isUnchangedClaudePlugin(capability: AcfCapability): boolean {
   return (
     projected.name === capability.manifest.name &&
     sameList(projected.skills, skills) &&
-    sameList(projected.servers, servers)
+    sameList(projected.servers, servers) &&
+    removedRemainder(capability).length === 0
   );
+}
+
+/** The remainder components of a Claude plugin source that selection or applicability removed. */
+function removedRemainder(capability: AcfCapability): NativeRemainderComponent[] {
+  const kept = capability.remainder ?? [];
+  return (capability.source?.projected?.remainder ?? []).filter(
+    (component) =>
+      !kept.some((item) => item.kind === component.kind && item.name === component.name),
+  );
+}
+
+/**
+ * The files and manifest keys only removed remainder components used, so they do not reach the
+ * plugin. A file or key a kept component shares stays.
+ */
+function unselected(capability: AcfCapability): { paths: Set<string>; keys: Set<string> } {
+  const kept = capability.remainder ?? [];
+  const keptPaths = new Set(kept.flatMap((component) => component.paths));
+  const keptKeys = new Set(kept.flatMap((component) => component.manifestKeys ?? []));
+  const removed = removedRemainder(capability);
+  return {
+    paths: new Set(removed.flatMap((c) => c.paths).filter((p) => !keptPaths.has(p))),
+    keys: new Set(removed.flatMap((c) => c.manifestKeys ?? []).filter((key) => !keptKeys.has(key))),
+  };
+}
+
+/**
+ * The source manifest's unprojected entries for the plugin, without the keys and path entries
+ * of remainder components selection removed: a key only removed components used is dropped, and
+ * a shared component key (such as `agents`) loses the paths of removed files.
+ */
+function selectedManifestEntries(
+  capability: AcfCapability,
+  rawManifest: Record<string, unknown>,
+): Array<[string, unknown]> {
+  const { paths, keys } = unselected(capability);
+  const entries: Array<[string, unknown]> = [];
+  for (const [key, value] of Object.entries(rawManifest)) {
+    if (PROJECTED_MANIFEST_KEYS.has(key) || keys.has(key)) continue;
+    const kept = withoutPaths(value, paths);
+    if (kept !== undefined) entries.push([key, kept]);
+  }
+  return entries;
+}
+
+/** `value` without string entries naming one of `paths`; undefined when nothing is left. */
+function withoutPaths(value: unknown, paths: ReadonlySet<string>): unknown {
+  const removed = (item: unknown) =>
+    typeof item === "string" && paths.has(path.posix.normalize(item));
+  if (Array.isArray(value)) {
+    const kept = value.filter((item) => !removed(item));
+    return kept.length === 0 && value.length > 0 ? undefined : kept;
+  }
+  return removed(value) ? undefined : value;
 }
 
 /** The source package byte for byte; its manifest differs only in the `version` value. */
@@ -250,9 +305,7 @@ async function generatedPackage(
   reportRemainder(capability, report);
 
   const extras: Array<[string, unknown]> =
-    format === "claude-plugin"
-      ? Object.entries(rawManifest).filter(([key]) => !PROJECTED_MANIFEST_KEYS.has(key))
-      : [];
+    format === "claude-plugin" ? selectedManifestEntries(capability, rawManifest) : [];
   for (const entry of Object.entries(nativeExtras(capability.manifest.targets, "claude")))
     if (!extras.some(([key]) => key === entry[0])) extras.push(entry);
   const manifest = pluginManifest(capability, extras, report);
@@ -361,25 +414,12 @@ async function rawServerEntry(
 
 /**
  * Reports remainder Claude cannot carry. A Claude plugin's remainder is Claude's own and goes
- * into the plugin unchanged, with a warning when rename or selection changed the package around
- * it. Other remainder has no Claude form and is omitted or refuses the package
- * (`remainderSupport`).
+ * into the plugin unchanged; resolution already warned (`acf.selection.remainder-references`)
+ * when rename or selection changed the package around it. Other remainder has no Claude form
+ * and is omitted or refuses the package (`remainderSupport`).
  */
 function reportRemainder(capability: AcfCapability, report: EmitReport): void {
-  const remainder = capability.remainder ?? [];
-  const name = capability.manifest.name;
-  if (capability.source?.format === "claude-plugin") {
-    if (remainder.length === 0) return;
-    report.diagnostics.push({
-      severity: "lossy",
-      code: "acf.emit.transformed-remainder",
-      message: `Claude plugin ${name} was renamed or had components removed; its preserved ${remainder.map((c) => `${c.kind} ${c.name}`).join(", ")} may still reference renamed or excluded items`,
-      targetId: "claude",
-      capability: { name },
-      data: { components: remainder.map((c) => ({ kind: c.kind, name: c.name })) },
-    });
-    return;
-  }
+  if (capability.source?.format === "claude-plugin") return;
   report.diagnostics.push(...remainderSupport(capability, "claude"));
 }
 
@@ -400,6 +440,7 @@ async function supportFiles(
     owned.add(CLAUDE_MANIFEST_PATH);
     owned.add(MCP_PATH);
     for (const p of jsonConfigPaths(rawManifest.mcpServers)) owned.add(p);
+    for (const p of unselected(capability).paths) owned.add(p);
   }
   if (format === "agent-plugins") {
     owned.add("plugin.json");

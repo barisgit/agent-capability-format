@@ -80,3 +80,30 @@ test("legacy source-only lock ids remain valid for path entries", () => {
   };
   expect(detectLockDrift(yml, lock)).toEqual([]);
 });
+
+test("include/exclude drift is diagnosed regardless of family and name order", () => {
+  const source = { kind: "path", location: "/repo" } as const;
+  const lockEntry = {
+    capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    capabilityNames: ["hardware"],
+    exclude: { skills: ["a", "b"], mcp: ["files"] },
+    source: "path:/repo",
+    sourceId: "path:/repo",
+  };
+  const lock: CapabilitiesLock = { acf: 1, entries: [lockEntry] };
+  const same: CapabilitiesYml = {
+    acf: 1,
+    capabilities: [{ source, exclude: { mcp: ["files"], skills: ["b", "a"] } }],
+  };
+  const changed: CapabilitiesYml = {
+    acf: 1,
+    capabilities: [{ source, exclude: { skills: ["a"] } }],
+  };
+
+  expect(detectLockDrift(same, lock)).toEqual([]);
+  const diagnostics = detectLockDrift(changed, lock);
+  expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["acf.lock.drift"]);
+  expect(diagnostics[0]?.data).toMatchObject({
+    ymlSelection: { include: null, exclude: { skills: ["a"] } },
+  });
+});

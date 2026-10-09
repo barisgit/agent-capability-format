@@ -4,9 +4,12 @@
  * directory) plus `report.json` with `expected/`.
  */
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type AcfCapability,
+  applyEntrySelection,
   type Diagnostic,
   type EmitOptions,
   type EmitResult,
@@ -166,11 +169,67 @@ test("an unchanged Claude plugin is copied byte for byte apart from its version"
 
 test("a renamed Claude plugin without an excluded skill is regenerated around its remainder", async () => {
   const golden = goldenCase(testsDir, "claude-plugin-transformed");
-  const capability = await readInput(golden.input, "claude-plugin", "code-review");
-  // Facet selection is applied before writers run; the writer sees the remaining skills.
-  capability.skills = capability.skills.filter((skill) => skill.name !== "triage");
-  const result = await emit(claudeAdapter, capability, INSTALL_ROOT, await inputFs(golden.input));
-  await assertGoldenTree(pluginTree(result, golden.input), golden.expected);
+  const selected = applyEntrySelection(
+    await readInput(golden.input, "claude-plugin", "code-review"),
+    { exclude: { skills: ["triage"] } },
+  );
+  const result = await emit(
+    claudeAdapter,
+    selected.capability,
+    INSTALL_ROOT,
+    await inputFs(golden.input),
+  );
+  await assertGoldenTree(
+    pluginTree(result, golden.input, { selection: selected.diagnostics }),
+    golden.expected,
+  );
+});
+
+test("a Claude plugin leaves out the files and manifest entries of excluded components", async () => {
+  const input = await mkdtemp(path.join(tmpdir(), "claude-selected-"));
+  try {
+    const files: Record<string, string> = {
+      ".claude-plugin/plugin.json": `${JSON.stringify({
+        name: "kit",
+        version: "1.0.0",
+        agents: ["./agents/keep.md", "./agents/drop.md"],
+        hooks: "./hooks/hooks.json",
+      })}\n`,
+      "agents/keep.md": "---\nname: keep\ndescription: Kept\n---\nKeep.\n",
+      "agents/drop.md": "---\nname: drop\ndescription: Dropped\n---\nDrop.\n",
+      "hooks/hooks.json": `${JSON.stringify({ hooks: {} })}\n`,
+      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+    };
+    for (const [relative, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
+      await writeFile(path.join(input, relative), text);
+    }
+    const selected = applyEntrySelection(await readInput(input, "claude-plugin"), {
+      exclude: { agents: ["drop"], hooks: ["hooks"] },
+    });
+
+    const result = await emit(
+      claudeAdapter,
+      selected.capability,
+      INSTALL_ROOT,
+      await inputFs(input),
+    );
+
+    const tree = pluginTree(result, input);
+    expect([...tree.keys()].sort()).toEqual([
+      ".claude-plugin/plugin.json",
+      "agents/keep.md",
+      "report.json",
+      "skills/review/SKILL.md",
+    ]);
+    const manifest = JSON.parse(
+      new TextDecoder().decode(tree.get(".claude-plugin/plugin.json")?.bytes),
+    ) as Record<string, unknown>;
+    expect(manifest.agents).toEqual(["./agents/keep.md"]);
+    expect(manifest.hooks).toBeUndefined();
+  } finally {
+    await rm(input, { recursive: true, force: true });
+  }
 });
 
 test("an Agent Plugins package is translated into a Claude plugin", async () => {

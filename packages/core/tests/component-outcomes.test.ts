@@ -126,7 +126,7 @@ describe("component outcomes", () => {
       outcome: "blocked",
       source: "skill review, MCP server docs",
       consequence: "capability tools is not installed for codex",
-      recovery: "exclude: { skill: [review], mcp: [docs] } or except: [codex]",
+      recovery: "exclude: { skills: [review], mcp: [docs] } or except: [codex]",
     });
     expect(capabilityBlocked(diagnostics, "codex")).toBe(true);
     expect(capabilityBlocked(diagnostics, "claude")).toBe(false);
@@ -214,7 +214,7 @@ describe("component outcomes", () => {
     expect(helper?.consequence).toBe(
       "cursor does not natively support agent; facet is not emitted",
     );
-    expect(helper?.recovery).toBe("exclude: { agent: [helper] } or except: [cursor]");
+    expect(helper?.recovery).toBe("exclude: { agents: [helper] } or except: [cursor]");
   });
 
   test("a partially supported family is changed behavior, an unsupported hook event omits its hooks", () => {

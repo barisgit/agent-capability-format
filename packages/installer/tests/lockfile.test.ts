@@ -35,7 +35,7 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
           resolvedAt: "2026-05-28T00:00:00.000Z",
           capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           capabilityNames: ["alpha"],
-          include: { skill: ["b", "a"] },
+          include: { skills: ["b", "a"] },
         },
       ],
     };
@@ -63,7 +63,7 @@ test("lockfile round-trips with sorted entries and alphabetical entry keys", asy
       "github:a/repo",
       "github:z/repo",
     ]);
-    expect(reread?.entries[0]?.include).toEqual({ skill: ["a", "b"] });
+    expect(reread?.entries[0]?.include).toEqual({ skills: ["a", "b"] });
     expect(reread?.entries[1]?.capabilities).toEqual(["a", "z/**"]);
   } finally {
     await cleanup(dir);

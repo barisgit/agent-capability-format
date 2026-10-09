@@ -3,6 +3,7 @@ import { canonicalTriggerNames } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
 import { carriersOf } from "../targets/field-support.js";
 import { sourceFormats } from "../types/interop.js";
+import type { SelectorKey } from "../types/model.js";
 
 export const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 export const targetIdSchema = slugSchema;
@@ -249,10 +250,16 @@ export const mcpFileSchema = z.object({
     .optional(),
 });
 
-const selectorSchema = z.record(
-  z.enum(["skill", "agent", "command", "instruction", "hook", "mcp"]),
-  z.array(z.string()),
-);
+const selectorNamesSchema = z.array(z.string()).optional();
+/** `include`/`exclude`: names per family, keyed by `selectorKeys` (SPEC.md §17.5). */
+const selectorSchema = z.strictObject({
+  skills: selectorNamesSchema,
+  agents: selectorNamesSchema,
+  commands: selectorNamesSchema,
+  instructions: selectorNamesSchema,
+  hooks: selectorNamesSchema,
+  mcp: selectorNamesSchema,
+} satisfies Record<SelectorKey, typeof selectorNamesSchema>);
 
 const sourceSpecObjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("github"), repo: z.string().min(1) }),

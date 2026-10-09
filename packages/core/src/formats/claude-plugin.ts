@@ -91,7 +91,7 @@ export async function readClaudePluginPackage(
     mcp,
     assets: await skillAssets(root, skills),
     diagnostics,
-    source: { format: "claude-plugin" },
+    source: { format: "claude-plugin", renamedFrom: named.identity.renamedFrom },
     remainder,
     manifestName: raw.name as string,
   });

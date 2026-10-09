@@ -1,7 +1,7 @@
 Compatibility
-  background (beta-cap) / codex - blocked: skill background is not installed for codex (skill.invocation.user=false). Recovery: exclude: { skill: [background] } or except: [codex]
+  background (beta-cap) / codex - blocked: skill background is not installed for codex (skill.invocation.user=false). Recovery: exclude: { skills: [background] } or except: [codex]
   events (beta-cap) / codex - blocked: MCP server events is not installed for codex (mcp.transport=sse). Recovery: exclude: { mcp: [events] } or except: [codex]
-  beta-helper, always, beta-server (beta-cap) / codex - blocked: capability beta-cap is not installed for codex (skill background, MCP server events). Recovery: exclude: { skill: [background], mcp: [events] } or except: [codex]
+  beta-helper, always, beta-server (beta-cap) / codex - blocked: capability beta-cap is not installed for codex (skill background, MCP server events). Recovery: exclude: { skills: [background], mcp: [events] } or except: [codex]
   alpha-server (alpha-cap) / codex - translated: ${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory (mcp.command=${ACF_CAPABILITY_DIR})
   codex - native: 1 skill, 1 agent, 1 instruction
   codex - dropped: targets.claude.native.when_to_use (review (alpha-cap))

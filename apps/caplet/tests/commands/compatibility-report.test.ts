@@ -53,7 +53,7 @@ const constructed: ComponentOutcome[] = [
     outcome: "changed-behavior",
     source: "targets.claude.native.permissionMode",
     consequence: "agent helper runs without permissionMode on opencode",
-    recovery: "exclude: { agent: [helper] } or except: [opencode]",
+    recovery: "exclude: { agents: [helper] } or except: [opencode]",
   },
   {
     capability: "tools",
@@ -63,7 +63,7 @@ const constructed: ComponentOutcome[] = [
     outcome: "blocked",
     source: "skill.invocation.user=false",
     consequence: "skill review is not installed for pi",
-    recovery: "exclude: { skill: [review] } or except: [pi]",
+    recovery: "exclude: { skills: [review] } or except: [pi]",
     dropped: ["skill.argument-hint"],
   },
   {
@@ -74,7 +74,7 @@ const constructed: ComponentOutcome[] = [
     outcome: "omitted",
     source: "agent",
     consequence: "agent helper is not installed for pi",
-    recovery: "exclude: { agent: [helper] } or except: [pi]",
+    recovery: "exclude: { agents: [helper] } or except: [pi]",
   },
   { capability: "tools", target: "pi", family: "mcp", component: "docs", outcome: "native" },
   {
@@ -103,7 +103,7 @@ describe("behavior-first compatibility report", () => {
   test("a refused skill reads as a block with its recovery", () => {
     const report = plain(renderCompatibility(constructed, ["pi"]));
     expect(report).toContain(
-      "review / pi - blocked: skill review is not installed for pi (skill.invocation.user=false). Recovery: exclude: { skill: [review] } or except: [pi]",
+      "review / pi - blocked: skill review is not installed for pi (skill.invocation.user=false). Recovery: exclude: { skills: [review] } or except: [pi]",
     );
   });
 

@@ -132,8 +132,54 @@ test("foreign snapshots are read with the reader their lock record names", async
       format: "claude-plugin",
       path: "plugins/review",
       snapshotRoot: snapshot,
-      projected: { name: "review-kit", skills: ["review"], servers: [] },
+      projected: { name: "review-kit", skills: ["review"], servers: [], remainder: [] },
     });
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("installed capabilities carry the selection their lock entry mirrors", async () => {
+  const dir = await tempDir("acf-resolver-selection-");
+  try {
+    const scope = scopeRoot("project", dir);
+    const snapshot = path.join(scope.capabilitiesDir, "review-kit");
+    await writeText(
+      path.join(snapshot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "review-kit", version: "1.0.0" }),
+    );
+    for (const name of ["review", "draft"])
+      await writeText(
+        path.join(snapshot, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: ${name}\n---\n`,
+      );
+    const payloadDigest = await computePayloadDigest(snapshot);
+    const lock: CapabilitiesLock = {
+      acf: 1,
+      entries: [
+        {
+          capabilityHash: payloadDigest,
+          capabilityNames: ["review-kit"],
+          exclude: { skills: ["draft"] },
+          source: "path:../plugin",
+          sourceId: "path:/plugin",
+          resolvedCapabilities: [
+            {
+              name: "review-kit",
+              format: "claude-plugin",
+              path: ".",
+              payloadDigest,
+              capabilityHash: payloadDigest,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { capabilities, diagnostics } = await resolveScopeCapabilities(scope, { lock });
+
+    expect(diagnostics).toEqual([]);
+    expect(capabilities[0]?.skills.map((skill) => skill.name)).toEqual(["review"]);
   } finally {
     await cleanup(dir);
   }

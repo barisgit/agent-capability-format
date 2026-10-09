@@ -28,7 +28,7 @@ describe("support diagnostics derived from registry cells", () => {
     expect(diagnostic?.capability).toEqual({ name: "tools" });
     expect(diagnostic?.message).toContain("skill.invocation.model=false");
     expect(diagnostic?.message).toContain(cell.reason);
-    expect(diagnostic?.message).toContain("exclude: { skill: [review] } or except: [opencode]");
+    expect(diagnostic?.message).toContain("exclude: { skills: [review] } or except: [opencode]");
     expect(readSupportData(diagnostic)).toEqual({
       family: "skill",
       component: "review",
@@ -36,7 +36,7 @@ describe("support diagnostics derived from registry cells", () => {
       blocks: "component",
       source: "skill.invocation.model=false",
       consequence: "skill review is not installed for opencode",
-      recovery: "exclude: { skill: [review] } or except: [opencode]",
+      recovery: "exclude: { skills: [review] } or except: [opencode]",
     });
   });
 
@@ -112,7 +112,7 @@ describe("support diagnostics derived from registry cells", () => {
     expect(readSupportData(diagnostic)).toMatchObject({
       outcome: "omitted",
       source: "agent",
-      recovery: "exclude: { agent: [helper] } or except: [codex]",
+      recovery: "exclude: { agents: [helper] } or except: [codex]",
     });
   });
 

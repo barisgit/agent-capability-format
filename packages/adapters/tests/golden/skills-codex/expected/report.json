@@ -3,7 +3,7 @@
     {
       "severity": "error",
       "code": "acf.support.refused",
-      "message": "skill background is blocked for codex by skill.invocation.user=false: codex cannot honor skill.invocation.user=false: Codex has no switch that refuses explicit $skill invocation. Recovery: exclude: { skill: [background] } or except: [codex]",
+      "message": "skill background is blocked for codex by skill.invocation.user=false: codex cannot honor skill.invocation.user=false: Codex has no switch that refuses explicit $skill invocation. Recovery: exclude: { skills: [background] } or except: [codex]",
       "targetId": "codex",
       "capability": {
         "name": "demo"
@@ -15,7 +15,7 @@
         "blocks": "component",
         "source": "skill.invocation.user=false",
         "consequence": "skill background is not installed for codex",
-        "recovery": "exclude: { skill: [background] } or except: [codex]"
+        "recovery": "exclude: { skills: [background] } or except: [codex]"
       },
       "family": "skill"
     },
@@ -48,7 +48,7 @@
         "outcome": "changed-behavior",
         "source": "targets.claude.native.allowed-tools",
         "consequence": "skill review runs without allowed-tools on codex",
-        "recovery": "exclude: { skill: [review] } or except: [codex]",
+        "recovery": "exclude: { skills: [review] } or except: [codex]",
         "dropped": "targets.claude.native.allowed-tools"
       },
       "family": "skill"

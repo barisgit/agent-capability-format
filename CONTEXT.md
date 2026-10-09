@@ -36,10 +36,16 @@ such as MCP and leaf standards such as Agent Skills. ACF defines a default
 hook handler wire protocol that adapters MAY override; it does not define a
 universal runtime, agent loop, or event log.
 
-### Axiom 4 — Native artifacts remain native
+### Axiom 4 — Native artifacts remain native; meaning is honored or refused
 
-Each target host gets artifacts in its own native shape. ACF preserves host
-semantics where possible and reports lossiness where it cannot.
+Each target host gets artifacts in its own native shape, through a carrier
+the target supports: loose files at its native locations, or for Claude a
+generated plugin package registered through the `claude` CLI. Every portable
+field has a per-target support cell (native, translated, degraded, refused)
+with evidence. Restricting and functional fields are honored exactly or the
+capability is refused on that target; only descriptive and granting fields
+may degrade, and every degradation is reported as lossiness. A writer never
+weakens a restriction to make output fit.
 
 ### Axiom 5 — Direct SDK consumption is secondary
 
@@ -144,14 +150,19 @@ native-only options; it is not a deep merge, replacement object, or place to
 restate mappings the adapter already knows from canonical fields. Unknown
 target ids or unknown extension fields produce diagnostics.
 
-### Axiom 12 — Raw native files are emitted artifacts, not ACF source
+### Axiom 12 — Native packages are foreign sources, not ACF source syntax
 
-ACF capabilities do not use target-native plugin/config files as portable
-source. Adapters may emit files such as `.codex-plugin/plugin.json`,
-`.claude-plugin/plugin.json`, `.mcp.json`, or native hook JSON/TOML, but ACF
-source keeps canonical and target-specific data in ACF-owned files and
-schemas. JSON and TOML are native emission formats or implementation
-details, not portable ACF source config.
+Inside an ACF package, portable data lives in ACF-owned YAML and Markdown.
+Target-only data lives in native extras: `targets.<target>.native`,
+`targets.<target>.package`, and files under `native/<target>/`, which are
+copied verbatim into that target's output and never read as facets. A
+`.claude-plugin/plugin.json` elsewhere in an ACF package is ignored.
+
+Native packages (Agent Plugins `plugin.json`, Claude plugins, bare skill
+directories) are foreign sources: a format reader projects each one into the
+ACF model as one capability, keeps what ACF cannot express as native
+remainder, and never merges two formats. JSON and TOML remain native
+emission and source formats, not ACF source config.
 
 ### Axiom 13 — Definition-first registries
 
@@ -350,7 +361,33 @@ other output in the target host's own format.
 ### Lossiness
 
 Any semantic gap where an ACF facet cannot be represented exactly in a
-target host. Reported via `lossy` diagnostics.
+target host. Reported via `lossy` diagnostics. Only descriptive and granting
+fields may be lossy; a restricting or functional gap is a refusal
+(`acf.support.refused`), which blocks that capability on that target.
+
+### Safety Class
+
+The effect of dropping a field: `restricting` (narrows when or how a
+capability acts), `granting` (widens permissions), `functional` (needed to
+run), or `descriptive` (display and discovery). Decides whether a missing
+support cell degrades or refuses.
+
+### Carrier
+
+The shape a target's output takes: `loose` files at the host's native
+locations, or a `plugin` package. Claude defaults to `plugin`; every other
+target supports only `loose`.
+
+### Native Extra
+
+Target-only data authored in an ACF package (`targets.<target>.native`,
+`targets.<target>.package`, `native/<target>/`) and passed to that target
+verbatim.
+
+### Foreign Source
+
+A fetched package in a native format (Agent Plugins, Claude plugin, bare
+skills) read into the ACF model by a format reader.
 
 ### Runtime Taxonomy / Registry
 
@@ -363,8 +400,8 @@ a sibling specification.
 ### Target Registry
 
 The implementation-level data structure that enumerates known targets, their
-facet support levels, their install paths per scope, their canonical-to-
-native mapping tables, and their extension schemas. Defined in
+per-field support cells and carriers, their install paths per scope, their
+canonical-to-native mapping tables, and their extension schemas. Defined in
 `IMPLEMENTATION.md` §4.
 
 ### Scope
@@ -381,7 +418,8 @@ A description in `capabilities.yml` of where to fetch a capability from:
 ### Lockfile
 
 `capabilities.lock`, recording the resolved identity (source id, commit,
-content hash) of each fetched capability per scope.
+source format, content hash, payload digest) and the selection of each
+fetched capability per scope.
 
 ### Diagnostic
 
@@ -444,8 +482,9 @@ regions.
 ### ACF Ownership Sidecar
 
 The `.acf-managed.json` file written at each install root by the emit
-driver. Records every `FileDiff` ownership (`{path, owns, capability,
-facet?, hash}`). Enables clean re-emit (remove stale pointers without
-touching unowned regions), drift detection (`acf.emit.drift`), and
+driver. Records every `FileDiff` ownership (`{target, carrier, capability,
+facet?, path, owns, mode, hash}`). Enables clean re-emit (remove stale
+pointers without touching unowned regions), drift detection
+(`acf.apply.drift`), and
 safe removal when a capability or facet is unfetched. Adapters do not
 write the sidecar; the emit driver writes it after diffs are applied.

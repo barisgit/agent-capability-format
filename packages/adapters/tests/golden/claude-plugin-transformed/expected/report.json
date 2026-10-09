@@ -8,33 +8,7 @@
       "dir": ".claude/.acf/marketplace/plugins/code-review"
     }
   ],
-  "diagnostics": [
-    {
-      "severity": "lossy",
-      "code": "acf.emit.transformed-remainder",
-      "message": "Claude plugin code-review was renamed or had components removed; its preserved agent reviewer, bin files, listing-metadata listing may still reference renamed or excluded items",
-      "targetId": "claude",
-      "capability": {
-        "name": "code-review"
-      },
-      "data": {
-        "components": [
-          {
-            "kind": "agent",
-            "name": "reviewer"
-          },
-          {
-            "kind": "bin",
-            "name": "files"
-          },
-          {
-            "kind": "listing-metadata",
-            "name": "listing"
-          }
-        ]
-      }
-    }
-  ],
+  "diagnostics": [],
   "outcomes": [
     {
       "capability": "code-review",
@@ -62,6 +36,20 @@
       "outcome": "translated",
       "source": "package.authors",
       "consequence": "the first entry becomes author; legacy \"Name <email>\" strings are decoded"
+    }
+  ],
+  "selection": [
+    {
+      "severity": "lossy",
+      "code": "acf.selection.remainder-references",
+      "message": "code-review keeps 3 native component(s) unchanged; they may still reference the 1 component(s) include/exclude removed and the package name review-kit that rename replaced",
+      "path": "<input>",
+      "data": {
+        "capability": "code-review",
+        "removed": 1,
+        "preserved": 3,
+        "renamedFrom": "review-kit"
+      }
     }
   ]
 }

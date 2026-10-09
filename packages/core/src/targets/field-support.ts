@@ -358,6 +358,11 @@ const mcpFields: FieldSupport[] = [
     `${CAPABILITY_DIR}/x becomes ${CLAUDE_PLUGIN_ROOT}/x`,
     absoluteCapabilityDir,
   ),
+  placeholderRow(
+    `mcp.command=${DATA_DIR}`,
+    `${DATA_DIR}/x becomes ${CLAUDE_PLUGIN_DATA}/x`,
+    capletDataDir,
+  ),
   sameKey("mcp", "mcp.command=absolute", "functional", "command", {
     opencode: native("command[0]", SRC.opencodeMcp),
   }),

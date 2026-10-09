@@ -7,7 +7,7 @@
     "outcome": "omitted",
     "source": "agent",
     "consequence": "cursor does not natively support agent; facet is not emitted",
-    "recovery": "exclude: { agent: [alpha-helper] } or except: [cursor]"
+    "recovery": "exclude: { agents: [alpha-helper] } or except: [cursor]"
   },
   {
     "capability": "alpha-cap",
@@ -17,7 +17,7 @@
     "outcome": "omitted",
     "source": "activation: always",
     "consequence": "cursor only emits file_context instructions as Cursor rules",
-    "recovery": "exclude: { instruction: [always] } or except: [cursor]"
+    "recovery": "exclude: { instructions: [always] } or except: [cursor]"
   },
   {
     "capability": "alpha-cap",
@@ -34,7 +34,7 @@
     "outcome": "omitted",
     "source": "agent",
     "consequence": "cursor does not natively support agent; facet is not emitted",
-    "recovery": "exclude: { agent: [beta-helper] } or except: [cursor]"
+    "recovery": "exclude: { agents: [beta-helper] } or except: [cursor]"
   },
   {
     "capability": "beta-cap",
@@ -44,7 +44,7 @@
     "outcome": "omitted",
     "source": "activation: always",
     "consequence": "cursor only emits file_context instructions as Cursor rules",
-    "recovery": "exclude: { instruction: [always] } or except: [cursor]"
+    "recovery": "exclude: { instructions: [always] } or except: [cursor]"
   },
   {
     "capability": "beta-cap",

@@ -1,4 +1,4 @@
-import type { CapabilitiesYml, Diagnostic } from "@caplet/core";
+import type { CapabilitiesYml, CapabilityEntry, Diagnostic, EntrySelection } from "@caplet/core";
 import type { CapabilitiesLock } from "./lockfile.js";
 import { entrySourceId, sourceId } from "./lockfile.js";
 
@@ -50,8 +50,49 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
         },
       });
     }
+    if (!sameSelection(entry, lockEntry)) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.lock.drift",
+        message: `capabilities.yml include, exclude, only or except differs from lock for ${id}`,
+        data: {
+          sourceId: id,
+          ymlSelection: selectionData(entry),
+          lockSelection: selectionData(lockEntry),
+        },
+      });
+    }
   }
   return diagnostics;
+}
+
+/** Whether two entries select the same components and targets, ignoring list order. */
+export function sameSelection(left: EntrySelection, right: EntrySelection): boolean {
+  return (
+    selectorKey(left.include) === selectorKey(right.include) &&
+    selectorKey(left.exclude) === selectorKey(right.exclude) &&
+    sameStrings(left.only, right.only) &&
+    sameStrings(left.except, right.except)
+  );
+}
+
+function selectionData(selection: EntrySelection): Record<keyof EntrySelection, unknown> {
+  return {
+    include: selection.include ?? null,
+    exclude: selection.exclude ?? null,
+    only: selection.only ?? null,
+    except: selection.except ?? null,
+  };
+}
+
+function selectorKey(selector: CapabilityEntry["include"]): string {
+  if (selector === undefined) return "";
+  return JSON.stringify(
+    Object.entries(selector)
+      .filter((pair): pair is [string, string[]] => pair[1] !== undefined)
+      .map(([family, names]) => [family, [...names].sort()])
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  );
 }
 
 function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {

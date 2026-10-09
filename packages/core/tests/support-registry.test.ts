@@ -36,6 +36,7 @@ const MCP_FIELDS = [
   "mcp.transport=sse",
   "mcp.command=bare",
   `mcp.command=${CAP}`,
+  `mcp.command=${DATA}`,
   "mcp.command=absolute",
   "mcp.args",
   "mcp.env",

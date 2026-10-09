@@ -27,6 +27,7 @@ const coveredByFixtures = new Set([
   "acf.mcp.url.insecure",
   "acf.mcp.url.credential-in-url",
   "acf.mcp.placeholder.unsupported",
+  "acf.mcp.placeholder.pending",
   "acf.skill.paths-not-core",
   "acf.skill.native-key-not-core",
   "acf.core.pending",
@@ -46,6 +47,8 @@ const coveredByFixtures = new Set([
 ]);
 
 const exportedOnly = new Set([
+  "acf.selection.unmatched",
+  "acf.selection.remainder-references",
   "acf.hook.target-native-event.unknown-schema",
   "acf.adapter.scope-unsupported",
   "acf.adapter.effect-degraded",
@@ -87,7 +90,6 @@ const exportedOnly = new Set([
   "acf.support.component-omitted",
   "acf.extras.dropped",
   // Built by the Claude plugin writer; packages/adapters/tests/claude-plugin.test.ts covers them.
-  "acf.emit.transformed-remainder",
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
   // Built by the Codex MCP writer; adapters/tests/native-mcp.test.ts covers it.

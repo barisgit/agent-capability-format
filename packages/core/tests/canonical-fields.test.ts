@@ -134,19 +134,16 @@ test("stdio server cwd starts with a capability or data directory placeholder or
       },
     );
   }
-  for (const cwd of [
-    "/srv/app",
-    "server",
-    "../up",
-    `${CAPABILITY_DIR}/../up`,
-    "./a/../../b",
-    `${DOLLAR}{HOME}/x`,
-  ]) {
+  for (const cwd of ["/srv/app", "server", "../up", `${CAPABILITY_DIR}/../up`, "./a/../../b"]) {
     await withCapability(
       mcpFile(`    transport: stdio\n    command: node\n    cwd: "${cwd}"\n`),
       (cap) => expect(errors(cap)).toEqual(["acf.mcp.cwd.invalid"]),
     );
   }
+  await withCapability(
+    mcpFile(`    transport: stdio\n    command: node\n    cwd: "${DOLLAR}{HOME}/x"\n`),
+    (cap) => expect(errors(cap)).toEqual(["acf.mcp.cwd.invalid", "acf.mcp.placeholder.pending"]),
+  );
   await withCapability(
     mcpFile("    transport: http\n    url: https://example.com/mcp\n    cwd: ./x\n"),
     (cap) => expect(errors(cap)).toEqual(["acf.mcp.cwd.invalid"]),
@@ -203,6 +200,34 @@ test("the data directory placeholder is valid in stdio fields and invalid in url
       expect(errors(cap)).toEqual([
         "acf.mcp.placeholder.unsupported",
         "acf.mcp.placeholder.unsupported",
+      ]),
+  );
+});
+
+test("a host environment reference in a canonical MCP field is an error naming its native route", async () => {
+  await withCapability(
+    mcpFile(
+      `    transport: stdio\n    command: "${CAPABILITY_DIR}/bin/srv"\n    args: ["--token=${DOLLAR}{TOKEN:-none}", "${DOLLAR}{ACF_PACKAGE_DIR}/x", "${DOLLAR}{ACF_HOOK_DIR}/y"]\n    env:\n      API_KEY: "${DOLLAR}{API_KEY}"\n      STATE: "${DATA_DIR}"\n`,
+    ),
+    (cap) => {
+      expect(errors(cap)).toEqual(["acf.mcp.placeholder.pending", "acf.mcp.placeholder.pending"]);
+      const [args, env] = cap.diagnostics.map((d) => d.message);
+      expect(args).toContain("args[0]");
+      expect(env).toContain("env.API_KEY");
+      expect(env).toContain(`${DOLLAR}{API_KEY}`);
+      expect(env).toContain("references to host environment variables, files or user options");
+      expect(env).toContain("targets.<target>.native");
+      expect(env).toContain("targets.claude.native.mcpServers");
+    },
+  );
+  await withCapability(
+    mcpFile(
+      `    transport: http\n    url: "https://example.com/${DOLLAR}{env:REGION}"\n    headers:\n      Authorization: "Bearer ${DOLLAR}{API_KEY}"\n`,
+    ),
+    (cap) =>
+      expect(cap.diagnostics.map((d) => d.message.split(" references ")[0])).toEqual([
+        "server srv: url",
+        "server srv: headers.Authorization",
       ]),
   );
 });

@@ -9,6 +9,7 @@ import type {
   SupportCell,
   TargetId,
 } from "../types/index.js";
+import { selectorKeys } from "../types/index.js";
 import { carriersOf, findFieldSupport, supportCell } from "./field-support.js";
 import { nativeKeyInfo } from "./native-keys.js";
 
@@ -91,12 +92,16 @@ export function translatedOutcome(
 /**
  * `acf.support.component-omitted` (lossy): the target has no carrier for the component type,
  * so the writer skips it. Use `packageRefused` instead when the component is restricting.
- * `recovery` replaces the default when another choice also resolves it (a carrier change).
+ * `options.recovery` replaces the default when another choice also resolves it (a carrier change);
+ * `options.source` names the component type in the report and defaults to the family.
  */
 export function componentOmitted(
   subject: SupportSubject,
   reason: string,
-  recovery = recoveryFor(subject),
+  {
+    recovery = recoveryFor(subject),
+    source = subject.family,
+  }: { recovery?: string; source?: string } = {},
 ): Diagnostic {
   const label = componentLabel(subject);
   return diagnostic(subject, {
@@ -105,7 +110,7 @@ export function componentOmitted(
     message: `${label} is omitted for ${subject.target}: ${reason}`,
     data: {
       outcome: "omitted",
-      source: subject.family,
+      source,
       consequence: `${label} is not installed for ${subject.target}`,
       recovery,
     },
@@ -259,7 +264,9 @@ function diagnostic(
     capability: { name: subject.capability },
     data: { family: subject.family, component: subject.component, ...input.data },
   };
-  if (subject.family !== "package") result.family = subject.family;
+  if (subject.family !== "package" && subject.family !== "remainder") {
+    result.family = subject.family;
+  }
   return result;
 }
 
@@ -272,6 +279,7 @@ export const outcomeFamilyNouns: Readonly<Record<OutcomeFamily, readonly [string
   instruction: ["instruction", "instructions"],
   hook: ["hook", "hooks"],
   mcp: ["MCP server", "MCP servers"],
+  remainder: ["native component", "native components"],
 };
 
 /** A component named by its family noun, such as `skill review` or `capability tools`. */
@@ -284,13 +292,16 @@ export function componentLabel(subject: Pick<SupportSubject, "family" | "compone
 /**
  * The recovery a user applies to accept the loss: exclude the component for the target, or
  * restrict it to other targets (capability-model-layers, Writers honor the table or refuse).
+ * Packages and native remainder outside the ACF families have no selector, only `except`.
  */
 export function recoveryFor(subject: {
   family: OutcomeFamily;
   component: string;
   target: TargetId;
 }): string {
-  if (subject.family === "package") return `except: [${subject.target}]`;
+  if (subject.family === "package" || subject.family === "remainder") {
+    return `except: [${subject.target}]`;
+  }
   return exclusionRecovery(
     [{ family: subject.family, component: subject.component }],
     subject.target,
@@ -298,8 +309,9 @@ export function recoveryFor(subject: {
 }
 
 /**
- * The recovery that excludes every one of `components` for the target at once, or restricts
- * the capability to other targets. Families keep their first-seen order.
+ * The `capabilities.yml` recovery for blocked `components`: exclude all of them from the
+ * entry (for every target), or except the entry from `target`. Families keep their
+ * first-seen order and use the selector keys `exclude` accepts.
  */
 export function exclusionRecovery(
   components: readonly { family: FacetFamily; component: string }[],
@@ -309,6 +321,8 @@ export function exclusionRecovery(
   for (const { family, component } of components) {
     byFamily.set(family, [...(byFamily.get(family) ?? []), component]);
   }
-  const lists = [...byFamily].map(([family, names]) => `${family}: [${names.join(", ")}]`);
+  const lists = [...byFamily].map(
+    ([family, names]) => `${selectorKeys[family]}: [${names.join(", ")}]`,
+  );
   return `exclude: { ${lists.join(", ")} } or except: [${target}]`;
 }

@@ -78,6 +78,7 @@ import {
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices, rootNoticeDiffFromSidecar } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
+import { withholdConflictingMcpServers } from "./mcp-conflicts.js";
 import { resolveScopeRoots } from "./scopes.js";
 
 export type EmittedDiff = {
@@ -296,14 +297,30 @@ export async function buildEmitPlan(
         continue;
       }
       diagnostics.push(...(await driftDiagnostics(installRoot)));
+      const applicable = await withholdConflictingMcpServers(
+        resolved.capabilities.flatMap(
+          (capability) => applyApplicability(capability, targetId) ?? [],
+        ),
+        {
+          target: targetId,
+          scope: scopeRoot.scope,
+          installRoot,
+          carrier: configResult.config.targets?.[targetId]?.carrier,
+          fs,
+        },
+      );
+      diagnostics.push(...applicable.diagnostics);
+      const emitted = new Map(
+        applicable.capabilities.map((capability) => [capability.manifest.name, capability]),
+      );
       for (const capability of resolved.capabilities) {
         const capabilityExecutables = await executableComponents(
           capability,
           targetId,
           configResult.config.targets?.[targetId]?.carrier,
         );
-        const filtered = applyApplicability(capability, targetId);
-        if (filtered === null) {
+        const filtered = emitted.get(capability.manifest.name);
+        if (filtered === undefined) {
           executables.push(...capabilityExecutables);
           continue;
         }

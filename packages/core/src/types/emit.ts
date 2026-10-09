@@ -28,10 +28,8 @@ export type TargetDefinition<Id extends string = string> = {
   displayName: string;
   support: Partial<Record<FamilySupportFamily, SupportLevel>>;
   installPaths: InstallPaths;
-  // Native per-target skills directory. SPEC §22.2: skills always emit to the
-  // canonical ~/.agents/skills (project ./.agents/skills) root; when a target
-  // also reads skills from its own native location, declare it here so caplet
-  // can dual-emit. `null` for both scopes means canonical-only (e.g. cursor).
+  // Native per-target skills directory (SPEC §22.2). Omitted when the target has
+  // none (Cursor), so a skill it cannot share through .agents/skills is omitted.
   skillInstallPaths?: InstallPaths | undefined;
   // The target discovers the ecosystem-shared .agents/skills root itself, so
   // native skill copies are opt-in rather than the default.
@@ -130,8 +128,12 @@ export type ComponentOutcomeKind =
   | "omitted"
   | "blocked";
 
-/** Component families of the compatibility report; `package` covers manifest-level data. */
-export type OutcomeFamily = FacetFamily | "package";
+/**
+ * Component families of the compatibility report; `package` covers manifest-level data and
+ * `remainder` a foreign package's native components outside the ACF families (output styles,
+ * LSP servers, settings, ...), which selection cannot name.
+ */
+export type OutcomeFamily = FacetFamily | "package" | "remainder";
 
 /**
  * The compatibility-report record for one component of one capability on one target.

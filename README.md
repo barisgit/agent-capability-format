@@ -105,7 +105,7 @@ capabilities:
   - source: github:vercel-labs/agent-skills
     ref: v1.5.6
     include:
-      skill: [react-best-practices, next-app-router]
+      skills: [react-best-practices, next-app-router]
   - source: path:../my-private
     capabilities: engineering-workflows
   - source: github:myorg/capability-pack
@@ -125,11 +125,20 @@ happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
 resolved by `rename:` or `exclude:`.
 
-Repositories do not need to adopt ACF before caplet can consume their skills.
-When no root `acf.yml` or `acf/` collection exists, caplet recognizes a root
-`SKILL.md`, `skills/<name>/SKILL.md`, or one-level-deep
-`<name>/SKILL.md`. Each discovered skill becomes one synthesized capability,
+Repositories do not need to adopt ACF before caplet can consume them. Caplet
+reads four source formats and takes the first it finds: ACF (`acf.yml` or an
+`acf/` collection), an Agent Plugins 1.0 package (`plugin.json`), a Claude
+plugin (`.claude-plugin/plugin.json`), then bare skills (a root `SKILL.md`,
+`skills/<name>/SKILL.md`, or one-level-deep `<name>/SKILL.md`). Set
+`format: acf | agent-plugins | claude-plugin | skills` on the entry to choose
+another. A plugin becomes one capability named after it; what ACF cannot
+express (agents, commands, hooks, LSP servers, ...) is kept and copied to
+the same host unchanged. Each bare skill becomes one synthesized capability,
 and its portable references and scripts are included automatically.
+
+A source that has bare skills and a `.claude-plugin/plugin.json` used to be
+read as skills; it is now read as a Claude plugin. Add `format: skills` to
+keep the old result.
 
 Select one capability directly from GitHub with the add-only `@name`
 shorthand:
@@ -198,15 +207,83 @@ the canonical command:
 
 Emitted destinations contain visible `ACF-MANAGED.md` notices: one aggregate
 inventory at each install root and one local marker inside each fully-owned
-skill directory. Edit the declared capability source, not these generated
-files, then run `caplet apply`. The machine-readable `.acf-managed.json`
-sidecar remains the authority used for drift detection and safe cleanup.
+loose skill directory. Generated Claude plugins carry none, so their content
+and version stay stable. Edit the declared capability source, not these
+generated files, then run `caplet apply`. The machine-readable
+`.acf-managed.json` sidecar remains the authority used for drift detection
+and safe cleanup.
+
+`add`, `update`, and `apply` (including `--dry-run`) list every added or
+changed executable: MCP stdio commands, hooks, LSP servers, monitors, files
+with the executable bit, and Claude `bin/` entries (`executables` in
+`--json`). Running `add` or `update` is your approval; caplet never prompts,
+so read that list when a source changes.
+
+## What each host receives
+
+Every field has a recorded meaning per host. Display fields a host lacks are
+dropped with a `lossy` diagnostic. A field that limits behavior (who may
+invoke a skill, which paths it applies to) or that a server needs to run is
+never dropped: caplet refuses the capability on that host. A refused
+capability gets no new, changed, or removed files on that host, the rest of
+the plan still applies, and the command exits 2. To recover, exclude the
+refused component (`exclude: { skills: [<name>] }`) or skip the host
+(`except: [<target>]`) on the `capabilities.yml` entry. Because a blocked
+capability keeps its previous `.agents/skills` copy, Pi can list a skill
+twice until the refusal is resolved.
+
+The shared `.agents/skills` root is written only when a selected host reads
+it (Codex, Cursor, OpenCode, Pi). Claude never reads it.
+
+### Claude: plugin or loose files
+
+Claude receives each capability as a generated plugin by default.
+Caplet writes it under `<claude-root>/.acf/marketplace/` (`~/.claude/` for
+user scope, `./.claude/` for project scope) and registers it through the
+`claude` CLI. Skills are then invoked as `/<capability>:<skill>`; the first
+apply after the switch prints each rename once (`/review` becomes
+`/review-kit:review`). Project scope registers at Claude's `local` scope, and
+Claude adds `**/.claude/settings.local.json` to your global git ignore the
+first time it writes there.
+
+Only capabilities made of skills, MCP servers, Claude-native components, and
+`native/claude/` files fit in a plugin. An ACF capability that also has
+agents, commands, hooks, or instructions stays loose for Claude as a whole
+(`acf.claude.legacy-carrier`). Set `targets.claude.carrier: loose` in
+`caplet.yml` to use loose files for everything; caplet then uninstalls its
+Claude plugins.
+
+`caplet status` reports each plugin as `registered`, `registration
+required`, `disabled by user`, `blocked by host policy`, or `unknown`.
+Without the `claude` CLI, caplet writes the plugin, reports `registration
+required` with the exact commands to run, and exits 0. A plugin you disable
+in Claude stays disabled across updates. A host policy block is reported,
+not worked around with loose files.
+
+Upgrading moves existing loose Claude skills and MCP servers into the
+plugin. Caplet removes the old loose files only after Claude reports the
+plugin registered, and leaves any you edited in place with an
+`acf.migration.drifted` warning naming the duplicate.
+
+### Known limits
+
+- MCP servers that need a Claude-only feature (`headersHelper`, OAuth, or a
+  host environment reference such as `${API_KEY}`) can only be written as
+  Claude config, under `targets.claude.native.mcpServers` in `acf.yml`.
+- Every hook in a Claude plugin counts as restricting on other hosts until
+  hook events are classified, so a Claude plugin with hooks is refused on
+  Codex, Cursor, OpenCode, and Pi. Exclude the hooks or the host to install
+  the rest.
+- Hooks written as loose Claude files are not in Claude's settings shape,
+  so Claude ignores them (see Hooks below). Hooks inside Claude plugins are
+  copied unchanged and work.
 
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
 implementation (`caplet` 0.1.0, packaged for npm as `@caplet/*` but not yet
-published). It supports bare skill imports, source capability selection, and
+published). It supports bare skill imports, Claude plugin and Agent Plugins
+sources, Claude plugin output, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).
 `RESULTS.md` and `IMPLEMENTER-AUDIT.md` are historical reports, not current
@@ -274,10 +351,13 @@ verbatim; `description` stays metadata.
 
 ## Hooks in one paragraph
 
-> **Experimental in caplet 0.1.x.** caplet writes hook entries in a
+> **Experimental in caplet 0.1.x.** caplet writes ACF hook entries in a
 > caplet-specific shape rather than each tool's native hook format, so tools
-> may ignore them. Do not rely on hooks, especially blocking ones, until the
-> hook writers are rebuilt (tracked in `openspec/changes/plugin-interop-foundation/`).
+> ignore them. For Claude, `.claude/settings.json` gets caplet's hook object
+> instead of Claude's `hooks.<Event>[].hooks[]` entries, and
+> `permission_request` maps to `PreToolUse` instead of `PermissionRequest`.
+> Do not rely on ACF hooks, especially blocking ones, until the follow-up
+> change `claude-loose-hooks-repair` rebuilds the writers.
 
 Hooks live in a single `hooks/hooks.yml` keyed by canonical type:
 `session_start`, `user_prompt_submit`, `pre_tool`, `permission_request`,
@@ -296,9 +376,17 @@ override.
 
 MCP servers are declared in `mcp/mcp.yml` under `servers: [...]`. Each server
 has `name`, `transport: stdio | http | sse`, the transport-specific fields
-(`command`/`args`/`env` for stdio; `url`/`headers` for http/sse), and
-optional `only`/`except`/`targets`. ACF declares servers; MCP itself owns
-runtime protocol semantics.
+(`command`/`args`/`env`/`cwd` for stdio; `url`/`headers` for http/sse), and
+optional `only`/`except`/`targets`. A `url` must be `https`, or `http` on
+localhost, and must not carry credentials; put tokens in `headers`.
+`${ACF_CAPABILITY_DIR}` is the capability root and `${ACF_DATA_DIR}` a
+writable directory per capability that survives updates. Caplet writes
+servers into each host's own config: the plugin's `.mcp.json` for Claude,
+`.codex/config.toml`, `.cursor/mcp.json`, `opencode.json`, and
+`.pi/mcp.json` (user-scope paths in SPEC.md §22.5). A server name already
+used by another capability or by your own config is withheld with
+`acf.mcp.config-conflict`. ACF declares servers; MCP itself owns runtime
+protocol semantics.
 
 ## Runtime taxonomy boundary
 

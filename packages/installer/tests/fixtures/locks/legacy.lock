@@ -7,7 +7,7 @@
         "alpha"
       ],
       "include": {
-        "skill": [
+        "skills": [
           "a",
           "b"
         ]

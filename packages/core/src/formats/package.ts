@@ -61,7 +61,7 @@ export function foreignCapability(input: {
   mcp: McpFile | undefined;
   assets: AssetRef[];
   diagnostics: Diagnostic[];
-  source: Pick<CapabilitySource, "format" | "formatVersion">;
+  source: Pick<CapabilitySource, "format" | "formatVersion" | "renamedFrom">;
   remainder: NativeRemainderComponent[];
   /** The name the package's own manifest declares, before `rename`. */
   manifestName: string;
@@ -74,9 +74,11 @@ export function foreignCapability(input: {
       name: input.manifestName,
       skills: input.skills.map((skill) => skill.name).sort(),
       servers: (input.mcp?.servers ?? []).map((server) => server.name).sort(),
+      remainder: input.remainder,
     },
   };
   if (input.source.formatVersion !== undefined) source.formatVersion = input.source.formatVersion;
+  if (input.source.renamedFrom !== undefined) source.renamedFrom = input.source.renamedFrom;
   return {
     root: input.root,
     scope: input.options.scope,
