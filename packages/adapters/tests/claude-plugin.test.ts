@@ -324,3 +324,38 @@ test("a skill or server its reader left out does not reach the Claude plugin", a
     "skills/good/SKILL.md",
   ]);
 });
+
+test("a capability with nothing for a Claude plugin to carry gets no plugin", async () => {
+  const emit = async (
+    native: Record<string, unknown> | undefined,
+  ): Promise<{ plugins: number; diffs: number; empty: string[] }> => {
+    const capability = capabilityModel({});
+    if (native !== undefined)
+      capability.manifest = { ...capability.manifest, targets: { claude: { native } } };
+    const result = await emitModel(
+      claudeAdapter,
+      capability,
+      INSTALL_ROOT,
+      {},
+      {
+        [path.join(CAP_ROOT, "README.md")]: "Docs.\n",
+      },
+    );
+    return {
+      plugins: result.plugins?.length ?? 0,
+      diffs: result.diffs.length,
+      empty: result.diagnostics
+        .filter((d) => d.code === "acf.claude.plugin-empty")
+        .map((d) => d.severity),
+    };
+  };
+  // Support files and listing metadata alone are nothing Claude would load.
+  expect(await emit(undefined)).toEqual({ plugins: 0, diffs: 0, empty: ["info"] });
+  expect(await emit({ displayName: "Demo" })).toEqual({ plugins: 0, diffs: 0, empty: ["info"] });
+  // A plugin that only pulls in other plugins still does something.
+  expect(await emit({ dependencies: ["helper-plugin"] })).toEqual({
+    plugins: 1,
+    diffs: 2,
+    empty: [],
+  });
+});

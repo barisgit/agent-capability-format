@@ -1454,7 +1454,13 @@ format-owned paths. A native ACF capability and a bare skill import, which is
 the ACF tree caplet synthesized around the skill, own the same paths
 (`ACF_OWNED`): the manifest, the facet directories, `native/` and caplet's
 import marker `.acf-import.json` (`IMPORT_MARKER_FILENAME`), so no caplet
-bookkeeping reaches the plugin. `EmitResult.plugins` reports each package:
+bookkeeping reaches the plugin. A generated package that carries nothing
+Claude loads (`BuiltPackage.carries`: no written skill, `.mcp.json`,
+`native/claude/` file, Claude remainder beyond listing metadata, or
+non-descriptive manifest entry) is not written: the writer returns no diffs
+and no plugin with `acf.claude.plugin-empty` (info), so the host plan
+uninstalls a plugin installed earlier and the stale sweep removes its files.
+`EmitResult.plugins` reports each package:
 
 ```ts
 export type EmittedPlugin = {
@@ -2825,6 +2831,7 @@ acf.mcp.config-conflict                      # server name claimed twice or user
 # Claude carrier and host
 acf.claude.legacy-carrier                    # capability stays loose for Claude (info)
 acf.claude.plugin-file-ignored               # Claude config in a non-Claude source left out of its plugin (info)
+acf.claude.plugin-empty                      # nothing of the capability reaches Claude; no plugin is written (info)
 acf.claude.skills-option-ignored             # targets.claude.skills cannot place a plugin's skills (warn)
 acf.claude.cli-unavailable                   # no claude CLI; registration required (warn)
 acf.claude.state-unreadable                  # plugin list unreadable (warn)

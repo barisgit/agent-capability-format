@@ -2933,7 +2933,14 @@ remainder, the `native/claude/` files, and the capability's other files
 outside ACF-defined paths (such as a server script), copied unchanged. Of
 those files, only the directories of skills the plugin regenerates or that
 selection or applicability removed are left out; a directory holding a
-`SKILL.md` that is no projected skill (documentation, an example) is copied.
+`SKILL.md` that is no projected skill (documentation, an example) is copied,
+except under `skills/`, where Claude would load it as a skill. Caplet's own
+bookkeeping (a bare skill import's synthesized `acf.yml` and
+`.acf-import.json`) is never copied. A capability with nothing a plugin would
+carry (no emitted skill or server, no Claude remainder or `native/claude/`
+file, no manifest entry beyond listing metadata) gets no plugin, reported
+with the `info` diagnostic `acf.claude.plugin-empty`; a plugin installed for
+it earlier is uninstalled and removed like a deselected capability's.
 Claude invokes its skills as `/<capability>:<skill>`.
 
 The manifest `version` is `<base>+acf.<d>`: `<base>` is
