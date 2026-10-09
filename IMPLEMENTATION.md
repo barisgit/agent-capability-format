@@ -1093,15 +1093,7 @@ export const targets = defineTargets([
       },
     },
 
-    extensions: {
-      capability:  claudeCapabilityExtensionSchema,
-      skill:       claudeSkillExtensionSchema,
-      agent:       claudeAgentExtensionSchema,
-      command:     claudeCommandExtensionSchema,
-      instruction: claudeInstructionExtensionSchema,
-      hook:        claudeHookExtensionSchema,
-      mcp:         claudeMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
 
     adapter: claudeAdapter,
   }),
@@ -1149,15 +1141,7 @@ export const targets = defineTargets([
       },
     },
 
-    extensions: {
-      capability:  codexCapabilityExtensionSchema,
-      skill:       codexSkillExtensionSchema,
-      agent:       codexAgentExtensionSchema,
-      command:     codexCommandExtensionSchema,
-      instruction: codexInstructionExtensionSchema,
-      hook:        codexHookExtensionSchema,
-      mcp:         codexMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
 
     adapter: codexAdapter,
   }),
@@ -1200,15 +1184,7 @@ export const targets = defineTargets([
         project: `./opencode.json`,
       },
     },
-    extensions: {
-      capability:  opencodeCapabilityExtensionSchema,
-      skill:       opencodeSkillExtensionSchema,
-      agent:       opencodeAgentExtensionSchema,
-      command:     opencodeCommandExtensionSchema,
-      instruction: opencodeInstructionExtensionSchema,
-      hook:        opencodeHookExtensionSchema,
-      mcp:         opencodeMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: opencodeAdapter,
   }),
 
@@ -1248,14 +1224,7 @@ export const targets = defineTargets([
         project: `./.cursor/mcp.json`,
       },
     },
-    extensions: {
-      capability:  cursorCapabilityExtensionSchema,
-      skill:       cursorSkillExtensionSchema,
-      agent:       cursorAgentExtensionSchema,
-      command:     cursorCommandExtensionSchema,
-      instruction: cursorInstructionExtensionSchema,
-      mcp:         cursorMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: cursorAdapter,
   }),
 
@@ -1297,15 +1266,7 @@ export const targets = defineTargets([
         project: `./.pi/mcp.json`,
       },
     },
-    extensions: {
-      capability:  piCapabilityExtensionSchema,
-      skill:       piSkillExtensionSchema,
-      agent:       piAgentExtensionSchema,
-      command:     piCommandExtensionSchema,
-      instruction: piInstructionExtensionSchema,
-      hook:        piHookExtensionSchema,
-      mcp:         piMcpExtensionSchema,
-    },
+    extensions: commonTargetExtensionSchemas,
     adapter: piAdapter,
   }),
 ] as const)
@@ -1321,11 +1282,6 @@ export const targetIds: readonly TargetId[] =
 
 export const targetMap: Readonly<Record<TargetId, TargetDefinition<TargetId>>> =
   deriveTargetMap(targets)
-
-export const targetExtensionSchemas = deriveExtensionSchemas(targets)
-export const targetSupportMatrix    = deriveSupportMatrix(targets)
-export const targetHookEventMap     = deriveHookEventMap(targets)
-export const targetTriggerSupport   = deriveTriggerSupport(targets)
 
 export function isTargetId(value: unknown): value is TargetId {
   return typeof value === "string" && (targetIds as string[]).includes(value)
@@ -1343,23 +1299,17 @@ export function isTargetId(value: unknown): value is TargetId {
 
 ### 4.5 Extension schemas
 
-Per-target, per-family extension schemas are declared next to the adapter:
+Every built-in target validates a family's `targets.<target>` block against the
+same per-family schema, `commonTargetExtensionSchemas` in
+`packages/core/src/targets/extensions.ts`. Each schema is strict, for example:
 
 ```ts
-import { z } from "zod"
-
-export const claudeHookExtensionSchema = z.object({
-  hooks: z
-    .record(
-      z.string(),                    // native event name; not slug-restricted
-      z.array(
-        canonicalHookEntrySchema.extend({
-          runInBackground: z.boolean().optional(),
-        }),
-      ),
-    )
-    .optional(),
-})
+const hookExtension = z
+  .object({
+    hooks: z.record(z.string(), z.array(hookEntrySchema)).optional(),
+    runInBackground: z.boolean().optional(),
+  })
+  .strict()
 ```
 
 Unknown target ids or unknown keys under a known target id are diagnostics
@@ -2456,19 +2406,12 @@ suggesting `path:`. Readers live in `packages/core/src/formats/`
 is not a slug fails with `acf.manifest.invalid-name`, whose
 `data.suggestedRename` gives a valid `rename`.
 
-```ts
-export async function discoverCapabilityRoots(repoRoot: string): Promise<string[]> {
-  if (await exists(path.join(repoRoot, "acf.yml"))) return [repoRoot]
-  if (await exists(path.join(repoRoot, "acf.yaml"))) return [repoRoot]
-
-  const acfDir = path.join(repoRoot, "acf")
-  if (await exists(acfDir)) return findAllAcfManifests(acfDir)
-
-  if (await exists(path.join(repoRoot, "skills"))) return [synthesizeLegacyManifest(repoRoot)]
-
-  return []
-}
-```
+`discoverRepository` in `packages/core/src/resolver/` finds the capabilities of
+an ACF repository: the root itself when it has `acf.yml` or `acf.yaml`;
+otherwise every outermost directory with one under `acf/`, skipping dot
+entries, sorted. Finding neither yields no roots and an
+`acf.resolve.no-capabilities` info diagnostic. Bare `skills/` synthesis
+happens earlier, in the installer's `inspectSource`.
 
 ## 8. Caplet configuration (`caplet.yml`)
 

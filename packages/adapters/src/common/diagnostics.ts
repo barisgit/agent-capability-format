@@ -19,11 +19,6 @@ type DiagnosticInput = {
   data?: Record<string, unknown> | undefined;
 };
 
-/** Appends a diagnostic, leaving out the optional fields `input` does not set. */
-export function pushDiag(diagnostics: Diagnostic[], input: DiagnosticInput): void {
-  diagnostics.push(toDiagnostic(input));
-}
-
 /** Appends a `lossy` diagnostic: the artifact was written, but with reduced fidelity. */
 export function pushLossy(
   diagnostics: Diagnostic[],

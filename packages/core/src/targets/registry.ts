@@ -4,19 +4,12 @@ import type {
   CanonicalHookType,
   CanonicalTriggerName,
   FamilySupportFamily,
-  SupportLevel,
   TargetAdapter,
   TargetDefinition,
   TargetId,
 } from "../types/index.js";
 import { isSlug } from "../utils/guards.js";
-import {
-  claudeExtensionSchemas,
-  codexExtensionSchemas,
-  cursorExtensionSchemas,
-  opencodeExtensionSchemas,
-  piExtensionSchemas,
-} from "./extensions.js";
+import { commonTargetExtensionSchemas } from "./extensions.js";
 
 const HOME = homedir();
 const hookKeys: readonly CanonicalHookType[] = [
@@ -95,7 +88,7 @@ export const targets = defineTargets([
         project: path.join(".", ".mcp.json"),
       },
     },
-    extensions: claudeExtensionSchemas,
+    extensions: commonTargetExtensionSchemas,
   }),
   defineTarget({
     id: "codex",
@@ -133,7 +126,7 @@ export const targets = defineTargets([
         project: path.join(".", ".codex", "config.toml"),
       },
     },
-    extensions: codexExtensionSchemas,
+    extensions: commonTargetExtensionSchemas,
   }),
   defineTarget({
     id: "cursor",
@@ -167,7 +160,7 @@ export const targets = defineTargets([
         project: path.join(".", ".cursor", "mcp.json"),
       },
     },
-    extensions: cursorExtensionSchemas,
+    extensions: commonTargetExtensionSchemas,
   }),
   defineTarget({
     id: "opencode",
@@ -208,7 +201,7 @@ export const targets = defineTargets([
         project: path.join(".", "opencode.json"),
       },
     },
-    extensions: opencodeExtensionSchemas,
+    extensions: commonTargetExtensionSchemas,
   }),
   defineTarget({
     id: "pi",
@@ -249,16 +242,13 @@ export const targets = defineTargets([
         project: path.join(".", ".pi", "mcp.json"),
       },
     },
-    extensions: piExtensionSchemas,
+    extensions: commonTargetExtensionSchemas,
   }),
 ] as const);
 
 export const targetIds: readonly TargetId[] = targets.map((target) => target.id);
 export const targetMap: Readonly<Record<TargetId, TargetDefinition<TargetId>>> = Object.fromEntries(
   targets.map((target) => [target.id, target]),
-);
-export const targetExtensionSchemas = Object.fromEntries(
-  targets.map((target) => [target.id, target.extensions]),
 );
 /** Families whose support is still declared per target rather than per field (see `fieldSupport`). */
 export const familySupportFamilies: readonly FamilySupportFamily[] = [
@@ -267,15 +257,6 @@ export const familySupportFamilies: readonly FamilySupportFamily[] = [
   "instruction",
   "hook",
 ];
-export const targetSupportMatrix: Readonly<
-  Record<TargetId, Partial<Record<FamilySupportFamily, SupportLevel>>>
-> = Object.fromEntries(targets.map((target) => [target.id, target.support]));
-export const targetHookEventMap = Object.fromEntries(
-  targets.map((target) => [target.id, target.mappings.hookEvents]),
-);
-export const targetTriggerSupport = Object.fromEntries(
-  targets.map((target) => [target.id, target.mappings.instructionTriggers]),
-);
 
 export function isTargetId(value: unknown): value is TargetId {
   return typeof value === "string" && targetIds.includes(value);
@@ -286,5 +267,3 @@ export function registerAdapter<Id extends TargetId>(id: Id, adapter: TargetAdap
   if (target === undefined) throw new Error(`unknown target id: ${id}`);
   (target as TargetDefinition<Id>).adapter = adapter;
 }
-
-export const setTargetAdapter = registerAdapter;

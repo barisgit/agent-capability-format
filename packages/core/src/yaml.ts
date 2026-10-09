@@ -13,6 +13,7 @@ export function parseYaml(str: string): unknown {
   return value;
 }
 
+/** YAML text of `value` in the `yaml` library's default style, for every YAML file and frontmatter written. */
 export function stringifyYml(value: unknown): string {
   return stringify(value);
 }

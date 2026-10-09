@@ -34,11 +34,8 @@ export type ResolveScopeOptions = {
   lock?: CapabilitiesLock | null | undefined;
 };
 
-/**
- * Capability roots found in a repository, sorted, with the diagnostics of the search. `legacy` is
- * always false.
- */
-export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[]; legacy: boolean };
+/** Capability roots found in a repository, sorted, with the diagnostics of the search. */
+export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[] };
 
 /** The capabilities directory, manifest and lock paths of the scope rooted at `agentsDir`. */
 export function scopeRoot(scope: Scope, agentsDir: string): ScopeRoot {
@@ -65,11 +62,6 @@ export async function discoverScopes(cwd: string): Promise<ScopeRoot[]> {
   return scopes;
 }
 
-/** The capability roots of {@link discoverRepository}, without its diagnostics. */
-export async function discoverCapabilityRoots(repoRoot: string): Promise<string[]> {
-  return (await discoverRepository(repoRoot)).roots;
-}
-
 /**
  * Finds the capabilities of a repository: the root itself when it has `acf.yml` or `acf.yaml`;
  * otherwise every outermost directory with one under `acf/`, skipping dot entries. Finding
@@ -77,11 +69,11 @@ export async function discoverCapabilityRoots(repoRoot: string): Promise<string[
  */
 export async function discoverRepository(repoRoot: string): Promise<RepositoryDiscovery> {
   const root = path.resolve(repoRoot);
-  if (await hasManifest(root)) return { roots: [root], diagnostics: [], legacy: false };
+  if (await hasManifest(root)) return { roots: [root], diagnostics: [] };
   const acfDir = path.join(root, "acf");
   if (await exists(acfDir)) {
     const roots = await findManifestDirs(acfDir);
-    return { roots: roots.sort(), diagnostics: [], legacy: false };
+    return { roots: roots.sort(), diagnostics: [] };
   }
   return {
     roots: [],
@@ -93,7 +85,6 @@ export async function discoverRepository(repoRoot: string): Promise<RepositoryDi
         path: root,
       },
     ],
-    legacy: false,
   };
 }
 
