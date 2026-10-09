@@ -88,8 +88,11 @@ export const statusCommand = defineCommand({
       }
       printClaude(out, claude, "planned");
       if (view.fileCount === 0) {
-        out.log("");
-        out.done("Everything up to date");
+        // The diagnostics above explain a non-zero exit; claiming success here would contradict it.
+        if (code === 0) {
+          out.log("");
+          out.done("Everything up to date");
+        }
         return;
       }
       // pending() starts with its own blank line.

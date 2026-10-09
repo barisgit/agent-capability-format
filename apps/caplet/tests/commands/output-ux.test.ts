@@ -554,3 +554,17 @@ test("status -v shows the managed footprint compactly", async () => {
     await cleanup(scope);
   }
 });
+
+test("status with errors does not close with an up-to-date line", async () => {
+  const scope = await makeScope();
+  try {
+    // capabilities.yml lists sources that are not locked yet, as after `caplet add --no-apply`.
+    const result = await runCaplet(scope, ["status", "--cwd", scope.cwd, "--scope", "project"]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout + result.stderr).toContain("acf.lock.missing-entry");
+    expect(result.stdout).not.toContain("Everything up to date");
+  } finally {
+    await cleanup(scope);
+  }
+});
