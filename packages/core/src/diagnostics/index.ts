@@ -100,6 +100,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.claude.plugin-file-ignored",
   "acf.claude.plugin-empty",
   "acf.claude.plugin-kept",
+  "acf.claude.manifest-unreadable",
   "acf.claude.skills-option-ignored",
   "acf.claude.cli-unavailable",
   "acf.claude.state-unreadable",

@@ -22,6 +22,12 @@ export type DesiredClaudeScope = {
    */
   recorded?: boolean | undefined;
   /**
+   * Plugins of still-selected capabilities that stay exactly as installed although caplet cannot
+   * list them with a version (`ClaudeRootPlan.kept`). No command touches them, and the
+   * marketplace is not removed while there is one, since `marketplace remove` uninstalls them.
+   */
+  kept?: readonly string[] | undefined;
+  /**
    * Plugins caplet generated in this scope earlier and no longer wants. When host state cannot be
    * read, they are assumed installed so the recovery commands include their uninstall.
    */
@@ -66,7 +72,10 @@ export type PlannedClaudePlugin = {
   action: ClaudePluginAction;
   /** Absent for `uninstall` and `kept`. */
   desiredVersion?: string | undefined;
-  /** For `kept`: what its capability has in Claude instead (`DesiredClaudeScope.retained`). */
+  /**
+   * For `kept`: what its capability has in Claude instead (`DesiredClaudeScope.retained`); absent
+   * for a plugin `DesiredClaudeScope.kept` names.
+   */
   output?: "loose" | "empty" | undefined;
   /** The entry at caplet's managed identity, when installed there. */
   observed?: ClaudeInstalledPlugin | undefined;
@@ -233,6 +242,10 @@ export function planClaudeScope(
   const uninstalls: number[] = [];
   for (const current of atScope.values()) {
     if (desiredNames.has(current.name)) continue;
+    if (desired.kept?.includes(current.name) === true) {
+      plugins.push({ name: current.name, id: current.id, action: "kept", observed: current });
+      continue;
+    }
     const retained = desired.retained?.find((plugin) => plugin.name === current.name);
     const command = planUninstall(current, claudeScope, retained, observed);
     if (command === undefined) {
@@ -253,7 +266,10 @@ export function planClaudeScope(
   const known = listed !== undefined;
   // `marketplace remove` would uninstall a kept plugin and delete what Claude saved for it.
   const retiring =
-    desired.plugins.length === 0 && known && plugins.every((p) => p.action !== "kept");
+    desired.plugins.length === 0 &&
+    (desired.kept ?? []).length === 0 &&
+    known &&
+    plugins.every((p) => p.action !== "kept");
   const keptBy = retiring
     ? [
         ...(desired.recorded === true ? [] : ["caplet's sidecar has no record of it"]),

@@ -49,6 +49,14 @@ export type ClaudeRootPlan = {
   record: ClaudeMarketplaceRecord;
   marketplaceDir: string;
   plugins: DesiredClaudePlugin[];
+  /**
+   * Plugins whose generated files the sidecar records and which caplet keeps exactly as installed
+   * without knowing their version: the capability is still selected and blocked by a refusal or
+   * `held`, but its generated manifest is missing or names no version. The marketplace keeps
+   * listing them, and no command touches them or retires the marketplace
+   * (`acf.claude.manifest-unreadable`).
+   */
+  kept: string[];
   /** Plugins whose generated files the sidecar still records but the plan no longer lists. */
   leftover: string[];
   /** Whether the sidecar records this marketplace as caplet's. */
@@ -69,9 +77,11 @@ export function marketplaceFile(installRoot: string): string {
 /**
  * Plans the marketplace of each Claude install root in `roots`. It lists every plugin the plan
  * generates there, plus the installed plugin of each capability a refusal blocks on Claude in that
- * scope and of each `held` one, because those keep their earlier install; a listed held plugin
- * gets `acf.claude.plugin-kept`. `marketplace.json` is owned by the reserved `acf-system`
- * owner; it is deleted only when nothing is listed and the sidecar shows caplet wrote it.
+ * scope and of each `held` one, because those keep their earlier install: with the version its
+ * generated manifest names, or as `kept` when that cannot be read. A listed held plugin gets
+ * `acf.claude.plugin-kept`, a `kept` one `acf.claude.manifest-unreadable`. `marketplace.json`
+ * is owned by the reserved `acf-system` owner; it is deleted only when nothing is listed and the
+ * sidecar shows caplet wrote it.
  * A left-over plugin whose capability is `pluginless` is retained; any other left-over plugin
  * belongs to a capability the user deselected or removed.
  */
@@ -86,14 +96,15 @@ export async function planClaudeMarketplaces(input: {
   const diffs: EmittedDiff[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const { scopeRoot, installRoot } of input.roots) {
-    const listed = await listedPlugins(scopeRoot, installRoot, input);
     const file = marketplaceFile(installRoot);
     const sidecar = await readSidecar(sidecarPath(installRoot));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
-    const leftover = sidecarPlugins(sidecar.managed).filter((name) => !listed.has(name));
-    if (listed.size === 0 && leftover.length === 0 && !owned && sidecar.marketplace === undefined) {
-      continue;
-    }
+    const generated = sidecarPlugins(sidecar.managed);
+    const { listed, kept } = await listedPlugins(scopeRoot, installRoot, generated, input);
+    const keptNames = kept.map((item) => item.capability);
+    const leftover = generated.filter((name) => !listed.has(name) && !keptNames.includes(name));
+    const unused = listed.size === 0 && kept.length === 0 && leftover.length === 0;
+    if (unused && !owned && sidecar.marketplace === undefined) continue;
 
     // The project root is the parent of the project's `.agents` directory.
     const target = await resolveClaudeScopeTarget(
@@ -118,6 +129,13 @@ export async function planClaudeMarketplaces(input: {
       if (held.scope !== scopeRoot.scope || !listed.has(held.capability)) continue;
       diagnostics.push(pluginKeptDiagnostic(held, `${held.capability}@${name}`));
     }
+    for (const item of kept) {
+      const manifest = path.join(
+        pluginPackageDir(installRoot, item.capability),
+        CLAUDE_PLUGIN_MANIFEST,
+      );
+      diagnostics.push(manifestUnreadableDiagnostic(item, name, manifest));
+    }
     roots.push({
       scopeRoot,
       installRoot,
@@ -126,10 +144,14 @@ export async function planClaudeMarketplaces(input: {
       marketplaceDir,
       plugins,
       recorded: sidecar.marketplace?.name === name,
+      kept: keptNames,
       leftover,
       retained,
     });
-    const after = plugins.length === 0 ? null : renderMarketplace(name, plugins);
+    const listing = [...plugins, ...keptNames.map((plugin) => ({ name: plugin }))].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const after = listing.length === 0 ? null : renderMarketplace(name, listing);
     if (after === null && !owned) continue;
     diffs.push({
       scopeRoot,
@@ -150,6 +172,14 @@ export async function planClaudeMarketplaces(input: {
   return { roots, diffs, diagnostics };
 }
 
+/**
+ * `caplet remove` for `capability` at `scope`. The scope is explicit because, inside a project,
+ * `caplet remove` defaults to project scope.
+ */
+function removeCommand(capability: string, scope: ScopeRoot["scope"]): string {
+  return `caplet remove ${capability} --scope ${scope}`;
+}
+
 /** `acf.claude.plugin-kept`: the installed plugin `id` of a held capability stays as it is. */
 function pluginKeptDiagnostic(held: HeldClaudePlugin, id: string): Diagnostic {
   return {
@@ -161,33 +191,74 @@ function pluginKeptDiagnostic(held: HeldClaudePlugin, id: string): Diagnostic {
   };
 }
 
+/** A still-selected capability whose installed plugin the marketplace keeps, and why. */
+type KeptPlugin = HeldClaudePlugin & { reason: "refused" | "held" };
+
 /**
- * The plugins the marketplace of `installRoot` lists, by name with their version: those the plan
- * generates there, and the installed one of each capability a refusal blocks on Claude in the
- * scope or the plan holds there, read from its `plugin.json`.
+ * `acf.claude.manifest-unreadable`: the installed plugin of a kept capability stays as it is and
+ * its marketplace `marketplace` stays registered, because the version of the generated plugin
+ * cannot be read from `manifest`.
+ */
+function manifestUnreadableDiagnostic(
+  item: KeptPlugin,
+  marketplace: string,
+  manifest: string,
+): Diagnostic {
+  const id = `${item.capability}@${marketplace}`;
+  const why =
+    item.reason === "refused"
+      ? "a refusal blocks it on Claude"
+      : "its reader left out an invalid component and nothing else of it reaches Claude";
+  return {
+    severity: "warn",
+    code: "acf.claude.manifest-unreadable",
+    targetId: "claude",
+    message: `Claude plugin \`${id}\` stays installed as it is and marketplace \`${marketplace}\` stays registered: ${item.capability} is still selected, ${why}, and caplet cannot read the plugin's version from its generated manifest ${manifest}, which is missing, unreadable, or names no version. Caplet uninstalls a plugin, deleting what Claude saved for it, only when its capability is deselected or removed. Fix the source so caplet generates the plugin again, or run \`${removeCommand(item.capability, item.scope)}\` to uninstall it.`,
+    data: { plugin: id, manifest },
+  };
+}
+
+/**
+ * The plugins the marketplace of `installRoot` lists. `listed`, by name with their version: those
+ * the plan generates there, and the installed one of each capability a refusal blocks on Claude in
+ * the scope or the plan holds there, read from its `plugin.json`. `kept`: those blocked or held
+ * capabilities among the plugins caplet `generated` there before whose version cannot be read.
+ * They keep their install all the same, because their capability is still selected.
  */
 async function listedPlugins(
   scopeRoot: ScopeRoot,
   installRoot: string,
+  generated: readonly string[],
   input: {
     plugins: readonly PlannedPlugin[];
     blocked: readonly BlockedCapability[];
     held?: readonly HeldClaudePlugin[] | undefined;
   },
-): Promise<Map<string, string>> {
+): Promise<{ listed: Map<string, string>; kept: KeptPlugin[] }> {
   const listed = new Map<string, string>();
   for (const plugin of input.plugins) {
     if (plugin.target === "claude" && plugin.installRoot === installRoot) {
       listed.set(plugin.name, plugin.version);
     }
   }
-  const kept = [...input.blocked.filter((item) => item.target === "claude"), ...(input.held ?? [])];
-  for (const item of kept) {
+  const candidates: KeptPlugin[] = [
+    ...input.blocked
+      .filter((item) => item.target === "claude")
+      .map((item) => ({
+        scope: item.scope,
+        capability: item.capability,
+        reason: "refused" as const,
+      })),
+    ...(input.held ?? []).map((item) => ({ ...item, reason: "held" as const })),
+  ];
+  const kept: KeptPlugin[] = [];
+  for (const item of candidates) {
     if (item.scope !== scopeRoot.scope || listed.has(item.capability)) continue;
     const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
     if (version !== undefined) listed.set(item.capability, version);
+    else if (generated.includes(item.capability)) kept.push(item);
   }
-  return listed;
+  return { listed, kept };
 }
 
 /** The capabilities whose generated plugin files a sidecar records, sorted, each once. */
@@ -216,7 +287,10 @@ export async function recordClaudeMarketplaces(roots: readonly ClaudeRootPlan[])
 }
 
 /** The marketplace listing: each plugin by its relative `./plugins/<name>` source. */
-export function renderMarketplace(name: string, plugins: readonly DesiredClaudePlugin[]): string {
+export function renderMarketplace(
+  name: string,
+  plugins: ReadonlyArray<Pick<DesiredClaudePlugin, "name">>,
+): string {
   const manifest = {
     name,
     owner: { name: "caplet" },
