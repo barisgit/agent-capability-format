@@ -136,6 +136,12 @@ export type CapabilitySource = {
         skillDirs: string[];
         servers: string[];
         remainder: NativeRemainderComponent[];
+        /**
+         * True when the reader left out a component it could not load
+         * (`acf.source.component-invalid`, design D27.4). The package then differs from what its
+         * host would read, so a writer never copies it unchanged.
+         */
+        incomplete?: true | undefined;
       }
     | undefined;
   /**

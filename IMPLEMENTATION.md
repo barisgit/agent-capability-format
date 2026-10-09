@@ -1471,17 +1471,22 @@ package with `plugin.json` written at the base version, so the suffix does
 not feed back into the digest.
 
 A foreign Claude plugin source carries `CapabilitySource.projected`
-(`{skills, servers, remainder}`: projected skill and server names and the
-native remainder, recorded by `foreignCapability` in
-`packages/core/src/formats/package.ts` before `rename`, selection, and
-applicability). `isUnchangedClaudePlugin`
+(`{skills, skillDirs, servers, remainder, incomplete?}`: projected skill and
+server names, skill directories, the native remainder, and whether the reader
+left out a component with `acf.source.component-invalid`, recorded by
+`foreignCapability` in `packages/core/src/formats/package.ts` before `rename`,
+selection, and applicability). `isUnchangedClaudePlugin`
 (`packages/adapters/src/claude/plugin-source.ts`) compares it and `renamedFrom` with
-the capability the writer receives: an unchanged package is copied
-byte-identically except the `plugin.json` `version` value; a transformed one
+the capability the writer receives: an unchanged package (no left-out
+component either) is copied byte-identically except the `plugin.json`
+`version` value; a transformed one
 gets a regenerated manifest, skills, and `.mcp.json`, and loses the files and
 manifest keys that only removed remainder components used. `.mcp.json` cannot
 hold an MCP bundle, so the manifest `mcpServers` keeps the selected `.mcpb` and
-HTTPS bundle references and a local bundle file is copied.
+HTTPS bundle references and a local bundle file is copied. Claude loads every
+`skills/<name>/SKILL.md` of a plugin, so a generated package never copies a
+skill directory there that it does not regenerate: from any source, such a
+directory holds a skill its reader left out (design D27.4).
 
 Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 

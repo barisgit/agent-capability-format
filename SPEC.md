@@ -2679,12 +2679,13 @@ Readers project into the canonical model:
   Claude extras.
 
 Written in its source format with no transformation (no `rename`,
-`include`, or `exclude`, and no applicability filter removing content), a
+`include`, or `exclude`, no applicability filter removing content, and no
+component its reader left out as invalid), a
 foreign package is emitted equal to its snapshot: the same paths, bytes,
 and executable bits, including unknown fields, comments, and unreferenced
 files. A transformation regenerates only the manifest, skills, and MCP
 configuration, copies every other file unchanged, and emits no file of an
-excluded component. A Claude plugin with native remainder reaches Claude
+excluded or left-out component. A Claude plugin with native remainder reaches Claude
 only through the plugin carrier (§22.8); on the loose carrier it is refused
 for Claude with the recovery `carrier: plugin` or `except: [claude]`.
 

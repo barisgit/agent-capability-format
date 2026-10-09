@@ -16,6 +16,9 @@ import type {
   SkillFacet,
 } from "../types/index.js";
 
+/** The warning of every component a reader leaves out (`componentNotLoaded`). */
+const COMPONENT_INVALID = "acf.source.component-invalid";
+
 /** What a format reader needs beyond the package root. */
 export type ForeignReadOptions = {
   scope: Scope;
@@ -78,6 +81,11 @@ export function foreignCapability(input: {
       remainder: input.remainder,
     },
   };
+  if (
+    input.diagnostics.some((diagnostic) => diagnostic.code === COMPONENT_INVALID) &&
+    source.projected
+  )
+    source.projected.incomplete = true;
   if (input.source.formatVersion !== undefined) source.formatVersion = input.source.formatVersion;
   if (input.source.renamedFrom !== undefined) source.renamedFrom = input.source.renamedFrom;
   return {

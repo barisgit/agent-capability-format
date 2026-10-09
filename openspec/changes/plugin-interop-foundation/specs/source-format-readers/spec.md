@@ -93,7 +93,7 @@ A skill or MCP server read from a bare skill import, an Agent Plugins package or
 - **THEN** `fine` installs, `fast` is left out with `acf.source.component-invalid`, and a Claude plugin holding `fast` reports the same code and message
 
 ### Requirement: Lossless same-format output
-When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
+When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, no component the reader left out as invalid (`acf.source.component-invalid`, design D27.4), and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
 
 #### Scenario: Claude round trip
 - **WHEN** an unchanged Claude plugin with an unknown manifest key, an unreferenced executable file and irregularly formatted JSON is installed for Claude

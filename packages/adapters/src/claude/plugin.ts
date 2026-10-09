@@ -342,9 +342,10 @@ function reportRemainder(capability: AcfCapability, report: EmitReport): void {
 
 /**
  * The package's files outside every generated carrier and format-owned path, copied unchanged.
- * Skill directories are left out only when they hold a skill the writer regenerates or a
- * projected skill selection or applicability removed; any other directory holding a `SKILL.md`
- * (documentation, examples) is support content. Claude configuration in a source not read as a
+ * Skill directories are left out only when they hold a skill the writer regenerates, a
+ * projected skill selection or applicability removed, or sit where Claude loads skills
+ * (`skills/<name>/`); any other directory holding a `SKILL.md` (documentation, examples) is
+ * support content. Claude configuration in a source not read as a
  * Claude plugin is left out with a hint.
  */
 async function supportFiles(
@@ -370,6 +371,11 @@ async function supportFiles(
     for (const p of jsonConfigPaths(rawManifest.mcpServers)) owned.add(p);
     for (const p of unselectedPathsAndKeys(capability).paths) owned.add(p);
   }
+  // Claude loads every `skills/<name>/SKILL.md` of a plugin, so a skill directory there that the
+  // writer does not regenerate is one its reader left out (design D27.4) and stays out too.
+  for (const name of await fs.listDir(path.join(capability.root, "skills")))
+    if (await fs.exists(path.join(capability.root, "skills", name, "SKILL.md")))
+      owned.add(`skills/${name}`);
   if (format === "agent-plugins") {
     owned.add("plugin.json");
     owned.add("mcp.json");

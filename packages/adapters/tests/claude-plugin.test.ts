@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { pluginPackageDir, readClaudePluginPackage } from "@caplet/core";
+import {
+  type ForeignReadResult,
+  pluginPackageDir,
+  readAgentPluginsPackage,
+  readClaudePluginPackage,
+} from "@caplet/core";
 import { claudeAdapter, codexAdapter } from "../src";
 import { claudeAuthor } from "../src/claude/manifest";
 import { makeInMemoryFs } from "./util/in-memory-fs";
-import { CAP_ROOT, capabilityModel, emitModel, PROJECT, skillFacet } from "./util/model";
+import { CAP_ROOT, capabilityModel, emitModel, filesAt, PROJECT, skillFacet } from "./util/model";
 import { withTempPackage } from "./util/temp-package";
 
 const INSTALL_ROOT = path.join(PROJECT, ".claude");
@@ -261,4 +266,61 @@ test("Agent Plugins remainder is omitted from a Claude plugin, or refuses it whe
   expect(refused.plugins ?? []).toEqual([]);
   expect(refused.diffs).toEqual([]);
   expect(refused.diagnostics.map((d) => d.code)).toContain("acf.support.refused");
+});
+
+/** The relative paths and texts of the Claude plugin `files` read by `reader` become. */
+async function pluginFromSource(
+  reader: typeof readClaudePluginPackage,
+  files: Record<string, string>,
+): Promise<Record<string, string>> {
+  return await withTempPackage("acf-plugin-source-", files, async (root) => {
+    const read: ForeignReadResult = await reader(root, {
+      scope: "project",
+      origin: { kind: "local", directory: root },
+      revision: null,
+    });
+    if (read.capability === undefined) throw new Error("the package did not read");
+    const result = await emitModel(
+      claudeAdapter,
+      read.capability,
+      INSTALL_ROOT,
+      {},
+      filesAt(root, files),
+    );
+    const dir = pluginPackageDir(INSTALL_ROOT, read.capability.manifest.name);
+    return Object.fromEntries(
+      result.diffs.map((diff) => [path.relative(dir, diff.path), String(diff.after)]),
+    );
+  });
+}
+
+test("a skill or server its reader left out does not reach the Claude plugin", async () => {
+  const claude = await pluginFromSource(readClaudePluginPackage, {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", version: "1.0.0" }),
+    "skills/fast/SKILL.md": "---\nname: fast\ndescription: Fast\neffort: extreme\n---\n",
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\n---\n",
+    ".mcp.json": JSON.stringify({
+      mcpServers: { quick: { command: "node", timeout: 500 }, slow: { command: "node" } },
+    }),
+  });
+  expect(Object.keys(claude).sort()).toEqual([
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "skills/fine/SKILL.md",
+  ]);
+  expect(Object.keys(JSON.parse(claude[".mcp.json"] ?? "{}").mcpServers)).toEqual(["slow"]);
+
+  const agentPlugins = await pluginFromSource(readAgentPluginsPackage, {
+    "plugin.json": JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "kit",
+      version: "1.0.0",
+    }),
+    "skills/bad/SKILL.md": "---\nname: other\ndescription: Bad\n---\n",
+    "skills/good/SKILL.md": "---\nname: good\ndescription: Good\n---\n",
+  });
+  expect(Object.keys(agentPlugins).sort()).toEqual([
+    ".claude-plugin/plugin.json",
+    "skills/good/SKILL.md",
+  ]);
 });
