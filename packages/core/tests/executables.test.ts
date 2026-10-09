@@ -531,6 +531,27 @@ test("a placeholder path whose first name starts with two dots counts toward the
   ).toEqual(["changed docs"]);
 });
 
+test("an argument naming a path with a space counts toward the server as one path", async () => {
+  const acf = async (code: string) =>
+    await capability({
+      "acf.yml": baseManifest,
+      "mcp/mcp.yml": `servers:\n  - name: docs\n    transport: stdio\n    command: node\n    args: ['${capabilityDir}/my server.js']\n`,
+      "my server.js": code,
+    });
+  expect(await claudeChanges(await acf("one()\n"), await acf("two()\n"))).toEqual([
+    "changed mcp-server docs",
+  ]);
+  const native = async (code: string) =>
+    await capability({
+      "acf.yml": baseManifest,
+      "native/claude/.mcp.json": `{"mcpServers":{"files":{"command":"node","args":["${pluginRoot}/my server.js"]}}}\n`,
+      "native/claude/my server.js": code,
+    });
+  expect(await claudeChanges(await native("one()\n"), await native("two()\n"))).toEqual([
+    "changed mcp-server files",
+  ]);
+});
+
 test("a native manifest-key path that normalizes to .. names no package file", async () => {
   const cap = await capability({
     "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      hooks: 'a/../..'\n`,

@@ -343,7 +343,9 @@ async function nativeServerExecutables({
       fingerprint: await nativePackageFingerprint(
         layers[0],
         { command, args, env, cwd },
-        packageRootReferences(snapshot, layers, ["ACF_CAPABILITY_DIR"], [command, ...(args ?? [])]),
+        packageRootReferences(snapshot, layers, ["ACF_CAPABILITY_DIR"], {
+          argv: [command, ...(args ?? [])],
+        }),
       ),
     });
   }
@@ -398,8 +400,8 @@ async function runningFingerprint(
   files: readonly TreeFile[],
   packageDir?: string,
 ): Promise<string> {
-  const strings = await componentStrings(definition, files);
-  const referenced = packageRootReferences(snapshot, bases, packageRootPlaceholders, strings);
+  const text = await componentStrings(definition, files);
+  const referenced = packageRootReferences(snapshot, bases, packageRootPlaceholders, { text });
   const all = union(snapshot, files, referenced);
   return packageDir === undefined
     ? await fingerprint(definition, all)

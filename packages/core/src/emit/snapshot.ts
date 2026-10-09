@@ -10,9 +10,37 @@ import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import { acfCapabilityDirPlaceholder } from "../types/index.js";
 import { leavesBase } from "../utils/paths.js";
 
-const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
-/** `${NAME}/path`, ending where a shell word or a JSON or YAML value would. */
-const PACKAGE_ROOT_PATH = /\$\{([A-Z_]+)\}(\/[^\s"'=:,;\\|&<>()`]+)/g;
+const ACF_PLACEHOLDERS: readonly string[] = [
+  "ACF_CAPABILITY_DIR",
+  "ACF_PACKAGE_DIR",
+  "ACF_HOOK_DIR",
+];
+/** `${NAME}/path` inside a string, ending where a shell word or a JSON or YAML value would. */
+const EMBEDDED_PATH = /\$\{([A-Z_]+)\}(\/[^\s"'=:,;\\|&<>()`]+)/g;
+/** A whole string, or the value of its `-option=`, that is `${NAME}/path`. */
+const WHOLE_PATH = /^(?:-[^=]*=)?\$\{([A-Z_]+)\}(\/.+)$/s;
+
+/**
+ * How the strings a reference search reads are split. An `argv` entry is passed to a process
+ * unsplit, so one that is a placeholder path (alone or as the value of `-option=`) names that
+ * path to its end, spaces included; any other entry, such as a `sh -c` script, is scanned for
+ * embedded placeholder paths. A `text` string may be either an argument or a shell command
+ * line, so it counts both ways.
+ */
+export type ReferenceStrings = { argv: readonly string[] } | { text: readonly string[] };
+
+/** The `[placeholder name, "/path"]` pairs `strings` name, by the rules of {@link ReferenceStrings}. */
+function placeholderPaths(strings: ReferenceStrings): [string, string][] {
+  const argv = "argv" in strings;
+  const found: [string, string][] = [];
+  for (const value of argv ? strings.argv : strings.text) {
+    const whole = WHOLE_PATH.exec(value);
+    if (whole !== null) found.push([whole[1] ?? "", whole[2] ?? ""]);
+    if (argv && whole !== null) continue;
+    for (const match of value.matchAll(EMBEDDED_PATH)) found.push([match[1] ?? "", match[2] ?? ""]);
+  }
+  return found;
+}
 
 /** A capability's files at the time of the inventory, relative to its resolved root. */
 export type Snapshot = {
@@ -25,18 +53,17 @@ export async function readSnapshot(root: string): Promise<Snapshot> {
   return { root: path.resolve(root), files: await listTreeFiles(root) };
 }
 
-/** Files of the snapshot that `values` name through an ACF path placeholder. */
+/** Files of the snapshot that the command line `argv` names through an ACF path placeholder. */
 export function referencedFiles(
   snapshot: Snapshot,
   placeholderDir: string,
-  values: readonly string[],
+  argv: readonly string[],
 ): TreeFile[] {
   const prefixes: string[] = [];
-  for (const value of values) {
-    for (const match of value.matchAll(PLACEHOLDER_PATH)) {
-      const base = match[1] === "ACF_HOOK_DIR" ? placeholderDir : snapshot.root;
-      prefixes.push(relativeTo(snapshot.root, path.join(base, match[2] ?? "")));
-    }
+  for (const [name, relative] of placeholderPaths({ argv })) {
+    if (!ACF_PLACEHOLDERS.includes(name)) continue;
+    const base = name === "ACF_HOOK_DIR" ? placeholderDir : snapshot.root;
+    prefixes.push(relativeTo(snapshot.root, path.join(base, relative)));
   }
   return filesUnder(snapshot, prefixes);
 }
@@ -78,7 +105,7 @@ export function relativeEntrypoints(
 }
 
 /**
- * Snapshot files that `values` name below a placeholder for a plugin package's root, such as
+ * Snapshot files that `strings` name below a placeholder for a plugin package's root, such as
  * `${CLAUDE_PLUGIN_ROOT}/scripts/start.js`: the code a plugin configuration runs. `names` are
  * the placeholder names that mean the package root, and `bases` the snapshot-relative
  * directories the package draws its files from, highest precedence first; a path resolves in the
@@ -89,17 +116,15 @@ export function packageRootReferences(
   snapshot: Snapshot,
   bases: readonly string[],
   names: readonly string[],
-  values: readonly string[],
+  strings: ReferenceStrings,
 ): TreeFile[] {
   const chosen: TreeFile[] = [];
-  for (const value of values) {
-    for (const match of value.matchAll(PACKAGE_ROOT_PATH)) {
-      if (!names.includes(match[1] ?? "")) continue;
-      const relative = path.posix.normalize((match[2] ?? "").slice(1)).normalize("NFC");
-      // The package root itself, or a path leaving it, names no file the configuration owns.
-      if (relative === "." || leavesBase(relative)) continue;
-      chosen.push(...filesUnder(snapshot, [layeredPath(snapshot, bases, relative)]));
-    }
+  for (const [name, placeholderPath] of placeholderPaths(strings)) {
+    if (!names.includes(name)) continue;
+    const relative = path.posix.normalize(placeholderPath.slice(1)).normalize("NFC");
+    // The package root itself, or a path leaving it, names no file the configuration owns.
+    if (relative === "." || leavesBase(relative)) continue;
+    chosen.push(...filesUnder(snapshot, [layeredPath(snapshot, bases, relative)]));
   }
   return union(snapshot, chosen);
 }
