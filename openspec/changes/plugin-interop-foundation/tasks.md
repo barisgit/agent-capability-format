@@ -47,12 +47,12 @@ Every task starts with a failing test and ends when it passes. "Golden" means a 
 
 ## 6. Documentation
 
-- [ ] 6.1 Update SPEC.md §§4.2, 7, 9, 13a, 14.3, 14.4, 14.7, 18, 19, 20, 22.1, 22.2 and 22.5 to match the capability specs.
-- [ ] 6.2 Revise CONTEXT.md Axioms 4 and 12, update IMPLEMENTATION.md §§3, 4, 7, 8.2, and document carriers, host states, migration, executable change reports and the known loose Claude hook defect in the README.
+- [x] 6.1 Update SPEC.md §§4.2, 7, 9, 13a, 14.3, 14.4, 14.7, 18, 19, 20, 22.1, 22.2 and 22.5 to match the capability specs.
+- [x] 6.2 Revise CONTEXT.md Axioms 4 and 12, update IMPLEMENTATION.md §§3, 4, 7, 8.2, and document carriers, host states, migration, executable change reports and the known loose Claude hook defect in the README.
 
 ## 7. Verification
 
 - [ ] 7.1 Run focused package tests and `bun run ci`.
 - [ ] 7.2 Run `openspec validate plugin-interop-foundation --strict` and `git diff --check`.
-- [ ] 7.3 Dogfood: install one public Claude plugin and one public Agent Plugins package for Claude at user and project scope and for Codex loose; migrate a loose Claude install; record results.
+- [x] 7.3 Dogfood: install one public Claude plugin and one public Agent Plugins package for Claude at user and project scope and for Codex loose; migrate a loose Claude install; record results. Recorded in `research/plugin-interop/dogfood-7.3.md`; Codex loading and model invocation remain UNKNOWN (Codex not installed; no authenticated Claude session).
 - [ ] 7.4 Run an independent review of the branch against this change and the code-review standards.
