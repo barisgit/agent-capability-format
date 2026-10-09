@@ -148,19 +148,26 @@ function marketplacePluginPaths(marketplace: unknown): string[] {
       : ".";
   const paths = new Set<string>();
   for (const plugin of marketplace.plugins) {
-    if (!isRecord(plugin)) continue;
-    const { source } = plugin;
-    let relative: string | undefined;
-    if (typeof source === "string") {
-      relative = source.startsWith("./") ? source : path.posix.join(pluginRoot, source);
-    } else if (isRecord(source) && source.source === "local" && typeof source.path === "string") {
-      relative = source.path;
-    }
+    const relative = localPluginSource(plugin, pluginRoot);
     if (relative === undefined) continue;
     const normalized = path.posix.normalize(relative).replace(/\/$/, "");
     if (normalized !== "." && !normalized.startsWith("..")) paths.add(normalized);
   }
   return [...paths].sort();
+}
+
+/**
+ * The marketplace-relative directory of a plugin entry with a local source: a `./` string as
+ * written, another string under `pluginRoot`, or a `{ source: "local", path }` object's path.
+ */
+function localPluginSource(plugin: unknown, pluginRoot: string): string | undefined {
+  if (!isRecord(plugin)) return undefined;
+  const { source } = plugin;
+  if (typeof source === "string")
+    return source.startsWith("./") ? source : path.posix.join(pluginRoot, source);
+  if (isRecord(source) && source.source === "local" && typeof source.path === "string")
+    return source.path;
+  return undefined;
 }
 
 /** Reads the package at `root` with the reader for `format`. */
