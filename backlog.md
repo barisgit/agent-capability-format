@@ -192,6 +192,8 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Invalid core field in a bare imported skill is an error, while Agent Plugins leaves such a skill out.** `packages/installer/src/inventory.ts` `readBareSkill` rejects the import with `acf.import.skill-frontmatter-invalid`; the Agent Plugins reader leaves the skill out with a warning. D27.4 covers native values only; decide whether core-field failures in foreign sources follow the same rule.
+
 - **Root-level plugin skill copies its package root as support files.** `packages/adapters/src/claude/plugin.ts` `supportFiles`: a foreign skill at the package root (manifest `skills: "."`) maps to an empty relative path, so the package root's files are copied again next to the regenerated `skills/<name>/`. Predates the review round.
 - **Removed paths derived outside the component table.** `packages/adapters/src/claude/plugin-source.ts` decides removed paths and manifest keys from remainder components rather than from `claudePluginComponents`; no defect seen, but a second place that can drift from the table.
 
