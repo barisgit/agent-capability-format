@@ -9,7 +9,8 @@
  * native keys in that dialect's own spelling), and at the package level of `acf.yml` also as
  * `targets.<target>.package` (native manifest values that replace the mapped core value for
  * that target). A dialect is a target id, or `agent-plugins` for Agent Plugins 1.0 keys that
- * no target in this change receives; only format readers write the `agent-plugins` dialect.
+ * no target receives; only format readers and the bare-skill import write the `agent-plugins`
+ * dialect.
  *
  * Writers, readers and the plan read extras only through these functions so the storage
  * shape stays in one place.

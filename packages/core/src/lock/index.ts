@@ -5,7 +5,8 @@
  * Parsing is strict for the fields integrity depends on (names become snapshot
  * directories, digests gate emission) and lenient for optional bookkeeping, so
  * lockfiles written before a field existed keep reading. Writing is canonical:
- * entries sorted by `sourceId`, keys alphabetical, selector values sorted.
+ * entries sorted by `sourceId`, keys in the fixed order of `canonicalizeEntry`, selector values
+ * sorted.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
