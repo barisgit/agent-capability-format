@@ -2929,9 +2929,15 @@ one, reading state with `claude plugin list --json`. It never runs
 the user disabled. It never writes Claude's private plugin state
 (`~/.claude/plugins/`) or edits `enabledPlugins` or
 `extraKnownMarketplaces`. It removes the marketplace only when no plugin
-in it is desired and no other Claude scope has one installed, because
-`claude plugin marketplace remove` uninstalls the marketplace's plugins in
-every scope.
+in it is desired and the removal touches nothing but caplet's registration,
+because `claude plugin marketplace remove` uninstalls the marketplace's
+plugins in every scope and directory and drops its declarations from the
+user settings and the working directory's project and local settings. When
+another of those settings files declares the marketplace or cannot be read,
+or a plugin from it is installed outside caplet's registration, the
+marketplace stays registered, `marketplace.json` is rewritten to list no
+plugins, and the warning `acf.claude.marketplace-kept` names what keeps it
+and the `claude plugin marketplace remove` command to run by hand.
 
 File changes that do not depend on Claude are applied before the `claude`
 commands run. Deleting a removed plugin's files waits until Claude no
@@ -2946,7 +2952,8 @@ stays on the machine that ran caplet. On its first local-scope write Claude
 itself adds `**/.claude/settings.local.json` to the user's global git
 ignore. Caplet never registers at Claude project or managed scope, and a
 plugin it finds in another scope is reported (`acf.claude.other-scope`), not
-changed.
+changed. `claude plugin list --json` also shows the project and local
+installs of other directories; caplet ignores them.
 
 #### 22.8.4 Host state
 
@@ -2955,24 +2962,28 @@ changed.
 state:
 
 - `registered` — Claude lists the plugin, enabled, at caplet's Claude
-  scope.
+  scope (for project scope, Claude local scope of that project root).
 - `disabled by user` — Claude lists it disabled; caplet updates the files
   and never re-enables it.
-- `not installed` — Claude does not list it: a removed plugin after its
-  uninstall, or a plugin that a dry run or status shows apply would
-  install.
+- `not installed` — Claude does not list it at caplet's Claude scope: a
+  removed plugin after its uninstall, a plugin that a dry run or status
+  shows apply would install, or a plugin installed only at another Claude
+  scope (`acf.claude.other-scope`), which apply leaves alone.
 - `registration required` — the `claude` CLI is missing or fails to start,
   or the install failed and Claude does not list the plugin. Without the
   CLI the package is written, the warning `acf.claude.cli-unavailable`
-  lists the exact commands, and apply exits 0.
+  lists the exact commands, and apply exits 0. A CLI that stops starting
+  partway leaves the remaining commands to the user the same way.
 - `blocked by host policy` — a command failed with a Claude policy message
   (`acf.claude.policy-blocked`, warning); caplet does not fall back to
   loose output.
-- `unknown` — Claude's state could not be read
-  (`acf.claude.state-unreadable`), or Claude still lists another version
-  than caplet generated: after its commands succeeded
-  (`acf.claude.version-mismatch`), or after its update or install failed
-  (the `acf.claude.command-failed` error explains it).
+- `unknown` — Claude's state could not be read (a list command failed,
+  `acf.claude.command-failed`, or printed output caplet cannot parse,
+  `acf.claude.state-unreadable`), or Claude still lists another version
+  than caplet generated: after its commands succeeded, or in a dry run or
+  status before apply updates it (`acf.claude.version-mismatch`), or after
+  its update or install failed (the `acf.claude.command-failed` error
+  explains it).
 
 Any other failed `claude` command is the error `acf.claude.command-failed`
 carrying Claude's message. The commands that depend on it are skipped,

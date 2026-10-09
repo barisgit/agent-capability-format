@@ -43,8 +43,9 @@ export async function cleanup(scope: TestScope): Promise<void> {
 }
 
 /**
- * Runs caplet as a subprocess with `HOME` at the scope's home. `claude` is missing from `PATH`
- * unless `env` supplies one (see `claudeShim`), so no test reaches the real Claude Code.
+ * Runs caplet as a subprocess with `HOME` and Claude's configuration directory in the scope's
+ * home. `claude` is missing from `PATH` unless `env` supplies one (see `claudeShim`), so no
+ * test reaches the real Claude Code or reads its settings.
  */
 export async function runCaplet(
   scope: TestScope,
@@ -59,6 +60,7 @@ export async function runCaplet(
       ...process.env,
       HOME: scope.home,
       USERPROFILE: scope.home,
+      CLAUDE_CONFIG_DIR: path.join(scope.home, ".claude"),
       PATH: pathWithoutClaude(),
       ...env,
     },

@@ -143,7 +143,7 @@ export async function recordClaudeMarketplaces(roots: readonly ClaudeRootPlan[])
 }
 
 /** The marketplace listing: each plugin by its relative `./plugins/<name>` source. */
-function renderMarketplace(name: string, plugins: readonly DesiredClaudePlugin[]): string {
+export function renderMarketplace(name: string, plugins: readonly DesiredClaudePlugin[]): string {
   const manifest = {
     name,
     owner: { name: "caplet" },

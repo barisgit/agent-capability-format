@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCli } from "../../../src/hosts/claude/cli.js";
 import { createClaudeHost } from "../../../src/hosts/claude/host.js";
-import { reconcileClaudeHost } from "../../../src/hosts/claude/reconcile.js";
+import { previewClaudeHost, reconcileClaudeHost } from "../../../src/hosts/claude/reconcile.js";
 import { claudeMarketplaceName } from "../../../src/hosts/claude/scope.js";
 import {
   type FakeTranscript,
@@ -25,6 +25,14 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
+
+/** The host port over `cli`, with Claude resolving project and local scope from the test project. */
+function host(cli: ClaudeCli) {
+  return createClaudeHost(cli, {
+    projectDir: path.join(dir, "project"),
+    configDir: path.join(home, ".claude"),
+  });
+}
 
 function userFake(transcripts: FakeTranscript[]) {
   return fakeClaudeCli({
@@ -58,7 +66,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "list-json-installed",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
     );
     expect(commandLines(fake.calls)).toEqual([
@@ -95,7 +103,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "list-json-after-update",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.0+acf.bbb" }]),
     );
     expect(commandLines(fake.calls)).toContain("claude plugin update probe@acf-user --scope user");
@@ -118,7 +126,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "list-json-installed",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.0+acf.bbb" }]),
     );
     expect(fake.unused()).toEqual([]);
@@ -151,7 +159,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
           }
         : await fake.cli(args);
     const report = await reconcileClaudeHost(
-      createClaudeHost(cli),
+      host(cli),
       userScope([{ name: "probe", version: "1.0.0+acf.bbb" }]),
     );
     expect(fake.unused()).toEqual([]);
@@ -175,7 +183,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "marketplace-add-already-known",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
     );
     expect(commandLines(fake.calls)).toEqual([
@@ -197,7 +205,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "marketplace-remove",
       "list-json-empty",
     ]);
-    const report = await reconcileClaudeHost(createClaudeHost(fake.cli), userScope([]));
+    const report = await reconcileClaudeHost(host(fake.cli), userScope([]));
     expect(commandLines(fake.calls).slice(2, 4)).toEqual([
       "claude plugin uninstall probe@acf-user --scope user",
       "claude plugin marketplace remove acf-user",
@@ -218,7 +226,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "list-json-after-update-while-disabled",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.2" }]),
     );
     const lines = commandLines(fake.calls);
@@ -234,7 +242,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
 
   test("a missing CLI reports registration required with the exact commands, as a warning", async () => {
     const report = await reconcileClaudeHost(
-      createClaudeHost(missingClaudeCli()),
+      host(missingClaudeCli()),
       userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
     );
     const [scope] = report.scopes;
@@ -260,6 +268,65 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(message).toContain("claude plugin install probe@acf-user --scope user");
   });
 
+  test("a CLI that stops starting mid-run is a warning listing every command not run", async () => {
+    // Synthetic: the binary disappears after the marketplace add (spawn fails with ENOENT).
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+    ]);
+    const missing = missingClaudeCli();
+    const cli: ClaudeCli = async (args) =>
+      args[1] === "install" ? await missing(args) : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([
+        { name: "lint", version: "1.0.0+acf.aaa" },
+        { name: "probe", version: "1.0.0+acf.aaa" },
+      ]),
+    );
+    expect(fake.unused()).toEqual([]);
+    const [scope] = report.scopes;
+    expect(scope?.commands.map((c) => c.status)).toEqual(["succeeded", "not run", "not run"]);
+    expect(scope?.plugins.map((p) => p.state)).toEqual([
+      "registration required",
+      "registration required",
+    ]);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.cli-unavailable", "warn"],
+    ]);
+    expect(report.diagnostics[0]?.data).toEqual({
+      commands: [
+        "claude plugin install lint@acf-user --scope user",
+        "claude plugin install probe@acf-user --scope user",
+      ],
+    });
+  });
+
+  test("a CLI that stops starting before the final state read is a warning", async () => {
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+      "install-user",
+    ]);
+    const missing = missingClaudeCli();
+    let lists = 0;
+    const cli: ClaudeCli = async (args) =>
+      args.join(" ") === "plugin list --json" && ++lists === 2
+        ? await missing(args)
+        : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.stateRead).toBe(false);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.cli-unavailable", "warn"],
+    ]);
+  });
+
   test("an install that Claude rejects fails that plugin only", async () => {
     const fake = userFake([
       "list-json-empty",
@@ -273,7 +340,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       "list-json-installed",
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([
         { name: "lint", version: "1.0.0+acf.aaa" },
         { name: "probe", version: "1.0.0+acf.aaa" },
@@ -304,7 +371,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       },
     ]);
     const report = await reconcileClaudeHost(
-      createClaudeHost(fake.cli),
+      host(fake.cli),
       userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
     );
     expect(fake.unused()).toEqual([]);
@@ -315,6 +382,61 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     const [diagnostic] = report.diagnostics;
     expect(diagnostic?.code).toBe("acf.claude.command-failed");
     expect(diagnostic?.message).toContain("claude plugin install probe@acf-user --scope user");
+  });
+
+  test("a failed state read is a command failure that changes nothing", async () => {
+    // Synthetic: no transcript of a failing list command exists.
+    const cli: ClaudeCli = async () => ({
+      kind: "exited",
+      exitCode: 1,
+      stdout: "",
+      stderr: "✘ Failed to read installed plugins: EACCES\n",
+    });
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(report.scopes[0]?.plugins[0]?.state).toBe("unknown");
+    expect(report.scopes[0]?.commands.map((c) => c.status)).toEqual(["not run", "not run"]);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.command-failed", "error"],
+    ]);
+    expect(report.diagnostics[0]?.message).toContain("claude plugin list --json");
+    expect(report.diagnostics[0]?.message).toContain("Failed to read installed plugins: EACCES");
+  });
+
+  test("a failed state read after the commands ran is a command failure", async () => {
+    const fake = userFake([
+      "list-json-empty",
+      "marketplace-list-json-empty",
+      "marketplace-add-user",
+      "install-user",
+    ]);
+    let lists = 0;
+    const cli: ClaudeCli = async (args) =>
+      args.join(" ") === "plugin list --json" && ++lists === 2
+        ? { kind: "exited", exitCode: 1, stdout: "", stderr: "✘ EACCES\n" }
+        : await fake.cli(args);
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.stateRead).toBe(false);
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.command-failed", "error"],
+    ]);
+  });
+
+  test("state Claude prints but caplet cannot parse is unreadable, a warning", async () => {
+    const cli: ClaudeCli = async () => ({ kind: "exited", exitCode: 0, stdout: "{}", stderr: "" });
+    const report = await reconcileClaudeHost(
+      host(cli),
+      userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
+    );
+    expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["acf.claude.state-unreadable", "warn"],
+    ]);
   });
 
   test("a policy block is reported as blocked by host policy", async () => {
@@ -336,7 +458,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
           }
         : await fake.cli(args);
     const report = await reconcileClaudeHost(
-      createClaudeHost(cli),
+      host(cli),
       userScope([{ name: "probe", version: "1.0.0+acf.aaa" }]),
     );
     expect(report.scopes[0]?.plugins[0]?.state).toBe("blocked by host policy");
@@ -358,7 +480,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       ],
       replace: { "<HOME>": home, "<PROJECT>": projectRoot, "acf-project-spike": marketplace },
     });
-    const report = await reconcileClaudeHost(createClaudeHost(fake.cli), [
+    const report = await reconcileClaudeHost(host(fake.cli), [
       {
         target: { scope: "project", projectRoot },
         marketplaceDir: path.join(projectRoot, ".claude/.acf/marketplace"),
@@ -381,5 +503,73 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
       ["acf.claude.other-scope", "info"],
     ]);
+  });
+
+  test("a desired plugin installed only at another Claude scope is not installed at caplet's", async () => {
+    const projectRoot = path.join(dir, "project");
+    const marketplace = claudeMarketplaceName({ scope: "project", projectRoot });
+    const fake = fakeClaudeCli({
+      transcripts: [
+        "list-json-project-and-local",
+        "marketplace-list-json",
+        "marketplace-add-local",
+      ],
+      replace: {
+        "<HOME>": home,
+        "<PROJECT>": projectRoot,
+        "<MARKETPLACE_DIR>": path.join(projectRoot, ".claude/.acf/marketplace"),
+        "acf-project-spike": marketplace,
+        "spike-mkt": marketplace,
+      },
+    });
+    const report = await reconcileClaudeHost(host(fake.cli), [
+      {
+        target: { scope: "project", projectRoot },
+        marketplaceDir: path.join(projectRoot, ".claude/.acf/marketplace"),
+        plugins: [
+          { name: "local1", version: "1.0.0+acf.aaa" },
+          { name: "probe", version: "1.0.0+acf.aaa" },
+        ],
+      },
+    ]);
+    expect(fake.unused()).toEqual([]);
+    expect(report.scopes[0]?.plugins).toEqual([
+      expect.objectContaining({ name: "local1", action: "unchanged", state: "registered" }),
+      {
+        name: "probe",
+        id: `probe@${marketplace}`,
+        action: "other-scope",
+        state: "not installed",
+        desiredVersion: "1.0.0+acf.aaa",
+      },
+    ]);
+  });
+});
+
+describe("previewClaudeHost", () => {
+  test("an outdated installed version is unknown with a mismatch warning, enabled or disabled", async () => {
+    for (const [fixture, version] of [
+      ["list-json-installed", "1.0.0+acf.aaa"],
+      ["list-json-disabled", "banana"],
+    ] as const) {
+      const fake = userFake([fixture, "marketplace-list-json"]);
+      const report = await previewClaudeHost(
+        host(fake.cli),
+        userScope([{ name: "probe", version: "1.0.0+acf.new" }]),
+      );
+      expect(fake.calls).toHaveLength(2);
+      expect(report.scopes[0]?.plugins[0]).toMatchObject({
+        action: "update",
+        state: "unknown",
+        version,
+        desiredVersion: "1.0.0+acf.new",
+      });
+      expect(report.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+        ["acf.claude.version-mismatch", "warn"],
+      ]);
+      expect(report.diagnostics[0]?.message).toContain(
+        "claude plugin update probe@acf-user --scope user",
+      );
+    }
   });
 });

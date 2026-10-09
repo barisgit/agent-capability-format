@@ -4,6 +4,7 @@
  * may proceed, and reports host and file state per plugin.
  */
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { ACF_SYSTEM_OWNER, type Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
@@ -12,13 +13,14 @@ import { execClaudeCli } from "../hosts/claude/cli.js";
 import { createClaudeHost } from "../hosts/claude/host.js";
 import type { ClaudePluginAction, DesiredClaudeScope } from "../hosts/claude/plan.js";
 import {
+  type ClaudeCommandReport,
   type ClaudeHostReport,
   type ClaudePluginReport,
   type ClaudeScopeReport,
   previewClaudeHost,
   reconcileClaudeHost,
 } from "../hosts/claude/reconcile.js";
-import { type ClaudeRootPlan, marketplaceFile } from "./claude-marketplace.js";
+import { type ClaudeRootPlan, marketplaceFile, renderMarketplace } from "./claude-marketplace.js";
 import { type ClaudeRename, renameLines } from "./claude-migration.js";
 import { displayPath } from "./plan-view.js";
 import { columns } from "./render.js";
@@ -92,14 +94,40 @@ export function gateOpen(gate: ClaudeGate, report: ClaudeReport): boolean {
     const plugin = scope.plugins.find((item) => item.name === gate.plugin);
     return plugin === undefined || plugin.state === "not installed";
   }
-  const remove = scope.commands.find((command) =>
-    command.command.startsWith("claude plugin marketplace remove "),
-  );
+  const remove = marketplaceRemove(scope);
   return (
     scope.otherScopeInstalls.length === 0 &&
     scope.plugins.every((plugin) => plugin.state === "not installed") &&
-    (remove === undefined || remove.status === "succeeded")
+    (remove === undefined ? !scope.marketplaceKnown : remove.status === "succeeded")
   );
+}
+
+/**
+ * The change to apply for a gated `item` once the host has run: `item` when its gate is open,
+ * undefined to hold it back. A retired marketplace that stays registered
+ * (`acf.claude.marketplace-kept`) keeps `marketplace.json` as an empty catalog instead of
+ * deleting it, so the registration Claude keeps still points at a valid marketplace.
+ */
+export function gatedChange(
+  item: EmittedDiff,
+  gate: ClaudeGate,
+  report: ClaudeReport,
+): EmittedDiff | undefined {
+  if (gateOpen(gate, report)) return item;
+  if (gate.kind !== "retired") return undefined;
+  const scope = report.scopes.find((candidate) => candidate.marketplaceDir === gate.marketplaceDir);
+  if (scope === undefined) return undefined;
+  const kept =
+    scope.stateRead &&
+    scope.marketplaceKnown &&
+    marketplaceRemove(scope) === undefined &&
+    scope.plugins.every((plugin) => plugin.state === "not installed");
+  if (!kept) return undefined;
+  return { ...item, diff: { ...item.diff, after: renderMarketplace(scope.marketplace, []) } };
+}
+
+function marketplaceRemove(scope: ClaudeScopeStatus): ClaudeCommandReport | undefined {
+  return scope.commands.find((command) => command.op === "marketplace remove");
 }
 
 /**
@@ -216,7 +244,12 @@ function claudeHost(roots: readonly ClaudeRootPlan[], cwd: string) {
   // the project root; user-scope commands work from anywhere.
   const project = roots.find((root) => root.target.scope === "project")?.target;
   const projectRoot = project?.scope === "project" ? project.projectRoot : cwd;
-  return createClaudeHost(execClaudeCli({ cwd: projectRoot }));
+  // Claude reads user settings from `CLAUDE_CONFIG_DIR` when it is set.
+  const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), ".claude");
+  return createClaudeHost(execClaudeCli({ cwd: projectRoot }), {
+    projectDir: projectRoot,
+    configDir,
+  });
 }
 
 function desiredScopes(roots: readonly ClaudeRootPlan[]): DesiredClaudeScope[] {
