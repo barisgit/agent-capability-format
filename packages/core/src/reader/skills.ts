@@ -50,69 +50,95 @@ export async function readSkills(
       });
       continue;
     }
-    const primary = path.join(full, "SKILL.md");
-    if (!(await exists(primary))) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.facet.primary-missing",
-        message: `skills/${entry.name}/ must contain SKILL.md`,
-        path: full,
-        family: "skill",
-      });
-      continue;
-    }
-    const parsed = await parseMarkdownFile(primary, diagnostics);
-    if (parsed === undefined) continue;
-    // A bare imported skill keeps every key as core, a target's extra or an agent-plugins
-    // extra; an authored skill reports unknown keys.
-    const mapped = imported ? mapBareSkill(parsed.frontmatter, coreSkillKeys) : undefined;
-    if (mapped === undefined) {
-      const reported = rejectNativeSkillKeys(parsed.frontmatter, primary, diagnostics);
-      pushUnknownFields(
-        parsed.frontmatter,
-        new Set([...coreSkillKeys, ...reported]),
-        diagnostics,
-        primary,
-      );
-    }
-    const candidate = mapped?.core ?? parsed.frontmatter;
-    const missingDescription =
-      imported && (typeof candidate.description !== "string" || candidate.description.length === 0);
-    const frontmatter = missingDescription
-      ? { ...candidate, description: "Imported skill" }
-      : candidate;
-    if (missingDescription) {
-      diagnostics.push({
-        severity: "warn",
-        code: "acf.import.skill-description-missing",
-        message: "imported skill has no description; using an in-memory fallback",
-        path: primary,
-        family: "skill",
-      });
-    }
-    const result = skillFrontmatterSchema.safeParse(frontmatter);
-    if (!result.success) {
-      pushZodIssues(diagnostics, result.error, primary, {
-        baseCode: "acf.markdown.invalid-frontmatter-field",
-        family: "skill",
-      });
-      continue;
-    }
-    const facet: SkillFacet = {
-      family: "skill",
-      name: result.data.name,
-      dir: full,
-      primaryFile: primary,
-      frontmatter: result.data,
-      body: parsed.body,
-    };
-    for (const [dialect, extras] of mapped?.extras ?? []) {
-      facet.frontmatter.targets = withNativeExtras(facet.frontmatter.targets, dialect, extras);
-    }
-    validateNameMatch(facet.family, facet.name, entry.name, primary, diagnostics);
-    facets.push(facet);
+    const facet = await readSkill(full, entry.name, imported, diagnostics);
+    if (facet !== undefined) facets.push(facet);
   }
   return facets.sort(byName);
+}
+
+/** The skill in directory `full` named `dirName`, or undefined after reporting why it is not. */
+async function readSkill(
+  full: string,
+  dirName: string,
+  imported: boolean,
+  diagnostics: Diagnostic[],
+): Promise<SkillFacet | undefined> {
+  const primary = path.join(full, "SKILL.md");
+  if (!(await exists(primary))) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.facet.primary-missing",
+      message: `skills/${dirName}/ must contain SKILL.md`,
+      path: full,
+      family: "skill",
+    });
+    return undefined;
+  }
+  const parsed = await parseMarkdownFile(primary, diagnostics);
+  if (parsed === undefined) return undefined;
+  const { frontmatter, extras } = skillFrontmatter(
+    parsed.frontmatter,
+    primary,
+    imported,
+    diagnostics,
+  );
+  const result = skillFrontmatterSchema.safeParse(frontmatter);
+  if (!result.success) {
+    pushZodIssues(diagnostics, result.error, primary, {
+      baseCode: "acf.markdown.invalid-frontmatter-field",
+      family: "skill",
+    });
+    return undefined;
+  }
+  const facet: SkillFacet = {
+    family: "skill",
+    name: result.data.name,
+    dir: full,
+    primaryFile: primary,
+    frontmatter: result.data,
+    body: parsed.body,
+  };
+  for (const [dialect, dialectExtras] of extras) {
+    facet.frontmatter.targets = withNativeExtras(facet.frontmatter.targets, dialect, dialectExtras);
+  }
+  validateNameMatch(facet.family, facet.name, dirName, primary, diagnostics);
+  return facet;
+}
+
+/** Native extras of an imported skill, by dialect. */
+type DialectExtras = NonNullable<ReturnType<typeof mapBareSkill>>["extras"];
+
+/**
+ * The frontmatter to validate as core, and the native extras by dialect. A bare imported skill
+ * keeps every key as core, a target's extra or an agent-plugins extra, and a missing description
+ * gets a fallback; an authored skill reports native and unknown keys.
+ */
+function skillFrontmatter(
+  raw: Record<string, unknown>,
+  primary: string,
+  imported: boolean,
+  diagnostics: Diagnostic[],
+): {
+  frontmatter: Record<string, unknown>;
+  extras: DialectExtras;
+} {
+  const mapped = imported ? mapBareSkill(raw, coreSkillKeys) : undefined;
+  if (mapped === undefined) {
+    const reported = rejectNativeSkillKeys(raw, primary, diagnostics);
+    pushUnknownFields(raw, new Set([...coreSkillKeys, ...reported]), diagnostics, primary);
+  }
+  const candidate = mapped?.core ?? raw;
+  const extras: DialectExtras = mapped?.extras ?? new Map();
+  if (!imported || (typeof candidate.description === "string" && candidate.description.length > 0))
+    return { frontmatter: candidate, extras };
+  diagnostics.push({
+    severity: "warn",
+    code: "acf.import.skill-description-missing",
+    message: "imported skill has no description; using an in-memory fallback",
+    path: primary,
+    family: "skill",
+  });
+  return { frontmatter: { ...candidate, description: "Imported skill" }, extras };
 }
 
 /**
