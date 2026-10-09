@@ -254,3 +254,14 @@ test("a reference another target's host expands is an error in every canonical M
       expect(errors(cap)).toEqual(["acf.mcp.placeholder.pending", "acf.mcp.placeholder.pending"]),
   );
 });
+
+test("a server's target extension holds only native extras", async () => {
+  for (const key of ["localDev: true", "scope: project", "servers: []"]) {
+    await withCapability(
+      mcpFile(
+        `    transport: stdio\n    command: srv\n    targets:\n      claude:\n        ${key}\n`,
+      ),
+      (cap) => expect(errors(cap)).toEqual(["acf.target.extension.unknown-field"]),
+    );
+  }
+});

@@ -1663,7 +1663,7 @@ targets:
 | `headers`     | mapping     | no       | `http`/`sse` only. HTTP request headers.                           |
 | `only`        | list        | no       | Entry-level applicability (§6).                                    |
 | `except`      | list        | no       | Entry-level applicability (§6).                                    |
-| `targets`     | mapping     | no       | Entry-level target extension data.                                 |
+| `targets`     | mapping     | no       | Entry-level target extension data: `native` extras only (§7.5).    |
 
 ### 13a.4 Transport rules
 
@@ -1819,9 +1819,6 @@ servers:
     url: https://mcp.example.com/search
     headers:
       Authorization: "Bearer placeholder"
-    targets:
-      claude:
-        scope: project
 ```
 
 ## 14. Diagnostics, lossiness, and emission
