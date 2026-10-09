@@ -79,6 +79,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
         action: "install",
         state: "registered",
         version: "1.0.0+acf.aaa",
+        desiredVersion: "1.0.0+acf.aaa",
       },
     ]);
     expect(scope?.commands.map((c) => c.status)).toEqual(["succeeded", "succeeded"]);
@@ -241,7 +242,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(fake.unused()).toEqual([]);
     const plugins = report.scopes[0]?.plugins ?? [];
     expect(plugins.map((p) => [p.name, p.state])).toEqual([
-      ["lint", "unknown"],
+      ["lint", "registration required"],
       ["probe", "registered"],
     ]);
     expect(plugins[0]?.message).toContain('Plugin "lint" not found in marketplace "acf-user"');
@@ -269,7 +270,7 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     expect(fake.unused()).toEqual([]);
     const [scope] = report.scopes;
     expect(scope?.commands.map((c) => c.status)).toEqual(["failed", "skipped"]);
-    expect(scope?.plugins[0]).toMatchObject({ state: "unknown" });
+    expect(scope?.plugins[0]).toMatchObject({ state: "registration required" });
     expect(scope?.plugins[0]?.message).toContain(`Path does not exist: ${userDir}`);
     const [diagnostic] = report.diagnostics;
     expect(diagnostic?.code).toBe("acf.claude.command-failed");

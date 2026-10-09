@@ -9,6 +9,7 @@ import {
   type PlannedClaudePlugin,
   planClaudeScope,
 } from "./plan.js";
+import { claudeMarketplaceName, claudeScopeFor } from "./scope.js";
 import type { ClaudeInstalledPlugin, ObservedClaudeState } from "./state.js";
 
 /**
@@ -32,6 +33,8 @@ export type ClaudePluginReport = {
   state: ClaudeHostState;
   /** Version Claude reports at caplet's scope (or the other scope for `other-scope`). */
   version?: string | undefined;
+  /** Version caplet generated; absent for `uninstall`. */
+  desiredVersion?: string | undefined;
   /** Claude's message when a command for this plugin failed or was skipped. */
   message?: string | undefined;
 };
@@ -64,6 +67,8 @@ export type ClaudeScopeReport = {
   otherScopeInstalls: { id: string; scope: string; enabled: boolean; version: string }[];
   /** Project scope only. */
   local?: ClaudeLocalRegistration | undefined;
+  /** Whether plugin states come from `claude plugin list` read after the commands ran. */
+  stateRead: boolean;
 };
 
 export type ClaudeHostReport = { scopes: ClaudeScopeReport[]; diagnostics: Diagnostic[] };
@@ -125,6 +130,36 @@ export async function reconcileClaudeHost(
   return { scopes, diagnostics };
 }
 
+/**
+ * What {@link reconcileClaudeHost} would do, without running a command: reads host state once and
+ * reports each plugin's current state with every planned command `not run`. A missing CLI is not
+ * a warning here; the commands are reported as planned.
+ */
+export async function previewClaudeHost(
+  host: ClaudeHost,
+  desired: readonly DesiredClaudeScope[],
+): Promise<ClaudeHostReport> {
+  const state = await readClaudeHostState(host);
+  if (!state.ok) {
+    const report = notRun(desired, state.failure);
+    return state.failure.kind === "unavailable" ? { ...report, diagnostics: [] } : report;
+  }
+  const diagnostics: Diagnostic[] = [];
+  const scopes = desired.map((scope) =>
+    scopeReport(
+      planClaudeScope(scope, state.value),
+      [],
+      state.value.plugins,
+      "unknown",
+      diagnostics,
+      {
+        preview: true,
+      },
+    ),
+  );
+  return { scopes, diagnostics };
+}
+
 async function runSteps(host: ClaudeHost, plan: ClaudeScopePlan): Promise<StepResult[]> {
   const results: StepResult[] = [];
   for (const step of plan.steps) {
@@ -147,6 +182,7 @@ function scopeReport(
   installed: ClaudeInstalledPlugin[] | undefined,
   unreadState: ClaudeHostState,
   diagnostics: Diagnostic[],
+  options: { preview?: boolean } = {},
 ): ClaudeScopeReport {
   const commands = plan.steps.map((step, i) =>
     commandReport(step.command, step.plugin, results[i]),
@@ -163,9 +199,26 @@ function scopeReport(
     const index = plan.steps.findIndex((step) => step.plugin === plugin.id);
     const result = results[index];
     if (result !== undefined && "failure" in result) {
-      return pluginReport(plugin, failureState(result.failure), undefined, result.failure.message);
+      const message = result.failure.message;
+      if (result.failure.kind === "policy-blocked" || installed === undefined) {
+        return pluginReport(plugin, failureState(result.failure), undefined, message);
+      }
+      // The command failed but the host state was read after it: report what Claude has.
+      const entry = atScope.get(plugin.id);
+      if (entry !== undefined) return pluginReport(plugin, enabledState(entry), entry, message);
+      const absent = plugin.action === "uninstall" ? "not installed" : "registration required";
+      return pluginReport(plugin, absent, undefined, message);
     }
     if (installed === undefined) return pluginReport(plugin, unreadState);
+    if (options.preview === true) {
+      const current =
+        plugin.action === "other-scope"
+          ? others.find((p) => p.name === plugin.name)
+          : atScope.get(plugin.id);
+      return current === undefined
+        ? pluginReport(plugin, "not installed")
+        : pluginReport(plugin, enabledState(current), current);
+    }
     if (plugin.action === "other-scope") {
       const other = others.find((p) => p.name === plugin.name);
       return pluginReport(plugin, other === undefined ? "unknown" : enabledState(other), other);
@@ -195,6 +248,7 @@ function scopeReport(
       enabled: p.enabled,
       version: p.version,
     })),
+    stateRead: installed !== undefined,
   };
   if (plan.target.scope === "project" && installed !== undefined) {
     report.local = {
@@ -219,6 +273,7 @@ function pluginReport(
     state,
   };
   if (entry !== undefined) report.version = entry.version;
+  if (plugin.desiredVersion !== undefined) report.desiredVersion = plugin.desiredVersion;
   if (message !== undefined) report.message = message;
   return report;
 }
@@ -255,11 +310,10 @@ function notRun(
   desired: readonly DesiredClaudeScope[],
   failure: ClaudeHostFailure,
 ): ClaudeHostReport {
-  const empty: ObservedClaudeState = { plugins: [], marketplaces: [] };
   const state = failureState(failure);
   const ignored: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
-    scopeReport(planClaudeScope(scope, empty), [], undefined, state, ignored),
+    scopeReport(planClaudeScope(scope, assumedState(scope)), [], undefined, state, ignored),
   );
   if (failure.kind !== "unavailable") return { scopes, diagnostics: [stateUnreadable(failure)] };
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
@@ -271,10 +325,33 @@ function notRun(
         severity: "warn",
         code: "acf.claude.cli-unavailable",
         targetId: "claude",
-        message: `Claude plugins were written but not registered: ${failure.message}. Install Claude Code and re-run \`caplet apply\`, or run:\n${indent(commands)}`,
+        message: `Claude plugin registration was not updated: ${failure.message}. Install Claude Code and re-run \`caplet apply\`, or run:\n${indent(commands)}`,
         data: { commands },
       },
     ],
+  };
+}
+
+/**
+ * The host state to plan against when it cannot be read: nothing installed except the scope's
+ * leftover plugins, whose marketplace is then assumed registered.
+ */
+function assumedState(scope: DesiredClaudeScope): ObservedClaudeState {
+  const leftover = scope.leftover ?? [];
+  if (leftover.length === 0) return { plugins: [], marketplaces: [] };
+  const marketplace = claudeMarketplaceName(scope.target);
+  const claudeScope = claudeScopeFor(scope.target.scope);
+  return {
+    plugins: leftover.map((name) => ({
+      id: `${name}@${marketplace}`,
+      name,
+      marketplace,
+      version: "",
+      scope: claudeScope,
+      enabled: true,
+      installPath: "",
+    })),
+    marketplaces: [{ name: marketplace, source: "directory" }],
   };
 }
 

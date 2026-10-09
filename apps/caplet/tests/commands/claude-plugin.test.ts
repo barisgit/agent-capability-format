@@ -15,6 +15,16 @@ import {
   type TestScope,
   writeText,
 } from "../helpers.js";
+import { claudeHost, localPluginList, plannedVersion } from "../support/claude-scenario.js";
+
+const PROJECT_ARGS = (scope: TestScope) => [
+  "--cwd",
+  scope.cwd,
+  "--scope",
+  "project",
+  "--target",
+  "claude",
+];
 
 const testsDir = path.resolve(import.meta.dir, "..");
 const scopes: TestScope[] = [];
@@ -88,7 +98,9 @@ test("apply writes a Claude plugin and lists it in the install-root inventory", 
   await selectSources(scope, [await pluginSource(scope, "review")]);
 
   const result = await applyProject(scope);
-  expect(result.stderr).toBe("");
+  // Tests run without Claude Code, so the only problem is the registration warning.
+  expect(result.stderr).toContain("1 problem (1 warning)");
+  expect(result.stderr).toContain("acf.claude.cli-unavailable");
   expect(result.exitCode).toBe(0);
   const claudeRoot = path.join(scope.cwd, ".claude");
   const marketplace = await projectMarketplace(scope);
@@ -109,17 +121,7 @@ test("apply writes a Claude plugin and lists it in the install-root inventory", 
   );
   await expect(stat(path.join(scope.cwd, ".mcp.json"))).rejects.toThrow();
 
-  const rerun = await runCaplet(scope, [
-    "apply",
-    "--cwd",
-    scope.cwd,
-    "--scope",
-    "project",
-    "--target",
-    "claude",
-    "--dry-run",
-    "--json",
-  ]);
+  const rerun = await runCaplet(scope, ["apply", ...PROJECT_ARGS(scope), "--dry-run", "--json"]);
   expect(JSON.parse(rerun.stdout).plan.changes).toEqual([]);
 
   const again = await applyProject(scope);
@@ -128,12 +130,6 @@ test("apply writes a Claude plugin and lists it in the install-root inventory", 
     ".acf-managed.json": sidecar,
     ...files,
   });
-
-  await selectSources(scope, []);
-  expect((await applyProject(scope)).exitCode).toBe(0);
-  await expect(
-    stat(path.join(claudeRoot, ".acf", "marketplace", "plugins", "review")),
-  ).rejects.toThrow();
 });
 
 test("the scope's marketplace lists every generated plugin and follows desired state", async () => {
@@ -165,8 +161,16 @@ test("the scope's marketplace lists every generated plugin and follows desired s
   );
   expect(await recorded()).toEqual({ name, scope: "local" });
 
+  // Claude has only review installed, so lint's files may go.
   await selectSources(scope, [review]);
-  expect((await applyProject(scope)).exitCode).toBe(0);
+  const version = await plannedVersion(scope, PROJECT_ARGS(scope), "review");
+  const kept = await claudeHost(scope, "project", "review", [
+    localPluginList(version),
+    "marketplace-list-json",
+    "marketplace-add-local",
+  ]);
+  expect((await applyProject(scope, kept.env)).exitCode).toBe(0);
+  expect(await kept.unused()).toEqual([]);
   await assertGoldenTree(
     await marketplaceTree(),
     goldenCase(testsDir, "claude-marketplace-remove").expected,
@@ -176,7 +180,15 @@ test("the scope's marketplace lists every generated plugin and follows desired s
   ).rejects.toThrow();
 
   await selectSources(scope, []);
-  expect((await applyProject(scope)).exitCode).toBe(0);
+  const retired = await claudeHost(scope, "project", "review", [
+    localPluginList(version),
+    "marketplace-list-json",
+    "uninstall-local",
+    "marketplace-remove",
+    "list-json-empty",
+  ]);
+  expect((await applyProject(scope, retired.env)).exitCode).toBe(0);
+  expect(await retired.unused()).toEqual([]);
   await expect(stat(path.join(claudeRoot, ".acf", "marketplace"))).rejects.toThrow();
   expect(await recorded()).toBeUndefined();
 });

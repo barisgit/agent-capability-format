@@ -1,7 +1,9 @@
 import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
 import { colors } from "consola/utils";
+import { claudeJson, printClaude } from "../internal/apply-flow.js";
 import { readCwd, readScope, readVerbose } from "../internal/args.js";
+import { previewClaude } from "../internal/claude-host-flow.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import { printDiagnostics, reporter } from "../internal/output.js";
@@ -42,6 +44,8 @@ export const statusCommand = defineCommand({
       const reach = await collectReach(plan);
       const verbose = readVerbose(context.args);
       const footprint = verbose ? await collectFootprint(plan) : null;
+      const claude = await previewClaude(plan.claude, plan.cwd);
+      diagnostics.push(...(claude?.diagnostics ?? []));
       if (!json) printDiagnostics([...diagnostics, ...plan.diagnostics], context.args);
       const view = buildPlanView(plan.diffs);
       if (json) {
@@ -49,6 +53,7 @@ export const statusCommand = defineCommand({
           pending: view.fileCount,
           ...reachToJson(reach),
           ...(footprint === null ? {} : { footprint: footprintToJson(footprint) }),
+          ...claudeJson(claude),
         });
         return;
       }
@@ -80,6 +85,7 @@ export const statusCommand = defineCommand({
           for (const line of footprintLines(scoped, { skipScopeHeader: true })) out.log(line);
         }
       }
+      printClaude(out, claude, "planned");
       out.log("");
       if (view.fileCount === 0) {
         out.done("Everything up to date");

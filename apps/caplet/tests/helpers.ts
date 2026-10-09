@@ -76,16 +76,15 @@ export async function fetchProject(scope: TestScope): Promise<void> {
   expect(result.exitCode).toBe(0);
 }
 
-export async function applyProject(scope: TestScope): Promise<RunResult> {
-  return await runCaplet(scope, [
-    "apply",
-    "--cwd",
-    scope.cwd,
-    "--scope",
-    "project",
-    "--target",
-    "claude",
-  ]);
+export async function applyProject(
+  scope: TestScope,
+  env: Record<string, string> = {},
+): Promise<RunResult> {
+  return await runCaplet(
+    scope,
+    ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"],
+    env,
+  );
 }
 
 /**

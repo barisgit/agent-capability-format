@@ -11,6 +11,11 @@ export type DesiredClaudeScope = {
   /** Absolute path of the scope's marketplace directory (`<install-root>/.acf/marketplace`). */
   marketplaceDir: string;
   plugins: DesiredClaudePlugin[];
+  /**
+   * Plugins caplet generated in this scope earlier and no longer wants. When host state cannot be
+   * read, they are assumed installed so the recovery commands include their uninstall.
+   */
+  leftover?: string[] | undefined;
 };
 
 /**

@@ -58,12 +58,19 @@ import {
 } from "../apply/sidecar.js";
 import { type FetchMode, readCwd, readOptionalString, readScope, validationError } from "./args.js";
 import {
+  type ClaudeGate,
+  type ClaudeReport,
+  claudeGate,
+  gateOpen,
+  reconcileClaude,
+} from "./claude-host-flow.js";
+import {
   type ClaudeRootPlan,
   planClaudeMarketplaces,
   recordClaudeMarketplaces,
 } from "./claude-marketplace.js";
 import { diskReadOnlyFs } from "./fs.js";
-import { addManagementNotices } from "./managed-notices.js";
+import { addManagementNotices, rootNoticeDiffFromSidecar } from "./managed-notices.js";
 import { anchorPathSource } from "./manifest.js";
 import { resolveScopeRoots } from "./scopes.js";
 
@@ -76,6 +83,8 @@ export type EmittedDiff = {
   /** Carrier of the output the diff belongs to, recorded on its sidecar entry. */
   carrier: Carrier;
   diff: FileDiff;
+  /** Host state the change waits for; such a change applies after Claude reconciliation. */
+  gate?: ClaudeGate | undefined;
 };
 
 /** A generated plugin package, with the scope and output root it was planned for. */
@@ -125,8 +134,15 @@ export type EmitPlan = {
   executables: ExecutableComponent[];
 };
 
-/** Outcome of applying a plan; `diagnostics` holds only what apply itself found. */
-export type ApplySummary = { results: ApplyResult[]; diagnostics: Diagnostic[] };
+/**
+ * Outcome of applying a plan; `diagnostics` holds only what apply itself found. `claude` is the
+ * host report of the plan's Claude install roots, absent when it has none.
+ */
+export type ApplySummary = {
+  results: ApplyResult[];
+  diagnostics: Diagnostic[];
+  claude?: ClaudeReport | undefined;
+};
 
 export async function fetchScopes(
   args: Record<string, unknown>,
@@ -371,6 +387,10 @@ export async function buildEmitPlan(
     ),
     ...sweep.deletes.filter((item) => fileDiffChanged(item.diff)),
   ];
+  for (const item of diffs) {
+    const gate = claudeGate(item, claude.roots);
+    if (gate !== undefined) item.gate = gate;
+  }
   return {
     cwd,
     config: configResult.config,
@@ -642,6 +662,11 @@ function isErrnoCode(error: unknown, code: string): boolean {
  * root with `acf.apply.outside-root` and leaves it, including its sidecar, untouched while other
  * roots still apply. Changes whose files moved on since planning are skipped by `applyDiffs`,
  * and their stale sidecar entries are kept so the next plan proposes them again.
+ *
+ * Claude install roots apply in two phases: every change without a gate, then host
+ * reconciliation through the `claude` CLI (the plugin files must exist before Claude installs
+ * them), then the gated changes whose host state allows them. A held-back change keeps its sidecar
+ * entry, so the next apply retries it, and the root's inventory is rebuilt from the sidecar.
  */
 export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
   const results: ApplyResult[] = [];
@@ -666,20 +691,46 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
     });
   }
   const skipped = new Set<string>();
-  for (const group of groupByApplyTarget(plan.diffs)) {
-    if (blockedRoots.has(group.installRoot)) continue;
-    const result = await applyDiffs(group.diffs, {
-      installRoot: group.installRoot,
-      capabilityName: group.capabilityName,
-      sidecarPath: path.join(group.installRoot, ".acf-managed.json"),
-      owner: group.owner,
-    });
-    results.push(result);
-    diagnostics.push(...result.diagnostics);
-    for (const skippedPath of result.skipped) {
-      const relative = relativeSidecarPath(group.installRoot, skippedPath);
-      skipped.add(`${group.installRoot}\u0000${relative}\u0000${group.capabilityName}`);
+  const applyItems = async (items: readonly EmittedDiff[]) => {
+    for (const group of groupByApplyTarget(items)) {
+      if (blockedRoots.has(group.installRoot)) continue;
+      const result = await applyDiffs(group.diffs, {
+        installRoot: group.installRoot,
+        capabilityName: group.capabilityName,
+        sidecarPath: path.join(group.installRoot, ".acf-managed.json"),
+        owner: group.owner,
+      });
+      results.push(result);
+      diagnostics.push(...result.diagnostics);
+      for (const skippedPath of result.skipped) {
+        const relative = relativeSidecarPath(group.installRoot, skippedPath);
+        skipped.add(`${group.installRoot}\u0000${relative}\u0000${group.capabilityName}`);
+      }
     }
+  };
+  await applyItems(plan.diffs.filter((item) => item.gate === undefined));
+
+  const claudeRoots = plan.claude.filter((root) => !blockedRoots.has(root.installRoot));
+  let claude: ClaudeReport | undefined;
+  const heldBackRoots = new Set<string>();
+  if (claudeRoots.length > 0) {
+    claude = await reconcileClaude(claudeRoots, plan.cwd);
+    diagnostics.push(...claude.diagnostics);
+    const open: EmittedDiff[] = [];
+    for (const item of plan.diffs) {
+      if (item.gate === undefined) continue;
+      if (gateOpen(item.gate, claude)) {
+        open.push(item);
+        continue;
+      }
+      heldBackRoots.add(item.installRoot);
+      const relative = relativeSidecarPath(
+        item.installRoot,
+        resolveDiffPath(item.installRoot, item.diff.path),
+      );
+      skipped.add(`${item.installRoot}\u0000${relative}\u0000${item.capabilityName}`);
+    }
+    await applyItems(open);
   }
   await removeStaleSidecarEntries(
     plan.staleEntries.filter(
@@ -688,8 +739,26 @@ export async function applyEmitPlan(plan: EmitPlan): Promise<ApplySummary> {
         !skipped.has(`${entry.installRoot}\u0000${entry.path}\u0000${entry.capability}`),
     ),
   );
-  await recordClaudeMarketplaces(plan.claude.filter((root) => !blockedRoots.has(root.installRoot)));
-  return { results, diagnostics };
+  // The planned inventory assumed every delete; list what a held-back change left in place.
+  for (const installRoot of heldBackRoots) {
+    const sidecarPath = path.join(installRoot, ".acf-managed.json");
+    const notice = await rootNoticeDiffFromSidecar(
+      installRoot,
+      await readSidecar(sidecarPath),
+      diskReadOnlyFs(),
+    );
+    if (!fileDiffChanged(notice)) continue;
+    const result = await applyDiffs([notice], {
+      installRoot,
+      capabilityName: ACF_SYSTEM_OWNER,
+      sidecarPath,
+      owner: { target: "claude", carrier: "loose" },
+    });
+    results.push(result);
+    diagnostics.push(...result.diagnostics);
+  }
+  await recordClaudeMarketplaces(claudeRoots);
+  return { results, diagnostics, claude };
 }
 
 /**

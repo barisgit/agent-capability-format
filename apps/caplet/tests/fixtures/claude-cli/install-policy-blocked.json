@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "claude",
+    "plugin",
+    "install",
+    "probe@spike-mkt",
+    "--scope",
+    "user"
+  ],
+  "exitCode": 1,
+  "stdout": "Installing plugin \"probe@spike-mkt\"...\n",
+  "stderr": "✘ Failed to install plugin \"probe@spike-mkt\": Plugin \"probe\" is blocked by your organization's policy and cannot be installed\n",
+  "notes": "SYNTHETIC, not observed: no managed-settings policy was available to record. The stderr follows the policy message template in the Claude Code bundle (see classifyClaudeFailure); stdout and the exit code mirror install-unknown-plugin."
+}

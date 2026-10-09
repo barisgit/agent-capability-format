@@ -1,6 +1,12 @@
 import { type ArgsDef, defineCommand } from "citty";
-import { reportEmptyPlan, sweepStaleEntries } from "../internal/apply-flow.js";
+import {
+  claudeJson,
+  printClaude,
+  reportEmptyPlan,
+  settleEmptyPlan,
+} from "../internal/apply-flow.js";
 import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
+import { previewClaude } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
 import {
@@ -86,20 +92,26 @@ export const applyCommand = defineCommand({
       }
       process.exitCode = planCode;
       if (view.fileCount === 0) {
-        const applied = await sweepStaleEntries(plan, dryRun);
+        const settled = await settleEmptyPlan(plan, dryRun);
+        const all = [...diagnostics, ...settled.diagnostics];
+        const code = exitCodeForDiagnostics(all, context.args);
+        process.exitCode = code;
         if (json) {
-          printJson("apply", planCode === 0, diagnostics, {
+          printJson("apply", code === 0, all, {
             plan: planToJson(view),
-            applied,
+            applied: settled.applied,
             ...outcomes,
             ...reachToJson(reach),
+            ...claudeJson(settled.claude),
           });
           return;
         }
+        printDiagnostics(settled.diagnostics, context.args);
         // Blocked capabilities are the one thing left to do, so their report stays visible.
         if (plan.blocked.length > 0) out.compatibility(plan.outcomes, plan.targets);
         reportEmptyPlan(out, plan, dryRun);
         out.executables(executables);
+        printClaude(out, settled.claude, dryRun ? "planned" : "applied");
         for (const line of reachBlock(
           reach,
           plan.scopes.map((scopeRoot) => scopeRoot.scope),
@@ -113,14 +125,19 @@ export const applyCommand = defineCommand({
         out.executables(executables);
       }
       if (dryRun) {
+        const claude = await previewClaude(plan.claude, plan.cwd);
+        const previewed = claude?.diagnostics ?? [];
         if (json) {
-          printJson("apply", planCode === 0, diagnostics, {
+          printJson("apply", planCode === 0, [...diagnostics, ...previewed], {
             plan: planToJson(view),
             applied: null,
             ...outcomes,
             ...reachToJson(reach),
+            ...claudeJson(claude),
           });
         } else {
+          printDiagnostics(previewed, context.args);
+          printClaude(out, claude, "planned");
           out.pending(`${view.fileCount} ${view.fileCount === 1 ? "file" : "files"}`);
           for (const line of reachBlock(
             reach,
@@ -156,6 +173,7 @@ export const applyCommand = defineCommand({
           applied: { files: view.fileCount, writes: written, deletes: deleted },
           ...outcomes,
           ...reachToJson(appliedReach),
+          ...claudeJson(applied.claude),
         });
         return;
       }
@@ -164,6 +182,7 @@ export const applyCommand = defineCommand({
       out.done(
         `Applied ${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} (${written} ${written === 1 ? "write" : "writes"}, ${deleted} ${deleted === 1 ? "delete" : "deletes"})`,
       );
+      printClaude(out, applied.claude, "applied");
       out.log("");
       for (const line of reachBlock(
         appliedReach,

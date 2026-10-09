@@ -24,8 +24,8 @@ import type { BlockedCapability, EmittedDiff, PlannedPlugin } from "./workflow.j
 
 /**
  * The Claude marketplace of one install root as a plan sees it: every plugin it lists (an empty
- * list retires the marketplace) and whether an earlier apply recorded it. A root appears only
- * when it lists a plugin or caplet maintained its marketplace before.
+ * list retires the marketplace). A root appears only when it lists a plugin or its sidecar shows
+ * caplet maintained a marketplace or plugin there before.
  */
 export type ClaudeRootPlan = {
   scopeRoot: ScopeRoot;
@@ -34,6 +34,8 @@ export type ClaudeRootPlan = {
   record: ClaudeMarketplaceRecord;
   marketplaceDir: string;
   plugins: DesiredClaudePlugin[];
+  /** Plugins whose generated files the sidecar still records but the plan no longer lists. */
+  leftover: string[];
 };
 
 /** `<install-root>/.acf/marketplace/.claude-plugin/marketplace.json`. */
@@ -71,7 +73,17 @@ export async function planClaudeMarketplaces(input: {
     const file = marketplaceFile(installRoot);
     const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
-    if (listed.size === 0 && !owned && sidecar.marketplace === undefined) continue;
+    const leftover = [
+      ...new Set(
+        sidecar.managed
+          .filter((entry) => entry.carrier === "plugin" && entry.capability !== ACF_SYSTEM_OWNER)
+          .map((entry) => entry.capability)
+          .filter((capability) => !listed.has(capability)),
+      ),
+    ].sort();
+    if (listed.size === 0 && leftover.length === 0 && !owned && sidecar.marketplace === undefined) {
+      continue;
+    }
 
     // The project root is the parent of the project's `.agents` directory.
     const target = await resolveClaudeScopeTarget(
@@ -90,6 +102,7 @@ export async function planClaudeMarketplaces(input: {
       record: { name, scope: claudeScopeFor(scopeRoot.scope) },
       marketplaceDir,
       plugins,
+      leftover,
     });
     const after = plugins.length === 0 ? null : renderMarketplace(name, plugins);
     if (after === null && !owned) continue;
