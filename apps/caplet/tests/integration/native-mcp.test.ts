@@ -100,3 +100,20 @@ test("OpenCode project servers are written to opencode.json at the project root"
     await cleanup(scope);
   }
 });
+
+test("apply writes nothing while a capability fails validation", async () => {
+  const scope = await makeScope();
+  try {
+    const hostReference = ["$", "{API_KEY}"].join("");
+    await writeText(
+      path.join(scope.sourceRoot, "alpha", "mcp", "mcp.yml"),
+      `servers:\n  - name: alpha-server\n    transport: stdio\n    command: node\n    env:\n      API_KEY: "${hostReference}"\n`,
+    );
+    const result = await applyCodex(scope);
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout + result.stderr).toContain("acf.mcp.placeholder.pending");
+    expect(await stat(path.join(scope.cwd, ".codex", "config.toml")).catch(() => null)).toBeNull();
+  } finally {
+    await cleanup(scope);
+  }
+});

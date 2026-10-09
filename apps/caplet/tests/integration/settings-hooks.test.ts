@@ -19,7 +19,7 @@ test("apply merges hooks into settings.json without clobbering user keys", async
         "    run:",
         '      command: "echo guard"',
         "    match:",
-        '      operation: "Bash"',
+        '      operation: "shell"',
         "",
       ].join("\n"),
     );
