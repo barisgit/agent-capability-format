@@ -31,37 +31,49 @@ export function renderCompatibility(
   outcomes: readonly ComponentOutcome[],
   targets: readonly TargetId[],
 ): string[] {
-  const lines: string[] = [];
   const qualify = new Set(outcomes.map((item) => item.capability)).size > 1;
-  for (const target of targets) {
-    const own = outcomes.filter((item) => item.target === target);
-    if (own.length === 0) continue;
-    const groups = new Map<string, ComponentOutcome[]>();
-    for (const item of [...own].filter((entry) => entry.outcome !== "native").sort(worstFirst)) {
-      const key = [item.capability, item.outcome, item.source, item.consequence, item.recovery]
-        .map((part) => part ?? "")
-        .join("\u0000");
-      groups.set(key, [...(groups.get(key) ?? []), item]);
-    }
-    // Within an outcome, single components come before the lines that share it among several,
-    // so a refusal's own line precedes the line of the components it blocks with it.
-    const ordered = [...groups.values()].sort(
-      (a, b) => outcomeRank(b[0]) - outcomeRank(a[0]) || a.length - b.length,
-    );
-    for (const [first, ...rest] of ordered) {
-      if (first !== undefined) lines.push(`  ${outcomeLine(first, rest, qualify)}`);
-    }
-    const native = own.filter((item) => item.outcome === "native" && item.family !== "package");
-    if (native.length > 0) {
-      lines.push(`  ${target} - ${colors.green("native")}: ${familyCounts(native)}`);
-    }
-    const dropped = own.flatMap((item) =>
-      (item.dropped ?? []).map((field) => `${field} (${label(item, qualify)})`),
-    );
-    if (dropped.length > 0)
-      lines.push(`  ${target} - ${colors.dim("dropped")}: ${dropped.join(", ")}`);
-  }
+  const lines = targets.flatMap((target) =>
+    targetLines(
+      target,
+      outcomes.filter((item) => item.target === target),
+      qualify,
+    ),
+  );
   return lines.length === 0 ? [] : [colors.bold("Compatibility"), ...lines, ""];
+}
+
+/** One target's report lines: its non-native outcomes, then its native and dropped summaries. */
+function targetLines(
+  target: TargetId,
+  own: readonly ComponentOutcome[],
+  qualify: boolean,
+): string[] {
+  const lines: string[] = [];
+  const groups = new Map<string, ComponentOutcome[]>();
+  for (const item of [...own].filter((entry) => entry.outcome !== "native").sort(worstFirst)) {
+    const key = [item.capability, item.outcome, item.source, item.consequence, item.recovery]
+      .map((part) => part ?? "")
+      .join("\u0000");
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  // Within an outcome, single components come before the lines that share it among several,
+  // so a refusal's own line precedes the line of the components it blocks with it.
+  const ordered = [...groups.values()].sort(
+    (a, b) => outcomeRank(b[0]) - outcomeRank(a[0]) || a.length - b.length,
+  );
+  for (const [first, ...rest] of ordered) {
+    if (first !== undefined) lines.push(`  ${outcomeLine(first, rest, qualify)}`);
+  }
+  const native = own.filter((item) => item.outcome === "native" && item.family !== "package");
+  if (native.length > 0) {
+    lines.push(`  ${target} - ${colors.green("native")}: ${familyCounts(native)}`);
+  }
+  const dropped = own.flatMap((item) =>
+    (item.dropped ?? []).map((field) => `${field} (${label(item, qualify)})`),
+  );
+  if (dropped.length > 0)
+    lines.push(`  ${target} - ${colors.dim("dropped")}: ${dropped.join(", ")}`);
+  return lines;
 }
 
 /** The report line of `item`, also naming the components in `rest` that share it. */

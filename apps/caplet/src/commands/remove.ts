@@ -1,8 +1,9 @@
 import path from "node:path";
 import { readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
-import { ownedPathViolations, readSidecar } from "../apply/sidecar.js";
+import { ownedPathViolations, readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
 import { appliedCounts, claudeJson, printClaude } from "../internal/apply-flow.js";
+import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readCwd, readExplicitScope, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
@@ -11,63 +12,69 @@ import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/
 import { planRemoval, removalRoots } from "../internal/removal.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
-import { applyEmitPlan, requestedTargets } from "../internal/workflow.js";
+import { requestedTargets } from "../internal/target-selection.js";
 
 export const removeCommand = defineCommand({
   meta: { name: "remove", description: "remove a capability and its managed output" },
   args: specToCittyArgs("remove") as ArgsDef,
   async run(context) {
-    await runCommandSafely("remove", context.args, async () => {
-      const names = removalNames(context.args);
-      const cwd = readCwd(context.args);
-      process.chdir(cwd);
-      const json = readJson(context.args);
-      const scope = await inferScope(readExplicitScope(context.args), cwd);
-      const root = (await resolveScopeRoots(scope, cwd))[0];
-      if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
-      const config = (await readCapletConfig(cwd)).config;
-      const targets = requestedTargets(context.args) ?? [...targetIds];
-      const resolvedCwd = path.resolve(cwd);
-      const roots = removalRoots({ scopeRoot: root, targets, config, cwd: resolvedCwd });
-      // Check every root before changing anything so a refused removal leaves the manifest,
-      // the outputs and the sidecars as they were.
-      const violations: string[] = [];
-      for (const { installRoot, boundary } of roots) {
-        const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
-        for (const name of names) {
-          violations.push(...(await ownedPathViolations(sidecar, installRoot, name, boundary)));
-        }
-      }
-      if (violations.length > 0) {
-        throw validationError(
-          `refusing to remove ${names.join(", ")}: ${violations.join("; ")}`,
-          "acf.apply.outside-root",
-        );
-      }
-      const plan = await planRemoval({ cwd: resolvedCwd, roots, names });
-      await removeManifestEntries(root, names);
-      const applied = await applyEmitPlan(plan);
-      const diagnostics = [...plan.diagnostics, ...applied.diagnostics];
-      const exitCode = exitCodeForDiagnostics(diagnostics, context.args);
-      if (json) {
-        printJson("remove", exitCode === 0, diagnostics, {
-          removed: names,
-          scope,
-          applied: appliedCounts(applied),
-          ...claudeJson(applied.claude),
-        });
-      } else {
-        const out = reporter(context.args);
-        const { files } = appliedCounts(applied);
-        out.done(`Removed ${names.join(", ")} (${scope} scope)`);
-        out.details([["Managed", `${files} managed ${files === 1 ? "file" : "files"} cleaned`]]);
-        printClaude(out, applied.claude, "applied");
-        printDiagnostics(diagnostics, context.args);
-      }
-      if (exitCode !== 0) process.exitCode = exitCode;
-    });
+    await runCommandSafely("remove", context.args, () => removeCapabilities(context.args));
   },
 });
+
+/**
+ * Removes the named capabilities from the manifest and deletes their managed output. Every output
+ * root is checked first, so a refused removal changes nothing.
+ */
+async function removeCapabilities(args: Record<string, unknown>): Promise<void> {
+  const names = removalNames(args);
+  const cwd = readCwd(args);
+  process.chdir(cwd);
+  const json = readJson(args);
+  const scope = await inferScope(readExplicitScope(args), cwd);
+  const root = (await resolveScopeRoots(scope, cwd))[0];
+  if (root === undefined) throw validationError(`unable to resolve ${scope} scope`);
+  const config = (await readCapletConfig(cwd)).config;
+  const targets = requestedTargets(args) ?? [...targetIds];
+  const resolvedCwd = path.resolve(cwd);
+  const roots = removalRoots({ scopeRoot: root, targets, config, cwd: resolvedCwd });
+  // Check every root before changing anything so a refused removal leaves the manifest,
+  // the outputs and the sidecars as they were.
+  const violations: string[] = [];
+  for (const { installRoot, boundary } of roots) {
+    const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
+    for (const name of names) {
+      violations.push(...(await ownedPathViolations(sidecar, installRoot, name, boundary)));
+    }
+  }
+  if (violations.length > 0) {
+    throw validationError(
+      `refusing to remove ${names.join(", ")}: ${violations.join("; ")}`,
+      "acf.apply.outside-root",
+    );
+  }
+  const plan = await planRemoval({ cwd: resolvedCwd, roots, names });
+  await removeManifestEntries(root, names);
+  const applied = await applyEmitPlan(plan);
+  const diagnostics = [...plan.diagnostics, ...applied.diagnostics];
+  const exitCode = exitCodeForDiagnostics(diagnostics, args);
+  if (json) {
+    printJson("remove", exitCode === 0, diagnostics, {
+      removed: names,
+      scope,
+      applied: appliedCounts(applied),
+      ...claudeJson(applied.claude),
+    });
+  } else {
+    const out = reporter(args);
+    const { files } = appliedCounts(applied);
+    out.done(`Removed ${names.join(", ")} (${scope} scope)`);
+    out.details([["Managed", `${files} managed ${files === 1 ? "file" : "files"} cleaned`]]);
+    printClaude(out, applied.claude, "applied");
+    printDiagnostics(diagnostics, args);
+  }
+  if (exitCode !== 0) process.exitCode = exitCode;
+}
 
 /** The capability names given to `caplet remove`, each once; at least one is required. */
 function removalNames(args: Record<string, unknown>): string[] {

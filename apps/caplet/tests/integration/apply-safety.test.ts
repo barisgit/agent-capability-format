@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { applyEmitPlan, buildEmitPlan } from "../../src/internal/workflow";
+import { applyEmitPlan } from "../../src/internal/apply-plan";
+import { buildEmitPlan } from "../../src/internal/emit-plan";
 import {
   applyProject,
   cleanup,

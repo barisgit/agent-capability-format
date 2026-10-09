@@ -58,6 +58,10 @@ function isCommandError(error: unknown): error is CommandError {
   );
 }
 
+/**
+ * Asks a yes/no question on the terminal; anything but `y`/`yes` is no. Without an interactive
+ * stdin and stdout there is nobody to ask, so the answer is yes.
+ */
 export async function confirm(question: string): Promise<boolean> {
   if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) return true;
   return await new Promise((resolve) => {

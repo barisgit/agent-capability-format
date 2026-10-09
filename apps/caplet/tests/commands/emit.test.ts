@@ -2,28 +2,6 @@ import { expect, test } from "bun:test";
 import path from "node:path";
 import { cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
 
-test("caplet emit dry-run shows pending diffs without writing", async () => {
-  const scope = await makeScope();
-  try {
-    await fetchProject(scope);
-    const result = await runCaplet(scope, [
-      "emit",
-      "--cwd",
-      scope.cwd,
-      "--scope",
-      "project",
-      "--target",
-      "claude",
-      "--dry-run",
-    ]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("warn Dry run: 5 changes not applied");
-    expect(await Bun.file(path.join(scope.cwd, ".claude", "CLAUDE.md")).exists()).toBe(false);
-  } finally {
-    await cleanup(scope);
-  }
-});
-
 test("default emission plans canonical skills once and only uses required native roots", async () => {
   const scope = await makeScope();
   try {

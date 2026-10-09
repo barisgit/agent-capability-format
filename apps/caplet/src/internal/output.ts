@@ -12,6 +12,10 @@ import { renderExecutableChanges } from "./executables.js";
 import type { PlanView } from "./plan-view.js";
 import { columns, glyphs } from "./render.js";
 
+/**
+ * How a command writes human output. Under `--quiet` only errors, the problem summary and
+ * executable changes remain.
+ */
 export type Reporter = {
   log(message: string): void;
   error(message: string): void;
@@ -36,6 +40,7 @@ export type Reporter = {
   hint(message: string): void;
 };
 
+/** The {@link Reporter} for a command's arguments (`--quiet`). */
 export function reporter(args: Record<string, unknown>): Reporter {
   const quiet = readQuiet(args);
   return {
@@ -142,6 +147,10 @@ function writeStderr(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
+/**
+ * Prints diagnostics once each, counting repeats as `(xN)`, then a summary of the problems.
+ * `info` diagnostics print only with `--verbose` and never count as problems.
+ */
 export function printDiagnostics(
   diagnostics: readonly Diagnostic[],
   args: Record<string, unknown>,
@@ -152,14 +161,13 @@ export function printDiagnostics(
   const unique: Diagnostic[] = [];
   for (const diagnostic of diagnostics) {
     if (diagnostic.severity === "info" && !verbose) continue;
-    const key = `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}\u0000${diagnostic.path ?? ""}\u0000${diagnostic.targetId ?? ""}`;
+    const key = diagnosticKey(diagnostic);
     const count = seen.get(key) ?? 0;
     if (count === 0) unique.push(diagnostic);
     seen.set(key, count + 1);
   }
   for (const diagnostic of unique) {
-    const key = `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}\u0000${diagnostic.path ?? ""}\u0000${diagnostic.targetId ?? ""}`;
-    const repeats = seen.get(key) ?? 1;
+    const repeats = seen.get(diagnosticKey(diagnostic)) ?? 1;
     const message = repeats > 1 ? `${diagnostic.message} (x${repeats})` : diagnostic.message;
     out.diagnostic({ ...diagnostic, message });
   }
@@ -171,6 +179,11 @@ export function printDiagnostics(
       lossy: counted.filter((d) => d.severity === "lossy").length,
     });
   }
+}
+
+/** What makes two diagnostics the same report for {@link printDiagnostics}. */
+function diagnosticKey(diagnostic: Diagnostic): string {
+  return `${diagnostic.severity}\u0000${diagnostic.code}\u0000${diagnostic.message}\u0000${diagnostic.path ?? ""}\u0000${diagnostic.targetId ?? ""}`;
 }
 
 /**
@@ -189,6 +202,7 @@ export function blockingExitCode(
   );
 }
 
+/** 4 for a lossy diagnostic under `--strict`, else 2 for an error, else 0. */
 export function exitCodeForDiagnostics(
   diagnostics: readonly Diagnostic[],
   args: Record<string, unknown>,
@@ -200,6 +214,7 @@ export function exitCodeForDiagnostics(
   return 0;
 }
 
+/** Prints `diagnostics`, sets `process.exitCode` from them and returns that code. */
 export function finishWithDiagnostics(
   diagnostics: readonly Diagnostic[],
   args: Record<string, unknown>,
@@ -221,6 +236,7 @@ function sentenceCase(value: string, capability?: string): string {
   return word.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/** The plan's file list by scope and destination, then its totals; nothing under `--quiet`. */
 export function renderPlan(view: PlanView, options: { quiet: boolean }): string[] {
   if (options.quiet) return [];
   const lines: string[] = [];

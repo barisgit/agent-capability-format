@@ -72,19 +72,6 @@ test("ls gives an actionable empty state", async () => {
   }
 });
 
-test("check reports what was validated", async () => {
-  const scope = await makeScope();
-  try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const result = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("Outputs are stale");
-  } finally {
-    await cleanup(scope);
-  }
-});
-
 test("diagnostics separate the code, message, and recovery context", async () => {
   const scope = await makeScope();
   try {

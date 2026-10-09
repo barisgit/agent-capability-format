@@ -1,9 +1,13 @@
 import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { type Scope, type ScopeRoot, scopeRoot } from "@caplet/core";
+import { type ScopeRoot, scopeRoot } from "@caplet/core";
 import type { ScopeSelection } from "./args.js";
 
+/**
+ * The roots of the selected scopes: user is `~/.agents`; project is the nearest `.agents` above
+ * `cwd` that is not the user's, and with `project` selected alone `<cwd>/.agents` when none exists.
+ */
 export async function resolveScopeRoots(
   selection: ScopeSelection,
   cwd: string,
@@ -20,15 +24,6 @@ export async function resolveScopeRoots(
       roots.push(scopeRoot("project", path.join(absoluteCwd, ".agents")));
   }
   return dedupeScopeRoots(roots);
-}
-
-export async function projectAgentsDir(cwd: string): Promise<string> {
-  const found = await findProjectAgentsDir(path.resolve(cwd));
-  return found ?? path.join(path.resolve(cwd), ".agents");
-}
-
-export function scopeLabel(root: ScopeRoot): string {
-  return `${root.scope}:${root.agentsDir}`;
 }
 
 function dedupeScopeRoots(roots: ScopeRoot[]): ScopeRoot[] {
@@ -74,10 +69,7 @@ function isErrno(error: unknown, code: string): error is { code: string } {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
-export function isScope(value: string): value is Scope {
-  return value === "user" || value === "project";
-}
-
+/** The explicit scope, else project when a project `.agents` exists above `cwd`, else user. */
 export async function inferScope(
   explicit: "user" | "project" | undefined,
   cwd: string,

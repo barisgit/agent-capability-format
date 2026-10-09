@@ -5,7 +5,8 @@ type ContainerLocation = { start: number; end: number; kind: "object" | "array" 
 type ObjectProperty = { valueStart: number; valueEnd: number; propStart: number };
 type ArrayElement = { valueStart: number; valueEnd: number };
 
-export function decodeJsonPointer(pointer: string): string[] {
+/** The unescaped reference tokens of an RFC 6901 pointer; `""` is the whole document. */
+function decodeJsonPointer(pointer: string): string[] {
   if (pointer === "") return [];
   if (!pointer.startsWith("/")) throw new Error(`JSON pointer must start with /: ${pointer}`);
   return pointer
@@ -14,6 +15,7 @@ export function decodeJsonPointer(pointer: string): string[] {
     .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"));
 }
 
+/** The value `pointer` names in `root`, or `undefined` when it names nothing. */
 export function getJsonPointer(root: unknown, pointer: string): unknown {
   let cursor = root;
   for (const segment of decodeJsonPointer(pointer)) {
@@ -29,6 +31,7 @@ export function getJsonPointer(root: unknown, pointer: string): unknown {
   return cursor;
 }
 
+/** Whether `pointer` names a value in `root`. */
 export function hasJsonPointer(root: unknown, pointer: string): boolean {
   if (pointer === "") return true;
   let cursor = root;
@@ -45,6 +48,11 @@ export function hasJsonPointer(root: unknown, pointer: string): boolean {
   return true;
 }
 
+/**
+ * Deletes the value `pointer` names from JSON text, editing the text in place so the rest of the
+ * document keeps its formatting. Blank text, the root pointer and a missing value leave it as is;
+ * text that is not JSON throws.
+ */
 export function deleteJsonPointerText(text: string, pointer: string): string {
   if (text.trim() === "") return text;
   JSON.parse(text);

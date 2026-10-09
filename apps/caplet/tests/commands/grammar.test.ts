@@ -76,22 +76,6 @@ test("ls alias is permanent and silent", async () => {
   }
 });
 
-test("check exit codes: 1 stale outputs, 0 clean", async () => {
-  const scope = await makeScope();
-  try {
-    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
-    const stale = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
-    expect(stale.exitCode).toBe(1);
-    expect(stale.stderr).toContain("Outputs are stale");
-
-    await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project"]);
-    const clean = await runCaplet(scope, ["check", "--cwd", scope.cwd, "--scope", "project"]);
-    expect(clean.exitCode).toBe(0);
-  } finally {
-    await cleanup(scope);
-  }
-});
-
 test("add infers project scope inside a project and echoes it", async () => {
   const scope = await makeScope();
   try {

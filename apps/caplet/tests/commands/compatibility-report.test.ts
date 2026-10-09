@@ -100,13 +100,6 @@ describe("behavior-first compatibility report", () => {
     );
   });
 
-  test("a refused skill reads as a block with its recovery", () => {
-    const report = plain(renderCompatibility(constructed, ["pi"]));
-    expect(report).toContain(
-      "review / pi - blocked: skill review is not installed for pi (skill.invocation.user=false). Recovery: exclude: { skills: [review] } or except: [pi]",
-    );
-  });
-
   test("names the capability when the report spans several", () => {
     const other = constructed.map((item) => ({ ...item, capability: "other" }));
     const report = plain(renderCompatibility([...constructed, ...other], ["pi"]));

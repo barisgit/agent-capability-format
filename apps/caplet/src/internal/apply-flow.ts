@@ -1,4 +1,5 @@
 import type { Diagnostic, ExecutableComponent } from "@caplet/core";
+import { applyEmitPlan } from "./apply-plan.js";
 import { readVerbose } from "./args.js";
 import {
   type ClaudeReport,
@@ -7,6 +8,8 @@ import {
   previewClaude,
 } from "./claude-host-flow.js";
 import { renamesJson } from "./claude-migration.js";
+import { buildEmitPlan } from "./emit-plan.js";
+import { plannedExecutableChanges } from "./fetch-scopes.js";
 import { printJson, readJson } from "./json.js";
 import {
   blockingExitCode,
@@ -16,13 +19,7 @@ import {
   reporter,
 } from "./output.js";
 import { buildPlanView, planToJson } from "./plan-view.js";
-import {
-  type ApplySummary,
-  applyEmitPlan,
-  buildEmitPlan,
-  type EmitPlan,
-  plannedExecutableChanges,
-} from "./workflow.js";
+import type { ApplySummary, EmitPlan } from "./workflow.js";
 
 /** What `add` or `update` hands to {@link planAndApply} after resolving its sources. */
 export type PlanAndApplyInput = {

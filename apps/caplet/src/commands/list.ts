@@ -10,7 +10,12 @@ import { colors } from "consola/utils";
 import { readCwd, readScope } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
 import { printJson, readJson } from "../internal/json.js";
-import { exitCodeForDiagnostics, finishWithDiagnostics, reporter } from "../internal/output.js";
+import {
+  exitCodeForDiagnostics,
+  finishWithDiagnostics,
+  type Reporter,
+  reporter,
+} from "../internal/output.js";
 import { displayPath } from "../internal/plan-view.js";
 import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
@@ -20,71 +25,76 @@ export const listCommand = defineCommand({
   meta: { name: "list", description: "list installed capabilities (alias: ls)" },
   args: specToCittyArgs("list") as ArgsDef,
   async run(context) {
-    await runCommandSafely("list", context.args, async () => {
-      const cwd = readCwd(context.args);
-      process.chdir(cwd);
-      const diagnostics: Diagnostic[] = [];
-      const inventories: Array<{ scope: string; path: string; capabilities: AcfCapability[] }> = [];
-      for (const scopeRoot of await resolveScopeRoots(readScope(context.args), cwd)) {
-        const resolved = await resolveScopeCapabilities(scopeRoot);
-        diagnostics.push(...resolved.diagnostics);
-        inventories.push({
-          scope: scopeRoot.scope,
-          path: path.join(scopeRoot.agentsDir, "capabilities"),
-          capabilities: resolved.capabilities,
-        });
-      }
-      if (readJson(context.args)) {
-        const code = exitCodeForDiagnostics(diagnostics, context.args);
-        printJson("list", code === 0, diagnostics, {
-          scopes: inventories.map((inventory) => ({
-            scope: inventory.scope,
-            path: inventory.path,
-            capabilities: inventory.capabilities.map((capability) => ({
-              name: capability.manifest.name,
-              version: capability.manifest.version,
-            })),
-          })),
-        });
-        process.exitCode = code;
-        return;
-      }
-      const code = finishWithDiagnostics(diagnostics, context.args);
-      if (code === 0) {
-        const out = reporter(context.args);
-        let count = 0;
-        let first = true;
-        const counts: string[] = [];
-        for (const inventory of inventories) {
-          if (!first) out.log("");
-          first = false;
-          out.log(`${colors.bold(inventory.scope)}  ${colors.dim(displayPath(inventory.path))}`);
-          if (inventory.capabilities.length === 0) {
-            out.log("  No capabilities installed.");
-            out.hint(`Get started: caplet add <source> --scope ${inventory.scope}`);
-            continue;
-          }
-          const head = ["NAME", "VERSION", "CONTENTS"].map((cell) => colors.dim(cell));
-          const rows = inventory.capabilities.map((capability) => {
-            const summary = describeCapability(capability);
-            return [
-              colors.bold(summary.name),
-              displayVersion(summary.version),
-              colors.dim(summary.contents),
-            ];
-          });
-          for (const line of columns([head, ...rows], { indent: "  " })) out.log(line);
-          count += inventory.capabilities.length;
-          counts.push(`${inventory.capabilities.length} ${inventory.scope}`);
-        }
-        out.log("");
-        out.done(
-          `${count} ${count === 1 ? "capability" : "capabilities"}${counts.length > 1 ? ` (${counts.join(", ")})` : ""}`,
-        );
-      }
-    });
+    await runCommandSafely("list", context.args, () => listCapabilities(context.args));
   },
 });
+
+/** Lists the capabilities installed in each selected scope. */
+async function listCapabilities(args: Record<string, unknown>): Promise<void> {
+  const cwd = readCwd(args);
+  process.chdir(cwd);
+  const diagnostics: Diagnostic[] = [];
+  const inventories: ScopeInventory[] = [];
+  for (const scopeRoot of await resolveScopeRoots(readScope(args), cwd)) {
+    const resolved = await resolveScopeCapabilities(scopeRoot);
+    diagnostics.push(...resolved.diagnostics);
+    inventories.push({
+      scope: scopeRoot.scope,
+      path: path.join(scopeRoot.agentsDir, "capabilities"),
+      capabilities: resolved.capabilities,
+    });
+  }
+  if (readJson(args)) {
+    const code = exitCodeForDiagnostics(diagnostics, args);
+    printJson("list", code === 0, diagnostics, {
+      scopes: inventories.map((inventory) => ({
+        scope: inventory.scope,
+        path: inventory.path,
+        capabilities: inventory.capabilities.map((capability) => ({
+          name: capability.manifest.name,
+          version: capability.manifest.version,
+        })),
+      })),
+    });
+    process.exitCode = code;
+    return;
+  }
+  if (finishWithDiagnostics(diagnostics, args) !== 0) return;
+  const out = reporter(args);
+  inventories.forEach((inventory, index) => {
+    if (index > 0) out.log("");
+    printInventory(out, inventory);
+  });
+  const filled = inventories.filter((inventory) => inventory.capabilities.length > 0);
+  const count = filled.reduce((sum, inventory) => sum + inventory.capabilities.length, 0);
+  const counts = filled.map((inventory) => `${inventory.capabilities.length} ${inventory.scope}`);
+  out.log("");
+  out.done(
+    `${count} ${count === 1 ? "capability" : "capabilities"}${counts.length > 1 ? ` (${counts.join(", ")})` : ""}`,
+  );
+}
+
+/** The capabilities installed in one scope's capabilities directory. */
+type ScopeInventory = { scope: string; path: string; capabilities: AcfCapability[] };
+
+function printInventory(out: Reporter, inventory: ScopeInventory): void {
+  out.log(`${colors.bold(inventory.scope)}  ${colors.dim(displayPath(inventory.path))}`);
+  if (inventory.capabilities.length === 0) {
+    out.log("  No capabilities installed.");
+    out.hint(`Get started: caplet add <source> --scope ${inventory.scope}`);
+    return;
+  }
+  const head = ["NAME", "VERSION", "CONTENTS"].map((cell) => colors.dim(cell));
+  const rows = inventory.capabilities.map((capability) => {
+    const summary = describeCapability(capability);
+    return [
+      colors.bold(summary.name),
+      displayVersion(summary.version),
+      colors.dim(summary.contents),
+    ];
+  });
+  for (const line of columns([head, ...rows], { indent: "  " })) out.log(line);
+}
 
 function describeCapability(capability: AcfCapability): {
   name: string;
