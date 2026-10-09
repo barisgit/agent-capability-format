@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { readLockfile, resolveCapabilities } from "../src";
 import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
@@ -153,4 +153,51 @@ describe("foreign source formats", () => {
     expect(lock?.entries[0]?.resolvedCapabilities?.map((item) => item.name)).toEqual(["kit-two"]);
     expect(await exists(path.join(scopeRoot.capabilitiesDir, "kit-two"))).toBe(true);
   });
+
+  test("the lock records the requested format apart from the detected one", async () => {
+    const detected = await scopeWith(polyglot);
+    expect(detected.records.map((item) => item.format)).toEqual(["acf"]);
+    expect((await readLockfile(detected.scopeRoot.lockPath))?.entries[0]?.format).toBeUndefined();
+
+    const requested = await scopeWith(polyglot, "    format: claude-plugin\n");
+    expect((await readLockfile(requested.scopeRoot.lockPath))?.entries[0]?.format).toBe(
+      "claude-plugin",
+    );
+  });
+
+  test("removing format: restores detection", async () => {
+    const { scopeRoot } = await scopeWith(polyglot, "    format: claude-plugin\n");
+    await writeText(scopeRoot.manifestPath, "acf: 1\ncapabilities:\n  - source: path:../pkg\n");
+    const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
+    expect(errors(result)).toEqual([]);
+    const entry = (await readLockfile(scopeRoot.lockPath))?.entries[0];
+    expect(entry?.format).toBeUndefined();
+    expect(entry?.resolvedCapabilities?.map((item) => item.format)).toEqual(["acf"]);
+  });
+
+  const intentChanges = [
+    { label: "rename", before: "    rename: kit-one\n", after: "    rename: kit-two\n" },
+    { label: "format", before: "    format: claude-plugin\n", after: "" },
+  ];
+  for (const { label, before, after } of intentChanges) {
+    for (const [mode, frozen] of [
+      ["auto", true],
+      ["never", false],
+    ] as const) {
+      const resolution = frozen ? "a frozen" : "an offline";
+      test(`a changed ${label} is lock drift for ${resolution} resolution, which changes nothing`, async () => {
+        const { scopeRoot } = await scopeWith(polyglot, before);
+        const lockBefore = await Bun.file(scopeRoot.lockPath).text();
+        const installedBefore = await readdir(scopeRoot.capabilitiesDir);
+        await writeText(
+          scopeRoot.manifestPath,
+          `acf: 1\ncapabilities:\n  - source: path:../pkg\n${after}`,
+        );
+        const result = await resolveCapabilities({ scope: "project", scopeRoot, mode, frozen });
+        expect(errors(result)).toEqual(["acf.lock.drift"]);
+        expect(await Bun.file(scopeRoot.lockPath).text()).toBe(lockBefore);
+        expect(await readdir(scopeRoot.capabilitiesDir)).toEqual(installedBefore);
+      });
+    }
+  }
 });

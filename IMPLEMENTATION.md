@@ -2320,6 +2320,7 @@ export type LockEntry = {
   capabilities?: string[]             // copied from the entry
   selectorsByCapability?: Record<string, string>
   rename?: Slug | Record<string, Slug>
+  format?: SourceFormat               // the entry's format:, absent when detected
   include?: FacetSelector             // selection copied from the entry
   exclude?: FacetSelector
   only?: TargetId[]
@@ -2375,10 +2376,11 @@ Drift handling:
 
 - `detectLockDrift` (`packages/installer/src/drift.ts`) reports a
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
-  and a changed ref, capabilities selector, or selection as `acf.lock.drift`.
-  Only `--mode never` (`--offline`) keeps ref, selector and selection drift
-  as an error; other modes resolve it in the same run (a changed ref or
-  selector refetches, a changed selection rewrites the lock). `caplet apply --frozen` resolves with
+  and a changed ref, capabilities selector, `rename`, requested `format`, or
+  selection as `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
+  as an error; other modes resolve it in the same run (a changed ref,
+  selector, rename or format refetches through `sameResolution`, a changed
+  selection rewrites the lock). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.

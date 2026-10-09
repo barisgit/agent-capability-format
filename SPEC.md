@@ -2401,6 +2401,7 @@ values sorted, no generation timestamp outside `resolvedAt`.
 | `entries[].resolvedCapabilities` | list | no | One record per capability: `name`, `format`, `formatVersion` (when the format has one), `path` (package root relative to the source root, `.` for the root), `payloadDigest` (§19.6), and `capabilityHash`. |
 | `entries[].capabilities` | list | no | Normalized collection selectors from `capabilities.yml`. |
 | `entries[].selectorsByCapability` | mapping | no | Final capability name to exact inventory selector, used for selector-safe removal. |
+| `entries[].format` | enum | no | Mirrors `capabilities.yml` `format`; absent when the format was detected. The format each capability was read as is in `resolvedCapabilities`. |
 | `entries[].include` / `exclude` | mapping | no | Selection copied from `capabilities.yml` (§17.5).               |
 | `entries[].only` / `except` | list | no | Selection copied from `capabilities.yml`.                      |
 | `entries[].rename` | slug or mapping | no | Mirrors `capabilities.yml`.                                  |

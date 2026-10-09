@@ -81,6 +81,42 @@ test("legacy source-only lock ids remain valid for path entries", () => {
   expect(detectLockDrift(yml, lock)).toEqual([]);
 });
 
+test("rename and requested format drift are diagnosed; detected formats are not intent", () => {
+  const source = { kind: "path", location: "/repo" } as const;
+  const lockEntry = {
+    capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    capabilityNames: ["kit"],
+    format: "claude-plugin" as const,
+    rename: { "review-kit": "kit" },
+    source: "path:/repo",
+    sourceId: "path:/repo",
+  };
+  const lock: CapabilitiesLock = { acf: 1, entries: [lockEntry] };
+  const same: CapabilitiesYml = {
+    acf: 1,
+    capabilities: [{ source, format: "claude-plugin", rename: { "review-kit": "kit" } }],
+  };
+  expect(detectLockDrift(same, lock)).toEqual([]);
+
+  const renamed = detectLockDrift(
+    { acf: 1, capabilities: [{ source, format: "claude-plugin", rename: "other" }] },
+    lock,
+  );
+  expect(renamed.map((diagnostic) => diagnostic.code)).toEqual(["acf.lock.drift"]);
+  expect(renamed[0]?.data).toMatchObject({
+    ymlRename: "other",
+    lockRename: { "review-kit": "kit" },
+  });
+
+  // Removing `format:` hands the choice back to detection, which is a different intent.
+  const detected = detectLockDrift(
+    { acf: 1, capabilities: [{ source, rename: { "review-kit": "kit" } }] },
+    lock,
+  );
+  expect(detected.map((diagnostic) => diagnostic.code)).toEqual(["acf.lock.drift"]);
+  expect(detected[0]?.data).toMatchObject({ ymlFormat: null, lockFormat: "claude-plugin" });
+});
+
 test("include/exclude drift is diagnosed regardless of family and name order", () => {
   const source = { kind: "path", location: "/repo" } as const;
   const lockEntry = {

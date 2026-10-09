@@ -1,5 +1,5 @@
 import type { CapabilitiesYml, CapabilityEntry, Diagnostic, EntrySelection } from "@caplet/core";
-import type { CapabilitiesLock } from "./lockfile.js";
+import type { CapabilitiesLock, LockEntry } from "./lockfile.js";
 import { entrySourceId, sourceId } from "./lockfile.js";
 
 export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | null): Diagnostic[] {
@@ -50,6 +50,30 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
         },
       });
     }
+    if (!sameRename(entry.rename, lockEntry.rename)) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.lock.drift",
+        message: `capabilities.yml rename differs from lock for ${id}`,
+        data: {
+          sourceId: id,
+          ymlRename: entry.rename ?? null,
+          lockRename: lockEntry.rename ?? null,
+        },
+      });
+    }
+    if ((entry.format ?? null) !== (lockEntry.format ?? null)) {
+      diagnostics.push({
+        severity: "error",
+        code: "acf.lock.drift",
+        message: `capabilities.yml format differs from lock for ${id}`,
+        data: {
+          sourceId: id,
+          ymlFormat: entry.format ?? null,
+          lockFormat: lockEntry.format ?? null,
+        },
+      });
+    }
     if (!sameSelection(entry, lockEntry)) {
       diagnostics.push({
         severity: "error",
@@ -64,6 +88,21 @@ export function detectLockDrift(yml: CapabilitiesYml, lock: CapabilitiesLock | n
     }
   }
   return diagnostics;
+}
+
+/**
+ * Whether `locked` was resolved from what `entry` now asks for: the same `ref`, capability
+ * selectors, `rename` and requested `format`. Source and `path` are part of the source id
+ * that paired them. When this is false the locked snapshots no longer apply and the entry
+ * must be fetched again; selection is not part of it (see {@link sameSelection}).
+ */
+export function sameResolution(entry: CapabilityEntry, locked: LockEntry): boolean {
+  return (
+    (entry.ref ?? null) === (locked.ref ?? null) &&
+    sameStrings(entry.capabilities, locked.capabilities) &&
+    sameRename(entry.rename, locked.rename) &&
+    (entry.format ?? null) === (locked.format ?? null)
+  );
 }
 
 /** Whether two entries select the same components and targets, ignoring list order. */
@@ -93,6 +132,12 @@ function selectorKey(selector: CapabilityEntry["include"]): string {
       .map(([family, names]) => [family, [...names].sort()])
       .sort(([a], [b]) => String(a).localeCompare(String(b))),
   );
+}
+
+function sameRename(left: CapabilityEntry["rename"], right: CapabilityEntry["rename"]): boolean {
+  if (typeof left !== "object" || typeof right !== "object") return left === right;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
 }
 
 function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {

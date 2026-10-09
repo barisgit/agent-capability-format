@@ -40,6 +40,11 @@ export type LockEntry = {
   selectorsByCapability?: Record<string, string> | undefined;
   except?: CapabilityEntry["except"] | undefined;
   exclude?: CapabilityEntry["exclude"] | undefined;
+  /**
+   * The entry's requested `format:`; absent when the format was detected. The format each
+   * capability was read as is `resolvedCapabilities[].format`.
+   */
+  format?: SourceFormat | undefined;
   include?: CapabilityEntry["include"] | undefined;
   only?: CapabilityEntry["only"] | undefined;
   ref?: string | undefined;
@@ -177,6 +182,7 @@ function canonicalizeEntry(entry: LockEntry): LockEntry {
   }
   if (entry.except !== undefined) ordered.except = [...entry.except].sort();
   if (entry.exclude !== undefined) ordered.exclude = sortSelector(entry.exclude);
+  if (entry.format !== undefined) ordered.format = entry.format;
   if (entry.include !== undefined) ordered.include = sortSelector(entry.include);
   if (entry.only !== undefined) ordered.only = [...entry.only].sort();
   if (entry.ref !== undefined) ordered.ref = entry.ref;
@@ -267,6 +273,7 @@ function parseLockEntry(value: unknown, lockPath: string): LockEntry {
   }
   if (isStringArray(value.except)) entry.except = value.except;
   if (isSelector(value.exclude)) entry.exclude = value.exclude;
+  if (isSourceFormat(value.format)) entry.format = value.format;
   if (isSelector(value.include)) entry.include = value.include;
   if (isStringArray(value.only)) entry.only = value.only;
   if (typeof value.ref === "string") entry.ref = value.ref;

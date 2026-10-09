@@ -11,7 +11,7 @@ import {
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
-import { detectLockDrift, sameSelection } from "./drift.js";
+import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
 import {
   inspectSource,
@@ -377,17 +377,6 @@ function matchSegment(pattern: string, candidate: string): boolean {
   return new RegExp(`${expression}$`).test(candidate);
 }
 
-function sameRename(left: CapabilityEntry["rename"], right: CapabilityEntry["rename"]): boolean {
-  if (typeof left !== "object" || typeof right !== "object") return left === right;
-  const keys = Object.keys(left);
-  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
-}
-
-function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  return [...left].sort().join("\0") === [...right].sort().join("\0");
-}
-
 async function removeStaleSnapshots(
   previous: CapabilitiesLock | null,
   next: CapabilitiesLock,
@@ -430,20 +419,13 @@ function normalizeEntry(entry: CapabilityEntry, manifestDir: string): Capability
 }
 
 /**
- * Drift a fetching resolution reconciles, so it is no error there: a missing entry, a changed
- * ref and changed capability selectors fetch, and a changed selection rewrites the lock. An
- * entry this resolution skips (`sourceIds`) or fails to fetch keeps its old lock entry, so
- * planning against the lock reports its drift.
+ * Drift a fetching resolution reconciles, so it is no error there: a missing entry and a
+ * changed ref, capability selectors, rename or format fetch, and a changed selection rewrites
+ * the lock. An entry this resolution skips (`sourceIds`) or fails to fetch keeps its old lock
+ * entry, so planning against the lock reports its drift.
  */
 function reconciledByFetch(diagnostic: Diagnostic): boolean {
-  if (diagnostic.code === "acf.lock.missing-entry") return true;
-  return (
-    diagnostic.code === "acf.lock.drift" &&
-    diagnostic.data !== undefined &&
-    ("ymlRef" in diagnostic.data ||
-      "ymlCapabilities" in diagnostic.data ||
-      "ymlSelection" in diagnostic.data)
-  );
+  return diagnostic.code === "acf.lock.missing-entry" || diagnostic.code === "acf.lock.drift";
 }
 
 /**
@@ -485,16 +467,7 @@ function shouldFetch(
 ): boolean {
   if (mode === "never") return false;
   if (mode === "force") return true;
-  if (locked === undefined) return true;
-  return (
-    (entry.ref ?? null) !== (locked.ref ?? null) ||
-    !sameStrings(entry.capabilities, locked.capabilities) ||
-    // A changed `rename:` names the snapshots differently, so the locked records no longer apply.
-    !sameRename(entry.rename, locked.rename) ||
-    // A changed `format:` selects another reader, so the locked records no longer apply.
-    (entry.format !== undefined &&
-      (locked.resolvedCapabilities ?? []).some((record) => record.format !== entry.format))
-  );
+  return locked === undefined || !sameResolution(entry, locked);
 }
 
 function requiresRef(entry: CapabilityEntry): boolean {
@@ -633,6 +606,7 @@ function lockEntryFor(
   if (entry.capabilities !== undefined) lockEntry.capabilities = entry.capabilities;
   if (entry.except !== undefined) lockEntry.except = entry.except;
   if (entry.exclude !== undefined) lockEntry.exclude = entry.exclude;
+  if (entry.format !== undefined) lockEntry.format = entry.format;
   if (entry.include !== undefined) lockEntry.include = entry.include;
   if (entry.only !== undefined) lockEntry.only = entry.only;
   if (entry.ref !== undefined) lockEntry.ref = entry.ref;
