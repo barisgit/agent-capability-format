@@ -2354,8 +2354,9 @@ Drift handling:
 - `detectLockDrift` (`packages/installer/src/drift.ts`) reports a
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
   and a changed ref, capabilities selector, or selection as `acf.lock.drift`.
-  Only `--mode never` (`--offline`) keeps selector and selection drift as an
-  error; other modes resolve it. `caplet apply --frozen` resolves with
+  Only `--mode never` (`--offline`) keeps ref, selector and selection drift
+  as an error; other modes resolve it in the same run (a changed ref or
+  selector refetches, a changed selection rewrites the lock). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.

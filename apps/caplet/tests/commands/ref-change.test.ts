@@ -68,6 +68,44 @@ function apply(scope: TestScope, flags: string[] = []) {
   ]);
 }
 
+test("apply refetches an entry whose ref changed and applies it in the same run", async () => {
+  const { scope, setRef, lockPath, snapshotText } = await installedAtV1();
+  try {
+    await setRef("v2");
+    const result = await apply(scope);
+    expect(result.stdout + result.stderr).not.toContain("acf.lock.drift");
+    expect(result.exitCode).toBe(0);
+    expect(await snapshotText()).toContain("Second guidance");
+    expect(await readFile(lockPath, "utf8")).toContain('"ref": "v2"');
+    expect((await apply(scope)).stdout).toContain("Everything up to date");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("update refetches an entry whose ref changed in the same run", async () => {
+  const { scope, setRef, snapshotText } = await installedAtV1();
+  try {
+    await setRef("v2");
+    const result = await runCaplet(scope, [
+      "update",
+      "git-cap",
+      "--yes",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ]);
+    expect(result.stdout + result.stderr).not.toContain("acf.lock.drift");
+    expect(result.exitCode).toBe(0);
+    expect(await snapshotText()).toContain("Second guidance");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("offline and frozen applies keep a changed ref as drift and write nothing", async () => {
   const { scope, setRef, lockPath, snapshotText } = await installedAtV1();
   try {
