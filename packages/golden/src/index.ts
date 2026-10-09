@@ -11,7 +11,7 @@
 import type { Dirent } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { isExecutableMode } from "@caplet/core";
+import { isExecutableMode, leavesBase } from "@caplet/core";
 
 /** One file of a golden tree. */
 export type GoldenFile = { bytes: Uint8Array; executable: boolean };
@@ -84,7 +84,7 @@ export function treeFromFileDiffs(diffs: readonly GoldenFileDiff[], root: string
   for (const diff of diffs) {
     if (diff.after === null) continue;
     const relative = path.relative(root, diff.path);
-    if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    if (relative === "" || leavesBase(relative)) {
       throw new Error(`${diff.path} is outside the golden root ${root}`);
     }
     tree.set(normalizeRelative(relative), {

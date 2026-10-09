@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import path from "node:path";
 import { type FileDiff, scopeRoot } from "@caplet/core";
 import { renderPlan } from "../../src/internal/output";
-import { buildPlanView, planToJson } from "../../src/internal/plan-view";
+import { buildPlanView, displayPath, planToJson } from "../../src/internal/plan-view";
 import type { EmittedDiff } from "../../src/internal/workflow";
 
 function diff(options: {
@@ -127,4 +127,36 @@ test("planToJson is fully expanded and machine stable", () => {
   const json = planToJson(buildPlanView(bigFixture())) as { changes: unknown[]; fileCount: number };
   expect(json.changes).toHaveLength(140);
   expect(json.fileCount).toBe(140);
+});
+
+test("a directory whose name starts with two dots stays inside its root", () => {
+  const files = [
+    "..data/1.md",
+    "..data/2.md",
+    "..data/3.md",
+    "..data/4.md",
+    "a.md",
+    "b.md",
+    "c.md",
+    "d.md",
+  ];
+  const view = buildPlanView(
+    files.map((file) =>
+      diff({
+        scope: "project",
+        agentsDir: "/repo/.agents",
+        target: "claude",
+        destination: "native",
+        installRoot: "/repo/.claude",
+        capability: "notes",
+        file,
+      }),
+    ),
+  );
+  const rows = view.scopes[0]?.destinations[0]?.rows ?? [];
+  expect(rows.map((row) => `${row.path} ${row.fileCount}`)).toEqual([
+    `..data${path.sep} 4`,
+    `${path.sep} 4`,
+  ]);
+  expect(displayPath(path.join(process.cwd(), "..notes"))).toBe("..notes");
 });

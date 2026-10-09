@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { ACF_SYSTEM_OWNER } from "@caplet/core";
+import { ACF_SYSTEM_OWNER, leavesBase } from "@caplet/core";
 import { colors } from "consola/utils";
 import { diffAction } from "../apply/apply-diffs.js";
 import { isStrictlyInside } from "../apply/containment.js";
@@ -193,7 +193,7 @@ function groupRows(files: PlanChange[], verbose: boolean, roots: RowRoots): Plan
   for (const file of files) {
     const relative = path.relative(installRoot, file.path);
     const topDir =
-      relative.startsWith("..") || !relative.includes(path.sep)
+      leavesBase(relative) || !relative.includes(path.sep)
         ? ""
         : (relative.split(path.sep)[0] as string);
     const capKey = [...file.capabilities].sort().join(",");
@@ -261,7 +261,7 @@ export function displayPath(filePath: string): string {
   const home = os.homedir();
   const relative = path.relative(process.cwd(), filePath);
   if (relative.length === 0) return ".";
-  if (!relative.startsWith("..") && process.cwd() !== home) return relative;
+  if (!leavesBase(relative) && process.cwd() !== home) return relative;
   if (filePath === home) return "~";
   if (filePath.startsWith(`${home}${path.sep}`)) return `~${filePath.slice(home.length)}`;
   return filePath;

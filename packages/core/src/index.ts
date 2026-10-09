@@ -15,5 +15,6 @@ export * from "./targets/index.js";
 export * from "./types/index.js";
 export * from "./utils/guards.js";
 export * from "./utils/json.js";
+export * from "./utils/paths.js";
 export * from "./validator/index.js";
 export * from "./yaml.js";

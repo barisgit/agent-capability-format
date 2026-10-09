@@ -156,6 +156,11 @@ test("a file diff is executable by its owner execute bit alone", () => {
   expect(tree.get("owner.sh")?.executable).toBe(true);
 });
 
+test("a file diff whose name starts with two dots stays inside the emit root", () => {
+  const tree = treeFromFileDiffs([{ path: "/work/..notes", after: "x" }], "/work");
+  expect([...tree.keys()]).toEqual(["..notes"]);
+});
+
 test("file diffs outside the emit root are rejected", () => {
   expect(() => treeFromFileDiffs([{ path: "/elsewhere/x", after: "x" }], "/work")).toThrow(
     "outside the golden root",
