@@ -60,6 +60,19 @@ describe("execClaudeCli", () => {
       kind: "terminated",
     });
   });
+
+  test("a command that ignores SIGTERM is killed after the grace period", async () => {
+    // The shell ignores SIGTERM, and its `sleep` (which inherits that) keeps the output pipes open
+    // after SIGKILL ends the shell.
+    const binary = await script("stubborn", "trap '' TERM; sleep 5");
+    const cli = execClaudeCli({ binary, cwd: dir, timeoutMs: 100, killGraceMs: 100 });
+    const started = Date.now();
+    expect(await cli(["plugin", "list", "--json"])).toMatchObject({
+      kind: "terminated",
+      signal: "SIGKILL",
+    });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
 });
 
 describe("classifyClaudeFailure", () => {
