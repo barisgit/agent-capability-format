@@ -51,9 +51,11 @@ function serverList(
   file: string,
   diagnostics: Diagnostic[],
 ): McpServer[] {
-  const report = (code: string, message: string): void => {
-    diagnostics.push({ severity: "error", code, message, path: file, family: "mcp" });
+  const report = (code: string, message: string, targetId?: string): void => {
+    diagnostics.push({ severity: "error", code, message, path: file, family: "mcp", targetId });
   };
+  const unknownTarget = (id: string): void =>
+    report("acf.target.unknown-id", `unknown target id: ${id}`, id);
   const duplicate = (name: string, of: string): void =>
     report("acf.facet.duplicate", `duplicate mcp server: ${name} repeats the name of ${of}`);
   const out: McpServer[] = [];
@@ -65,10 +67,12 @@ function serverList(
   }
   for (const [target, block] of Object.entries(targets ?? {})) {
     if (!isTargetId(target)) {
-      report("acf.target.unknown-id", `unknown target id: ${target}`);
+      unknownTarget(target);
       continue;
     }
-    out.push(...targetServers(target, block.servers ?? [], canonicalNames, report, duplicate));
+    out.push(
+      ...targetServers(target, block.servers ?? [], canonicalNames, unknownTarget, duplicate),
+    );
   }
   return out;
 }
@@ -78,15 +82,13 @@ function targetServers(
   target: TargetId,
   entries: readonly McpServer[],
   canonicalNames: ReadonlySet<string>,
-  report: (code: string, message: string) => void,
+  unknownTarget: (id: string) => void,
   duplicate: (name: string, of: string) => void,
 ): McpServer[] {
   const out: McpServer[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
-    const server = narrowToTarget(entry, target, (id) =>
-      report("acf.target.unknown-id", `unknown target id: ${id}`),
-    );
+    const server = narrowToTarget(entry, target, unknownTarget);
     if (canonicalNames.has(server.name)) duplicate(server.name, "a canonical server");
     else if (seen.has(server.name))
       duplicate(server.name, `another targets.${target}.servers entry`);

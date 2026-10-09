@@ -25,3 +25,27 @@ test("MCP http and sse require url", async () => {
     await cleanup(dir);
   }
 });
+
+test("an unknown target id in a family-level server block names the target", async () => {
+  for (const [block, id] of [
+    ["  nope:\n    servers: []\n", "nope"],
+    [
+      "  codex:\n    servers:\n      - name: one\n        transport: stdio\n        command: node\n        only: [ghost]\n",
+      "ghost",
+    ],
+  ]) {
+    const { cap, dir } = await readTempCapability({
+      "acf.yml": baseManifest,
+      "mcp/mcp.yml": `servers: []\ntargets:\n${block}`,
+    });
+    try {
+      expect(
+        cap.diagnostics
+          .filter((d) => d.code === "acf.target.unknown-id")
+          .map((d) => [d.family, d.targetId]),
+      ).toEqual([["mcp", id]]);
+    } finally {
+      await cleanup(dir);
+    }
+  }
+});
