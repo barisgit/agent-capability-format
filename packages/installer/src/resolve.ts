@@ -1,23 +1,17 @@
-import { cp, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
-  computeCapabilityDigests,
   type Diagnostic,
   digestMismatchDiagnostic,
-  entryCapabilityHash,
-  type LockedCapability,
   type ScopeRoot,
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
+import { isErrno } from "./errno.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
-import {
-  inspectSource,
-  type SourceCapabilityCandidate,
-  type SourceInventory,
-} from "./inventory.js";
+import type { SourceInventory } from "./inventory.js";
 import {
   type CapabilitiesLock,
   cacheKeyFor,
@@ -25,23 +19,31 @@ import {
   canonicalizePathLocation,
   entrySourceId,
   type LockEntry,
+  lockVersion,
   readLockfile,
   sourceId,
-  sourceString,
   writeLockfile,
 } from "./lockfile.js";
-import { copySnapshot, SnapshotRejectedError } from "./snapshot.js";
+import { type CapabilityRecord, capabilityPath, materializeFetched } from "./materialize.js";
 
+/** What {@link resolveCapabilities} reconciles and how far it may go. */
 export type ResolveOptions = {
   scope: "user" | "project";
   scopeRoot: ScopeRoot;
+  /**
+   * `auto` fetches entries that are new, changed in intent, locked under a legacy key or
+   * missing a snapshot; `force` refetches every selected entry; `never` fetches nothing, reports all drift and
+   * leaves the lock unwritten.
+   */
   mode: "auto" | "never" | "force";
+  /** Source ids that may be fetched; other entries keep their lock entries. All when absent. */
   sourceIds?: readonly string[] | undefined;
   /**
    * `false` previews resolution: neither the lock nor the installed snapshots change, and
    * the result's `preview` holds the snapshots the resolution would install.
    */
   updateLock?: boolean | undefined;
+  /** Sources the caller already fetched and inspected, by source id, used instead of fetching. */
   prefetchedSources?: ReadonlyMap<string, PrefetchedSource> | undefined;
   /**
    * A frozen resolution (SPEC.md §19.7): any disagreement between capabilities.yml and the
@@ -51,12 +53,15 @@ export type ResolveOptions = {
   frozen?: boolean | undefined;
 };
 
+/** A fetched source and its inventory, as `caplet add` prepared them before resolving. */
 export type PrefetchedSource = {
   fetched: FetchedCapability;
   inventory: SourceInventory;
 };
 
+/** The outcome of {@link resolveCapabilities}. */
 export type ResolveResult = {
+  /** Installed capabilities by name; on failure, those the prior lock records. */
   capabilities: CapabilityRecord[];
   lockfile: CapabilitiesLock;
   diagnostics: Diagnostic[];
@@ -71,18 +76,14 @@ export type ResolvePreview = {
   dispose(): Promise<void>;
 };
 
-export type CapabilityRecord = {
-  entry: CapabilityEntry;
-  name: string;
-  selector: string;
-  root: string;
-  commit: string | null;
-  /** v1 `capabilityHash` of the snapshot at `root`. */
-  contentHash: string;
-  /** Per-capability lock record; absent for capabilities locked before records existed. */
-  lockRecord?: LockedCapability | undefined;
-};
-
+/**
+ * Reconciles a scope's `capabilities.yml` with its lock and installed snapshots (SPEC.md
+ * §19-§20): fetches what `mode` and drift require, stages every selected capability, and
+ * only when every entry succeeded and no final names collide replaces the snapshots and
+ * writes the lock. On any error diagnostic the prior lock and snapshots stay. Invalid
+ * manifests, sources and selections are reported as diagnostics; fetch and file-system
+ * failures throw.
+ */
 export async function resolveCapabilities(opts: ResolveOptions): Promise<ResolveResult> {
   const manifest = await readCapabilitiesYml(opts.scopeRoot.manifestPath);
   const existingLock = await readLockfile(opts.scopeRoot.lockPath);
@@ -136,6 +137,34 @@ async function createPreview(scopeRoot: ScopeRoot): Promise<ResolvePreview> {
   };
 }
 
+/** What one resolution shares across its entries. */
+type ResolveContext = {
+  opts: ResolveOptions;
+  yml: CapabilitiesYml;
+  stagingDir: string;
+  /** A frozen resolution found drift: nothing may be fetched. */
+  frozenDrift: boolean;
+  selectedSourceIds: ReadonlySet<string> | null;
+};
+
+/** A `capabilities.yml` entry with its source ids and the lock entry they paired it with. */
+type PairedEntry = {
+  entry: CapabilityEntry;
+  id: string;
+  /** Source id without `path`, which lockfiles written before `#path=` ids keyed by. */
+  legacyId: string;
+  locked: LockEntry | undefined;
+};
+
+/** One entry's contribution to the next lock and installed snapshots. */
+type EntryOutcome = {
+  records: CapabilityRecord[];
+  lockEntry: LockEntry | undefined;
+  diagnostics: Diagnostic[];
+  fetched: boolean;
+  failed: boolean;
+};
+
 async function resolveCapabilitiesStaged(
   opts: ResolveOptions,
   stagingDir: string,
@@ -154,6 +183,13 @@ async function resolveCapabilitiesStaged(
   );
 
   await mkdir(opts.scopeRoot.capabilitiesDir, { recursive: true });
+  const context: ResolveContext = {
+    opts,
+    yml,
+    stagingDir,
+    frozenDrift,
+    selectedSourceIds: opts.sourceIds === undefined ? null : new Set(opts.sourceIds),
+  };
   const records: CapabilityRecord[] = [];
   const priorRecords: CapabilityRecord[] = [];
   const nextEntries: LockEntry[] = [];
@@ -165,7 +201,6 @@ async function resolveCapabilitiesStaged(
   const lockedBySource = new Map(
     (usableLock?.entries ?? []).map((entry) => [entry.sourceId, entry]),
   );
-  const selectedSourceIds = opts.sourceIds === undefined ? null : new Set(opts.sourceIds);
 
   for (const entry of yml.capabilities) {
     const id = entrySourceId(entry);
@@ -174,71 +209,12 @@ async function resolveCapabilitiesStaged(
     if (locked !== undefined) {
       priorRecords.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
     }
-    const legacyLock = locked !== undefined && locked.sourceId !== id;
-    if (requiresRef(entry) && entry.ref === undefined) {
-      diagnostics.push(refRequiredDiagnostic(entry, id));
-      failed = true;
-      if (locked !== undefined) nextEntries.push(locked);
-      continue;
-    }
-    const selected =
-      selectedSourceIds === null || selectedSourceIds.has(id) || selectedSourceIds.has(legacyId);
-    const fetchNeeded =
-      !frozenDrift &&
-      ((selected &&
-        ((legacyLock && opts.mode !== "never") || shouldFetch(opts.mode, entry, locked))) ||
-        (opts.mode === "auto" &&
-          selected &&
-          locked !== undefined &&
-          !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir))));
-    if (!fetchNeeded) {
-      if (locked !== undefined) {
-        nextEntries.push(withSelection(locked, entry));
-        records.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
-      }
-      continue;
-    }
-
-    // Only a missing snapshot triggered this fetch: restore the locked content from the
-    // locked commit rather than wherever the moving ref points now.
-    const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
-    const prefetched = restoring
-      ? undefined
-      : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));
-    const fetchEntry =
-      restoring && locked?.resolvedSha !== undefined
-        ? { ...entry, ref: locked.resolvedSha }
-        : entry;
-    const fetchedCapability =
-      prefetched?.fetched ?? (await fetchCapability(fetchEntry, fetchOptions(yml, opts.scopeRoot)));
-    const sourceStagingDir = path.join(
-      stagingDir,
-      cacheKeyFor(fetchedCapability.sourceId, entry.ref),
-    );
-    const materialized = await materializeFetched(
-      entry,
-      fetchedCapability,
-      sourceStagingDir,
-      prefetched?.inventory,
-    );
-    const mismatches =
-      restoring && materialized.ok ? restoreMismatches(locked, materialized.records) : [];
-    diagnostics.push(...materialized.diagnostics, ...mismatches);
-    if (!materialized.ok || mismatches.length > 0) {
-      failed = true;
-      if (locked !== undefined) {
-        nextEntries.push(locked);
-        records.push(...recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir));
-      }
-      continue;
-    }
-    records.push(...materialized.records);
-    // A verified restore leaves its entry exactly as locked; one predating per-capability
-    // records takes the fresh entry so it gains them.
-    if (restoring && locked?.resolvedCapabilities !== undefined)
-      nextEntries.push(withSelection(locked, entry));
-    else if (materialized.lockEntry !== null) nextEntries.push(materialized.lockEntry);
-    fetched = true;
+    const outcome = await resolveEntry(context, { entry, id, legacyId, locked });
+    records.push(...outcome.records);
+    if (outcome.lockEntry !== undefined) nextEntries.push(outcome.lockEntry);
+    diagnostics.push(...outcome.diagnostics);
+    fetched ||= outcome.fetched;
+    failed ||= outcome.failed;
   }
 
   // Validate final destinations across fetched and retained records before any
@@ -271,6 +247,111 @@ async function resolveCapabilitiesStaged(
   return { capabilities: committedRecords.sort(byRecordName), lockfile, diagnostics };
 }
 
+/**
+ * Resolves one entry: keeps its lock entry when nothing calls for a fetch, otherwise fetches
+ * and stages it. A failed entry keeps its old lock entry so the rest of the lock is intact.
+ */
+async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promise<EntryOutcome> {
+  const { entry, id, locked } = paired;
+  const { capabilitiesDir } = context.opts.scopeRoot;
+  if (requiresRef(entry) && entry.ref === undefined) {
+    return {
+      records: [],
+      lockEntry: locked,
+      diagnostics: [refRequiredDiagnostic(entry, id)],
+      fetched: false,
+      failed: true,
+    };
+  }
+  if (!(await fetchNeeded(context, paired))) {
+    return {
+      records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),
+      lockEntry: locked === undefined ? undefined : withSelection(locked, entry),
+      diagnostics: [],
+      fetched: false,
+      failed: false,
+    };
+  }
+  return await fetchEntry(context, paired);
+}
+
+/**
+ * Whether a selected entry must be fetched: a lock keyed by its legacy id, `mode` or a
+ * changed resolution calls for it, or (`auto` only) a locked snapshot is missing.
+ */
+async function fetchNeeded(context: ResolveContext, paired: PairedEntry): Promise<boolean> {
+  const { opts, frozenDrift, selectedSourceIds } = context;
+  const { entry, id, legacyId, locked } = paired;
+  const selected =
+    selectedSourceIds === null || selectedSourceIds.has(id) || selectedSourceIds.has(legacyId);
+  if (frozenDrift || !selected) return false;
+  const legacyLock = locked !== undefined && locked.sourceId !== id;
+  return (
+    (legacyLock && opts.mode !== "never") ||
+    shouldFetch(opts.mode, entry, locked) ||
+    (opts.mode === "auto" &&
+      locked !== undefined &&
+      !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)))
+  );
+}
+
+/** Fetches and stages one entry; a restore must reproduce the locked digests exactly. */
+async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise<EntryOutcome> {
+  const { opts, yml, stagingDir } = context;
+  const { entry, id, legacyId, locked } = paired;
+  const legacyLock = locked !== undefined && locked.sourceId !== id;
+  // Only a missing snapshot triggered this fetch: restore the locked content from the
+  // locked commit rather than wherever the moving ref points now.
+  const restoring = locked !== undefined && !legacyLock && !shouldFetch(opts.mode, entry, locked);
+  const prefetched = restoring
+    ? undefined
+    : (opts.prefetchedSources?.get(id) ?? opts.prefetchedSources?.get(legacyId));
+  const requested =
+    restoring && locked?.resolvedSha !== undefined ? { ...entry, ref: locked.resolvedSha } : entry;
+  const fetchedCapability =
+    prefetched?.fetched ?? (await fetchCapability(requested, fetchOptions(yml, opts.scopeRoot)));
+  const sourceStagingDir = path.join(
+    stagingDir,
+    cacheKeyFor(fetchedCapability.sourceId, entry.ref),
+  );
+  const materialized = await materializeFetched(
+    entry,
+    fetchedCapability,
+    sourceStagingDir,
+    prefetched?.inventory,
+  );
+  const mismatches =
+    restoring && materialized.ok ? restoreMismatches(locked, materialized.records) : [];
+  const diagnostics = [...materialized.diagnostics, ...mismatches];
+  if (!materialized.ok || mismatches.length > 0) {
+    return {
+      records:
+        locked === undefined ? [] : recordsFromLock(entry, locked, opts.scopeRoot.capabilitiesDir),
+      lockEntry: locked,
+      diagnostics,
+      fetched: false,
+      failed: true,
+    };
+  }
+  // A verified restore leaves its entry exactly as locked; one predating per-capability
+  // records takes the fresh entry so it gains them.
+  const lockEntry =
+    restoring && locked?.resolvedCapabilities !== undefined
+      ? withSelection(locked, entry)
+      : (materialized.lockEntry ?? undefined);
+  return {
+    records: materialized.records,
+    lockEntry,
+    diagnostics,
+    fetched: true,
+    failed: false,
+  };
+}
+
+/**
+ * Moves staged snapshots into `capabilitiesDir`, replacing any installed copy. Records not
+ * inside staging (read from an installed lock) already live at their final root and pass through.
+ */
 async function commitStagedRecords(
   records: CapabilityRecord[],
   stagingDir: string,
@@ -314,69 +395,7 @@ function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
   return diagnostics;
 }
 
-function selectCapabilities(
-  entry: CapabilityEntry,
-  sourceRoot: string,
-  inventory: SourceInventory,
-): { candidates: SourceCapabilityCandidate[]; diagnostics: Diagnostic[] } {
-  if (entry.capabilities === undefined)
-    return { candidates: inventory.candidates, diagnostics: [] };
-  const selected = new Set<SourceCapabilityCandidate>();
-  const diagnostics: Diagnostic[] = [];
-  for (const selector of entry.capabilities) {
-    const matches = inventory.candidates.filter((candidate) =>
-      globMatches(selector, candidate.selector),
-    );
-    if (matches.length === 0) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.resolve.capability-selector-unmatched",
-        message: `capability selector matched nothing: ${selector}`,
-        path: sourceRoot,
-        data: { selector, candidates: inventory.candidates.map((item) => item.selector).sort() },
-      });
-    }
-    for (const match of matches) selected.add(match);
-  }
-  return { candidates: [...selected], diagnostics };
-}
-
-function globMatches(pattern: string, candidate: string): boolean {
-  return matchSegments(pattern.split("/"), candidate.split("/"), 0, 0);
-}
-
-function matchSegments(
-  pattern: string[],
-  candidate: string[],
-  patternIndex: number,
-  candidateIndex: number,
-): boolean {
-  if (patternIndex === pattern.length) return candidateIndex === candidate.length;
-  const segment = pattern[patternIndex];
-  if (segment === "**") {
-    if (matchSegments(pattern, candidate, patternIndex + 1, candidateIndex)) return true;
-    return (
-      candidateIndex < candidate.length &&
-      matchSegments(pattern, candidate, patternIndex, candidateIndex + 1)
-    );
-  }
-  if (candidateIndex >= candidate.length || segment === undefined) return false;
-  return (
-    matchSegment(segment, candidate[candidateIndex] ?? "") &&
-    matchSegments(pattern, candidate, patternIndex + 1, candidateIndex + 1)
-  );
-}
-
-function matchSegment(pattern: string, candidate: string): boolean {
-  let expression = "^";
-  for (const char of pattern) {
-    if (char === "*") expression += ".*";
-    else if (char === "?") expression += ".";
-    else expression += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`${expression}$`).test(candidate);
-}
-
+/** Deletes installed snapshots the previous lock owned and the next lock no longer names. */
 async function removeStaleSnapshots(
   previous: CapabilitiesLock | null,
   next: CapabilitiesLock,
@@ -389,13 +408,6 @@ async function removeStaleSnapshots(
       await rm(capabilityPath(capabilitiesDir, name), { recursive: true, force: true });
     }
   }
-}
-
-function capabilityPath(capabilitiesDir: string, name: string): string {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
-    throw new Error(`invalid capability destination name: ${name}`);
-  }
-  return path.join(capabilitiesDir, name);
 }
 
 function normalizeCapabilitiesYml(value: CapabilitiesYml, manifestDir: string): CapabilitiesYml {
@@ -520,149 +532,6 @@ function recordsFromLock(
   });
 }
 
-async function materializeFetched(
-  entry: CapabilityEntry,
-  fetched: FetchedCapability,
-  stagingDir: string,
-  inspectedInventory?: SourceInventory,
-): Promise<{
-  ok: boolean;
-  records: CapabilityRecord[];
-  lockEntry: LockEntry | null;
-  diagnostics: Diagnostic[];
-}> {
-  const inventory =
-    inspectedInventory ??
-    (await inspectSource(fetched.root, {
-      format: entry.format,
-      rename: entry.rename,
-      revision: fetched.commit,
-    }));
-  const diagnostics = [...inventory.diagnostics];
-  const records: CapabilityRecord[] = [];
-  const selected = selectCapabilities(entry, fetched.root, inventory);
-  diagnostics.push(...selected.diagnostics);
-  if (diagnostics.some((item) => item.severity === "error")) {
-    return { ok: false, records, lockEntry: null, diagnostics };
-  }
-
-  for (const candidate of selected.candidates) {
-    const name = finalCapabilityName(entry, candidate.name);
-    const destination = capabilityPath(stagingDir, name);
-    try {
-      if (candidate.synthesized) {
-        await materializeImportedSkill(candidate, destination, fetched.commit);
-      } else {
-        await copySnapshot(candidate.root, destination);
-      }
-    } catch (error) {
-      if (!(error instanceof SnapshotRejectedError)) throw error;
-      diagnostics.push(snapshotRejectedDiagnostic(name, error));
-      return { ok: false, records: [], lockEntry: null, diagnostics };
-    }
-    const digests = await computeCapabilityDigests(destination);
-    records.push({
-      entry,
-      name,
-      selector: candidate.selector,
-      root: destination,
-      commit: fetched.commit,
-      contentHash: digests.capabilityHash,
-      lockRecord: {
-        name,
-        format: candidate.format,
-        ...(candidate.formatVersion === undefined
-          ? {}
-          : { formatVersion: candidate.formatVersion }),
-        path: selectedSourcePath(entry, candidate),
-        ...digests,
-      },
-    });
-  }
-
-  if (records.length === 0) return { ok: true, records, lockEntry: null, diagnostics };
-  const lockEntry = lockEntryFor(entry, fetched, records, inventory.synthesized);
-  return { ok: true, records, lockEntry, diagnostics };
-}
-
-function lockEntryFor(
-  entry: CapabilityEntry,
-  fetched: FetchedCapability,
-  records: CapabilityRecord[],
-  synthesized: boolean,
-): LockEntry {
-  const lockRecords = records.flatMap((record) =>
-    record.lockRecord === undefined ? [] : [record.lockRecord],
-  );
-  const lockEntry: LockEntry = {
-    capabilityHash: entryCapabilityHash(lockRecords) ?? emptyTreeHash(),
-    capabilityNames: records.map((record) => record.name).sort(),
-    selectorsByCapability: Object.fromEntries(
-      records.map((record) => [record.name, record.selector]),
-    ),
-    source: sourceString(entry.source),
-    sourceId: fetched.sourceId,
-  };
-  if (entry.capabilities !== undefined) lockEntry.capabilities = entry.capabilities;
-  if (entry.except !== undefined) lockEntry.except = entry.except;
-  if (entry.exclude !== undefined) lockEntry.exclude = entry.exclude;
-  if (entry.format !== undefined) lockEntry.format = entry.format;
-  if (entry.include !== undefined) lockEntry.include = entry.include;
-  if (entry.only !== undefined) lockEntry.only = entry.only;
-  if (entry.ref !== undefined) lockEntry.ref = entry.ref;
-  if (entry.rename !== undefined) lockEntry.rename = entry.rename;
-  if (synthesized) lockEntry.synthesized = true;
-  lockEntry.resolvedCapabilities = lockRecords;
-  lockEntry.resolvedAt = new Date().toISOString();
-  if (fetched.commit !== null) lockEntry.resolvedSha = fetched.commit;
-  return lockEntry;
-}
-
-async function materializeImportedSkill(
-  candidate: SourceCapabilityCandidate,
-  destination: string,
-  revision: string | null,
-): Promise<void> {
-  await rm(destination, { recursive: true, force: true });
-  // Leave out notices caplet itself emitted, so a target directory read back as a source
-  // does not carry them into the snapshot.
-  await copySnapshot(candidate.root, path.join(destination, "skills", candidate.name), {
-    exclude: (relativePath) => path.posix.basename(relativePath) === "ACF-MANAGED.md",
-  });
-  const version = `0.0.0-unmanifested+${revision ?? "local"}`;
-  await writeFile(
-    path.join(destination, "acf.yml"),
-    `acf: 1\nname: ${candidate.name}\nversion: ${version}\n`,
-    "utf8",
-  );
-  await writeFile(
-    path.join(destination, ".acf-import.json"),
-    `${JSON.stringify({ acf: 1, synthesized: true, sourcePath: candidate.sourcePath })}\n`,
-    "utf8",
-  );
-}
-
-/** Package root of `candidate` relative to the source root (before `path:`), POSIX. */
-function selectedSourcePath(entry: CapabilityEntry, candidate: SourceCapabilityCandidate): string {
-  const entryPath = path.posix.normalize((entry.path ?? ".").replaceAll("\\", "/"));
-  return path.posix.join(entryPath, candidate.sourcePath);
-}
-
-function finalCapabilityName(entry: CapabilityEntry, manifestName: string): string {
-  if (typeof entry.rename === "string") return entry.rename;
-  if (entry.rename !== undefined) return entry.rename[manifestName] ?? manifestName;
-  return manifestName;
-}
-
-function snapshotRejectedDiagnostic(name: string, error: SnapshotRejectedError): Diagnostic {
-  return {
-    severity: "error",
-    code: "acf.source.snapshot-rejected",
-    message: `capability ${name}: ${error.message}`,
-    data: { name, path: error.relativePath, reason: error.reason },
-  };
-}
-
 function refRequiredDiagnostic(entry: CapabilityEntry, id: string): Diagnostic {
   return {
     severity: "error",
@@ -674,16 +543,4 @@ function refRequiredDiagnostic(entry: CapabilityEntry, id: string): Diagnostic {
 
 function byRecordName(a: CapabilityRecord, b: CapabilityRecord): number {
   return a.name.localeCompare(b.name);
-}
-
-function emptyTreeHash(): string {
-  return "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-}
-
-function lockVersion(lock: CapabilitiesLock): number {
-  return (lock as { acf: number }).acf;
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

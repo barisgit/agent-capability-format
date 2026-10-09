@@ -4,7 +4,7 @@ import { chmod, readFile, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { type AcfCapability, readCapability, resolveScopeCapabilities } from "@caplet/core";
 import { resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 // Fixtures are built per test: symlinks, FIFOs and colliding names cannot live in git.
 
@@ -13,10 +13,6 @@ async function resolvePathSource(dir: string, repo: string) {
   await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
   const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
   return { scopeRoot, result };
-}
-
-function errors(result: Awaited<ReturnType<typeof resolveCapabilities>>) {
-  return result.diagnostics.filter((item) => item.severity === "error");
 }
 
 test("a snapshot keeps hidden files, exact bytes and executable bits but not .git", async () => {

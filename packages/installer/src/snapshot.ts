@@ -61,7 +61,7 @@ async function collectFiles(
   rejectCollisions(directory, prefix, names);
   const files: SnapshotFile[] = [];
   for (const name of names) {
-    const relativePath = prefix === "" ? name : `${prefix}/${name}`;
+    const relativePath = joinRelative(prefix, name);
     if (options.exclude?.(relativePath) === true) continue;
     const sourcePath = path.join(directory, name);
     const stat = await lstat(sourcePath);
@@ -84,15 +84,18 @@ function rejectCollisions(directory: string, prefix: string, names: readonly str
   for (const name of names) {
     const key = name.normalize("NFC").toLowerCase();
     if (seen.has(key)) {
-      const relativePath = prefix === "" ? name : `${prefix}/${name}`;
       throw new SnapshotRejectedError(
-        relativePath,
+        joinRelative(prefix, name),
         "normalization-collision",
         path.join(directory, name),
       );
     }
     seen.add(key);
   }
+}
+
+function joinRelative(prefix: string, name: string): string {
+  return prefix === "" ? name : `${prefix}/${name}`;
 }
 
 function describe(reason: SnapshotRejection): string {

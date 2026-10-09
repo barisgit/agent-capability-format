@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
+import type { Diagnostic } from "@caplet/core";
 import { readLockfile, resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const AP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 const dirs: string[] = [];
@@ -32,8 +33,8 @@ async function scopeWith(files: Record<string, string>, entry = "") {
   return { scopeRoot, result, records: lock?.entries[0]?.resolvedCapabilities ?? [] };
 }
 
-function errors(result: { diagnostics: { severity: string; code: string }[] }): string[] {
-  return result.diagnostics.filter((item) => item.severity === "error").map((item) => item.code);
+function errorCodes(result: { diagnostics: readonly Diagnostic[] }): string[] {
+  return errors(result).map((item) => item.code);
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -59,7 +60,7 @@ const polyglot = {
 describe("foreign source formats", () => {
   test("a Claude plugin locks one claude-plugin capability with its whole snapshot", async () => {
     const { scopeRoot, result, records } = await scopeWith(claudePlugin);
-    expect(errors(result)).toEqual([]);
+    expect(errorCodes(result)).toEqual([]);
     expect(records).toEqual([
       expect.objectContaining({ name: "review-kit", format: "claude-plugin", path: "." }),
     ]);
@@ -75,7 +76,7 @@ describe("foreign source formats", () => {
       "skills/b/SKILL.md": skill("b"),
       "skills/c/SKILL.md": skill("c"),
     });
-    expect(errors(result)).toEqual([]);
+    expect(errorCodes(result)).toEqual([]);
     expect(records).toEqual([
       expect.objectContaining({ name: "docs-kit", format: "agent-plugins", formatVersion: "1.0" }),
     ]);
@@ -89,13 +90,13 @@ describe("foreign source formats", () => {
 
   test("format: overrides detection", async () => {
     const { result, records } = await scopeWith(polyglot, "    format: claude-plugin\n");
-    expect(errors(result)).toEqual([]);
+    expect(errorCodes(result)).toEqual([]);
     expect(records.map((item) => item.format)).toEqual(["claude-plugin"]);
   });
 
   test("format: naming an absent format fails", async () => {
     const { result, records } = await scopeWith(claudePlugin, "    format: agent-plugins\n");
-    expect(errors(result)).toEqual(["acf.source.format-not-found"]);
+    expect(errorCodes(result)).toEqual(["acf.source.format-not-found"]);
     expect(records).toEqual([]);
   });
 
@@ -104,7 +105,7 @@ describe("foreign source formats", () => {
       ".claude-plugin/plugin.json": "{ not json",
       "skills/one/SKILL.md": skill("one"),
     });
-    expect(errors(result)).toEqual(["acf.source.manifest-invalid"]);
+    expect(errorCodes(result)).toEqual(["acf.source.manifest-invalid"]);
     expect(result.capabilities).toEqual([]);
     expect(await exists(path.join(scopeRoot.capabilitiesDir, "one"))).toBe(false);
   });
@@ -116,7 +117,7 @@ describe("foreign source formats", () => {
         plugins: [{ name: "review", source: "./plugins/review" }],
       }),
     });
-    expect(errors(result)).toEqual(["acf.source.marketplace-unsupported"]);
+    expect(errorCodes(result)).toEqual(["acf.source.marketplace-unsupported"]);
     const diagnostic = result.diagnostics.find(
       (item) => item.code === "acf.source.marketplace-unsupported",
     );
@@ -129,10 +130,10 @@ describe("foreign source formats", () => {
       "skills/a/SKILL.md": skill("a"),
     };
     const failed = await scopeWith(files);
-    expect(errors(failed.result)).toEqual(["acf.manifest.invalid-name"]);
+    expect(errorCodes(failed.result)).toEqual(["acf.manifest.invalid-name"]);
 
     const renamed = await scopeWith(files, "    rename: acme-docs\n");
-    expect(errors(renamed.result)).toEqual([]);
+    expect(errorCodes(renamed.result)).toEqual([]);
     expect(renamed.records).toEqual([
       expect.objectContaining({ name: "acme-docs", format: "agent-plugins" }),
     ]);
@@ -147,7 +148,7 @@ describe("foreign source formats", () => {
       "acf: 1\ncapabilities:\n  - source: path:../pkg\n    rename: kit-two\n",
     );
     const second = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(errors(second)).toEqual([]);
+    expect(errorCodes(second)).toEqual([]);
     const lock = await readLockfile(scopeRoot.lockPath);
     expect(lock?.entries[0]?.rename).toBe("kit-two");
     expect(lock?.entries[0]?.resolvedCapabilities?.map((item) => item.name)).toEqual(["kit-two"]);
@@ -159,7 +160,7 @@ describe("foreign source formats", () => {
       claudePlugin,
       "    capabilities: [review-kit]\n    rename:\n      review-kit: kit\n      kit: unexpected\n",
     );
-    expect(errors(result)).toEqual([]);
+    expect(errorCodes(result)).toEqual([]);
     const entry = (await readLockfile(scopeRoot.lockPath))?.entries[0];
     expect(entry?.capabilityNames).toEqual(["kit"]);
     expect(entry?.selectorsByCapability).toEqual({ kit: "review-kit" });
@@ -181,7 +182,7 @@ describe("foreign source formats", () => {
     const { scopeRoot } = await scopeWith(polyglot, "    format: claude-plugin\n");
     await writeText(scopeRoot.manifestPath, "acf: 1\ncapabilities:\n  - source: path:../pkg\n");
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(errors(result)).toEqual([]);
+    expect(errorCodes(result)).toEqual([]);
     const entry = (await readLockfile(scopeRoot.lockPath))?.entries[0];
     expect(entry?.format).toBeUndefined();
     expect(entry?.resolvedCapabilities?.map((item) => item.format)).toEqual(["acf"]);
@@ -206,7 +207,7 @@ describe("foreign source formats", () => {
           `acf: 1\ncapabilities:\n  - source: path:../pkg\n${after}`,
         );
         const result = await resolveCapabilities({ scope: "project", scopeRoot, mode, frozen });
-        expect(errors(result)).toEqual(["acf.lock.drift"]);
+        expect(errorCodes(result)).toEqual(["acf.lock.drift"]);
         expect(await Bun.file(scopeRoot.lockPath).text()).toBe(lockBefore);
         expect(await readdir(scopeRoot.capabilitiesDir)).toEqual(installedBefore);
       });

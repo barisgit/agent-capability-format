@@ -4,11 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeContentHash, computePayloadDigest } from "@caplet/core/hash";
 import { serializeLock } from "@caplet/core/lock";
+import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
 import { readLockfile, resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 const fixtures = fileURLToPath(new URL("./fixtures/locks", import.meta.url));
-const golden = fileURLToPath(new URL("./golden/multi-capability-lock", import.meta.url));
+const golden = goldenCase(import.meta.dir, "multi-capability-lock");
 
 test("lockfiles written before per-capability records round-trip byte for byte", async () => {
   const lockPath = path.join(fixtures, "legacy.lock");
@@ -21,14 +22,14 @@ test("a multi-capability source locks each capability's provenance and digests",
   const dir = await tempDir("acf-installer-multi-lock-");
   try {
     const repo = path.join(dir, "repo");
-    await cp(path.join(golden, "input"), repo, { recursive: true });
+    await cp(golden.input, repo, { recursive: true });
     // Executable bits may not survive every checkout; the golden expects this one set.
     await chmod(path.join(repo, "acf", "alpha", "scripts", "run.sh"), 0o755);
     const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${repo}\n`);
 
     const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(result)).toEqual([]);
 
     const records = result.lockfile.entries[0]?.resolvedCapabilities ?? [];
     expect(records.map((record) => record.name)).toEqual(["alpha", "beta"]);
@@ -42,9 +43,7 @@ test("a multi-capability source locks each capability's provenance and digests",
     const actual = (await readFile(scopeRoot.lockPath, "utf8"))
       .replaceAll(repo, "<SOURCE>")
       .replace(/"resolvedAt": "[^"]+"/, '"resolvedAt": "<RESOLVED_AT>"');
-    const expectedPath = path.join(golden, "expected", "capabilities.lock");
-    if (process.env.UPDATE_GOLDEN === "1") await writeText(expectedPath, actual);
-    expect(actual).toBe(await readFile(expectedPath, "utf8"));
+    await assertGoldenTree(treeFromFiles({ "capabilities.lock": actual }), golden.expected);
   } finally {
     await cleanup(dir);
   }

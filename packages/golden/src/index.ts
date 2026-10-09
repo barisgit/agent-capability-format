@@ -8,6 +8,7 @@
  *
  * Set `UPDATE_GOLDEN=1` to rewrite `expected/` from the actual output instead of failing.
  */
+import type { Dirent } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -96,7 +97,7 @@ export function treeFromFileDiffs(diffs: readonly GoldenFileDiff[], root: string
 export async function readTree(dir: string): Promise<GoldenTree> {
   const tree: GoldenTree = new Map();
   async function walk(current: string): Promise<void> {
-    let entries: import("node:fs").Dirent[];
+    let entries: Dirent[];
     try {
       entries = await readdir(current, { withFileTypes: true });
     } catch (error) {
@@ -135,7 +136,7 @@ export async function writeTree(tree: GoldenTree, dir: string): Promise<void> {
  * Compares two trees and returns one readable line block per differing path, sorted by path.
  * An empty result means the trees are equal.
  */
-export function diffTrees(actual: GoldenTree, expected: GoldenTree): string[] {
+function diffTrees(actual: GoldenTree, expected: GoldenTree): string[] {
   const paths = [...new Set([...actual.keys(), ...expected.keys()])].sort();
   const blocks: string[] = [];
   for (const relative of paths) {

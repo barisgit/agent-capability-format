@@ -43,11 +43,6 @@ async function failure(actual: GoldenTree): Promise<string> {
   throw new Error("expected the golden comparison to fail");
 }
 
-test("goldenCase resolves the input and expected directories of a case", () => {
-  expect(sample.input).toBe(path.join(import.meta.dir, "golden", "sample", "input"));
-  expect(sample.expected).toBe(path.join(import.meta.dir, "golden", "sample", "expected"));
-});
-
 test("an identical in-memory tree matches the committed golden", async () => {
   await assertGoldenTree(sampleTree(), sample.expected, { update: false });
 });

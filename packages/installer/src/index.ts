@@ -17,10 +17,10 @@ export {
   sourceString,
   writeLockfile,
 } from "./lockfile.js";
+export type { CapabilityRecord } from "./materialize.js";
 export type { PruneResult } from "./prune.js";
 export { pruneCapabilities } from "./prune.js";
 export type {
-  CapabilityRecord,
   PrefetchedSource,
   ResolveOptions,
   ResolveResult,

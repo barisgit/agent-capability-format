@@ -10,8 +10,15 @@ import {
   selectorKeys,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
+import { isErrno } from "./errno.js";
 import { entrySourceId } from "./lockfile.js";
 
+/**
+ * Reads and validates a scope's `capabilities.yml`. A missing file reads as an empty
+ * manifest. Unparseable or invalid content, or a source URL carrying credentials, yields
+ * error diagnostics and an empty manifest, so nothing from it is used; duplicate source
+ * entries are reported and kept.
+ */
 export async function readCapabilitiesYml(
   manifestPath: string,
 ): Promise<{ value: CapabilitiesYml; diagnostics: Diagnostic[] }> {
@@ -161,8 +168,4 @@ function duplicateEntryDiagnostics(value: CapabilitiesYml, manifestDir: string):
 
 function emptyCapabilitiesYml(): CapabilitiesYml {
   return { acf: 1, capabilities: [] };
-}
-
-function isErrno(error: unknown, code: string): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }

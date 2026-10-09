@@ -3,7 +3,7 @@ import { chmod, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { resolveScopeCapabilities } from "@caplet/core";
 import { resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 async function installTwo(dir: string) {
   const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
@@ -17,7 +17,7 @@ async function installTwo(dir: string) {
     `acf: 1\ncapabilities:\n  - source: path:${path.join(sources, "kept")}\n  - source: path:${path.join(sources, "tampered")}\n`,
   );
   const result = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-  expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+  expect(errors(result)).toEqual([]);
   return { scopeRoot, sources };
 }
 

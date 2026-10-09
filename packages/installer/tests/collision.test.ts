@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveCapabilities } from "../src";
-import { cleanup, tempDir, testScopeRoot, writeText } from "./helpers";
+import { cleanup, errors, tempDir, testScopeRoot, writeText } from "./helpers";
 
 // SPEC §17.6: same-scope name collisions are errors with no implicit winner.
 // The resolver must detect them before replacing any installed snapshot.
@@ -62,7 +62,7 @@ test("new source colliding with a retained locked capability preserves snapshot 
     await writeCapability(two, "shared", "two");
     await writeText(scopeRoot.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${one}\n`);
     const first = await resolveCapabilities({ scope: "project", scopeRoot, mode: "auto" });
-    expect(first.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(first)).toEqual([]);
     const lockBefore = await readFile(scopeRoot.lockPath, "utf8");
 
     await writeText(
@@ -108,7 +108,7 @@ test("rename onto another capability's name collides, rename to a free name reso
       `acf: 1\ncapabilities:\n  - source: path:${one}\n  - source: path:${two}\n    rename: gamma\n`,
     );
     const resolved = await resolveCapabilities({ scope: "project", scopeRoot, mode: "force" });
-    expect(resolved.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(errors(resolved)).toEqual([]);
     expect(resolved.capabilities.map((item) => item.name)).toEqual(["alpha", "gamma"]);
     expect(
       await readFile(path.join(scopeRoot.capabilitiesDir, "alpha", "marker.txt"), "utf8"),
