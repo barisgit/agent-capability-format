@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { ClaudeCli, ClaudeCliOutcome } from "./cli.js";
 import {
@@ -46,7 +46,8 @@ export interface ClaudeHost {
   run(command: ClaudeCommand): Promise<ClaudeHostResult<undefined>>;
   /**
    * The settings files `marketplace remove` edits from `projectDir`, the user file first; a
-   * missing file declares nothing.
+   * missing file declares nothing. Each file appears once, at its first scope: from the home
+   * directory the project file is the user file.
    */
   readSettings(): Promise<ClaudeSettingsFile[]>;
 }
@@ -80,13 +81,35 @@ export function createClaudeHost(
         return { ok: true, value: undefined };
       return failed(outcome);
     },
-    readSettings: () =>
-      Promise.all([
-        readSettingsFile("user", path.join(location.configDir, "settings.json")),
-        readSettingsFile("project", path.join(location.projectDir, ".claude", "settings.json")),
-        readSettingsFile("local", path.join(location.projectDir, ".claude", "settings.local.json")),
-      ]),
+    readSettings: async () =>
+      await distinctFiles(
+        await Promise.all([
+          readSettingsFile("user", path.join(location.configDir, "settings.json")),
+          readSettingsFile("project", path.join(location.projectDir, ".claude", "settings.json")),
+          readSettingsFile(
+            "local",
+            path.join(location.projectDir, ".claude", "settings.local.json"),
+          ),
+        ]),
+      ),
   };
+}
+
+/**
+ * `files` without the ones whose real path an earlier file already has. Without this, the user
+ * file read again as the project file (Claude run from the home directory) would count as a
+ * settings file other than caplet's own declaring caplet's marketplace.
+ */
+async function distinctFiles(files: ClaudeSettingsFile[]): Promise<ClaudeSettingsFile[]> {
+  const seen = new Set<string>();
+  const distinct: ClaudeSettingsFile[] = [];
+  for (const file of files) {
+    const real = await realpath(file.path).catch(() => path.resolve(file.path));
+    if (seen.has(real)) continue;
+    seen.add(real);
+    distinct.push(file);
+  }
+  return distinct;
 }
 
 async function readSettingsFile(

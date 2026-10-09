@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execClaudeCli } from "../../../src/hosts/claude/cli.js";
@@ -133,5 +133,17 @@ describe("createClaudeHost settings", () => {
         settings: { marketplaces: [], configuredPlugins: [], enabledPlugins: {} },
       },
     ]);
+  });
+
+  test("a project file that is the user file is read once, as the user file", async () => {
+    // Claude run from the home directory, whose `.claude` links to the configuration directory.
+    const configDir = path.join(dir, "linked-config");
+    const home = path.join(dir, "home");
+    await mkdir(configDir, { recursive: true });
+    await mkdir(home, { recursive: true });
+    await symlink(configDir, path.join(home, ".claude"));
+    await writeFile(path.join(configDir, "settings.json"), "{}");
+    const host = createClaudeHost(missingClaudeCli(), { projectDir: home, configDir });
+    expect((await host.readSettings()).map((file) => file.scope)).toEqual(["user", "local"]);
   });
 });

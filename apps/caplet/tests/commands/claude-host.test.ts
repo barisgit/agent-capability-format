@@ -290,6 +290,46 @@ test("remove uninstalls the plugin and removes the marketplace before deleting f
   );
 });
 
+test("remove run from the home directory removes the marketplace only caplet's registration declares", async () => {
+  const scope = await reviewScope("user");
+  const version = await applyWithoutCli(scope);
+  // What `marketplace add --scope user` wrote. From the home directory the project settings file
+  // is the user settings file, so it is caplet's own declaration, not another file's.
+  await writeText(
+    path.join(scope.home, ".claude", "settings.json"),
+    JSON.stringify({
+      extraKnownMarketplaces: {
+        "acf-user": {
+          source: { source: "directory", path: claudeMarketplaceDir(scope, "user") },
+        },
+      },
+    }),
+  );
+  const host = await userHost(scope, [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+    "uninstall-user",
+    "marketplace-remove",
+    "list-json-empty",
+  ]);
+
+  const result = await runCaplet(
+    scope,
+    ["remove", NAME, "--cwd", scope.home, "--scope", "user", "--target", "claude", "--json"],
+    host.env,
+  );
+
+  expect(result.exitCode).toBe(0);
+  expect(await host.calls()).toEqual([
+    ...READ,
+    `claude plugin uninstall ${NAME}@acf-user --scope user`,
+    "claude plugin marketplace remove acf-user",
+    "claude plugin list --json",
+  ]);
+  expect((JSON.parse(result.stdout) as ApplyJson).diagnostics).toEqual([]);
+  expect(existsSync(claudeMarketplaceDir(scope, "user"))).toBe(false);
+});
+
 test("remove keeps a marketplace another Claude settings file declares, with an empty catalog", async () => {
   const scope = await reviewScope("user");
   const version = await applyWithoutCli(scope);
