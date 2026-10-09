@@ -6,7 +6,7 @@ import type { SourceCapabilityCandidate, SourceInventory } from "./inventory.js"
  * when the entry has none, otherwise each candidate whose selector matches an exact or glob
  * selector, once. A selector that matches nothing is an error naming the candidates.
  */
-export function selectCapabilities(
+export function matchCapabilitySelectors(
   entry: CapabilityEntry,
   sourceRoot: string,
   inventory: SourceInventory,

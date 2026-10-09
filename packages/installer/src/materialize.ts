@@ -7,7 +7,7 @@ import {
   entryCapabilityHash,
   type LockedCapability,
 } from "@caplet/core";
-import { selectCapabilities } from "./capability-selectors.js";
+import { matchCapabilitySelectors } from "./capability-selectors.js";
 import type { FetchedCapability } from "./fetch.js";
 import {
   inspectSource,
@@ -64,7 +64,7 @@ export async function materializeFetched(
     }));
   const diagnostics = [...inventory.diagnostics];
   const records: CapabilityRecord[] = [];
-  const selected = selectCapabilities(entry, fetched.root, inventory);
+  const selected = matchCapabilitySelectors(entry, fetched.root, inventory);
   diagnostics.push(...selected.diagnostics);
   if (diagnostics.some((item) => item.severity === "error")) {
     return { ok: false, records, lockEntry: null, diagnostics };
