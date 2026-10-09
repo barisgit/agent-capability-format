@@ -631,7 +631,9 @@ a simple file form and a directory form. Hooks and MCP are family-level
 YAML configurations: one file per family, not one file per declaration.
 
 ACF-authored configuration files are YAML in v1. Implementations MUST NOT
-accept JSON or TOML as portable ACF source config. Native artifacts emitted
+accept JSON or TOML as portable ACF source config. A mapping key `__proto__`
+anywhere in a YAML file or frontmatter block is an error: JavaScript readers
+and hosts cannot keep it as an ordinary key, so it would vanish silently. Native artifacts emitted
 by adapters MAY use any format the target requires (§14.4).
 
 ## 9. Skills

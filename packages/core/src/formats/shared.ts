@@ -5,13 +5,17 @@
  */
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { nativeValueProblem } from "../targets/native-keys.js";
 import type {
   CapabilityEntry,
   Diagnostic,
+  InteropFamily,
   NativeRemainderComponent,
   PackageAuthor,
   SafetyClass,
+  TargetId,
 } from "../types/index.js";
+import { assertNoProtoKey } from "../utils/proto-key.js";
 
 /** True for a plain JSON object (not null, not an array). */
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,6 +46,25 @@ export function isSemVer(value: string): boolean {
   return SEMVER.test(value);
 }
 
+/**
+ * Why a foreign component's native keys for its own `target` make it invalid: the first key whose
+ * value is outside the domain the host documents, or undefined. The host rejects such a
+ * component, and native ACF rejects the same value (`acf.extras.native-value-invalid`), so the
+ * reader leaves the component out with a warning (capability-model-layers, Native ACF
+ * expressiveness parity).
+ */
+export function nativeValuesProblem(
+  target: TargetId,
+  family: InteropFamily,
+  extras: Readonly<Record<string, unknown>>,
+): string | undefined {
+  for (const [key, value] of Object.entries(extras)) {
+    const problem = nativeValueProblem(target, family, key, value);
+    if (problem !== undefined) return `${key} is not a valid ${target} value: ${problem}`;
+  }
+  return undefined;
+}
+
 /** Result of reading a JSON document: its value, or the error diagnostic it produced. */
 export type JsonRead = { ok: true; value: unknown } | { ok: false; diagnostic: Diagnostic };
 
@@ -52,7 +75,9 @@ export async function readJson(
   severity: Diagnostic["severity"],
 ): Promise<JsonRead> {
   try {
-    return { ok: true, value: JSON.parse(await readFile(file, "utf8")) };
+    const value: unknown = JSON.parse(await readFile(file, "utf8"));
+    assertNoProtoKey(value);
+    return { ok: true, value };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return {

@@ -319,9 +319,9 @@ async function generatedPackage(
       report.diagnostics.push(nativeTreeDropped({ capability: name, target: "claude" }, owner));
   for (const dialect of extrasDialects(capability.manifest.targets)) {
     if (dialect === "claude") continue;
-    for (const key of Object.keys(nativeExtras(capability.manifest.targets, dialect)))
+    for (const [key, value] of Object.entries(nativeExtras(capability.manifest.targets, dialect)))
       report.diagnostics.push(
-        extraDropped({ ...subject, family: "package" }, { owner: dialect, key }),
+        extraDropped({ ...subject, family: "package" }, { owner: dialect, key, value }),
       );
   }
 

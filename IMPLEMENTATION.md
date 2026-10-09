@@ -2729,6 +2729,9 @@ trigger holds, MAY emit additional more-specific codes, and MUST NOT
 collapse listed codes into more generic ones.
 
 ```txt
+# Schema
+acf.schema.invalid-yaml                      # malformed YAML or frontmatter, or a `__proto__` key; the file is skipped (error)
+
 # Manifest
 acf.manifest.invalid-name
 acf.manifest.invalid-field                   # any other manifest field fails its schema (version, authors, ...)
@@ -2750,6 +2753,8 @@ acf.layout.singular-facet-folder             # root `skill/`, `agent/`, etc. (er
 
 # Family-specific
 acf.skill.shape.not-directory
+acf.import.skill-description-missing        # bare skill without description; a fallback is used (warn)
+acf.import.skill-frontmatter-invalid         # bare skill frontmatter is malformed or fails its schema; skipped (error)
 acf.instruction.debounce.requires-repeat-always
 acf.instruction.invalid-regex                # `paths` or `conditions` regex doesn't compile (error)
 acf.applicability.empty                      # facet+capability applicability intersection is empty
@@ -2763,11 +2768,13 @@ acf.hook.effect.not-allowed                  # effect not in hook type's matrix
 acf.hook.run.args-and-shell                  # `args` and `shell` are mutually exclusive
 acf.hook.target-native-event.unknown-schema  # `targets.<target>.hooks.<event>` shape unknown
 acf.hooks.invalid-field                      # any other hooks file value fails its schema (error)
+acf.hooks.duplicate-file                     # hooks.yml AND hooks.yaml both present (error)
 
 # MCP
 acf.mcp.transport.missing-url                # http/sse without `url`
 acf.mcp.transport.missing-command            # stdio without `command`
 acf.mcp.invalid-field                        # any other MCP file value fails its schema (error)
+acf.mcp.duplicate-file                       # mcp.yml AND mcp.yaml both present (error)
 
 # Asset references
 acf.path.absolute
@@ -2805,6 +2812,10 @@ acf.capabilities-yml.duplicate-entry
 acf.capabilities-yml.unknown-key             # key capabilities.yml does not define (error)
 acf.capabilities-yml.invalid                 # any other capabilities.yml value fails its schema (error)
 acf.caplet-yml.invalid                       # caplet.yml value fails its schema (error)
+acf.resolve.no-capabilities                  # source has no capability (info when resolving a scope; error when installing)
+acf.resolve.capability-selector-unmatched    # capabilities selector matches no source capability (error)
+acf.resolve.ref-required                     # github or git source without ref (error)
+acf.prune.failed                             # removing unreferenced snapshots failed (error)
 acf.lock.drift
 acf.lock.missing-entry
 acf.lock.unsupported-version
@@ -2813,6 +2824,8 @@ acf.lock.unsupported-version
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
 acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
+acf.emit.managed-notice-reserved-path        # capability ships a file at the reserved notice name (error)
+acf.emit.managed-notice-destination-collision # reserved notice path holds a file caplet does not own (error)
 
 # Source formats and snapshots
 acf.source.format-selected                   # format chosen by detection or format: (info)
@@ -2821,7 +2834,7 @@ acf.source.format-version-unsupported        # Agent Plugins schema other than 1
 acf.source.format-not-found                  # format: names a format the source lacks (error)
 acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
 acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
-acf.source.component-invalid                 # invalid foreign skill or server, excluded (warn)
+acf.source.component-invalid                 # invalid foreign skill or server (incl. a native value its host rejects), excluded (warn)
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
@@ -2835,7 +2848,7 @@ acf.support.refused                          # field or component refused; block
 acf.support.degraded                         # descriptive or granting field degraded (lossy)
 acf.support.component-omitted                # component the target cannot carry (lossy)
 acf.extras.dropped                           # native extra not carried by this target or carrier (lossy)
-acf.extras.conflict                          # extra sets a key the writer generates (error)
+acf.extras.conflict                          # extra sets a key the writer generates, or a bundled agents/openai.yaml contradicts the generated Codex metadata (error)
 acf.extras.unclassified                      # native key unknown to the registry (info)
 acf.extras.package-value-invalid             # invalid targets.<target>.package value (error)
 acf.extras.native-value-invalid              # known targets.<target>.native key with a value outside its native domain (error)
@@ -2871,6 +2884,11 @@ acf.migration.drifted                        # edited loose artifact left in pla
 # CLI
 acf.cli.partial-implementation               # implementer flagged a gap; non-silent failure
 acf.cli.usage                                # bad command input: flag value, name, missing argument (error, exit 2)
+acf.caplet.not-found                         # `caplet show` names no installed capability (error)
+acf.doctor.git-missing                       # git is not on PATH (error)
+acf.doctor.agents-unreadable                 # .agents directory missing (warn) or unreadable (error)
+acf.doctor.target-unregistered               # configured target has no adapter (error)
+acf.doctor.lockfile-invalid                  # capabilities.lock does not parse (error)
 ```
 
 Codes SHOULD be stable across versions. New codes are additive.

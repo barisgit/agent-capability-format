@@ -12,6 +12,7 @@ import {
   isRecord,
   isSlug,
   mapPlaceholders,
+  nativeValuesProblem,
   placeholder,
 } from "./shared.js";
 
@@ -109,12 +110,14 @@ const CLAUDE_CANONICAL_KEYS = ["type", "command", "args", "env", "url", "headers
  */
 export function projectClaudeServer(name: string, raw: unknown): ServerProjection {
   if (!isRecord(raw)) return invalid("server must be an object");
-  const stdio = raw.type === undefined || raw.type === "stdio";
-  if (raw.headersHelper !== undefined) return pending("uses headersHelper", stdio);
-  if (raw.oauth !== undefined) return pending("uses OAuth", stdio);
   const extras = Object.fromEntries(
     Object.entries(raw).filter(([key]) => !CLAUDE_CANONICAL_KEYS.includes(key)),
   );
+  const valueProblem = nativeValuesProblem("claude", "mcp", extras);
+  if (valueProblem !== undefined) return invalid(valueProblem);
+  const stdio = raw.type === undefined || raw.type === "stdio";
+  if (raw.headersHelper !== undefined) return pending("uses headersHelper", stdio);
+  if (raw.oauth !== undefined) return pending("uses OAuth", stdio);
 
   let server: McpServer;
   if (stdio) {

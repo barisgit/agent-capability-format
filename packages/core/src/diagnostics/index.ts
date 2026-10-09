@@ -3,7 +3,14 @@ import type { Diagnostic, FacetFamily, TargetId } from "../types/index.js";
 
 export type { Diagnostic } from "../types/index.js";
 
+/**
+ * Every diagnostic code the packages and the caplet CLI emit, plus codes SPEC.md reserves for
+ * features not built yet. IMPLEMENTATION.md §11.2 documents each with its severity;
+ * tests/diagnostics-coverage.test.ts fails when source emits an unregistered code or the two
+ * lists diverge.
+ */
 export const ACF_DIAGNOSTIC_CODES = [
+  "acf.schema.invalid-yaml",
   "acf.manifest.invalid-name",
   "acf.manifest.invalid-field",
   "acf.manifest.acf-version-unknown",
@@ -16,6 +23,9 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.facet.duplicate",
   "acf.layout.singular-facet-folder",
   "acf.skill.shape.not-directory",
+  "acf.skill.placeholder-unexpanded",
+  "acf.import.skill-description-missing",
+  "acf.import.skill-frontmatter-invalid",
   "acf.instruction.debounce.requires-repeat-always",
   "acf.instruction.invalid-regex",
   "acf.applicability.empty",
@@ -30,6 +40,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.mcp.transport.missing-url",
   "acf.mcp.transport.missing-command",
   "acf.mcp.invalid-field",
+  "acf.mcp.duplicate-file",
   "acf.mcp.cwd.invalid",
   "acf.mcp.url.insecure",
   "acf.mcp.url.credential-in-url",
@@ -63,8 +74,10 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.capabilities-yml.unknown-key",
   "acf.capabilities-yml.invalid",
   "acf.caplet-yml.invalid",
-  "acf.resolve.capability-selector-direct-source",
   "acf.resolve.capability-selector-unmatched",
+  "acf.resolve.no-capabilities",
+  "acf.resolve.ref-required",
+  "acf.prune.failed",
   "acf.lock.digest-mismatch",
   "acf.lock.drift",
   "acf.lock.missing-entry",
@@ -81,11 +94,26 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.emit.drift",
   "acf.emit.managed-notice-reserved-path",
   "acf.emit.managed-notice-destination-collision",
+  "acf.apply.drift",
+  "acf.apply.outside-root",
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",
   "acf.claude.skills-option-ignored",
+  "acf.claude.cli-unavailable",
+  "acf.claude.state-unreadable",
+  "acf.claude.command-failed",
+  "acf.claude.policy-blocked",
+  "acf.claude.version-mismatch",
+  "acf.claude.other-scope",
+  "acf.claude.marketplace-kept",
+  "acf.migration.drifted",
   "acf.cli.partial-implementation",
   "acf.cli.usage",
+  "acf.caplet.not-found",
+  "acf.doctor.git-missing",
+  "acf.doctor.agents-unreadable",
+  "acf.doctor.target-unregistered",
+  "acf.doctor.lockfile-invalid",
   "acf.support.refused",
   "acf.support.degraded",
   "acf.support.component-omitted",

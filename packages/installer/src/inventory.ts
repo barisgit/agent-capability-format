@@ -115,7 +115,15 @@ export async function inspectSource(
   const candidates: SourceCapabilityCandidate[] = [];
   for (const skillRoot of skillRoots) {
     const skillFile = path.join(skillRoot, "SKILL.md");
-    const parsed = await parseMarkdown(skillFile);
+    let parsed: Awaited<ReturnType<typeof parseMarkdown>>;
+    try {
+      parsed = await parseMarkdown(skillFile);
+    } catch (error) {
+      diagnostics.push(
+        invalidFrontmatter(skillFile, error instanceof Error ? error.message : String(error)),
+      );
+      continue;
+    }
     const missingDescription =
       typeof parsed.frontmatter.description !== "string" ||
       parsed.frontmatter.description.length === 0;
@@ -124,13 +132,8 @@ export async function inspectSource(
       description: missingDescription ? "Imported skill" : parsed.frontmatter.description,
     });
     if (!result.success) {
-      diagnostics.push({
-        severity: "error",
-        code: "acf.import.skill-frontmatter-invalid",
-        message: `invalid imported skill frontmatter: ${result.error.issues.map((issue) => issue.message).join(", ")}`,
-        path: skillFile,
-        family: "skill",
-      });
+      const reasons = result.error.issues.map((issue) => issue.message).join(", ");
+      diagnostics.push(invalidFrontmatter(skillFile, reasons));
       continue;
     }
     if (missingDescription) {
@@ -227,4 +230,15 @@ async function isRegularFile(candidate: string): Promise<boolean> {
 
 function isErrno(error: unknown, code: string): error is { code: string } {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
+/** The error for a bare skill whose frontmatter is malformed YAML or fails its schema. */
+function invalidFrontmatter(skillFile: string, reason: string): Diagnostic {
+  return {
+    severity: "error",
+    code: "acf.import.skill-frontmatter-invalid",
+    message: `invalid imported skill frontmatter: ${reason}`,
+    path: skillFile,
+    family: "skill",
+  };
 }

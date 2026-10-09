@@ -7,7 +7,12 @@
  */
 import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
-import { nativeKeyInfo } from "../targets/native-keys.js";
+import { nativeKeyClass, nativeKeyInfo, strictestClass } from "../targets/native-keys.js";
+import {
+  CLAUDE_PLUGIN_BIN_DIR,
+  claudePluginComponents,
+  type PluginComponentSpec,
+} from "../targets/plugin-layout.js";
 import type { PreservedForeignData } from "../targets/self-check.js";
 import type {
   Diagnostic,
@@ -188,21 +193,16 @@ async function readSkills(
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-const CLASS_RANK: Record<SafetyClass, number> = {
-  descriptive: 0,
-  granting: 1,
-  functional: 2,
-  restricting: 3,
-};
-
-/** The registry's class for Claude manifest keys, strictest first; unknown keys are functional. */
-function keyClass(keys: readonly string[]): SafetyClass {
-  return keys
-    .map((key) => nativeKeyInfo("claude", "package", key)?.class ?? "functional")
-    .reduce<SafetyClass>(
-      (strictest, next) => (CLASS_RANK[next] > CLASS_RANK[strictest] ? next : strictest),
-      "descriptive",
-    );
+/**
+ * The strictest registry class of manifest keys `keys` under their values in `raw`; unknown
+ * keys are functional.
+ */
+function keyClass(raw: Record<string, unknown>, keys: readonly string[]): SafetyClass {
+  return strictestClass(
+    keys
+      .map((key) => nativeKeyClass(nativeKeyInfo("claude", "package", key), raw[key]))
+      .map((found) => (found === "unclassified" ? "functional" : found)),
+  );
 }
 
 const LISTING_KEYS = [
@@ -229,11 +229,11 @@ const FILE_COMPONENTS = [
 ] as const;
 
 /** Components whose default file merges with manifest declarations into one component. */
-const MERGED_COMPONENTS = [
-  { key: "hooks", kind: "hook", name: "hooks", file: "hooks/hooks.json" },
-  { key: "lspServers", kind: "lsp-server", name: "lsp-servers", file: ".lsp.json" },
-  { key: "settings", kind: "settings", name: "settings", file: "settings.json" },
-] as const;
+const MERGED_COMPONENTS = claudePluginComponents.filter(
+  (spec): spec is PluginComponentSpec & { file: string } => spec.file !== undefined,
+);
+/** Keys that hold monitors; any other value of them is an `other` component. */
+const MONITOR_COMPONENTS = claudePluginComponents.filter((spec) => spec.kind === "monitor");
 
 const KEY_COMPONENTS = [
   { key: "userConfig", kind: "user-config" },
@@ -263,7 +263,7 @@ async function remainderComponents(
           name,
           paths: await commandSource(root, definition),
           manifestKeys: [spec.key],
-          class: keyClass([spec.key]),
+          class: keyClass(raw, [spec.key]),
         });
       continue;
     }
@@ -283,7 +283,7 @@ async function remainderComponents(
           name: path.posix.basename(file).replace(/\.[^.]*$/, ""),
           paths: [file],
           manifestKeys: raw[spec.key] === undefined ? [] : [spec.key],
-          class: keyClass([spec.key]),
+          class: keyClass(raw, [spec.key]),
         });
       }
     }
@@ -304,11 +304,11 @@ async function remainderComponents(
       name: spec.name,
       paths,
       manifestKeys,
-      class: keyClass([spec.key]),
+      class: keyClass(raw, [spec.key]),
     });
   }
 
-  for (const file of await filesUnder(root, path.join(root, "bin"))) {
+  for (const file of await filesUnder(root, path.join(root, CLAUDE_PLUGIN_BIN_DIR))) {
     await add({
       kind: "bin",
       name: path.posix.basename(file),
@@ -325,11 +325,10 @@ async function remainderComponents(
       name: spec.key,
       paths: [],
       manifestKeys: [spec.key],
-      class: keyClass([spec.key]),
+      class: keyClass(raw, [spec.key]),
     });
   }
 
-  const monitorKeys = ["monitors", ...(isRecord(raw.experimental) ? ["experimental"] : [])];
   const listing = LISTING_KEYS.filter((key) => raw[key] !== undefined);
   if (listing.length > 0) {
     const icon = typeof raw.icon === "string" ? contained(root, raw.icon) : undefined;
@@ -341,18 +340,20 @@ async function remainderComponents(
           ? [path.posix.normalize(raw.icon as string)]
           : [],
       manifestKeys: listing,
-      class: keyClass(listing),
+      class: keyClass(raw, listing),
     });
   }
   for (const key of Object.keys(raw).sort()) {
     if (handled.has(key)) continue;
-    const monitor = monitorKeys.includes(key) && hasMonitors(raw, key);
+    const monitor = MONITOR_COMPONENTS.some(
+      (spec) => spec.key === key && (spec.holds?.(raw[key]) ?? true),
+    );
     await add({
       kind: monitor ? "monitor" : "other",
       name: key,
       paths: componentPaths(raw[key]).filter((relative) => contained(root, relative) !== undefined),
       manifestKeys: [key],
-      class: keyClass([key]),
+      class: keyClass(raw, [key]),
     });
   }
   return out;
@@ -365,12 +366,6 @@ async function commandSource(root: string, definition: unknown): Promise<string[
   return resolved !== undefined && (await isFile(resolved))
     ? [path.posix.normalize(definition.source)]
     : [];
-}
-
-function hasMonitors(raw: Record<string, unknown>, key: string): boolean {
-  return (
-    key === "monitors" || (isRecord(raw.experimental) && raw.experimental.monitors !== undefined)
-  );
 }
 
 /**
@@ -386,14 +381,13 @@ export const claudePluginPreserved: PreservedForeignData = {
     ...FILE_COMPONENTS.map((spec) => spec.key),
     ...MERGED_COMPONENTS.map((spec) => spec.key),
     ...KEY_COMPONENTS.map((spec) => spec.key),
-    "monitors",
-    "experimental",
+    ...MONITOR_COMPONENTS.map((spec) => spec.key),
     "mcpServers",
   ],
   files: [
     ...FILE_COMPONENTS.map((spec) => `${spec.dir}/`),
     ...MERGED_COMPONENTS.map((spec) => spec.file),
-    "bin/",
+    `${CLAUDE_PLUGIN_BIN_DIR}/`,
   ],
   packageValues: ["version", "author"],
 };

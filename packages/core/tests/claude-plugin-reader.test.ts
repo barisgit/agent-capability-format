@@ -226,3 +226,49 @@ describe("Claude plugin reader", () => {
     ]);
   });
 });
+
+test("a __proto__ key in plugin.json rejects the manifest instead of vanishing", async () => {
+  const result = await read({
+    ".claude-plugin/plugin.json":
+      '{"name":"review-kit","mcpServers":{"__proto__":{"command":"node"}}}',
+  });
+  expect(result.capability).toBeUndefined();
+  expect(result.diagnostics.map((d) => d.code)).toEqual(["acf.source.manifest-invalid"]);
+});
+
+test("a listing key's value decides the listing component's class", async () => {
+  const listingClass = async (defaultEnabled: boolean) =>
+    (
+      await read({
+        ".claude-plugin/plugin.json": JSON.stringify({
+          name: "kit",
+          displayName: "Kit",
+          defaultEnabled,
+        }),
+      })
+    ).capability?.remainder?.find((item) => item.kind === "listing-metadata")?.class;
+  expect(await listingClass(true)).toBe("functional");
+  expect(await listingClass(false)).toBe("restricting");
+});
+
+test("a skill or server with a native value its host rejects is left out with a warning", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit" }),
+    "skills/fast/SKILL.md": "---\nname: fast\ndescription: Fast\neffort: extreme\n---\n",
+    "skills/fine/SKILL.md": "---\nname: fine\ndescription: Fine\neffort: low\n---\n",
+    ".mcp.json": JSON.stringify({
+      mcpServers: {
+        quick: { command: "node", timeout: 500 },
+        slow: { command: "node", timeout: 5000 },
+      },
+    }),
+  });
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["fine"]);
+  expect(capability?.mcp?.servers.map((server) => server.name)).toEqual(["slow"]);
+  expect(
+    diagnostics.map((d) => [d.severity, d.code, d.message.includes("not a valid claude value")]),
+  ).toEqual([
+    ["warn", "acf.source.component-invalid", true],
+    ["warn", "acf.source.component-invalid", true],
+  ]);
+});

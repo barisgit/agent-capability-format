@@ -267,3 +267,17 @@ test("a linked native/ directory or target directory is rejected without reading
     for (const dir of [outside, linkedRoot, linkedTarget]) await cleanup(dir);
   }
 });
+
+test("a __proto__ key is reported instead of silently dropped", async () => {
+  const cases: Record<string, string>[] = [
+    { "hooks/hooks.yml": "targets:\n  claude:\n    hooks:\n      __proto__: []\n" },
+    server("    env:\n      __proto__: x\n"),
+    skill("targets:\n  claude:\n    native:\n      __proto__: { a: 1 }\n"),
+  ];
+  for (const files of cases)
+    await withCapability(files, (cap) =>
+      expect(only(cap, "acf.schema.invalid-yaml").map((d) => d.message)).toEqual([
+        expect.stringContaining("__proto__"),
+      ]),
+    );
+});

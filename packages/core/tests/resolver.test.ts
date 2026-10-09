@@ -184,3 +184,43 @@ test("installed capabilities carry the selection their lock entry mirrors", asyn
     await cleanup(dir);
   }
 });
+
+test("a renamed native snapshot resolves under its locked name", async () => {
+  const dir = await tempDir("acf-resolver-rename-");
+  try {
+    const scope = scopeRoot("project", dir);
+    const snapshot = path.join(scope.capabilitiesDir, "kit-one");
+    await writeText(path.join(snapshot, "acf.yml"), "acf: 1\nname: review-kit\nversion: 1.0.0\n");
+    const payloadDigest = await computePayloadDigest(snapshot);
+    const lock: CapabilitiesLock = {
+      acf: 1,
+      entries: [
+        {
+          capabilityHash: payloadDigest,
+          capabilityNames: ["kit-one"],
+          rename: "kit-one",
+          source: "path:../pkg",
+          sourceId: "path:/pkg",
+          resolvedCapabilities: [
+            {
+              name: "kit-one",
+              format: "acf",
+              path: ".",
+              payloadDigest,
+              capabilityHash: payloadDigest,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { capabilities, diagnostics } = await resolveScopeCapabilities(scope, { lock });
+
+    expect(diagnostics).toEqual([]);
+    expect(capabilities.map((cap) => [cap.manifest.name, cap.source?.renamedFrom])).toEqual([
+      ["kit-one", "review-kit"],
+    ]);
+  } finally {
+    await cleanup(dir);
+  }
+});

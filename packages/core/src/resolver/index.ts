@@ -99,8 +99,8 @@ export async function readRepositoryCapabilities(
 
 /**
  * Reads every installed capability snapshot of `root`. Capabilities with a lock record
- * carry their `source` provenance; an Agent Plugins or Claude plugin snapshot is read by
- * the format reader its record names, under the locked (possibly renamed) name.
+ * carry their `source` provenance and resolve under the locked (possibly renamed) name; an
+ * Agent Plugins or Claude plugin snapshot is read by the format reader its record names.
  */
 export async function resolveScopeCapabilities(
   root: ScopeRoot,
@@ -146,7 +146,14 @@ export async function resolveScopeCapabilities(
       const cap = await readCapability(capRoot, root.scope, { kind: "local", directory: capRoot });
       cap.diagnostics.push(...discovery.diagnostics);
       const source = capRoot === dir ? await lockedSource(record, dir) : undefined;
-      if (source !== undefined) cap.source = source;
+      if (source !== undefined) {
+        // The snapshot keeps the package's own acf.yml; `rename` lives only in the lock.
+        if (record !== undefined && record.name !== cap.manifest.name) {
+          source.renamedFrom = cap.manifest.name;
+          cap.manifest.name = record.name;
+        }
+        cap.source = source;
+      }
       capabilities.push(select(cap, locked?.entry));
     }
   }

@@ -2,6 +2,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import type { Diagnostic, FacetFamily, Manifest } from "../types/index.js";
 import { exists, readText } from "../utils/fs.js";
+import { assertNoProtoKey } from "../utils/proto-key.js";
 import { parseYaml } from "../yaml.js";
 
 export async function pickFamilyYaml(
@@ -44,11 +45,36 @@ export async function validateSingularFolders(
   }
 }
 
+/** Splits `file` into frontmatter and body; throws on malformed YAML or a `__proto__` key. */
 export async function parseMarkdown(
   file: string,
 ): Promise<{ frontmatter: Record<string, unknown>; body: string }> {
-  const parsed = matter(await readText(file));
+  // Passing options bypasses gray-matter's content cache, which keeps an entry even when parsing
+  // throws: a second file with the same broken text would read back as empty frontmatter.
+  const parsed = matter(await readText(file), {});
+  assertNoProtoKey(parsed.data);
   return { frontmatter: parsed.data, body: parsed.content };
+}
+
+/**
+ * {@link parseMarkdown}, with a frontmatter parse error reported as `acf.schema.invalid-yaml`
+ * and `undefined` returned, so one broken file does not abort the capability read.
+ */
+export async function parseMarkdownFile(
+  file: string,
+  diagnostics: Diagnostic[],
+): Promise<{ frontmatter: Record<string, unknown>; body: string } | undefined> {
+  try {
+    return await parseMarkdown(file);
+  } catch (error) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.schema.invalid-yaml",
+      message: error instanceof Error ? error.message : "invalid frontmatter YAML",
+      path: file,
+    });
+    return undefined;
+  }
 }
 
 export async function parseYamlFile(file: string, diagnostics: Diagnostic[]): Promise<unknown> {

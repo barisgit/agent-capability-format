@@ -2,9 +2,16 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
-import { componentPaths, isRecord } from "../formats/shared.js";
+import { componentPaths } from "../formats/shared.js";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
-import { capabilityCarrier, remainderTargets, targetMap } from "../targets/index.js";
+import {
+  CLAUDE_PLUGIN_BIN_DIR,
+  capabilityCarrier,
+  claudePluginComponents,
+  type PluginComponentSpec,
+  remainderTargets,
+  targetMap,
+} from "../targets/index.js";
 import type {
   AcfCapability,
   Carrier,
@@ -66,33 +73,19 @@ const kindOrder: readonly ExecutableKind[] = [
 /**
  * Package components that execute code, per plugin carrier target, recorded the way that target's
  * plugin reader records the same component as foreign remainder (formats/claude-plugin.ts): the
- * default file merges with the paths and value of the manifest key, and `when` limits a key to
- * values that hold executable entries. Every file under `bin/` is one `bin` component.
+ * default file merges with the paths and value of the manifest key, and `holds` limits a key to
+ * values that hold executable entries. Every file under the bin directory is one `bin` component.
  */
 const pluginExecutables: Partial<
-  Record<
-    TargetId,
-    readonly {
-      kind: NativeRemainderKind;
-      name: string;
-      key: string;
-      file?: string;
-      when?: (value: unknown) => boolean;
-    }[]
-  >
+  Record<TargetId, { components: readonly PluginComponentSpec[]; binDir: string }>
 > = {
-  claude: [
-    { kind: "hook", name: "hooks", key: "hooks", file: "hooks/hooks.json" },
-    { kind: "lsp-server", name: "lsp-servers", key: "lspServers", file: ".lsp.json" },
-    { kind: "monitor", name: "monitors", key: "monitors" },
-    {
-      kind: "monitor",
-      name: "experimental",
-      key: "experimental",
-      when: (value) => isRecord(value) && value.monitors !== undefined,
-    },
-    { kind: "mcp-server", name: "mcpServers", key: "mcpServers" },
-  ],
+  claude: {
+    components: [
+      ...claudePluginComponents.filter((spec) => spec.executes),
+      { kind: "mcp-server", name: "mcpServers", key: "mcpServers", executes: true },
+    ],
+    binDir: CLAUDE_PLUGIN_BIN_DIR,
+  },
 };
 
 const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
@@ -338,9 +331,11 @@ function pluginConfigComponents(
   const files = nativeFiles(capability, target).map((file) => file.path);
   const extras = nativeExtras(capability.manifest.targets, target);
   const components: PluginConfigComponent[] = [];
-  for (const spec of pluginExecutables[target] ?? []) {
+  const plugin = pluginExecutables[target];
+  if (plugin === undefined) return [];
+  for (const spec of plugin.components) {
     const value = extras[spec.key];
-    if (value !== undefined && spec.when !== undefined && !spec.when(value)) continue;
+    if (value !== undefined && spec.holds !== undefined && !spec.holds(value)) continue;
     const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
     for (const relative of value === undefined ? [] : componentPaths(value)) {
       const normalized = path.posix.normalize(relative);
@@ -361,18 +356,16 @@ function pluginConfigComponents(
       definition: value === undefined ? null : { [spec.key]: value },
     });
   }
-  if (pluginExecutables[target] !== undefined) {
-    for (const file of files.filter((item) => item.startsWith("bin/"))) {
-      const prefix = `${dir}/${file}`;
-      components.push({
-        kind: "bin",
-        name: path.posix.basename(file),
-        detail: prefix,
-        dir,
-        prefixes: [prefix],
-        definition: null,
-      });
-    }
+  for (const file of files.filter((item) => item.startsWith(`${plugin.binDir}/`))) {
+    const prefix = `${dir}/${file}`;
+    components.push({
+      kind: "bin",
+      name: path.posix.basename(file),
+      detail: prefix,
+      dir,
+      prefixes: [prefix],
+      definition: null,
+    });
   }
   return components;
 }
