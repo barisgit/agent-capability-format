@@ -28,7 +28,7 @@ agent-capability-format/
   apps/
     caplet/               # reference CLI binary
   packages/
-    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission orchestrator, per-target extension schemas, canonical EmitOptions
+    core/                 # pure SPEC logic; types, schemas, reader, validator, resolver (local), applicability, hash, diagnostics, emission helpers (applicability, outcomes, executables), per-target extension schemas, canonical EmitOptions
     adapters/             # per-target emit functions + shared file utilities
     installer/            # git + network fetch (capabilities.yml resolution, lockfile writes)
     sdk/                  # convenience helpers for direct consumers; re-exports core + adapters + installer
@@ -719,14 +719,17 @@ export const acfPathPlaceholders = [
 
 Substitution is performed when the adapter materializes a hook `run.command`,
 hook `run.args[i]`, hook `run.env[k]`, MCP `command`, MCP `args[i]`, MCP
-`env[k]`, MCP `cwd`, MCP `url`, and MCP `headers[k]`. No other interpolation
-is performed by ACF, and validation rejects any other `${...}` reference in
-those MCP values (`acf.mcp.placeholder.pending`) because hosts such as Claude
-would expand it. Loose carriers substitute absolute paths. The Claude plugin
-carrier writes `${CLAUDE_PLUGIN_ROOT}` for `${ACF_CAPABILITY_DIR}` and
-`${ACF_PACKAGE_DIR}`, and `${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`,
-where `<dir>` is the directory of the MCP file inside the capability (hooks
-keep a capability loose for Claude).
+`env[k]`, and MCP `cwd`; a path placeholder in MCP `url` or `headers[k]`
+refuses the server on every target. No other interpolation is performed by
+ACF, and validation rejects any other reference a writer target would expand
+in those MCP values (`acf.mcp.placeholder.pending`): `${...}` (Claude,
+Cursor, pi-mcp-adapter), `{env:...}` and `{file:...}` (OpenCode), and
+`$env:NAME` (pi-mcp-adapter). Loose carriers substitute absolute paths. The
+Claude plugin carrier writes `${CLAUDE_PLUGIN_ROOT}` for
+`${ACF_CAPABILITY_DIR}` and `${ACF_PACKAGE_DIR}`, and
+`${CLAUDE_PLUGIN_ROOT}/<dir>` for `${ACF_HOOK_DIR}`, where `<dir>` is the
+directory of the MCP file inside the capability (hooks keep a capability
+loose for Claude).
 
 `acfDataDirPlaceholder` (`${ACF_DATA_DIR}`) is MCP-only: a persistent,
 writable directory per capability and install scope that survives updates.
@@ -2801,7 +2804,7 @@ acf.mcp.cwd.invalid                          # cwd base or traversal (error)
 acf.mcp.url.insecure                         # non-https URL off localhost (error)
 acf.mcp.url.credential-in-url                # userinfo in url (error)
 acf.mcp.placeholder.unsupported              # ${ACF_DATA_DIR} in url or headers (error)
-acf.mcp.placeholder.pending                  # non-ACF ${...} reference in an MCP value (error)
+acf.mcp.placeholder.pending                  # host reference (${...}, {env:...}, $env:...) in an MCP value (error)
 acf.mcp.config-conflict                      # server name claimed twice or user-defined (error)
 
 # Claude carrier and host
@@ -2844,87 +2847,31 @@ applicability filtering and per-capability adapter calls. Adapters return
 `FileDiff[]`. Caplet collects, optionally shows (`apply --dry-run`), and
 applies them via a writer that updates `.acf-managed.json`.
 
-```ts
-export type EmitRequest = {
-  scopes: ScopeRoot[]                  // from resolver §7.1, filtered by --scope
-  targets: TargetId[]                  // from caplet config or --target
-  options: EmitOptions
-}
+Caplet owns the orchestration (`buildEmitPlan` in
+`apps/caplet/src/internal/workflow.ts`); core exports the pieces, not an
+orchestrator. For each scope root it:
 
-export type EmitReport = {
-  perScopeTarget: Record<string, EmitResult>   // key = `${scope}:${target}`
-}
-
-export async function emit(
-  req: EmitRequest,
-  fs: ReadOnlyFs,
-): Promise<EmitReport> {
-  const report: EmitReport = { perScopeTarget: {} }
-
-  for (const scopeRoot of req.scopes) {
-    const capabilities = await resolveScopeCapabilities(scopeRoot)
-
-    for (const targetId of req.targets) {
-      const target = targetMap[targetId]
-      const installRoot = resolveInstallRoot(target, scopeRoot.scope)
-      if (installRoot === null) {
-        report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-          diffs: [],
-          diagnostics: [{
-            severity: "lossy",
-            code: "acf.adapter.scope-unsupported",
-            message: `${targetId} does not support scope=${scopeRoot.scope}`,
-          }],
-        }
-        continue
-      }
-
-      const allDiffs: FileDiff[] = []
-      const allDiags: Diagnostic[] = []
-
-      for (const cap of capabilities) {
-        const filtered = applyApplicability(cap, targetId)
-        if (filtered === null) continue   // capability fully excluded
-        const result = await target.adapter.emit(
-          {
-            capability: filtered,
-            scope: scopeRoot.scope,
-            installRoot,
-            options: req.options,
-          },
-          fs,
-        )
-        allDiffs.push(...result.diffs)
-        allDiags.push(...result.diagnostics)
-      }
-
-      report.perScopeTarget[`${scopeRoot.scope}:${targetId}`] = {
-        diffs: allDiffs,
-        diagnostics: allDiags,
-      }
-    }
-  }
-
-  return report
-}
-
-function resolveInstallRoot(target: TargetDefinition<TargetId>, scope: Scope): string | null {
-  // caplet.yml override beats adapter default.
-  const override = getCapletOverride(target.id, scope)
-  if (override) return override
-  return target.installPaths[scope]
-}
-```
+1. resolves the scope's capabilities (`resolveScopeCapabilities`) and adds
+   every capability's own `error` diagnostics to the plan, so a capability
+   that fails validation blocks apply (SPEC.md §14.2);
+2. for each target, reports `acf.adapter.scope-unsupported` when the target
+   has no install root for the scope, otherwise filters each capability with
+   `applyApplicability` and withholds conflicting MCP server names;
+3. calls the target adapter's `validate` and `emit` per capability; a
+   capability whose diagnostics block it on that target
+   (`capabilityBlocked`) contributes diagnostics but no diffs, and its
+   previous output is kept.
 
 `applyApplicability(cap, targetId)`:
 
 1. checks capability `only`/`except` against `targetId`; returns `null` if excluded,
-2. drops each facet not applicable to `targetId` via §10 cascade,
-3. validates each remaining facet's `targets.<target>` payload against the
-   target's extension schema,
-4. emits `lossy` diagnostics for unsupported facet families based on the
+2. drops each facet not applicable to `targetId` via the SPEC.md §6.4 cascade,
+3. emits `lossy` diagnostics for unsupported facet families based on the
    support matrix,
-5. returns the filtered capability.
+4. returns the filtered capability.
+
+The reader, not this step, validates `targets.<target>` payloads against the
+target's extension schema.
 
 ### 12.1 Diff application
 

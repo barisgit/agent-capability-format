@@ -231,3 +231,61 @@ test("a host environment reference in a canonical MCP field is an error naming i
       ]),
   );
 });
+
+test("a reference another target's host expands is an error in every canonical MCP field", async () => {
+  // OpenCode substitutes {env:...} and {file:...} anywhere in opencode.json; pi-mcp-adapter
+  // expands $env:NAME. Each would turn a literal canonical value into a host reference.
+  await withCapability(
+    mcpFile(
+      `    transport: stdio\n    command: node\n    args: ["--key={env:API_KEY}", "{file:./secret}"]\n    env:\n      TOKEN: "$env:TOKEN"\n      PLAIN: "{env}"\n`,
+    ),
+    (cap) =>
+      expect(cap.diagnostics.map((d) => [d.code, d.message.split(", which ")[0]])).toEqual([
+        ["acf.mcp.placeholder.pending", "server srv: args[0] references {env:API_KEY}"],
+        ["acf.mcp.placeholder.pending", "server srv: args[1] references {file:./secret}"],
+        ["acf.mcp.placeholder.pending", "server srv: env.TOKEN references $env:TOKEN"],
+      ]),
+  );
+  await withCapability(
+    mcpFile(
+      `    transport: http\n    url: "https://example.com/{env:REGION}"\n    headers:\n      Authorization: "Bearer {file:~/.token}"\n`,
+    ),
+    (cap) =>
+      expect(errors(cap)).toEqual(["acf.mcp.placeholder.pending", "acf.mcp.placeholder.pending"]),
+  );
+});
+
+test("a server's target extension holds only native extras", async () => {
+  for (const key of ["localDev: true", "scope: project", "servers: []"]) {
+    await withCapability(
+      mcpFile(
+        `    transport: stdio\n    command: srv\n    targets:\n      claude:\n        ${key}\n`,
+      ),
+      (cap) => expect(errors(cap)).toEqual(["acf.target.extension.unknown-field"]),
+    );
+  }
+});
+
+test("a family-level native server gets the canonical server checks", async () => {
+  const native = (target: string, server: string) => ({
+    "mcp/mcp.yml": `targets:\n  ${target}:\n    servers:\n      - name: native\n${server}`,
+  });
+  const stdio = "        transport: stdio\n        command: srv\n";
+  for (const [file, code] of [
+    [
+      native("codex", '        transport: http\n        url: "http://example.com/mcp"\n'),
+      "acf.mcp.url.insecure",
+    ],
+    [
+      native("codex", `${stdio}        env:\n          KEY: "\${HOST_KEY}"\n`),
+      "acf.mcp.placeholder.pending",
+    ],
+    [
+      native("codex", `${stdio}        targets:\n          codex:\n            bogus: 1\n`),
+      "acf.target.extension.unknown-field",
+    ],
+    [native("nope", stdio), "acf.target.unknown-id"],
+  ] as const) {
+    await withCapability(file, (cap) => expect(errors(cap)).toEqual([code]));
+  }
+});

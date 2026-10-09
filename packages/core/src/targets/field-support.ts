@@ -233,11 +233,32 @@ const DATA_DIR = placeholder("ACF_DATA_DIR");
 const CLAUDE_PLUGIN_ROOT = placeholder("CLAUDE_PLUGIN_ROOT");
 const CLAUDE_PLUGIN_DATA = placeholder("CLAUDE_PLUGIN_DATA");
 
-const absoluteCapabilityDir = (source: string) =>
-  translated(
-    `${CAPABILITY_DIR} becomes the absolute path of the installed capability directory`,
-    source,
-  );
+/**
+ * The path placeholders of SPEC.md §13.6.3, each with its Claude plugin spelling and the
+ * directory a loose carrier writes for it. `${ACF_PACKAGE_DIR}` is an alias of the capability
+ * directory; in an MCP value `${ACF_HOOK_DIR}` names the directory of the capability's MCP file.
+ */
+const PATH_PLACEHOLDERS = [
+  {
+    name: CAPABILITY_DIR,
+    plugin: CLAUDE_PLUGIN_ROOT,
+    directory: "the installed capability directory",
+  },
+  {
+    name: placeholder("ACF_PACKAGE_DIR"),
+    plugin: CLAUDE_PLUGIN_ROOT,
+    directory: "the installed capability directory",
+  },
+  {
+    name: placeholder("ACF_HOOK_DIR"),
+    plugin: `${CLAUDE_PLUGIN_ROOT}/<directory of mcp.yml>`,
+    directory: "the installed directory of mcp.yml",
+  },
+] as const;
+type PathPlaceholder = (typeof PATH_PLACEHOLDERS)[number];
+
+const absoluteDir = (placeholder: PathPlaceholder) => (source: string) =>
+  translated(`${placeholder.name} becomes the absolute path of ${placeholder.directory}`, source);
 const capletDataDir = (source: string) =>
   translated(
     `${DATA_DIR} becomes <install-root>/.acf/data/<capability>/, which caplet creates`,
@@ -313,13 +334,13 @@ function cwdPlaceholderRow(id: string, loose: (source: string) => SupportCell): 
   });
 }
 
-function remotePlaceholderRow(id: string): FieldSupport {
+function remotePlaceholderRow(id: string, placeholder: PathPlaceholder): FieldSupport {
   return sameKeyCells(
     "mcp",
     id,
     "functional",
     refused(
-      `${CAPABILITY_DIR} names a local directory, which has no meaning in a URL or header sent to a remote server`,
+      `${placeholder.name} names a local directory, which has no meaning in a URL or header sent to a remote server`,
       SRC.mcpTable,
     ),
   );
@@ -353,10 +374,12 @@ const mcpFields: FieldSupport[] = [
   sameKey("mcp", "mcp.command=bare", "functional", "command", {
     opencode: native("command[0]", SRC.opencodeMcp),
   }),
-  placeholderRow(
-    `mcp.command=${CAPABILITY_DIR}`,
-    `${CAPABILITY_DIR}/x becomes ${CLAUDE_PLUGIN_ROOT}/x`,
-    absoluteCapabilityDir,
+  ...PATH_PLACEHOLDERS.map((path) =>
+    placeholderRow(
+      `mcp.command=${path.name}`,
+      `${path.name}/x becomes ${path.plugin}/x`,
+      absoluteDir(path),
+    ),
   ),
   placeholderRow(
     `mcp.command=${DATA_DIR}`,
@@ -380,20 +403,25 @@ const mcpFields: FieldSupport[] = [
   sameKey("mcp", "mcp.headers", "functional", "headers", {
     codex: native("http_headers", SRC.codexMcp),
   }),
-  placeholderRow(
-    `mcp.args=${CAPABILITY_DIR}`,
-    `${CAPABILITY_DIR} becomes ${CLAUDE_PLUGIN_ROOT}`,
-    absoluteCapabilityDir,
-    CLAUDE_END_TO_END_EVIDENCE,
+  ...PATH_PLACEHOLDERS.map((path) =>
+    placeholderRow(
+      `mcp.args=${path.name}`,
+      `${path.name} becomes ${path.plugin}`,
+      absoluteDir(path),
+      // Only the capability directory in args ran on a real Claude host.
+      path.name === CAPABILITY_DIR ? CLAUDE_END_TO_END_EVIDENCE : undefined,
+    ),
   ),
-  placeholderRow(
-    `mcp.env=${CAPABILITY_DIR}`,
-    `${CAPABILITY_DIR} becomes ${CLAUDE_PLUGIN_ROOT}`,
-    absoluteCapabilityDir,
+  ...PATH_PLACEHOLDERS.map((path) =>
+    placeholderRow(
+      `mcp.env=${path.name}`,
+      `${path.name} becomes ${path.plugin}`,
+      absoluteDir(path),
+    ),
   ),
-  cwdPlaceholderRow(`mcp.cwd=${CAPABILITY_DIR}`, absoluteCapabilityDir),
-  remotePlaceholderRow(`mcp.url=${CAPABILITY_DIR}`),
-  remotePlaceholderRow(`mcp.headers=${CAPABILITY_DIR}`),
+  ...PATH_PLACEHOLDERS.map((path) => cwdPlaceholderRow(`mcp.cwd=${path.name}`, absoluteDir(path))),
+  ...PATH_PLACEHOLDERS.map((path) => remotePlaceholderRow(`mcp.url=${path.name}`, path)),
+  ...PATH_PLACEHOLDERS.map((path) => remotePlaceholderRow(`mcp.headers=${path.name}`, path)),
   placeholderRow(
     `mcp.args=${DATA_DIR}`,
     `${DATA_DIR} becomes ${CLAUDE_PLUGIN_DATA}`,
