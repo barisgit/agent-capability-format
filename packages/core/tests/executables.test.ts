@@ -356,3 +356,12 @@ test("a placeholder path whose first name starts with two dots counts toward the
     ).map(({ change, name }) => `${change} ${name}`),
   ).toEqual(["changed docs"]);
 });
+
+test("a native manifest-key path that normalizes to .. names no package file", async () => {
+  const cap = await capability({
+    "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      hooks: 'a/../..'\n`,
+  });
+  expect((await executableComponents(cap, "claude")).map((item) => item.detail)).toEqual([
+    "targets.claude.native.hooks",
+  ]);
+});

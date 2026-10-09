@@ -20,6 +20,7 @@ import type {
   TargetId,
 } from "../types/index.js";
 import { hookEntries } from "../types/index.js";
+import { leavesBase } from "../utils/paths.js";
 import { applyApplicability } from "./index.js";
 import {
   filesUnder,
@@ -461,7 +462,7 @@ function configPaths(
   const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
   for (const relative of value === undefined ? [] : componentPaths(value)) {
     const normalized = path.posix.normalize(relative);
-    if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
+    if (leavesBase(normalized)) continue;
     if (!paths.includes(normalized)) paths.push(normalized);
   }
   return paths;
