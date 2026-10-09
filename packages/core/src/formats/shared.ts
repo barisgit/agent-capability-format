@@ -19,15 +19,6 @@ import type {
 import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 
-/** `${NAME}`, spelled without a template literal so the placeholder stays literal. */
-export function placeholder(name: string): string {
-  return `$${"{"}${name}}`;
-}
-
-/** Canonical placeholders for the installed capability directory and its data directory. */
-export const CAPABILITY_DIR = placeholder("ACF_CAPABILITY_DIR");
-export const DATA_DIR = placeholder("ACF_DATA_DIR");
-
 // SemVer 2.0.0, the regular expression published at semver.org.
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;

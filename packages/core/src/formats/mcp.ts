@@ -6,14 +6,10 @@
 import { withNativeExtras } from "../extras/index.js";
 import { hostReferences, urlProblem } from "../reader/mcp-rules.js";
 import type { McpServer } from "../types/index.js";
+import { acfCapabilityDirPlaceholder, acfDataDirPlaceholder } from "../types/index.js";
 import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
-import {
-  CAPABILITY_DIR,
-  DATA_DIR,
-  mapPlaceholders,
-  nativeValuesProblem,
-  placeholder,
-} from "./shared.js";
+import { placeholder } from "../utils/placeholder.js";
+import { mapPlaceholders, nativeValuesProblem } from "./shared.js";
 
 /**
  * How one foreign server maps into core: a canonical `server`, a whole-server native
@@ -25,8 +21,14 @@ export type ServerProjection =
   | { kind: "remainder"; reason: string; executable: boolean }
   | { kind: "invalid"; reason: string };
 
-const AGENT_PLUGINS_PLACEHOLDERS = { PLUGIN_ROOT: CAPABILITY_DIR, PLUGIN_DATA: DATA_DIR };
-const CLAUDE_PLACEHOLDERS = { CLAUDE_PLUGIN_ROOT: CAPABILITY_DIR, CLAUDE_PLUGIN_DATA: DATA_DIR };
+const AGENT_PLUGINS_PLACEHOLDERS = {
+  PLUGIN_ROOT: acfCapabilityDirPlaceholder,
+  PLUGIN_DATA: acfDataDirPlaceholder,
+};
+const CLAUDE_PLACEHOLDERS = {
+  CLAUDE_PLUGIN_ROOT: acfCapabilityDirPlaceholder,
+  CLAUDE_PLUGIN_DATA: acfDataDirPlaceholder,
+};
 
 const invalid = (reason: string): ServerProjection => ({ kind: "invalid", reason });
 const pending = (reason: string, executable: boolean): ServerProjection => ({
@@ -59,8 +61,10 @@ function agentPluginsStdio(name: string, raw: Record<string, unknown>): ServerPr
   const server: McpServer = {
     name,
     transport: "stdio",
-    command: command.startsWith("./") ? `${CAPABILITY_DIR}/${command.slice(2)}` : command,
-    cwd: cwd === undefined ? CAPABILITY_DIR : map.one(cwd),
+    command: command.startsWith("./")
+      ? `${acfCapabilityDirPlaceholder}/${command.slice(2)}`
+      : command,
+    cwd: cwd === undefined ? acfCapabilityDirPlaceholder : map.one(cwd),
   };
   if (args !== undefined) server.args = map.list(args);
   if (env !== undefined) server.env = map.record(env);
