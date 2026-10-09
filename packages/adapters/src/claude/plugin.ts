@@ -165,20 +165,29 @@ class PackageFiles implements Iterable<[string, PackageFile]> {
   }
 }
 
-/** The source package byte for byte; its manifest differs only in the `version` value. */
+/**
+ * The source package byte for byte and mode for mode; its manifest differs only in the `version`
+ * value.
+ */
 async function copiedPackage(capability: AcfCapability, fs: ReadOnlyFs): Promise<BuiltPackage> {
   const files = new PackageFiles();
   let manifestText = "{}\n";
+  let manifestMode = 0o644;
   for (const file of await listTree(fs, capability.root, { skip: (p) => p === ".git" })) {
-    if (file.path === CLAUDE_PLUGIN_MANIFEST) manifestText = new TextDecoder().decode(file.bytes);
-    else files.set(file.path, { content: file.bytes, mode: file.mode });
+    if (file.path === CLAUDE_PLUGIN_MANIFEST) {
+      manifestText = new TextDecoder().decode(file.bytes);
+      manifestMode = file.mode;
+    } else files.set(file.path, { content: file.bytes, mode: file.mode });
   }
   const raw = parseJsonObject(manifestText);
   const own = typeof raw?.version === "string" ? raw.version : undefined;
   return {
     files,
     baseVersion: own ?? capability.manifest.version,
-    manifest: (version) => ({ content: mergeJson(manifestText, "/version", version), mode: 0o644 }),
+    manifest: (version) => ({
+      content: mergeJson(manifestText, "/version", version),
+      mode: manifestMode,
+    }),
   };
 }
 

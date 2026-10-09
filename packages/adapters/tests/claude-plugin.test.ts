@@ -174,6 +174,29 @@ test("an unchanged Claude plugin without a version gets one inserted and nothing
   });
 });
 
+test("an unchanged Claude plugin keeps its manifest's file mode", async () => {
+  const manifest = '{\n  "name": "notes",\n  "version": "1.0.0"\n}\n';
+  await withTempPackage(
+    "acf-claude-plugin-",
+    { ".claude-plugin/plugin.json": manifest },
+    async (root) => {
+      const read = await readClaudePluginPackage(root, {
+        scope: "project",
+        origin: { kind: "local", directory: root },
+        revision: null,
+      });
+      if (read.capability === undefined) throw new Error("the plugin did not read");
+      const manifestPath = path.join(root, ".claude-plugin", "plugin.json");
+      const fs = makeInMemoryFs({ [manifestPath]: { content: manifest, mode: 0o755 } });
+      const result = await claudeAdapter.emit(
+        { capability: read.capability, scope: "project", installRoot: INSTALL_ROOT, options: {} },
+        fs,
+      );
+      expect(result.diffs.map((diff) => diff.afterMode)).toEqual([0o755]);
+    },
+  );
+});
+
 test("a native ACF capability with a skill and a hook stays whole on loose Claude files", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "review", description: "Review a change" })],
