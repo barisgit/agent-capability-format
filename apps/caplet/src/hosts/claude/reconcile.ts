@@ -3,10 +3,19 @@ import type { Diagnostic, Scope } from "@caplet/core";
 import {
   type ClaudeCommand,
   type ClaudeScope,
+  formatClaudeArgs,
   formatClaudeCommand,
   LIST_MARKETPLACES_ARGS,
   LIST_PLUGINS_ARGS,
 } from "./commands.js";
+import {
+  cliUnavailableDiagnostic,
+  commandFailedDiagnostic,
+  marketplaceKeptDiagnostic,
+  otherScopeDiagnostic,
+  stateReadDiagnostic,
+  versionMismatchDiagnostic,
+} from "./diagnostics.js";
 import type { ClaudeHost, ClaudeHostFailure } from "./host.js";
 import {
   type ClaudePluginAction,
@@ -98,9 +107,11 @@ type ClaudeStateRead =
  */
 async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
   const plugins = await host.listPlugins();
-  if (!plugins.ok) return { ...plugins, command: listCommand(LIST_PLUGINS_ARGS) };
+  if (!plugins.ok) return { ...plugins, command: formatClaudeArgs(LIST_PLUGINS_ARGS) };
   const marketplaces = await host.listMarketplaces();
-  if (!marketplaces.ok) return { ...marketplaces, command: listCommand(LIST_MARKETPLACES_ARGS) };
+  if (!marketplaces.ok) {
+    return { ...marketplaces, command: formatClaudeArgs(LIST_MARKETPLACES_ARGS) };
+  }
   return {
     ok: true,
     value: {
@@ -116,6 +127,9 @@ async function readClaudeHostState(host: ClaudeHost): Promise<ClaudeStateRead> {
 type StepResult =
   | { status: "succeeded" }
   | { status: "failed" | "skipped" | "not run"; failure: ClaudeHostFailure };
+
+/** Shared by every scope of one run: the failure of the first command that could not start. */
+type RunState = { unavailable: ClaudeHostFailure | undefined };
 
 /**
  * Brings Claude's plugin registrations in line with the desired plugins of each ACF scope: reads
@@ -134,7 +148,7 @@ export async function reconcileClaudeHost(
   if (!before.ok) return await notRun(desired, before, host);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
-  const run = { unavailable: undefined as ClaudeHostFailure | undefined };
+  const run: RunState = { unavailable: undefined };
   const results: StepResult[][] = [];
   for (const plan of plans) results.push(await runSteps(host, plan, run));
 
@@ -154,18 +168,21 @@ export async function reconcileClaudeHost(
         .filter((_, j) => results[i]?.[j]?.status === "not run")
         .map((step) => formatClaudeCommand(step.command)),
     );
-    diagnostics.push(cliUnavailable(run.unavailable, commands, "finished"));
+    diagnostics.push(cliUnavailableDiagnostic(run.unavailable, commands, "finished"));
   }
   // A CLI that stopped starting is reported above; the read after it fails the same way.
   if (!after.ok && !(run.unavailable !== undefined && after.failure.kind === "unavailable")) {
-    diagnostics.push(stateReadFailure(listCommand(LIST_PLUGINS_ARGS), after.failure, true));
+    diagnostics.push(stateReadDiagnostic(formatClaudeArgs(LIST_PLUGINS_ARGS), after.failure, true));
   }
   const scopes = plans.map((plan, index) =>
     scopeReport(
       plan,
-      results[index] ?? [],
-      after.ok ? after.value : undefined,
-      "unknown",
+      {
+        results: results[index] ?? [],
+        installed: after.ok ? after.value : undefined,
+        unreadState: "unknown",
+        preview: false,
+      },
       diagnostics,
     ),
   );
@@ -187,13 +204,8 @@ export async function previewClaudeHost(
   const scopes = desired.map((scope) =>
     scopeReport(
       planClaudeScope(scope, state.value),
-      [],
-      state.value.plugins,
-      "unknown",
+      { results: [], installed: state.value.plugins, unreadState: "unknown", preview: true },
       diagnostics,
-      {
-        preview: true,
-      },
     ),
   );
   return { scopes, diagnostics };
@@ -206,7 +218,7 @@ export async function previewClaudeHost(
 async function runSteps(
   host: ClaudeHost,
   plan: ClaudeScopePlan,
-  run: { unavailable: ClaudeHostFailure | undefined },
+  run: RunState,
 ): Promise<StepResult[]> {
   const results: StepResult[] = [];
   for (const step of plan.steps) {
@@ -229,63 +241,56 @@ async function runSteps(
   return results;
 }
 
+/** What a scope report is built from besides its plan. */
+type ScopeOutcome = {
+  /** One result per plan step; empty when nothing ran. */
+  results: readonly StepResult[];
+  /**
+   * What `claude plugin list` reported after the commands ran (for a preview, before);
+   * undefined when it could not be read.
+   */
+  installed: ClaudeInstalledPlugin[] | undefined;
+  /** State of a plugin without a failed command while `installed` is undefined. */
+  unreadState: ClaudeHostState;
+  /** Nothing ran, so a listed plugin's state is its current one and a missing one is not installed. */
+  preview: boolean;
+};
+
+/** The report of one scope; appends the scope's diagnostics to `diagnostics`. */
 function scopeReport(
   plan: ClaudeScopePlan,
-  results: StepResult[],
-  installed: ClaudeInstalledPlugin[] | undefined,
-  unreadState: ClaudeHostState,
+  outcome: ScopeOutcome,
   diagnostics: Diagnostic[],
-  options: { preview?: boolean } = {},
 ): ClaudeScopeReport {
+  const { results, installed } = outcome;
   const commands = plan.steps.map((step, i) =>
     commandReport(step.command, step.plugin, results[i]),
   );
   diagnostics.push(...failureDiagnostics(plan, results));
   const installs = partitionInstalls(plan, installed ?? []);
-  const atScope = new Map(installs.managed.map((p) => [p.id, p]));
+  const managed =
+    installed === undefined ? undefined : new Map(installs.managed.map((p) => [p.id, p]));
   const others = installs.otherScope;
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
-  if (plan.keptBy.length > 0) diagnostics.push(keptDiagnostic(plan, installed !== undefined));
+  if (plan.keptBy.length > 0) {
+    diagnostics.push(marketplaceKeptDiagnostic(plan, installed !== undefined));
+  }
 
-  const plugins = plan.plugins.map((plugin): ClaudePluginReport => {
+  const plugins = plan.plugins.map((plugin) => {
     const index = plan.steps.findIndex((step) => step.plugin === plugin.id);
     const result = results[index];
     if (result !== undefined && "failure" in result) {
-      const message = result.failure.message;
-      if (result.failure.kind === "policy-blocked" || installed === undefined) {
-        return pluginReport(plugin, failureState(result.failure), undefined, message);
-      }
-      // The command failed but the host state was read after it: report what Claude has. The
-      // failure diagnostic already explains a version left behind.
-      const entry = atScope.get(plugin.id);
-      if (entry !== undefined)
-        return pluginReport(plugin, listedState(plugin, entry), entry, message);
-      const absent = plugin.action === "uninstall" ? "not installed" : "registration required";
-      return pluginReport(plugin, absent, undefined, message);
+      return failedPluginReport(plugin, result.failure, managed);
     }
-    if (installed === undefined) return pluginReport(plugin, unreadState);
-    // Installed only at another Claude scope: `others` and `acf.claude.other-scope` report that
-    // install; caplet's own registration does not exist.
-    if (plugin.action === "other-scope") return pluginReport(plugin, "not installed");
-    if (options.preview === true) {
-      const current = atScope.get(plugin.id);
-      if (current === undefined) return pluginReport(plugin, "not installed");
-      const state = listedState(plugin, current);
-      if (state === "unknown") {
-        const step = plan.steps.find((item) => item.plugin === plugin.id);
-        const pending = step === undefined ? undefined : formatClaudeCommand(step.command);
-        diagnostics.push(versionMismatchDiagnostic(plugin, current, pending));
-      }
-      return pluginReport(plugin, state, current);
-    }
-    const entry = atScope.get(plugin.id);
-    if (plugin.action === "uninstall") {
-      return pluginReport(plugin, entry === undefined ? "not installed" : "unknown", entry);
-    }
-    if (entry === undefined) return pluginReport(plugin, "unknown");
-    const state = listedState(plugin, entry);
-    if (state === "unknown") diagnostics.push(versionMismatchDiagnostic(plugin, entry));
-    return pluginReport(plugin, state, entry);
+    if (managed === undefined) return pluginReport(plugin, outcome.unreadState);
+    const pending = outcome.preview ? plan.steps[index]?.command : undefined;
+    return listedPluginReport(
+      plugin,
+      managed.get(plugin.id),
+      outcome.preview,
+      pending,
+      diagnostics,
+    );
   });
 
   const report: ClaudeScopeReport = {
@@ -304,14 +309,64 @@ function scopeReport(
     marketplaceKnown: plan.marketplaceKnown,
     stateRead: installed !== undefined,
   };
-  if (plan.target.scope === "project" && installed !== undefined) {
+  if (plan.target.scope === "project" && managed !== undefined) {
     report.local = {
       projectRoot: plan.target.projectRoot,
       settingsFile: path.join(plan.target.projectRoot, ".claude", "settings.local.json"),
-      plugins: [...atScope.keys()],
+      plugins: [...managed.keys()],
     };
   }
   return report;
+}
+
+/**
+ * A plugin whose command failed, was skipped or did not run. When the host state was read after
+ * it, report what Claude has; the failure diagnostic already explains a version left behind.
+ */
+function failedPluginReport(
+  plugin: PlannedClaudePlugin,
+  failure: ClaudeHostFailure,
+  managed: Map<string, ClaudeInstalledPlugin> | undefined,
+): ClaudePluginReport {
+  const message = failure.message;
+  if (failure.kind === "policy-blocked" || managed === undefined) {
+    return pluginReport(plugin, failureState(failure), undefined, message);
+  }
+  const entry = managed.get(plugin.id);
+  if (entry !== undefined) return pluginReport(plugin, listedState(plugin, entry), entry, message);
+  const absent = plugin.action === "uninstall" ? "not installed" : "registration required";
+  return pluginReport(plugin, absent, undefined, message);
+}
+
+/**
+ * A plugin without a failed command, judged from `entry`, its listing at caplet's managed
+ * identity. After a run, a plugin still listed after its uninstall or missing after its install is
+ * `unknown`. A listed version other than caplet's is `unknown` with a mismatch warning that, in a
+ * preview, names the `pending` command apply would run.
+ */
+function listedPluginReport(
+  plugin: PlannedClaudePlugin,
+  entry: ClaudeInstalledPlugin | undefined,
+  preview: boolean,
+  pending: ClaudeCommand | undefined,
+  diagnostics: Diagnostic[],
+): ClaudePluginReport {
+  // Installed only at another Claude scope: `otherScopeInstalls` and `acf.claude.other-scope`
+  // report that install; caplet's own registration does not exist.
+  if (plugin.action === "other-scope") return pluginReport(plugin, "not installed");
+  if (preview) {
+    if (entry === undefined) return pluginReport(plugin, "not installed");
+  } else if (plugin.action === "uninstall") {
+    return pluginReport(plugin, entry === undefined ? "not installed" : "unknown", entry);
+  } else if (entry === undefined) {
+    return pluginReport(plugin, "unknown");
+  }
+  const state = listedState(plugin, entry);
+  if (state === "unknown") {
+    const command = pending === undefined ? undefined : formatClaudeCommand(pending);
+    diagnostics.push(versionMismatchDiagnostic(plugin, entry, command));
+  }
+  return pluginReport(plugin, state, entry);
 }
 
 function pluginReport(
@@ -355,10 +410,6 @@ function listedState(plugin: PlannedClaudePlugin, entry: ClaudeInstalledPlugin):
   if (plugin.desiredVersion !== undefined && entry.version !== plugin.desiredVersion) {
     return "unknown";
   }
-  return enabledState(entry);
-}
-
-function enabledState(entry: ClaudeInstalledPlugin): ClaudeHostState {
   return entry.enabled ? "registered" : "disabled by user";
 }
 
@@ -381,41 +432,23 @@ async function notRun(
   options: { preview?: boolean } = {},
 ): Promise<ClaudeHostReport> {
   const { failure } = read;
-  const state = failureState(failure);
   const settings = await host.readSettings();
   const scopeDiagnostics: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
     scopeReport(
       planClaudeScope(scope, assumedState(scope, host.projectDir, settings)),
-      [],
-      undefined,
-      state,
+      { results: [], installed: undefined, unreadState: failureState(failure), preview: false },
       scopeDiagnostics,
     ),
   );
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
   const diagnostics: Diagnostic[] = [];
   if (failure.kind !== "unavailable") {
-    diagnostics.push(stateReadFailure(read.command, failure, false));
+    diagnostics.push(stateReadDiagnostic(read.command, failure, false));
   } else if (commands.length > 0 && options.preview !== true) {
-    diagnostics.push(cliUnavailable(failure, commands, "updated"));
+    diagnostics.push(cliUnavailableDiagnostic(failure, commands, "updated"));
   }
   return { scopes, diagnostics: [...diagnostics, ...scopeDiagnostics] };
-}
-
-/** The `claude` CLI is missing or does not start; `commands` are the ones left to run. */
-function cliUnavailable(
-  failure: ClaudeHostFailure,
-  commands: string[],
-  verb: "updated" | "finished",
-): Diagnostic {
-  return {
-    severity: "warn",
-    code: "acf.claude.cli-unavailable",
-    targetId: "claude",
-    message: `Claude plugin registration was not ${verb}: ${failure.message}. Install Claude Code and re-run \`caplet apply\`, or run:\n${indent(commands)}`,
-    data: { commands },
-  };
 }
 
 /**
@@ -454,67 +487,15 @@ function changesPlugins(command: ClaudeCommand): boolean {
   return command.op !== "marketplace add" && command.op !== "marketplace update";
 }
 
-function listCommand(args: readonly string[]): string {
-  return ["claude", ...args].join(" ");
-}
-
-/**
- * A list command that failed, could not start, or printed output caplet cannot parse; only a
- * failed command is an error.
- * `ran`: the state was read after commands ran, so registration may have changed.
- */
-function stateReadFailure(command: string, failure: ClaudeHostFailure, ran: boolean): Diagnostic {
-  const changed = ran
-    ? "the Claude commands ran, but their result is unknown"
-    : "Claude registration was not changed";
-  if (failure.kind === "unavailable") {
-    return {
-      severity: "warn",
-      code: "acf.claude.cli-unavailable",
-      targetId: "claude",
-      message: `Could not start \`${command}\` (${failure.message}); ${changed}. Install Claude Code and re-run \`caplet apply\`.`,
-      data: { commands: [] },
-    };
-  }
-  if (failure.kind === "unreadable") {
-    return {
-      severity: "warn",
-      code: "acf.claude.state-unreadable",
-      targetId: "claude",
-      message: `Could not read Claude plugin state (${failure.message}); ${changed}. Run \`${command}\` to inspect it, then re-run \`caplet apply\`.`,
-      data: { command },
-    };
-  }
-  return {
-    severity: "error",
-    code: "acf.claude.command-failed",
-    targetId: "claude",
-    message: `\`${command}\` failed: ${failure.message}; ${changed}. Fix the cause and re-run \`caplet apply\`.`,
-    data: { command, skipped: [] },
-  };
-}
-
-function failureDiagnostics(plan: ClaudeScopePlan, results: StepResult[]): Diagnostic[] {
+/** A diagnostic per failed step, naming the steps it skipped. */
+function failureDiagnostics(plan: ClaudeScopePlan, results: readonly StepResult[]): Diagnostic[] {
   return plan.steps.flatMap((step, i): Diagnostic[] => {
     const result = results[i];
     if (result?.status !== "failed") return [];
-    const command = formatClaudeCommand(step.command);
     const skipped = plan.steps
       .filter((_, j) => results[j]?.status === "skipped" && dependsOn(plan, j, i))
       .map((s) => formatClaudeCommand(s.command));
-    const skippedText = skipped.length === 0 ? "" : ` Skipped:\n${indent(skipped)}`;
-    const policy = result.failure.kind === "policy-blocked";
-    return [
-      {
-        severity: policy ? "warn" : "error",
-        code: policy ? "acf.claude.policy-blocked" : "acf.claude.command-failed",
-        targetId: "claude",
-        message: policy
-          ? `\`${command}\` was blocked by Claude host policy: ${result.failure.message}. Caplet does not fall back to loose output; ask your administrator to allow the marketplace or set \`targets.claude.carrier: loose\`.${skippedText}`
-          : `\`${command}\` failed: ${result.failure.message}. Fix the cause and re-run \`caplet apply\`.${skippedText}`,
-        data: { command, skipped },
-      },
-    ];
+    return [commandFailedDiagnostic(formatClaudeCommand(step.command), result.failure, skipped)];
   });
 }
 
@@ -522,55 +503,4 @@ function failureDiagnostics(plan: ClaudeScopePlan, results: StepResult[]): Diagn
 function dependsOn(plan: ClaudeScopePlan, j: number, i: number): boolean {
   const after = plan.steps[j]?.after ?? [];
   return after.includes(i) || after.some((k) => dependsOn(plan, k, i));
-}
-
-/**
- * Claude lists `entry` at another version than caplet generated. `pending` is the planned
- * command a dry run or status did not run; without it the commands ran and Claude ignored them.
- */
-function versionMismatchDiagnostic(
-  plugin: PlannedClaudePlugin,
-  entry: ClaudeInstalledPlugin,
-  pending?: string,
-): Diagnostic {
-  const recovery =
-    pending === undefined
-      ? "Check that the marketplace directory lists the new version and re-run `caplet apply`."
-      : `\`caplet apply\` runs \`${pending}\`.`;
-  return {
-    severity: "warn",
-    code: "acf.claude.version-mismatch",
-    targetId: "claude",
-    message: `Claude reports \`${plugin.id}\` at version ${entry.version}, expected ${plugin.desiredVersion}, so it still serves the old content. ${recovery}`,
-    data: { plugin: plugin.id, reported: entry.version, expected: plugin.desiredVersion },
-  };
-}
-
-function otherScopeDiagnostic(plan: ClaudeScopePlan, other: ClaudeInstalledPlugin): Diagnostic {
-  return {
-    severity: "info",
-    code: "acf.claude.other-scope",
-    targetId: "claude",
-    message: `\`${other.id}\` is also installed at Claude ${other.scope} scope; caplet manages only ${plan.claudeScope} scope and leaves it unchanged.`,
-    data: { plugin: other.id, scope: other.scope },
-  };
-}
-
-/**
- * The marketplace stays registered because removing it would change more than caplet's own.
- * `emptied`: the host state was read, so apply rewrites the catalog with no plugins.
- */
-function keptDiagnostic(plan: ClaudeScopePlan, emptied: boolean): Diagnostic {
-  const command = formatClaudeCommand({ op: "marketplace remove", marketplace: plan.marketplace });
-  return {
-    severity: "warn",
-    code: "acf.claude.marketplace-kept",
-    targetId: "claude",
-    message: `Claude marketplace \`${plan.marketplace}\` stays registered${emptied ? " with an empty catalog" : ""}, because \`${command}\` would also change what caplet does not own:\n${indent(plan.keptBy)}\nRun \`${command}\` yourself to remove it everywhere.`,
-    data: { marketplace: plan.marketplace, keptBy: plan.keptBy, command },
-  };
-}
-
-function indent(lines: string[]): string {
-  return lines.map((line) => `  ${line}`).join("\n");
 }

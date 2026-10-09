@@ -47,7 +47,12 @@ export const LIST_MARKETPLACES_ARGS: readonly string[] = [
 
 /** The command as a POSIX shell line a user can paste, for recovery hints. */
 export function formatClaudeCommand(command: ClaudeCommand): string {
-  return ["claude", ...claudeArgs(command)].map(shellQuote).join(" ");
+  return formatClaudeArgs(claudeArgs(command));
+}
+
+/** `claude` with `args` (the arguments after the program name) as a POSIX shell line. */
+export function formatClaudeArgs(args: readonly string[]): string {
+  return ["claude", ...args].map(shellQuote).join(" ");
 }
 
 function shellQuote(arg: string): string {
