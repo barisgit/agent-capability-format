@@ -37,7 +37,8 @@ const savedEnv = new Map(envKeys.map((key) => [key, process.env[key]]));
 
 beforeEach(async () => {
   scope = await makeScope();
-  // In-process plans and host commands read these; never reach the real home or Claude.
+  // Processes the in-process apply spawns, such as the Claude shim, inherit these. In process only
+  // CLAUDE_CONFIG_DIR takes effect; os.homedir() stays the run's throwaway HOME, fixed at start.
   process.env.HOME = scope.home;
   process.env.CLAUDE_CONFIG_DIR = path.join(scope.home, ".claude");
   for (const [key, dir] of [
