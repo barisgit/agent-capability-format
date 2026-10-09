@@ -84,10 +84,3 @@ export function remainderSupport(capability: AcfCapability, target: TargetId): D
   }
   return diagnostics;
 }
-
-/** Whether the native remainder of `capability` refuses the whole package on `target`. */
-export function remainderRefuses(capability: AcfCapability, target: TargetId): boolean {
-  return remainderSupport(capability, target).some(
-    (diagnostic) => diagnostic.code === "acf.support.refused",
-  );
-}
