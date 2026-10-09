@@ -41,51 +41,55 @@ export const applyCommand = defineCommand({
   meta: { name: "apply", description: "reconcile emitted files with your capability manifests" },
   args: specToCittyArgs("apply") as ArgsDef,
   async run(context) {
-    await runCommandSafely("apply", context.args, async () => {
-      const args = context.args;
-      const json = readJson(args);
-      const dryRun = args["dry-run"] === true;
-      const frozen = args.frozen === true;
-      const installed = await installedExecutables(args);
-      const { plan, diagnostics } = await planApply(args, dryRun, frozen);
-      if (!json) printDiagnostics(diagnostics, args);
-      const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
-      const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, args);
-      // A dry run shows the changes as apply will make them once the host has run.
-      const preview = dryRun && blocking === 0 ? await previewClaude(plan) : undefined;
-      const view = buildPlanView(previewedDiffs(plan, preview), { verbose: readVerbose(args) });
-      const run: ApplyRun = {
-        args,
-        json,
-        out: reporter(args),
-        plan,
-        diagnostics,
-        view,
-        executables: plannedExecutableChanges(installed, plan),
-        reach: await collectReach(plan),
-      };
-      if (blocking !== 0) {
-        if (json) printJson("apply", false, diagnostics, envelope(run, undefined));
-        else run.out.compatibility(plan.outcomes, plan.targets);
-        process.exitCode = blocking;
-        return;
-      }
-      // Refused capabilities are already out of the plan for their targets; the rest applies.
-      process.exitCode = exitCodeForDiagnostics(diagnostics, args);
-      if (view.fileCount === 0) {
-        await settleAndReport(run, dryRun, preview);
-        return;
-      }
-      if (!json) {
-        printCompatibility(run.out, plan, view.fileCount);
-        run.out.plan(view);
-        run.out.executables(run.executables);
-      }
-      if (dryRun) reportDryRun(run, preview);
-      else if (await deletionsConfirmed(run)) await applyAndReport(run);
-    });
+    await runCommandSafely("apply", context.args, () => applyManifests(context.args));
   },
 });
+
+/**
+ * Plans the selected scopes and targets and applies the plan, or with `--dry-run` only reports it.
+ */
+async function applyManifests(args: Record<string, unknown>): Promise<void> {
+  const json = readJson(args);
+  const dryRun = args["dry-run"] === true;
+  const frozen = args.frozen === true;
+  const installed = await installedExecutables(args);
+  const { plan, diagnostics } = await planApply(args, dryRun, frozen);
+  if (!json) printDiagnostics(diagnostics, args);
+  const frozenStale = frozen && diagnostics.some((d) => d.code.startsWith("acf.lock."));
+  const blocking = frozenStale ? 3 : blockingExitCode(diagnostics, args);
+  // A dry run shows the changes as apply will make them once the host has run.
+  const preview = dryRun && blocking === 0 ? await previewClaude(plan) : undefined;
+  const view = buildPlanView(previewedDiffs(plan, preview), { verbose: readVerbose(args) });
+  const run: ApplyRun = {
+    args,
+    json,
+    out: reporter(args),
+    plan,
+    diagnostics,
+    view,
+    executables: plannedExecutableChanges(installed, plan),
+    reach: await collectReach(plan),
+  };
+  if (blocking !== 0) {
+    if (json) printJson("apply", false, diagnostics, envelope(run, undefined));
+    else run.out.compatibility(plan.outcomes, plan.targets);
+    process.exitCode = blocking;
+    return;
+  }
+  // Refused capabilities are already out of the plan for their targets; the rest applies.
+  process.exitCode = exitCodeForDiagnostics(diagnostics, args);
+  if (view.fileCount === 0) {
+    await settleAndReport(run, dryRun, preview);
+    return;
+  }
+  if (!json) {
+    printCompatibility(run.out, plan, view.fileCount);
+    run.out.plan(view);
+    run.out.executables(run.executables);
+  }
+  if (dryRun) reportDryRun(run, preview);
+  else if (await deletionsConfirmed(run)) await applyAndReport(run);
+}
 
 /** What every outcome of one `caplet apply` reports once the plan is built. */
 type ApplyRun = {

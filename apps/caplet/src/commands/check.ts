@@ -16,79 +16,85 @@ export const checkCommand = defineCommand({
   },
   args: specToCittyArgs("check") as ArgsDef,
   async run(context) {
-    await runCommandSafely("check", context.args, async () => {
-      const cwd = readCwd(context.args);
-      process.chdir(cwd);
-      const diagnostics: Diagnostic[] = [];
-      const lockDiagnostics: Diagnostic[] = [];
-      const scopeRoots = await resolveScopeRoots(readScope(context.args), cwd);
-      let capabilityCount = 0;
-      for (const scopeRoot of scopeRoots) {
-        const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
-        diagnostics.push(...manifest.diagnostics);
-        const lock = await readLockfile(scopeRoot.lockPath);
-        lockDiagnostics.push(...detectLockDrift(manifest.value, lock));
-        const resolved = await resolveScopeCapabilities(scopeRoot);
-        diagnostics.push(...resolved.diagnostics);
-        capabilityCount += resolved.capabilities.length;
-        for (const capability of resolved.capabilities) diagnostics.push(...capability.diagnostics);
-      }
-      const json = readJson(context.args);
-      const out = reporter(context.args);
-      let reported = [...diagnostics, ...lockDiagnostics];
-      const finish = (code: 0 | 1 | 2 | 3, result: string, pending: number, message: string) => {
-        if (json) {
-          printJson("check", code === 0, reported, {
-            result,
-            pending,
-            capabilities: capabilityCount,
-            scopes: scopeRoots.map((scopeRoot) => scopeRoot.scope),
-          });
-        } else {
-          printDiagnostics(reported, context.args);
-          if (code === 0) out.done(message);
-          else out.failure(message);
-        }
-        process.exitCode = code;
-      };
-      const invalid = exitCodeForDiagnostics(diagnostics, context.args);
-      if (invalid !== 0) {
-        finish(invalid === 4 ? 2 : invalid, "invalid", 0, "Validation failed");
-        return;
-      }
-      if (context.args.frozen === true && lockDiagnostics.some((d) => d.severity !== "info")) {
-        finish(3, "lock-stale", 0, "Lockfile is stale - run caplet update and commit the result");
-        return;
-      }
-      const plan = await buildEmitPlan(context.args);
-      // The plan repeats the validation and lock findings above and adds what emitting found,
-      // such as a component apply refuses. Lock staleness only fails with --frozen, judged above.
-      reported = plan.diagnostics;
-      const planInvalid = exitCodeForDiagnostics(
-        reported.filter((d) => !d.code.startsWith("acf.lock.")),
-        context.args,
-      );
-      if (planInvalid !== 0) {
-        finish(2, "invalid", 0, "Validation failed");
-        return;
-      }
-      const pending = plan.diffs.length;
-      if (pending > 0) {
-        finish(
-          1,
-          "stale",
-          pending,
-          `Outputs are stale - ${pending} ${pending === 1 ? "file" : "files"} pending. Run caplet apply.`,
-        );
-        return;
-      }
-      finish(0, "clean", 0, "Validation passed");
-      if (!json) {
-        out.details([
-          ["Capabilities", capabilityCount],
-          ["Scopes", scopeRoots.map((scopeRoot) => scopeRoot.scope).join(", ")],
-        ]);
-      }
-    });
+    await runCommandSafely("check", context.args, () => checkScopes(context.args));
   },
 });
+
+/**
+ * Validates the manifests and capabilities, then reports whether the outputs are stale (exit 1),
+ * the lock is stale under `--frozen` (exit 3) or anything is invalid (exit 2).
+ */
+async function checkScopes(args: Record<string, unknown>): Promise<void> {
+  const cwd = readCwd(args);
+  process.chdir(cwd);
+  const diagnostics: Diagnostic[] = [];
+  const lockDiagnostics: Diagnostic[] = [];
+  const scopeRoots = await resolveScopeRoots(readScope(args), cwd);
+  let capabilityCount = 0;
+  for (const scopeRoot of scopeRoots) {
+    const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
+    diagnostics.push(...manifest.diagnostics);
+    const lock = await readLockfile(scopeRoot.lockPath);
+    lockDiagnostics.push(...detectLockDrift(manifest.value, lock));
+    const resolved = await resolveScopeCapabilities(scopeRoot);
+    diagnostics.push(...resolved.diagnostics);
+    capabilityCount += resolved.capabilities.length;
+    for (const capability of resolved.capabilities) diagnostics.push(...capability.diagnostics);
+  }
+  const json = readJson(args);
+  const out = reporter(args);
+  let reported = [...diagnostics, ...lockDiagnostics];
+  const finish = (code: 0 | 1 | 2 | 3, result: string, pending: number, message: string) => {
+    if (json) {
+      printJson("check", code === 0, reported, {
+        result,
+        pending,
+        capabilities: capabilityCount,
+        scopes: scopeRoots.map((scopeRoot) => scopeRoot.scope),
+      });
+    } else {
+      printDiagnostics(reported, args);
+      if (code === 0) out.done(message);
+      else out.failure(message);
+    }
+    process.exitCode = code;
+  };
+  const invalid = exitCodeForDiagnostics(diagnostics, args);
+  if (invalid !== 0) {
+    finish(invalid === 4 ? 2 : invalid, "invalid", 0, "Validation failed");
+    return;
+  }
+  if (args.frozen === true && lockDiagnostics.some((d) => d.severity !== "info")) {
+    finish(3, "lock-stale", 0, "Lockfile is stale - run caplet update and commit the result");
+    return;
+  }
+  const plan = await buildEmitPlan(args);
+  // The plan repeats the validation and lock findings above and adds what emitting found,
+  // such as a component apply refuses. Lock staleness only fails with --frozen, judged above.
+  reported = plan.diagnostics;
+  const planInvalid = exitCodeForDiagnostics(
+    reported.filter((d) => !d.code.startsWith("acf.lock.")),
+    args,
+  );
+  if (planInvalid !== 0) {
+    finish(2, "invalid", 0, "Validation failed");
+    return;
+  }
+  const pending = plan.diffs.length;
+  if (pending > 0) {
+    finish(
+      1,
+      "stale",
+      pending,
+      `Outputs are stale - ${pending} ${pending === 1 ? "file" : "files"} pending. Run caplet apply.`,
+    );
+    return;
+  }
+  finish(0, "clean", 0, "Validation passed");
+  if (!json) {
+    out.details([
+      ["Capabilities", capabilityCount],
+      ["Scopes", scopeRoots.map((scopeRoot) => scopeRoot.scope).join(", ")],
+    ]);
+  }
+}
