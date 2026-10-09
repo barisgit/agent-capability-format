@@ -192,6 +192,9 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Frozen restore rewrites lock entries written before per-capability records.** `packages/installer/src/resolve.ts` `fetchEntry`: under `--frozen`, restoring such an entry writes the fresh entry, so the lock gains `resolvedCapabilities` at the same sha, and an entry keyed by a legacy source id keeps that id. Provenance is unchanged, but it is a lock write under frozen. Suspected fix: under frozen keep the locked entry (`withSelection(locked)`).
+- **Hand-resolved path sources before drift detection.** `apps/caplet/src/internal/emit-plan.ts` (~275-282) resolves relative `path:` sources itself before `detectLockDrift`; pass `manifestDir` instead, as `commands/check.ts` now does.
+
 - **Unreadable lockfile is an internal error.** `readLockfile` (`packages/core/src/lock/index.ts`) rethrows everything but ENOENT, so a directory at the lock path surfaces as `acf.cli.internal` instead of a diagnostic, and `list` exits 0.
 - **Pending inline MCP server fingerprinted by the whole manifest.** `remainderExecutables` (`packages/core/src/emit/executables.ts`) fingerprints every file in a remainder component's `paths`; a foreign Claude plugin's pending server lists `.claude-plugin/plugin.json`, so a version-only bump reports an executable change. `nativeServerExecutables` already drops the manifest path; the foreign path should do the same.
 - **Root-layer config resolution can over-include ACF files.** `packageLayers` (`packages/core/src/emit/executables.ts`) falls back to the capability root without the `ACF_OWNED`/`CLAUDE_DISCOVERED` exclusions emission applies (`packages/adapters/src/claude/plugin.ts`), so a native key naming an ACF-owned path is fingerprinted though never copied. Errs toward reporting more.
