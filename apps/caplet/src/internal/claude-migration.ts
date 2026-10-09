@@ -2,14 +2,13 @@
  * Migration from loose Claude files to plugins (claude-plugin-output, Migration from loose Claude
  * output and One-time invocation rename notice). A capability that became a Claude plugin keeps
  * its loose `.claude/` files until Claude reports the plugin registered; then caplet deletes the
- * files it wrote unchanged, releases the ones the user edited, and announces once per install
- * root that the skills are now invoked as `/<capability>:<skill>`.
+ * files it wrote unchanged, releases the ones the user edited, and announces on that apply that
+ * the retired skills are now invoked as `/<capability>:<skill>`.
  */
-import path from "node:path";
 import type { Diagnostic, Scope } from "@caplet/core";
 import { colors } from "consola/utils";
 import { resolveDiffPath } from "../apply/apply-diffs.js";
-import { readSidecar, relativeSidecarPath, writeSidecar } from "../apply/sidecar.js";
+import { relativeSidecarPath } from "../apply/sidecar.js";
 import type { ClaudeGate } from "./claude-host-flow.js";
 import { displayPath } from "./plan-view.js";
 import type { EmittedDiff } from "./workflow.js";
@@ -43,16 +42,19 @@ export type ClaudeMigration = { releases: ClaudeRelease[]; renames: ClaudeRename
 
 /**
  * Splits the planned retirements of loose Claude artifacts (changes behind a `registered` gate):
- * drifted ones become releases instead of deletes, and the retired skills of install roots that
- * have not shown the rename notice yet become renames. Returns the changes left to apply.
+ * drifted ones become releases instead of deletes, and each retired skill becomes a rename.
+ * Retirement happens once per migration, so a rename is announced on exactly the apply that
+ * retires its skill, without a record of earlier notices: a capability that migrates later than
+ * the others of its install root, or again after a switch back to loose, still gets its notice.
+ * Returns the changes left to apply.
  */
-export async function planClaudeMigration(
-  diffs: readonly EmittedDiff[],
-): Promise<{ diffs: EmittedDiff[]; migration: ClaudeMigration }> {
+export function planClaudeMigration(diffs: readonly EmittedDiff[]): {
+  diffs: EmittedDiff[];
+  migration: ClaudeMigration;
+} {
   const kept: EmittedDiff[] = [];
   const releases: ClaudeRelease[] = [];
   const renames = new Map<string, ClaudeRename>();
-  const noticeShown = new Map<string, boolean>();
   for (const item of diffs) {
     const gate = item.gate;
     if (gate?.kind !== "registered") {
@@ -74,11 +76,6 @@ export async function planClaudeMigration(
     }
     const facet = item.diff.facet;
     if (facet?.family !== "skill") continue;
-    if (!noticeShown.has(item.installRoot)) {
-      const sidecar = await readSidecar(path.join(item.installRoot, ".acf-managed.json"));
-      noticeShown.set(item.installRoot, sidecar.renameNoticeShown === true);
-    }
-    if (noticeShown.get(item.installRoot) === true) continue;
     const rename: ClaudeRename = {
       scope: item.scopeRoot.scope,
       installRoot: item.installRoot,
@@ -122,17 +119,6 @@ export function driftedWarning(release: ClaudeRelease): Diagnostic {
   };
 }
 
-/** Records in each install root's sidecar that the rename notice was shown. */
-export async function recordRenameNotices(renames: readonly ClaudeRename[]): Promise<void> {
-  for (const installRoot of new Set(renames.map((rename) => rename.installRoot))) {
-    const sidecarPath = path.join(installRoot, ".acf-managed.json");
-    const sidecar = await readSidecar(sidecarPath);
-    if (sidecar.renameNoticeShown === true) continue;
-    sidecar.renameNoticeShown = true;
-    await writeSidecar(sidecarPath, sidecar);
-  }
-}
-
 /** The `--json` form of renames. */
 export function renamesJson(
   renames: readonly ClaudeRename[],
@@ -140,7 +126,7 @@ export function renamesJson(
   return renames.map(({ scope, capability, from, to }) => ({ scope, capability, from, to }));
 }
 
-/** The one-time notice: each old and new invocation name. */
+/** The rename notice: each old and new invocation name. */
 export function renameLines(renames: readonly ClaudeRename[]): string[] {
   if (renames.length === 0) return [];
   return [

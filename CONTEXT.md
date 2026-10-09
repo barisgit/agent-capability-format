@@ -44,8 +44,7 @@ generated plugin package registered through the `claude` CLI. Every portable
 field has a per-target support cell (native, translated, degraded, refused)
 with evidence. Restricting and functional fields are honored exactly or the
 capability is refused on that target; only descriptive and granting fields
-may degrade, and every degradation is reported as lossiness. A writer never
-weakens a restriction to make output fit.
+may degrade, and every degradation is reported as lossiness.
 
 ### Axiom 5 — Direct SDK consumption is secondary
 
@@ -376,7 +375,8 @@ support cell degrades or refuses.
 
 The shape a target's output takes: `loose` files at the host's native
 locations, or a `plugin` package. Claude defaults to `plugin`; every other
-target supports only `loose`.
+target supports only `loose`. A capability that also selects agents,
+commands, hooks, or instructions for Claude stays wholly `loose` there.
 
 ### Native Extra
 

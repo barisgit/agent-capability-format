@@ -206,12 +206,6 @@ function parseSidecar(value: unknown, sidecarPath: string): AcfManagedSidecar {
     }
     sidecar.marketplace = { name: record.name, scope: record.scope };
   }
-  if (value.renameNoticeShown !== undefined) {
-    if (value.renameNoticeShown !== true) {
-      throw new Error(`invalid sidecar renameNoticeShown at ${sidecarPath}`);
-    }
-    sidecar.renameNoticeShown = true;
-  }
   return sidecar;
 }
 
@@ -275,7 +269,6 @@ function canonicalSidecar(sidecar: AcfManagedSidecar): AcfManagedSidecar {
     ...(sidecar.marketplace === undefined
       ? {}
       : { marketplace: { name: sidecar.marketplace.name, scope: sidecar.marketplace.scope } }),
-    ...(sidecar.renameNoticeShown === true ? { renameNoticeShown: true as const } : {}),
     managed: sortEntries(sidecar.managed.map(canonicalEntry)),
   };
 }
