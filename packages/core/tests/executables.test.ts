@@ -9,6 +9,7 @@ import {
   type NativeRemainderComponent,
   readAgentPluginsPackage,
   readCapability,
+  readClaudePluginPackage,
 } from "../src";
 import { baseManifest, cleanup, makeCapability, tempDir } from "./helpers";
 
@@ -125,6 +126,81 @@ describe("executableComponents", () => {
       "mcp/mcp.yml": stdioServer,
     });
     expect(await executableComponents(cap, "codex")).toEqual([]);
+  });
+});
+
+describe("native ACF executable configuration", () => {
+  const hooksJson = (script: string): string =>
+    `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${pluginRoot}/${script}"}]}]}}\n`;
+  const lspServers = { ts: { command: "tsls" } };
+
+  /** A native ACF capability whose Claude plugin package carries hooks, an LSP server and a bin entry. */
+  async function nativeCapability(script = "start.sh", lsp: unknown = lspServers) {
+    return await capability(
+      {
+        "acf.yml": `${baseManifest}targets:\n  claude:\n    native:\n      lspServers: ${JSON.stringify(lsp)}\n`,
+        "native/claude/hooks/hooks.json": hooksJson(script),
+        "native/claude/bin/tool": "#!/bin/sh\n",
+        "native/codex/run.sh": "#!/bin/sh\n",
+      },
+      ["native/claude/bin/tool", "native/codex/run.sh"],
+    );
+  }
+
+  test("matches the inventory of the same Claude plugin read as a foreign package", async () => {
+    const dir = await tempDir();
+    dirs.push(dir);
+    await makeCapability(dir, {
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "test-cap",
+        version: "1.0.0",
+        lspServers,
+      }),
+      "hooks/hooks.json": hooksJson("start.sh"),
+      "bin/tool": "#!/bin/sh\n",
+    });
+    await chmod(path.join(dir, "bin/tool"), 0o755);
+    const { capability: foreign } = await readClaudePluginPackage(dir, {
+      scope: "project",
+      origin: { kind: "local", directory: dir },
+      revision: null,
+    });
+    if (foreign === undefined) throw new Error("the plugin did not read as a capability");
+    const inventory = async (cap: AcfCapability) =>
+      (await executableComponents(cap, "claude")).map(({ kind, name, fingerprint }) => ({
+        kind,
+        name,
+        fingerprint,
+      }));
+    const expected = await inventory(foreign);
+    expect(expected.map(({ kind, name }) => `${kind} ${name}`)).toEqual([
+      "hook hooks",
+      "lsp-server lsp-servers",
+      "bin tool",
+    ]);
+    expect(await inventory(await nativeCapability())).toEqual(expected);
+  });
+
+  test("reports changed native hooks and manifest keys only where the plugin carries them", async () => {
+    const before = await nativeCapability();
+    const changes = async (after: AcfCapability) =>
+      executableChanges(
+        await executableComponents(before, "claude"),
+        await executableComponents(after, "claude"),
+      ).map(({ change, kind, name }) => `${change} ${kind} ${name}`);
+    expect(await changes(await nativeCapability("other.sh"))).toEqual(["changed hook hooks"]);
+    expect(await changes(await nativeCapability("start.sh", { ts: { command: "evil" } }))).toEqual([
+      "changed lsp-server lsp-servers",
+    ]);
+    const detail = (await executableComponents(before, "claude")).map((item) => item.detail);
+    expect(detail).toEqual([
+      "native/claude/hooks/hooks.json",
+      "targets.claude.native.lspServers",
+      "native/claude/bin/tool",
+    ]);
+    // Loose writers drop native/<target>/ files and package extras, so nothing of them runs there.
+    expect(await executableComponents(before, "claude", "loose")).toEqual([]);
+    expect(await executableComponents(before, "codex")).toEqual([]);
   });
 });
 

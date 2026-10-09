@@ -1425,7 +1425,10 @@ generates from a core field is an `acf.extras.conflict` error.
 - **Executables.** `executableComponents` and `executableChanges`
   (`packages/core/src/emit/executables.ts`) list added or changed MCP stdio
   commands, hooks, LSP servers, monitors, executable files, and Claude
-  `bin/` entries for the change report and `--json` `executables`.
+  `bin/` entries for the change report and `--json` `executables`. The
+  plugin carrier's executable configuration from `native/claude/` files and
+  `targets.claude.native` keys is classified and fingerprinted like the same
+  component in a foreign Claude plugin, so both report alike.
 
 ### 4.9 Claude plugin carrier and host port
 

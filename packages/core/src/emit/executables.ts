@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { NATIVE_FILES_DIR, nativeExtras, nativeFiles } from "../extras/index.js";
+import { componentPaths, isRecord } from "../formats/shared.js";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import { capabilityCarrier, remainderTargets, targetMap } from "../targets/index.js";
 import type {
@@ -60,6 +62,38 @@ const kindOrder: readonly ExecutableKind[] = [
   "file",
 ];
 
+/**
+ * Package components that execute code, per plugin carrier target, recorded the way that target's
+ * plugin reader records the same component as foreign remainder (formats/claude-plugin.ts): the
+ * default file merges with the paths and value of the manifest key, and `when` limits a key to
+ * values that hold executable entries. Every file under `bin/` is one `bin` component.
+ */
+const pluginExecutables: Partial<
+  Record<
+    TargetId,
+    readonly {
+      kind: NativeRemainderKind;
+      name: string;
+      key: string;
+      file?: string;
+      when?: (value: unknown) => boolean;
+    }[]
+  >
+> = {
+  claude: [
+    { kind: "hook", name: "hooks", key: "hooks", file: "hooks/hooks.json" },
+    { kind: "lsp-server", name: "lsp-servers", key: "lspServers", file: ".lsp.json" },
+    { kind: "monitor", name: "monitors", key: "monitors" },
+    {
+      kind: "monitor",
+      name: "experimental",
+      key: "experimental",
+      when: (value) => isRecord(value) && value.monitors !== undefined,
+    },
+    { kind: "mcp-server", name: "mcpServers", key: "mcpServers" },
+  ],
+};
+
 const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
 
 type Snapshot = {
@@ -71,11 +105,14 @@ type Snapshot = {
 /**
  * Lists the components of `capability` that execute code on `target`, after the capability's
  * applicability (`only`/`except`) for that target: stdio MCP servers, hooks on targets that run
- * hooks, executable native remainder of a format `target` writes, and files with the executable
- * bit. A file under a skill follows that skill's applicability, a file under `native/<t>/`
- * reaches only `t`, and files of a foreign package reach only the target of its format or a plugin
- * carrier, which copies the package's support files. Files belonging to a remainder component
- * count toward that component, not as separate files. `carrier` is the configured
+ * hooks, executable native remainder of a format `target` writes, the executable configuration a
+ * plugin carrier writes from `native/<target>/` files and `targets.<target>.native` keys
+ * (classified like the same package's foreign remainder), and files with the executable bit. A
+ * file under a skill follows that skill's applicability, a file under `native/<t>/` reaches only
+ * `t` through its plugin carrier (loose writers drop the tree), and files of a foreign package
+ * reach only the target of its format or a plugin carrier, which copies the package's support
+ * files. Files belonging to a remainder or native configuration component count toward that
+ * component, not as separate files. `carrier` is the configured
  * `targets.<t>.carrier`; absent means the target default ({@link capabilityCarrier}).
  *
  * Reads the capability's snapshot to fingerprint referenced and executable files, so call it
@@ -149,6 +186,26 @@ export async function executableComponents(
     });
   }
 
+  if (pluginCarried) {
+    for (const component of pluginConfigComponents(filtered, target)) {
+      claimed.push(...component.prefixes);
+      components.push({
+        ...base,
+        kind: component.kind,
+        name: component.name,
+        detail: component.detail,
+        fingerprint: await fingerprint(
+          component.definition,
+          filesUnder(snapshot, component.prefixes).map((file) => ({
+            ...file,
+            // Package-relative, as the same file in a foreign package is fingerprinted.
+            rel: file.rel.slice(component.dir.length + 1),
+          })),
+        ),
+      });
+    }
+  }
+
   const foreign = filtered.source !== undefined && foreignFormats.has(filtered.source.format);
   const foreignTargets =
     filtered.source === undefined || !foreign
@@ -163,7 +220,7 @@ export async function executableComponents(
     const skill = [...skillDirs].find(([dir]) => underAny(file.rel, [dir]));
     if (skill !== undefined && !keptSkills.has(skill[1])) continue;
     const nativeTarget = /^native\/([^/]+)\//.exec(file.rel)?.[1];
-    if (nativeTarget !== undefined && nativeTarget !== target) continue;
+    if (nativeTarget !== undefined && (nativeTarget !== target || !pluginCarried)) continue;
     if (foreign && skill === undefined && !foreignTargets.includes(target) && !pluginCarried) {
       continue;
     }
@@ -251,6 +308,68 @@ function referencedFiles(
     }
   }
   return filesUnder(snapshot, prefixes);
+}
+
+type PluginConfigComponent = {
+  kind: NativeRemainderKind;
+  name: string;
+  detail: string;
+  /** Snapshot-relative `native/<target>` directory the package files come from. */
+  dir: string;
+  /** Snapshot-relative paths of the component's files and directories. */
+  prefixes: string[];
+  definition: unknown;
+};
+
+/**
+ * Executing components a plugin carrier for `target` writes into its package from the
+ * capability's `native/<target>/` files and package-level `targets.<target>.native` keys.
+ */
+function pluginConfigComponents(
+  capability: AcfCapability,
+  target: TargetId,
+): PluginConfigComponent[] {
+  const dir = `${NATIVE_FILES_DIR}/${target}`;
+  const files = nativeFiles(capability, target).map((file) => file.path);
+  const extras = nativeExtras(capability.manifest.targets, target);
+  const components: PluginConfigComponent[] = [];
+  for (const spec of pluginExecutables[target] ?? []) {
+    const value = extras[spec.key];
+    if (value !== undefined && spec.when !== undefined && !spec.when(value)) continue;
+    const paths = spec.file !== undefined && files.includes(spec.file) ? [spec.file] : [];
+    for (const relative of value === undefined ? [] : componentPaths(value)) {
+      const normalized = path.posix.normalize(relative);
+      if (normalized.startsWith("../") || path.posix.isAbsolute(normalized)) continue;
+      if (!paths.includes(normalized)) paths.push(normalized);
+    }
+    if (paths.length === 0 && value === undefined) continue;
+    const prefixes = paths.map((item) => `${dir}/${item}`);
+    components.push({
+      kind: spec.kind,
+      name: spec.name,
+      detail: [
+        ...prefixes,
+        ...(value === undefined ? [] : [`targets.${target}.native.${spec.key}`]),
+      ].join(", "),
+      dir,
+      prefixes,
+      definition: value === undefined ? null : { [spec.key]: value },
+    });
+  }
+  if (pluginExecutables[target] !== undefined) {
+    for (const file of files.filter((item) => item.startsWith("bin/"))) {
+      const prefix = `${dir}/${file}`;
+      components.push({
+        kind: "bin",
+        name: path.posix.basename(file),
+        detail: prefix,
+        dir,
+        prefixes: [prefix],
+        definition: null,
+      });
+    }
+  }
+  return components;
 }
 
 function filesUnder(snapshot: Snapshot, prefixes: readonly string[]): TreeFile[] {
