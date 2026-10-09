@@ -280,3 +280,12 @@ test("a placeholder named like an Object.prototype property keeps the server nat
     ["mcp-server", "files"],
   ]);
 });
+
+test("a component path whose first name starts with two dots stays inside the plugin", async () => {
+  const { capability, diagnostics } = await read({
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "kit", skills: "./..skills" }),
+    "..skills/triage/SKILL.md": "---\nname: triage\ndescription: Triage\n---\n",
+  });
+  expect(diagnostics).toEqual([]);
+  expect(capability?.skills.map((skill) => skill.name)).toEqual(["triage"]);
+});

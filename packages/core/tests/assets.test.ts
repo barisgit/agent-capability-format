@@ -30,3 +30,18 @@ test("asset absolute path, traversal, and missing file are diagnosed", async () 
     await cleanup(dir);
   }
 });
+
+test("an asset under a directory whose name starts with two dots stays inside the capability", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": baseManifest,
+    "skills/ok/SKILL.md":
+      "---\nname: ok\ndescription: Ok\nassets: ['../../..notes/a.txt']\n---\nbody\n",
+    "..notes/a.txt": "asset\n",
+  });
+  try {
+    expect(codes(cap)).toEqual([]);
+    expect(cap.assets.map((asset) => asset.path)).toContain("..notes/a.txt");
+  } finally {
+    await cleanup(dir);
+  }
+});

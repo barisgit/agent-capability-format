@@ -122,7 +122,7 @@ function resolveEntryPath(root: string, entryPath: string | undefined): string {
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, entryPath);
   const relative = path.relative(resolvedRoot, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`capability path escapes source root: ${entryPath}`);
   }
   return resolved;

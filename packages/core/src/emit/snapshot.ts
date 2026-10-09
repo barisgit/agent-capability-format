@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { listTreeFiles, type TreeFile } from "../hash/tree.js";
 import { acfCapabilityDirPlaceholder } from "../types/index.js";
+import { leavesBase } from "../utils/paths.js";
 
 const PLACEHOLDER_PATH = /\$\{(ACF_CAPABILITY_DIR|ACF_PACKAGE_DIR|ACF_HOOK_DIR)\}(\/[^\s"'=:,;]+)/g;
 
@@ -99,7 +100,7 @@ export function underAny(rel: string, prefixes: readonly string[]): boolean {
 export function relativeTo(root: string, absolute: string): string {
   const relative = path.relative(root, absolute).split(path.sep).join("/").normalize("NFC");
   // A path outside the snapshot can match no snapshot file.
-  return relative.startsWith("..") ? "\u0000outside" : relative === "." ? "" : relative;
+  return leavesBase(relative) ? "\u0000outside" : relative === "." ? "" : relative;
 }
 
 /**

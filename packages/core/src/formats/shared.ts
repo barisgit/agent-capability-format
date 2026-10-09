@@ -17,6 +17,7 @@ import type {
   TargetId,
 } from "../types/index.js";
 import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
+import { leavesBase } from "../utils/paths.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
 
 // SemVer 2.0.0, the regular expression published at semver.org.
@@ -316,7 +317,7 @@ export function componentPaths(value: unknown): string[] {
 export function contained(root: string, relative: string): string | undefined {
   const resolved = path.resolve(root, relative);
   const back = path.relative(root, resolved);
-  return back.startsWith("..") || path.isAbsolute(back) ? undefined : resolved;
+  return leavesBase(back) ? undefined : resolved;
 }
 
 /** The warning for a Claude manifest component path that escapes the plugin directory. */

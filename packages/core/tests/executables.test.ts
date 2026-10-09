@@ -341,3 +341,18 @@ describe("executableChanges", () => {
     expect(await executableComponents(cap, "claude")).toEqual([]);
   });
 });
+
+test("a placeholder path whose first name starts with two dots counts toward the server", async () => {
+  const server = async (code: string): Promise<AcfCapability> =>
+    await capability({
+      "acf.yml": baseManifest,
+      "mcp/mcp.yml": `servers:\n  - name: docs\n    transport: stdio\n    command: node\n    args: ['${capabilityDir}/..server.js']\n`,
+      "..server.js": code,
+    });
+  expect(
+    executableChanges(
+      await executableComponents(await server("one()\n"), "claude"),
+      await executableComponents(await server("two()\n"), "claude"),
+    ).map(({ change, name }) => `${change} ${name}`),
+  ).toEqual(["changed docs"]);
+});
