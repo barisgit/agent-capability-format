@@ -19,8 +19,8 @@ export type DesiredClaudeScope = {
 };
 
 /**
- * What happens to one plugin. `other-scope`: the id is installed only at another Claude scope, so
- * caplet leaves it alone instead of installing over it.
+ * What happens to one plugin. `other-scope`: the id is installed only at another Claude scope that
+ * applies here, so caplet leaves it alone instead of installing over it.
  */
 export type ClaudePluginAction = "install" | "update" | "unchanged" | "uninstall" | "other-scope";
 
@@ -30,7 +30,7 @@ export type PlannedClaudePlugin = {
   action: ClaudePluginAction;
   /** Absent for `uninstall`. */
   desiredVersion?: string | undefined;
-  /** The entry at caplet's Claude scope, when installed there. */
+  /** The entry at caplet's managed identity, when installed there. */
   observed?: ClaudeInstalledPlugin | undefined;
 };
 
@@ -49,9 +49,11 @@ export type ClaudeScopePlan = {
   claudeScope: ClaudeScope;
   marketplace: string;
   marketplaceDir: string;
+  /** Directory Claude resolves `project` and `local` scope from (`ObservedClaudeState`). */
+  projectDir: string;
   steps: PlannedClaudeStep[];
   plugins: PlannedClaudePlugin[];
-  /** Installs of this marketplace at other Claude scopes; reported, never changed. */
+  /** Installs of this marketplace at other Claude scopes that apply here; reported, never changed. */
   otherScopeInstalls: ClaudeInstalledPlugin[];
   /**
    * Whether Claude already lists the marketplace. `marketplace list` does not say at which
@@ -60,26 +62,59 @@ export type ClaudeScopePlan = {
   marketplaceKnown: boolean;
 };
 
+/** How the installs of a scope plan's marketplace relate to caplet's registration. */
+export type ClaudeInstallPartition = {
+  /** At caplet's managed identity: its Claude scope and, for `local`, its project root. */
+  managed: ClaudeInstalledPlugin[];
+  /** At another Claude scope that applies in `projectDir`: user scope, or that directory's. */
+  otherScope: ClaudeInstalledPlugin[];
+  /** Project and local installs of other directories, which caplet neither reports nor changes. */
+  elsewhere: ClaudeInstalledPlugin[];
+};
+
+/** Partitions the listed installs of `plan`'s marketplace (D25). */
+export function partitionInstalls(
+  plan: Pick<ClaudeScopePlan, "target" | "claudeScope" | "marketplace" | "projectDir">,
+  plugins: readonly ClaudeInstalledPlugin[],
+): ClaudeInstallPartition {
+  const partition: ClaudeInstallPartition = { managed: [], otherScope: [], elsewhere: [] };
+  const { target } = plan;
+  for (const plugin of plugins) {
+    if (plugin.marketplace !== plan.marketplace) continue;
+    const managed =
+      plugin.scope === plan.claudeScope &&
+      (target.scope === "user" || plugin.projectPath === target.projectRoot);
+    if (managed) partition.managed.push(plugin);
+    else if (plugin.scope === "user" || plugin.projectPath === plan.projectDir) {
+      partition.otherScope.push(plugin);
+    } else partition.elsewhere.push(plugin);
+  }
+  return partition;
+}
+
 /**
  * Plans the `claude plugin` commands for one ACF scope (D8, D25): an unconditional, idempotent
  * `marketplace add` when any plugin is desired, `install` for plugins not installed at caplet's
- * Claude scope, `update` for changed versions (also for disabled plugins, which stay disabled),
+ * managed identity, `update` for changed versions (also for disabled plugins, which stay disabled),
  * and `uninstall` for plugins no longer desired. It never plans `install` for an installed plugin,
  * because install re-enables a plugin the user disabled (D15). The marketplace is removed only
- * when no plugin is desired and no other Claude scope has plugins from it, because
- * `marketplace remove` uninstalls its plugins in every scope.
+ * when no plugin is desired and nothing else, at any Claude scope or directory, has plugins from
+ * it, because `marketplace remove` uninstalls its plugins everywhere.
  */
 export function planClaudeScope(
   desired: DesiredClaudeScope,
   observed: ObservedClaudeState,
 ): ClaudeScopePlan {
-  const marketplace = claudeMarketplaceName(desired.target);
-  const claudeScope = claudeScopeFor(desired.target.scope);
-  const fromMarketplace = observed.plugins.filter((p) => p.marketplace === marketplace);
-  const atScope = new Map(
-    fromMarketplace.filter((p) => p.scope === claudeScope).map((p) => [p.name, p]),
+  const target = desired.target;
+  const marketplace = claudeMarketplaceName(target);
+  const claudeScope = claudeScopeFor(target.scope);
+  const projectDir = observed.projectDir;
+  const installs = partitionInstalls(
+    { target, claudeScope, marketplace, projectDir },
+    observed.plugins,
   );
-  const otherScopeInstalls = fromMarketplace.filter((p) => p.scope !== claudeScope);
+  const atScope = new Map(installs.managed.map((p) => [p.name, p]));
+  const otherScopeInstalls = installs.otherScope;
   const steps: PlannedClaudeStep[] = [];
   const plugins: PlannedClaudePlugin[] = [];
   const desiredNames = new Set(desired.plugins.map((p) => p.name));
@@ -129,7 +164,8 @@ export function planClaudeScope(
     });
   }
   const known = observed.marketplaces.some((m) => m.name === marketplace);
-  if (desired.plugins.length === 0 && known && otherScopeInstalls.length === 0) {
+  const retained = otherScopeInstalls.length + installs.elsewhere.length;
+  if (desired.plugins.length === 0 && known && retained === 0) {
     steps.push({ command: { op: "marketplace remove", marketplace }, after: uninstalls });
   }
   return {
@@ -137,6 +173,7 @@ export function planClaudeScope(
     claudeScope,
     marketplace,
     marketplaceDir: desired.marketplaceDir,
+    projectDir,
     steps,
     plugins,
     otherScopeInstalls,

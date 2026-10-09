@@ -33,13 +33,18 @@ export type ClaudeHostResult<T> =
  * Calls never throw for host failures; they return them.
  */
 export interface ClaudeHost {
+  /** Directory Claude resolves `project` and `local` scope from: the runner's working directory. */
+  readonly projectDir: string;
   listPlugins(): Promise<ClaudeHostResult<ClaudeInstalledPlugin[]>>;
   listMarketplaces(): Promise<ClaudeHostResult<ClaudeKnownMarketplace[]>>;
   run(command: ClaudeCommand): Promise<ClaudeHostResult<undefined>>;
 }
 
-/** The Claude host port over a `claude` runner (`execClaudeCli`, or a transcript fake in tests). */
-export function createClaudeHost(cli: ClaudeCli): ClaudeHost {
+/**
+ * The Claude host port over a `claude` runner (`execClaudeCli`, or a transcript fake in tests).
+ * `projectDir` must be the runner's working directory.
+ */
+export function createClaudeHost(cli: ClaudeCli, location: { projectDir: string }): ClaudeHost {
   async function list<T>(args: readonly string[], parse: (stdout: string) => T) {
     const outcome = await cli(args);
     if (outcome.kind !== "exited" || outcome.exitCode !== 0) return failed(outcome);
@@ -51,6 +56,7 @@ export function createClaudeHost(cli: ClaudeCli): ClaudeHost {
     }
   }
   return {
+    projectDir: location.projectDir,
     listPlugins: () => list(LIST_PLUGINS_ARGS, parsePluginList),
     listMarketplaces: () => list(LIST_MARKETPLACES_ARGS, parseMarketplaceList),
     async run(command) {

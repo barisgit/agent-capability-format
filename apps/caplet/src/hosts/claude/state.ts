@@ -26,6 +26,12 @@ export type ClaudeKnownMarketplace = {
 export type ObservedClaudeState = {
   plugins: ClaudeInstalledPlugin[];
   marketplaces: ClaudeKnownMarketplace[];
+  /**
+   * Directory Claude resolves `project` and `local` scope from (the working directory of every
+   * command). `plugin list` also lists other directories' project and local installs, each with
+   * its `projectPath`.
+   */
+  projectDir: string;
 };
 
 /**

@@ -7,6 +7,7 @@ import {
   type ClaudeScopePlan,
   type DesiredClaudeScope,
   type PlannedClaudePlugin,
+  partitionInstalls,
   planClaudeScope,
 } from "./plan.js";
 import { claudeMarketplaceName, claudeScopeFor } from "./scope.js";
@@ -31,7 +32,7 @@ export type ClaudePluginReport = {
   id: string;
   action: ClaudePluginAction;
   state: ClaudeHostState;
-  /** Version Claude reports at caplet's scope (or the other scope for `other-scope`). */
+  /** Version Claude reports at caplet's managed identity. */
   version?: string | undefined;
   /** Version caplet generated; absent for `uninstall`. */
   desiredVersion?: string | undefined;
@@ -84,7 +85,14 @@ export async function readClaudeHostState(
   if (!plugins.ok) return plugins;
   const marketplaces = await host.listMarketplaces();
   if (!marketplaces.ok) return marketplaces;
-  return { ok: true, value: { plugins: plugins.value, marketplaces: marketplaces.value } };
+  return {
+    ok: true,
+    value: {
+      plugins: plugins.value,
+      marketplaces: marketplaces.value,
+      projectDir: host.projectDir,
+    },
+  };
 }
 
 type StepResult =
@@ -105,7 +113,7 @@ export async function reconcileClaudeHost(
   desired: readonly DesiredClaudeScope[],
 ): Promise<ClaudeHostReport> {
   const before = await readClaudeHostState(host);
-  if (!before.ok) return notRun(desired, before.failure);
+  if (!before.ok) return notRun(desired, before.failure, host.projectDir);
 
   const plans = desired.map((scope) => planClaudeScope(scope, before.value));
   const results: StepResult[][] = [];
@@ -144,7 +152,7 @@ export async function previewClaudeHost(
 ): Promise<ClaudeHostReport> {
   const state = await readClaudeHostState(host);
   if (!state.ok) {
-    const report = notRun(desired, state.failure);
+    const report = notRun(desired, state.failure, host.projectDir);
     return state.failure.kind === "unavailable" ? { ...report, diagnostics: [] } : report;
   }
   const diagnostics: Diagnostic[] = [];
@@ -191,11 +199,9 @@ function scopeReport(
     commandReport(step.command, step.plugin, results[i]),
   );
   diagnostics.push(...failureDiagnostics(plan, results));
-  const fromMarketplace = (installed ?? []).filter((p) => p.marketplace === plan.marketplace);
-  const atScope = new Map(
-    fromMarketplace.filter((p) => p.scope === plan.claudeScope).map((p) => [p.id, p]),
-  );
-  const others = fromMarketplace.filter((p) => p.scope !== plan.claudeScope);
+  const installs = partitionInstalls(plan, installed ?? []);
+  const atScope = new Map(installs.managed.map((p) => [p.id, p]));
+  const others = installs.otherScope;
   for (const other of others) diagnostics.push(otherScopeDiagnostic(plan, other));
 
   const plugins = plan.plugins.map((plugin): ClaudePluginReport => {
@@ -215,13 +221,10 @@ function scopeReport(
       return pluginReport(plugin, absent, undefined, message);
     }
     if (installed === undefined) return pluginReport(plugin, unreadState);
+    // Installed only at another Claude scope: `others` and `acf.claude.other-scope` report that
+    // install; caplet's own registration does not exist.
+    if (plugin.action === "other-scope") return pluginReport(plugin, "not installed");
     if (options.preview === true) {
-      if (plugin.action === "other-scope") {
-        const other = others.find((p) => p.name === plugin.name);
-        return other === undefined
-          ? pluginReport(plugin, "not installed")
-          : pluginReport(plugin, enabledState(other), other);
-      }
       const current = atScope.get(plugin.id);
       if (current === undefined) return pluginReport(plugin, "not installed");
       const state = listedState(plugin, current);
@@ -231,10 +234,6 @@ function scopeReport(
         diagnostics.push(versionMismatchDiagnostic(plugin, current, pending));
       }
       return pluginReport(plugin, state, current);
-    }
-    if (plugin.action === "other-scope") {
-      const other = others.find((p) => p.name === plugin.name);
-      return pluginReport(plugin, other === undefined ? "unknown" : enabledState(other), other);
     }
     const entry = atScope.get(plugin.id);
     if (plugin.action === "uninstall") {
@@ -333,11 +332,18 @@ function failureState(failure: ClaudeHostFailure): ClaudeHostState {
 function notRun(
   desired: readonly DesiredClaudeScope[],
   failure: ClaudeHostFailure,
+  projectDir: string,
 ): ClaudeHostReport {
   const state = failureState(failure);
   const ignored: Diagnostic[] = [];
   const scopes = desired.map((scope) =>
-    scopeReport(planClaudeScope(scope, assumedState(scope)), [], undefined, state, ignored),
+    scopeReport(
+      planClaudeScope(scope, assumedState(scope, projectDir)),
+      [],
+      undefined,
+      state,
+      ignored,
+    ),
   );
   if (failure.kind !== "unavailable") return { scopes, diagnostics: [stateUnreadable(failure)] };
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
@@ -360,11 +366,12 @@ function notRun(
  * The host state to plan against when it cannot be read: nothing installed except the scope's
  * leftover plugins, whose marketplace is then assumed registered.
  */
-function assumedState(scope: DesiredClaudeScope): ObservedClaudeState {
+function assumedState(scope: DesiredClaudeScope, projectDir: string): ObservedClaudeState {
   const leftover = scope.leftover ?? [];
-  if (leftover.length === 0) return { plugins: [], marketplaces: [] };
-  const marketplace = claudeMarketplaceName(scope.target);
-  const claudeScope = claudeScopeFor(scope.target.scope);
+  if (leftover.length === 0) return { plugins: [], marketplaces: [], projectDir };
+  const { target } = scope;
+  const marketplace = claudeMarketplaceName(target);
+  const claudeScope = claudeScopeFor(target.scope);
   return {
     plugins: leftover.map((name) => ({
       id: `${name}@${marketplace}`,
@@ -374,8 +381,10 @@ function assumedState(scope: DesiredClaudeScope): ObservedClaudeState {
       scope: claudeScope,
       enabled: true,
       installPath: "",
+      projectPath: target.scope === "project" ? target.projectRoot : undefined,
     })),
     marketplaces: [{ name: marketplace, source: "directory" }],
+    projectDir,
   };
 }
 

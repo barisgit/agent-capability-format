@@ -65,6 +65,7 @@ describe("createClaudeHost over the real runner", () => {
   test("maps a missing CLI to an unavailable failure", async () => {
     const host = createClaudeHost(
       execClaudeCli({ binary: path.join(dir, "no-such-claude"), cwd: dir }),
+      { projectDir: dir },
     );
     expect(await host.listPlugins()).toMatchObject({
       ok: false,

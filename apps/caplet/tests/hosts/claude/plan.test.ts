@@ -21,9 +21,11 @@ function installed(
   version: string,
   scope: ClaudeInstalledPlugin["scope"],
   enabled = true,
+  projectPath: string | undefined = scope === "user" ? undefined : projectRoot,
 ): ClaudeInstalledPlugin {
   const [name = "", marketplace = ""] = id.split("@");
-  return { id, name, marketplace, version, scope, enabled, installPath: `/cache/${id}` };
+  const installPath = `/cache/${id}`;
+  return { id, name, marketplace, version, scope, enabled, installPath, projectPath };
 }
 
 function commands(plan: ReturnType<typeof planClaudeScope>): string[] {
@@ -62,7 +64,7 @@ describe("planClaudeScope", () => {
         marketplaceDir: userDir,
         plugins: [{ name: "review", version: "1.2.0+acf.aaa" }],
       },
-      { plugins: [], marketplaces: [] },
+      { plugins: [], marketplaces: [], projectDir: projectRoot },
     );
     expect(plan.claudeScope).toBe("user");
     expect(plan.marketplace).toBe("acf-user");
@@ -80,7 +82,7 @@ describe("planClaudeScope", () => {
         marketplaceDir: projectDir,
         plugins: [{ name: "review", version: "1.0.0+acf.aaa" }],
       },
-      { plugins: [], marketplaces: [] },
+      { plugins: [], marketplaces: [], projectDir: projectRoot },
     );
     expect(plan.claudeScope).toBe("local");
     expect(commands(plan)).toEqual([
@@ -108,6 +110,7 @@ describe("planClaudeScope", () => {
           installed("other@someone-else", "1.0.0", "user"),
         ],
         marketplaces: [{ name: "acf-user", source: "directory" }],
+        projectDir: projectRoot,
       },
     );
     expect(commands(plan)).toEqual([
@@ -142,6 +145,7 @@ describe("planClaudeScope", () => {
           installed("off-same@acf-user", "1.0.0", "user", false),
         ],
         marketplaces: [],
+        projectDir: projectRoot,
       },
     );
     expect(commands(plan)).toEqual([
@@ -156,6 +160,7 @@ describe("planClaudeScope", () => {
       {
         plugins: [installed("gone@acf-user", "1.0.0", "user")],
         marketplaces: [{ name: "acf-user", source: "directory" }],
+        projectDir: projectRoot,
       },
     );
     expect(commands(plan)).toEqual([
@@ -168,7 +173,7 @@ describe("planClaudeScope", () => {
   test("no desired plugins and an unknown marketplace: nothing to run", () => {
     const plan = planClaudeScope(
       { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
-      { plugins: [], marketplaces: [] },
+      { plugins: [], marketplaces: [], projectDir: projectRoot },
     );
     expect(plan.steps).toEqual([]);
   });
@@ -186,6 +191,7 @@ describe("planClaudeScope", () => {
           installed(`manual@${projectMarketplace}`, "1.0.0", "project"),
         ],
         marketplaces: [{ name: projectMarketplace, source: "directory" }],
+        projectDir: projectRoot,
       },
     );
     // Installing at local scope would write enabledPlugins true over the user's disable.
@@ -203,9 +209,56 @@ describe("planClaudeScope", () => {
       {
         plugins: [installed("manual@acf-user", "1.0.0", "project")],
         marketplaces: [{ name: "acf-user", source: "directory" }],
+        projectDir: projectRoot,
       },
     );
     expect(plan.steps).toEqual([]);
+  });
+
+  test("a local install of another project is neither caplet's nor reported", () => {
+    const other = "/home/u/other";
+    const plan = planClaudeScope(
+      {
+        target: { scope: "project", projectRoot },
+        marketplaceDir: projectDir,
+        plugins: [{ name: "review", version: "1.0.0" }],
+      },
+      {
+        plugins: [installed(`review@${projectMarketplace}`, "1.0.0", "local", true, other)],
+        marketplaces: [{ name: projectMarketplace, source: "directory" }],
+        projectDir: projectRoot,
+      },
+    );
+    expect(commands(plan)).toEqual([
+      `claude plugin marketplace add ${projectDir} --scope local`,
+      `claude plugin install review@${projectMarketplace} --scope local`,
+    ]);
+    expect(plan.otherScopeInstalls).toEqual([]);
+  });
+
+  test("user scope ignores installs of other projects but keeps the marketplace they use", () => {
+    const other = "/home/u/other";
+    const elsewhere = installed("review@acf-user", "1.0.0", "local", true, other);
+    const install = planClaudeScope(
+      {
+        target: { scope: "user" },
+        marketplaceDir: userDir,
+        plugins: [{ name: "review", version: "1.0.0" }],
+      },
+      { plugins: [elsewhere], marketplaces: [], projectDir: projectRoot },
+    );
+    expect(install.plugins.map((p) => p.action)).toEqual(["install"]);
+    expect(install.otherScopeInstalls).toEqual([]);
+    // `marketplace remove` would uninstall the other project's plugin too.
+    const retire = planClaudeScope(
+      { target: { scope: "user" }, marketplaceDir: userDir, plugins: [] },
+      {
+        plugins: [elsewhere],
+        marketplaces: [{ name: "acf-user", source: "directory" }],
+        projectDir: projectRoot,
+      },
+    );
+    expect(retire.steps).toEqual([]);
   });
 
   test("formats commands with shell quoting for paths with spaces", () => {

@@ -2933,7 +2933,8 @@ stays on the machine that ran caplet. On its first local-scope write Claude
 itself adds `**/.claude/settings.local.json` to the user's global git
 ignore. Caplet never registers at Claude project or managed scope, and a
 plugin it finds in another scope is reported (`acf.claude.other-scope`), not
-changed.
+changed. `claude plugin list --json` also shows the project and local
+installs of other directories; caplet ignores them.
 
 #### 22.8.4 Host state
 
@@ -2942,12 +2943,13 @@ changed.
 state:
 
 - `registered` — Claude lists the plugin, enabled, at caplet's Claude
-  scope.
+  scope (for project scope, Claude local scope of that project root).
 - `disabled by user` — Claude lists it disabled; caplet updates the files
   and never re-enables it.
-- `not installed` — Claude does not list it: a removed plugin after its
-  uninstall, or a plugin that a dry run or status shows apply would
-  install.
+- `not installed` — Claude does not list it at caplet's Claude scope: a
+  removed plugin after its uninstall, a plugin that a dry run or status
+  shows apply would install, or a plugin installed only at another Claude
+  scope (`acf.claude.other-scope`), which apply leaves alone.
 - `registration required` — the `claude` CLI is missing or fails to start,
   or the install failed and Claude does not list the plugin. Without the
   CLI the package is written, the warning `acf.claude.cli-unavailable`

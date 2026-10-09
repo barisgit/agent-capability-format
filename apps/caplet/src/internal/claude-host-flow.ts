@@ -216,7 +216,7 @@ function claudeHost(roots: readonly ClaudeRootPlan[], cwd: string) {
   // the project root; user-scope commands work from anywhere.
   const project = roots.find((root) => root.target.scope === "project")?.target;
   const projectRoot = project?.scope === "project" ? project.projectRoot : cwd;
-  return createClaudeHost(execClaudeCli({ cwd: projectRoot }));
+  return createClaudeHost(execClaudeCli({ cwd: projectRoot }), { projectDir: projectRoot });
 }
 
 function desiredScopes(roots: readonly ClaudeRootPlan[]): DesiredClaudeScope[] {

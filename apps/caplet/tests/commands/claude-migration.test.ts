@@ -219,6 +219,33 @@ test("a failed registration keeps the loose files managed until a later apply re
   expect(existsSync(looseSkill(scope))).toBe(false);
 });
 
+test("a plugin installed only at another Claude scope does not retire the loose files", async () => {
+  const scope = await looseProject();
+  const version = await plannedVersion(scope, args(scope).slice(1), NAME);
+  const marketplace = await claudeMarketplace(scope, "project");
+  // Claude lists the plugin at Claude project scope, which caplet leaves alone, and not at local.
+  const host = await claudeHost(scope, "project", NAME, [
+    {
+      fixture: "list-json-project-and-local",
+      replace: {
+        "1.0.0+acf.aaa": version,
+        "local1@acf-project-spike": "local1@team-mkt",
+        "probe@acf-project-spike": `${NAME}@${marketplace}`,
+      },
+    },
+    "marketplace-list-json",
+    "marketplace-add-local",
+  ]);
+  const applied = await runCaplet(scope, [...args(scope), "--json"], host.env);
+  expect(await host.unused()).toEqual([]);
+  expect(await host.unexpected()).toEqual([]);
+  expect(applied.exitCode).toBe(0);
+  const json = JSON.parse(applied.stdout) as ApplyJson;
+  expect(json.renames).toBeUndefined();
+  expect(json.diagnostics.map((d) => d.code)).toContain("acf.claude.other-scope");
+  expect(existsSync(looseSkill(scope))).toBe(true);
+});
+
 /** Switches the project's Claude carrier to loose and applies; the plugin is installed at `version`. */
 async function switchToLoose(scope: TestScope, version: string) {
   await writeText(
