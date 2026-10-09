@@ -1275,16 +1275,15 @@ export const targets = defineTargets([
 ### 4.4 Derived outputs
 
 ```ts
-export type TargetId = (typeof targets)[number]["id"]
+export type TargetId = string                   // types/model.ts; not narrowed to the built-ins
 
-export const targetIds: readonly TargetId[] =
-  targets.map((t) => t.id) as TargetId[]
+export const targetIds: readonly TargetId[] = targets.map((target) => target.id)
 
 export const targetMap: Readonly<Record<TargetId, TargetDefinition<TargetId>>> =
-  deriveTargetMap(targets)
+  Object.fromEntries(targets.map((target) => [target.id, target]))
 
 export function isTargetId(value: unknown): value is TargetId {
-  return typeof value === "string" && (targetIds as string[]).includes(value)
+  return typeof value === "string" && targetIds.includes(value)
 }
 ```
 
@@ -2024,25 +2023,12 @@ async function readProseFamily<Family extends "agent" | "command" | "instruction
 
 ```ts
 async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookFile | undefined> {
-  const dir = path.join(root, "hooks")
-  const candidates = ["hooks.yml", "hooks.yaml"].map((n) => path.join(dir, n))
-  const present = (await Promise.all(candidates.map(exists)))
-    .map((ok, i) => (ok ? candidates[i] : null))
-    .filter((p): p is string => !!p)
-
-  if (present.length === 0) return undefined
-  if (present.length > 1) {
-    diagnostics.push({
-      severity: "error",
-      code: "acf.hooks.duplicate-file",
-      message: `hooks/hooks.yml and hooks/hooks.yaml both exist`,
-    })
-    return undefined
-  }
-
-  const file = present[0]
-  const raw = await readYaml(file)
-  const parsed = hookFileSchema.safeParse(raw)
+  // hooks.yml or hooks.yaml; both present is acf.hooks.duplicate-file
+  const file = await pickFamilyYaml(
+    path.join(root, "hooks"), "hooks", "acf.hooks.duplicate-file", diagnostics,
+  )
+  if (file === undefined) return undefined
+  const parsed = hookFileSchema.safeParse(await parseYamlFile(file, diagnostics))
   if (!parsed.success) {
     pushZodIssues(diagnostics, parsed.error, file, {
       baseCode: "acf.hooks.invalid-field",
@@ -2052,11 +2038,11 @@ async function readHooks(root: string, diagnostics: Diagnostic[]): Promise<HookF
     return undefined
   }
 
-  return {
-    path: file,
-    buckets: pickBuckets(parsed.data),
-    native: nativeHooks(parsed.data.targets, file, diagnostics), // acf.target.unknown-id
-  }
+  const hookFile: HookFile = { path: file, buckets: pickBuckets(parsed.data) }
+  // family-level targets.<target>.hooks; an unknown target id is acf.target.unknown-id
+  const native = nativeHooks(parsed.data.targets, file, diagnostics)
+  if (native !== undefined) hookFile.native = native
+  return hookFile
 }
 ```
 
@@ -2311,15 +2297,13 @@ or forces a refetch:
 
 ```ts
 export async function computeContentHash(root: string): Promise<string> {
-  const files = await listRegularFilesRecursive(root)        // no symlinks, no specials
-  const rels = files
-    .map((f) => path.relative(root, f).split(path.sep).join("/").normalize("NFC"))
-    .sort()                                                   // byte-lexicographic
   const hash = crypto.createHash("sha256")
-  for (const rel of rels) {
-    hash.update(Buffer.from(rel, "utf8"))
+  // listTreeFiles (hash/tree.ts): no symlinks or special files; NFC relative paths
+  // sorted by their UTF-8 bytes
+  for (const entry of await listTreeFiles(root)) {
+    hash.update(Buffer.from(entry.rel, "utf8"))
     hash.update(Buffer.from([0]))
-    hash.update(await fs.readFile(path.join(root, ...rel.split("/"))))
+    hash.update(await fs.readFile(entry.absPath))
     hash.update(Buffer.from([0]))
   }
   return `sha256-${hash.digest("hex")}`

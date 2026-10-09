@@ -1,6 +1,6 @@
 ## Why
 
-Loose Claude hook output is broken today. `hookSettingsEntry` in `packages/adapters/src/common/emitter.ts` (around lines 549-574) writes caplet's canonical hook object (`acfMarker`, `name`, `type`, `event`, `effect`, `timeoutMs`, `run`) into `.claude/settings.json`, but Claude reads `{"hooks": {"<Event>": [{"matcher": ..., "hooks": [{"type": "command", "command": ...}]}]}}` with handler `timeout` in seconds (`research/plugin-interop/tools/claude-code.md`, Hooks). The target registry also maps `permission_request` to `PreToolUse` for Claude (`packages/core/src/targets/registry.ts:83`), although Claude has a separate `PermissionRequest` event with different input. Mixed native ACF capabilities with hooks stay on loose Claude output in `plugin-interop-foundation`, so this defect is still reachable; it is recorded there as a known defect and fixed here.
+Loose Claude hook output is broken today. `hookSettingsEntry` in `packages/adapters/src/common/hooks.ts` (around lines 234-268) writes caplet's canonical hook object (`acfMarker`, `name`, `type`, `event`, `effect`, `timeoutMs`, `run`) into `.claude/settings.json`, but Claude reads `{"hooks": {"<Event>": [{"matcher": ..., "hooks": [{"type": "command", "command": ...}]}]}}` with handler `timeout` in seconds (`research/plugin-interop/tools/claude-code.md`, Hooks). The target registry also maps `permission_request` to `PreToolUse` for Claude (`packages/core/src/targets/registry.ts:75`), although Claude has a separate `PermissionRequest` event with different input. Mixed native ACF capabilities with hooks stay on loose Claude output in `plugin-interop-foundation`, so this defect is still reachable; it is recorded there as a known defect and fixed here.
 
 ## What Changes
 
@@ -21,4 +21,4 @@ None in `openspec/specs/`. Builds on the support-table and refusal rules of `plu
 
 ## Impact
 
-- `packages/adapters/src/common/emitter.ts` hook emission, `packages/core/src/targets/registry.ts` Claude event mapping, SPEC.md §22.6. Existing broken `.claude/settings.json` entries owned by caplet are replaced on the next apply.
+- `packages/adapters/src/common/hooks.ts` hook emission, `packages/core/src/targets/registry.ts` Claude event mapping, SPEC.md §22.6. Existing broken `.claude/settings.json` entries owned by caplet are replaced on the next apply.
