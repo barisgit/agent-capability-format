@@ -64,7 +64,7 @@ export function validateMcpServerValues(
       "acf.mcp.url.credential-in-url",
       `url must not contain userinfo credentials: ${credentials.redacted}. Send credentials in headers instead`,
     );
-  } else if (!isAllowedUrl(server.url)) {
+  } else if (urlProblem(server.url, true) !== undefined) {
     push(
       "acf.mcp.url.insecure",
       "url must use https://, or http:// only for localhost, 127.0.0.1 or [::1]",
@@ -125,13 +125,21 @@ function cwdProblem(cwd: string): string | undefined {
   return segments.includes("..") ? `must not leave ${base} through ..` : undefined;
 }
 
-function isAllowedUrl(url: string): boolean {
-  let parsed: URL;
+/**
+ * Why `value` is outside the canonical MCP URL domain (HTTPS, or HTTP to a loopback host;
+ * no user information), or undefined when it is inside. Fragments are rejected when
+ * `allowFragment` is false, as Agent Plugins 1.0 requires.
+ */
+export function urlProblem(value: string, allowFragment: boolean): string | undefined {
+  let url: URL;
   try {
-    parsed = new URL(url);
+    url = new URL(value);
   } catch {
-    return false;
+    return "is not a URL";
   }
-  if (parsed.protocol === "https:") return true;
-  return parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname);
+  if (url.username !== "" || url.password !== "") return "carries user information";
+  if (!allowFragment && url.hash !== "") return "has a fragment";
+  if (url.protocol === "https:") return undefined;
+  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) return undefined;
+  return "must use https, or http to a loopback host";
 }

@@ -223,27 +223,6 @@ export function packageAuthor(author: PackageAuthor): PackageAuthor {
   return entry;
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-/**
- * Why `value` is outside the canonical MCP URL domain (HTTPS, or HTTP to a loopback host;
- * no user information), or undefined when it is inside. Fragments are rejected when
- * `allowFragment` is false, as Agent Plugins 1.0 requires.
- */
-export function urlProblem(value: string, allowFragment: boolean): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return "is not a URL";
-  }
-  if (url.username !== "" || url.password !== "") return "carries user information";
-  if (!allowFragment && url.hash !== "") return "has a fragment";
-  if (url.protocol === "https:") return undefined;
-  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) return undefined;
-  return "must use https, or http to a loopback host";
-}
-
 /** Inner text of every `${...}` placeholder in `value` (`NAME`, or `NAME:-default`). */
 export function placeholderNames(value: string): string[] {
   return [...value.matchAll(/\$\{([^}]*)\}/g)].map((match) => match[1] ?? "");

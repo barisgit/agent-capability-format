@@ -4,7 +4,7 @@
  * when it relies on a meaning core cannot express, or is invalid under its format's rules.
  */
 import { withNativeExtras } from "../extras/index.js";
-import { hostReferences } from "../reader/mcp-rules.js";
+import { hostReferences, urlProblem } from "../reader/mcp-rules.js";
 import type { McpServer } from "../types/index.js";
 import {
   CAPABILITY_DIR,
@@ -13,7 +13,6 @@ import {
   isSlug,
   mapPlaceholders,
   placeholder,
-  urlProblem,
 } from "./shared.js";
 
 /**
