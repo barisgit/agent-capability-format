@@ -2355,8 +2355,10 @@ Drift handling:
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
   and a changed ref, capabilities selector, or selection as `acf.lock.drift`.
   Only `--mode never` (`--offline`) keeps selector and selection drift as an
-  error; other modes resolve it. `caplet check --frozen` exits 3 on any
-  non-info lock diagnostic.
+  error; other modes resolve it. `caplet apply --frozen` resolves with
+  `frozen`: any drift is an error found before anything is fetched or
+  written, and only missing snapshots are restored from their lock entries.
+  `caplet check --frozen` exits 3 on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and
@@ -3224,7 +3226,7 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   everything else and exits 2. `--json` carries the same records as `outcomes`.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
-  exits 3 when the lockfile is stale. A plan that deletes files asks for
+  exits 3 without fetching or writing when the lockfile is stale. A plan that deletes files asks for
   confirmation on a TTY unless `--yes` or `--json` is set.
 
 ### 14.3 Inspection commands

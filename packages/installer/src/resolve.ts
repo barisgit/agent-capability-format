@@ -43,6 +43,12 @@ export type ResolveOptions = {
    */
   updateLock?: boolean | undefined;
   prefetchedSources?: ReadonlyMap<string, PrefetchedSource> | undefined;
+  /**
+   * A frozen resolution (SPEC.md §19.7): any disagreement between capabilities.yml and the
+   * lock is an error and nothing is fetched or written; a missing snapshot is still restored
+   * from its lock entry.
+   */
+  frozen?: boolean | undefined;
 };
 
 export type PrefetchedSource = {
@@ -139,7 +145,13 @@ async function resolveCapabilitiesStaged(
   const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
   const usableLock = existingLock !== null && lockVersion(existingLock) === 1 ? existingLock : null;
-  diagnostics.push(...driftDiagnosticsForMode(yml, existingLock, opts.mode));
+  const drift = detectLockDrift(yml, existingLock);
+  const frozenDrift = opts.frozen === true && drift.length > 0;
+  diagnostics.push(
+    ...(opts.mode === "never" || opts.frozen === true
+      ? drift
+      : drift.filter((item) => !reconciledByFetch(item))),
+  );
 
   await mkdir(opts.scopeRoot.capabilitiesDir, { recursive: true });
   const records: CapabilityRecord[] = [];
@@ -147,6 +159,7 @@ async function resolveCapabilitiesStaged(
   const nextEntries: LockEntry[] = [];
   let fetched = false;
   let failed =
+    frozenDrift ||
     manifest.diagnostics.some((diagnostic) => diagnostic.severity === "error") ||
     diagnostics.some((diagnostic) => diagnostic.code === "acf.lock.unsupported-version");
   const lockedBySource = new Map(
@@ -171,12 +184,13 @@ async function resolveCapabilitiesStaged(
     const selected =
       selectedSourceIds === null || selectedSourceIds.has(id) || selectedSourceIds.has(legacyId);
     const fetchNeeded =
-      (selected &&
+      !frozenDrift &&
+      ((selected &&
         ((legacyLock && opts.mode !== "never") || shouldFetch(opts.mode, entry, locked))) ||
-      (opts.mode === "auto" &&
-        selected &&
-        locked !== undefined &&
-        !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir)));
+        (opts.mode === "auto" &&
+          selected &&
+          locked !== undefined &&
+          !(await lockInstalled(locked, opts.scopeRoot.capabilitiesDir))));
     if (!fetchNeeded) {
       if (locked !== undefined) {
         nextEntries.push(withSelection(locked, entry));
@@ -415,20 +429,12 @@ function normalizeEntry(entry: CapabilityEntry, manifestDir: string): Capability
   };
 }
 
-function driftDiagnosticsForMode(
-  yml: CapabilitiesYml,
-  lock: CapabilitiesLock | null,
-  mode: ResolveOptions["mode"],
-): Diagnostic[] {
-  const diagnostics = detectLockDrift(yml, lock);
-  if (mode === "never") return diagnostics;
-  return diagnostics.filter(
-    (diagnostic) => diagnostic.code !== "acf.lock.missing-entry" && !isSelectionDrift(diagnostic),
-  );
-}
-
-/** Drift this resolution reconciles: capability selectors refetch, a changed selection rewrites the lock. */
-function isSelectionDrift(diagnostic: Diagnostic): boolean {
+/**
+ * Drift a fetching resolution reconciles, so it is no error there: a missing entry and changed
+ * capability selectors fetch, and a changed selection rewrites the lock.
+ */
+function reconciledByFetch(diagnostic: Diagnostic): boolean {
+  if (diagnostic.code === "acf.lock.missing-entry") return true;
   return (
     diagnostic.code === "acf.lock.drift" &&
     diagnostic.data !== undefined &&

@@ -163,6 +163,7 @@ export async function fetchScopes(
   opts?: {
     updateLock?: boolean;
     prefetchedSources?: ReadonlyMap<string, PrefetchedSource>;
+    frozen?: boolean;
   },
 ): Promise<{ scopes: ScopeRoot[]; results: ResolveResult[]; diagnostics: Diagnostic[] }> {
   const cwd = path.resolve(readCwd(args));
@@ -184,6 +185,7 @@ export async function fetchScopes(
       sourceIds,
       updateLock: opts?.updateLock,
       prefetchedSources: opts?.prefetchedSources,
+      frozen: opts?.frozen,
     });
     results.push(result);
     diagnostics.push(...result.diagnostics);

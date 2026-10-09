@@ -41,12 +41,10 @@ export const applyCommand = defineCommand({
       const fetched =
         dryRun && frozen
           ? { scopes: [], results: [], diagnostics: [] }
-          : await fetchScopes(
-              context.args,
-              readFetchMode(context.args),
-              undefined,
-              simulate ? { updateLock: false } : undefined,
-            );
+          : await fetchScopes(context.args, readFetchMode(context.args), undefined, {
+              frozen,
+              ...(simulate ? { updateLock: false } : {}),
+            });
       // A simulated apply plans against the previewed lock and snapshots, then discards them.
       const previews = fetched.scopes.flatMap((scopeRoot, index) => {
         const result = fetched.results[index];
