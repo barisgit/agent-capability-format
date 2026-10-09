@@ -1931,7 +1931,9 @@ Each family has explicit discovery rules.
 
 ```ts
 // `imported`: a bare skill import keeps every frontmatter key (core, a target's
-// extra, or an agent-plugins extra) instead of reporting unknown keys.
+// extra, or an agent-plugins extra) instead of reporting unknown keys; a skill
+// whose target extra holds a value outside that host's domain is left out with
+// acf.source.component-invalid (warn), as in every foreign format (D27.4).
 async function readSkills(
   root: string,
   diagnostics: Diagnostic[],
@@ -2765,7 +2767,7 @@ acf.source.format-version-unsupported        # Agent Plugins schema other than 1
 acf.source.format-not-found                  # format: names a format the source lacks (error)
 acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
 acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
-acf.source.component-invalid                 # invalid foreign skill or server (incl. a native value its host rejects), excluded (warn)
+acf.source.component-invalid                 # invalid foreign or bare imported skill, or foreign server (incl. a native value its host rejects), excluded (warn)
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)

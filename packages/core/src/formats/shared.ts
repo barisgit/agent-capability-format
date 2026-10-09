@@ -50,6 +50,28 @@ export function nativeValuesProblem(
   return undefined;
 }
 
+/**
+ * `acf.source.component-invalid` (warn) for a skill or MCP server of a foreign or imported source
+ * that is left out because of `reason`, such as a native value outside its host's domain; the
+ * rest of the package still loads. Every source format reports such a component with this one
+ * code and wording (design D27.4); native ACF reports the same value as an error instead.
+ */
+export function componentNotLoaded(
+  family: "skill" | "mcp",
+  name: string,
+  reason: string,
+  file: string,
+): Diagnostic {
+  const label = family === "skill" ? "skill" : "MCP server";
+  return {
+    severity: "warn",
+    code: "acf.source.component-invalid",
+    message: `${label} ${name} is not loaded: ${reason}`,
+    path: file,
+    family,
+  };
+}
+
 /** Result of reading a JSON document: its value, or the error diagnostic it produced. */
 export type JsonRead = { ok: true; value: unknown } | { ok: false; diagnostic: Diagnostic };
 

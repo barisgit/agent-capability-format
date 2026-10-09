@@ -12,7 +12,7 @@ import { nativeKeyInfo } from "../targets/native-keys.js";
 import { targetIds } from "../targets/registry.js";
 import type { AssetRef, Diagnostic, SkillFacet } from "../types/index.js";
 import { isRecord, isSlug, isStringArray, isStringMap } from "../utils/guards.js";
-import { filesUnder, isFile, nativeValuesProblem } from "./shared.js";
+import { componentNotLoaded, filesUnder, isFile, nativeValuesProblem } from "./shared.js";
 
 /** Which loading rules apply: Agent Skills as Agent Plugins 1.0 requires, or Claude's. */
 export type SkillRules = "agent-plugins" | "claude";
@@ -30,13 +30,7 @@ export async function readForeignSkill(
 ): Promise<SkillFacet | undefined> {
   const primaryFile = path.join(dir, "SKILL.md");
   const invalid = (reason: string): undefined => {
-    diagnostics.push({
-      severity: "warn",
-      code: "acf.source.component-invalid",
-      message: `skill ${path.basename(dir)} is not loaded: ${reason}`,
-      path: primaryFile,
-      family: "skill",
-    });
+    diagnostics.push(componentNotLoaded("skill", path.basename(dir), reason, primaryFile));
     return undefined;
   };
 

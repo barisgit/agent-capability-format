@@ -2567,6 +2567,9 @@ its validated skill frontmatter. Generated capability state MUST be staged
 outside the source checkout; a resolver MUST NOT write an `acf.yml` or other
 metadata into a local `path:` source. The generated version identifies the
 capability as unmanifested and SHOULD include the resolved source revision.
+A skill whose frontmatter holds a target's native key with a value outside
+that host's domain is left out with a warning, as in every foreign source
+format; the same value in an authored skill is an error.
 
 Imported skill contents include every recursively contained regular file
 except hidden paths, dependency trees such as `node_modules`, generated

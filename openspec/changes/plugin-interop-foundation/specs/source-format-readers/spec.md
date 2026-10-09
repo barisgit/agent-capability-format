@@ -85,6 +85,13 @@ The Claude plugin reader SHALL project manifest metadata, skills from `skills/` 
 - **WHEN** the manifest `commands` is a map defining `danger` and `safe`, and the entry excludes command `danger`
 - **THEN** each map entry is a command remainder component, and the regenerated manifest's `commands` map holds only `safe`
 
+### Requirement: Invalid native values leave out one component
+A skill or MCP server read from a bare skill import, an Agent Plugins package or a Claude plugin whose target native key holds a value outside that host's domain SHALL be left out with the warning `acf.source.component-invalid` and the message `<skill|MCP server> <name> is not loaded: <key> is not a valid <target> value: <problem>`, the same for every source format, while the rest of the source loads (design D27.4). The same value in native ACF SHALL stay an error (`acf.extras.native-value-invalid`).
+
+#### Scenario: Bare skill with an invalid effort
+- **WHEN** a bare skills repository holds skills `fast` with `effort: extreme` and `fine`
+- **THEN** `fine` installs, `fast` is left out with `acf.source.component-invalid`, and a Claude plugin holding `fast` reports the same code and message
+
 ### Requirement: Lossless same-format output
 When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
 
