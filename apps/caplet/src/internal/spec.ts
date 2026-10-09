@@ -1,4 +1,6 @@
 import { targetIds } from "@caplet/core";
+import { type ArgsDef, parseArgs } from "citty";
+import { readJson } from "./json.js";
 
 export type FlagSpec = {
   name: string;
@@ -316,6 +318,12 @@ export function specToCittyArgs(name: string): Record<string, unknown> {
       description: positional.description,
     };
   }
+  return { ...args, ...cittyFlags(spec) };
+}
+
+/** citty definitions of every flag `spec` accepts, global and target flags included. */
+function cittyFlags(spec: CommandSpec): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
   const flags = [
     ...(spec.globals ? GLOBAL_FLAGS : []),
     ...(spec.target ? [TARGET_FLAG] : []),
@@ -330,7 +338,19 @@ export function specToCittyArgs(name: string): Record<string, unknown> {
   }
   return args;
 }
-undefined;
+
+/**
+ * Whether `argv`, the tokens after the command name, selects JSON output the way `command`
+ * reads `--json` (`readJson` over citty's parse, so `--json=true`, `--no-json` and the last
+ * of repeated forms count as they do there). Positionals are left out of the parse, so a
+ * command line missing a required one still answers; an unknown or absent command reads
+ * `--json` alone.
+ */
+export function wantsJson(command: string | undefined, argv: string[]): boolean {
+  const spec = command === undefined ? undefined : commandSpec(command);
+  const flags = spec === undefined ? { json: { type: "boolean" } } : cittyFlags(spec);
+  return readJson(parseArgs(argv, flags as ArgsDef));
+}
 
 function editDistance(a: string, b: string): number {
   let previous = Array.from({ length: b.length + 1 }, (_, j) => j);

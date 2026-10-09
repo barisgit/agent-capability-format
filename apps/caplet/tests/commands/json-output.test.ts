@@ -175,8 +175,10 @@ test("usage errors under --json print the command's envelope with an error diagn
       { args: ["show"], command: "show", message: "NAME" },
       { args: ["apply", "--bogus"], command: "apply", message: "--bogus" },
     ];
-    for (const item of cases) {
-      const result = await runCaplet(scope, [...item.args, "--json", "--cwd", scope.cwd]);
+    for (const item of cases.flatMap((entry) =>
+      ["--json", "--json=true"].map((json) => ({ ...entry, json })),
+    )) {
+      const result = await runCaplet(scope, [...item.args, item.json, "--cwd", scope.cwd]);
 
       expect(result.exitCode).toBe(2);
       const envelope = parseEnvelope(result.stdout);
@@ -202,16 +204,22 @@ test("an unexpected failure under --json still prints the envelope and exits 1",
     // A directory where the lockfile belongs makes the lockfile read throw EISDIR, which no
     // command handles.
     await mkdir(path.join(scope.agentsDir, "capabilities.lock"));
-    const result = await runCaplet(scope, ["status", "--json", "--cwd", scope.cwd]);
+    for (const json of ["--json", "--json=true"]) {
+      const result = await runCaplet(scope, ["status", json, "--cwd", scope.cwd]);
 
-    expect(result.exitCode).toBe(1);
-    const envelope = parseEnvelope(result.stdout);
-    expect(envelope.command).toBe("status");
-    expect(envelope.ok).toBe(false);
-    expect(envelope.diagnostics).toEqual([
-      expect.objectContaining({ severity: "error", code: "acf.cli.internal" }),
-    ]);
-    expect(result.stderr).toContain("EISDIR");
+      expect(result.exitCode).toBe(1);
+      const envelope = parseEnvelope(result.stdout);
+      expect(envelope.command).toBe("status");
+      expect(envelope.ok).toBe(false);
+      expect(envelope.diagnostics).toEqual([
+        expect.objectContaining({ severity: "error", code: "acf.cli.internal" }),
+      ]);
+      expect(result.stderr).toContain("EISDIR");
+    }
+    // The last of a flag and its negation wins, as the command reads it.
+    const plain = await runCaplet(scope, ["status", "--json", "--no-json", "--cwd", scope.cwd]);
+    expect(plain.exitCode).toBe(1);
+    expect(plain.stdout).toBe("");
   } finally {
     await cleanup(scope);
   }

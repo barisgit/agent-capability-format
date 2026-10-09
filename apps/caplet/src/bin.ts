@@ -4,7 +4,7 @@ import { rewriteAlias, rootCommand } from "./cli.js";
 import { renderCommandHelp, renderRootHelp } from "./help.js";
 import { INTERNAL_ERROR_CODE, reportCommandFailure } from "./internal/command.js";
 import { CAPLET_VERSION } from "./internal/json.js";
-import { commandSpec, unknownFlagError } from "./internal/spec.js";
+import { commandSpec, unknownFlagError, wantsJson } from "./internal/spec.js";
 
 const rawArgs = process.argv.slice(2);
 const first = rawArgs[0];
@@ -26,10 +26,12 @@ if (argv.includes("--help") || argv.includes("-h")) {
   }
 }
 const helpTarget = command === undefined ? "caplet --help" : `caplet ${command} --help`;
+const commandArgs = command === undefined ? argv : argv.slice(1);
+const json = wantsJson(command, commandArgs);
 
 /** Ends a run the command line itself got wrong: exit 2, with a JSON envelope under `--json`. */
 function usageFailure(message: string, hint: string): never {
-  if (argv.includes("--json")) reportCommandFailure(command ?? "caplet", { json: true }, message);
+  if (json) reportCommandFailure(command ?? "caplet", { json: true }, message);
   else process.stderr.write(`${message}\n  ${hint}\n`);
   process.exit(2);
 }
@@ -37,7 +39,7 @@ function usageFailure(message: string, hint: string): never {
 if (command !== undefined && commandSpec(command) === undefined) {
   usageFailure(`unknown command: ${command}`, "See caplet --help for available commands.");
 }
-const flagError = unknownFlagError(command, command === undefined ? argv : argv.slice(1));
+const flagError = unknownFlagError(command, commandArgs);
 if (flagError !== undefined) usageFailure(flagError, `See ${helpTarget} for available flags.`);
 try {
   await runCommand(rootCommand, { rawArgs: argv });
@@ -57,7 +59,7 @@ try {
 function internalFailure(error: unknown): never {
   const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${detail}\n`);
-  if (argv.includes("--json")) {
+  if (json) {
     const message = error instanceof Error ? error.message : String(error);
     reportCommandFailure(
       command ?? "caplet",
