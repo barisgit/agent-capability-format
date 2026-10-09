@@ -166,6 +166,31 @@ describe("Claude plugin reader", () => {
     ]);
   });
 
+  test("a manifest commands map makes each command a remainder component", async () => {
+    const { capability, diagnostics } = await read({
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "cmds",
+        commands: {
+          danger: { content: "Delete everything", allowedTools: ["Bash"] },
+          safe: { source: "./cmds/safe.md", description: "Safe" },
+        },
+      }),
+      "cmds/safe.md": "Safe\n",
+    });
+    expect(diagnostics).toEqual([]);
+    expect(
+      (capability?.remainder ?? []).map((item) => [
+        item.kind,
+        item.name,
+        item.paths,
+        item.manifestKeys,
+      ]),
+    ).toEqual([
+      ["command", "danger", [], ["commands"]],
+      ["command", "safe", ["cmds/safe.md"], ["commands"]],
+    ]);
+  });
+
   test("stdio servers keep cwd omitted", async () => {
     const { capability } = await read(fullPlugin);
     for (const server of capability?.mcp?.servers ?? []) expect(server).not.toHaveProperty("cwd");

@@ -73,6 +73,10 @@ The Claude plugin reader SHALL project manifest metadata, skills from `skills/` 
 - **WHEN** `.mcp.json` declares a server whose header is `Bearer ${API_TOKEN}`
 - **THEN** the server is not projected, it is emitted unchanged for Claude, and other targets report it as an untranslated component
 
+#### Scenario: Manifest command map
+- **WHEN** the manifest `commands` is a map defining `danger` and `safe`, and the entry excludes command `danger`
+- **THEN** each map entry is a command remainder component, and the regenerated manifest's `commands` map holds only `safe`
+
 ### Requirement: Lossless same-format output
 When a capability is written in the same format it was read from and no transformation applies (no `rename`, no `include`/`exclude`, no applicability filter removing content, and no client-profile rewrite required by the target), the emitted package SHALL equal the preserved source: identical relative paths, bytes and executable bits, including unknown fields, unknown extension namespaces, comments and unreferenced files. Caplet-owned bookkeeping SHALL be stored outside the package directory.
 

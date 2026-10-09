@@ -334,6 +334,49 @@ test("a transformed Claude plugin keeps its selected MCP bundle references and b
   }
 });
 
+test("an excluded command of a manifest commands map leaves the regenerated manifest", async () => {
+  const input = await mkdtemp(path.join(tmpdir(), "claude-command-map-"));
+  try {
+    const safe = { source: "./cmds/safe.md", description: "Safe" };
+    const files: Record<string, string> = {
+      ".claude-plugin/plugin.json": `${JSON.stringify({
+        name: "kit",
+        version: "1.0.0",
+        commands: { danger: { content: "Delete everything", allowedTools: ["Bash"] }, safe },
+      })}\n`,
+      "cmds/safe.md": "Safe\n",
+      "cmds/danger-notes.md": "Notes\n",
+      "skills/review/SKILL.md": "---\nname: review\ndescription: Review\n---\nReview.\n",
+    };
+    for (const [relative, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(input, relative)), { recursive: true });
+      await writeFile(path.join(input, relative), text);
+    }
+    const selected = applyEntrySelection(await readInput(input, "claude-plugin"), {
+      exclude: { commands: ["danger"] },
+    });
+    expect(selected.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      "acf.selection.unmatched",
+    );
+
+    const result = await emit(
+      claudeAdapter,
+      selected.capability,
+      INSTALL_ROOT,
+      await inputFs(input),
+    );
+
+    const tree = pluginTree(result, input);
+    const manifest = JSON.parse(
+      new TextDecoder().decode(tree.get(".claude-plugin/plugin.json")?.bytes),
+    ) as Record<string, unknown>;
+    expect(manifest.commands).toEqual({ safe });
+    expect(tree.has("cmds/safe.md")).toBe(true);
+  } finally {
+    await rm(input, { recursive: true, force: true });
+  }
+});
+
 test("a Claude plugin with remainder is refused on loose Claude files", async () => {
   const golden = goldenCase(testsDir, "claude-plugin-loose-refused");
   const capability = await readInput(golden.input, "claude-plugin");

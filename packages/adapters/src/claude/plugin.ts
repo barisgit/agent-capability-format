@@ -216,9 +216,10 @@ function unselected(capability: AcfCapability): { paths: Set<string>; keys: Set<
 }
 
 /**
- * The source manifest's unprojected entries for the plugin, without the keys and path entries
- * of remainder components selection removed: a key only removed components used is dropped, and
- * a shared component key (such as `agents`) loses the paths of removed files.
+ * The source manifest's unprojected entries for the plugin, without the keys and entries of
+ * remainder components selection removed: a key only removed components used is dropped, a
+ * shared component key (such as `agents`) loses the paths of removed files, and a shared
+ * component map (such as a `commands` map) loses the entries of removed components.
  */
 function selectedManifestEntries(
   capability: AcfCapability,
@@ -228,10 +229,29 @@ function selectedManifestEntries(
   const entries: Array<[string, unknown]> = [];
   for (const [key, value] of Object.entries(rawManifest)) {
     if (PROJECTED_MANIFEST_KEYS.has(key) || keys.has(key)) continue;
-    const kept = withoutPaths(value, paths);
+    const kept = isRecord(value)
+      ? withoutNames(value, removedNames(capability, key))
+      : withoutPaths(value, paths);
     if (kept !== undefined) entries.push([key, kept]);
   }
   return entries;
+}
+
+/** Names of the removed remainder components declared under manifest key `key`. */
+function removedNames(capability: AcfCapability, key: string): Set<string> {
+  return new Set(
+    removedRemainder(capability)
+      .filter((component) => component.manifestKeys?.includes(key) === true)
+      .map((component) => component.name),
+  );
+}
+
+/** `map` without the entries `names` lists. */
+function withoutNames(
+  map: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(map).filter(([name]) => !names.has(name)));
 }
 
 /** `value` without string entries naming one of `paths`; undefined when nothing is left. */

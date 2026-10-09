@@ -2636,9 +2636,10 @@ Readers project into the canonical model:
   namespaces are preserved as native remainder.
 - **Claude plugin**: manifest metadata, skills from `skills/` and manifest
   `skills` paths, and MCP servers from `.mcp.json` and manifest
-  `mcpServers` (inline or a relative path). Agents, commands, hooks, output
-  styles, LSP servers, monitors, `bin/`, plugin `settings.json`,
-  `userConfig`, channels, dependencies, and listing metadata are kept as
+  `mcpServers` (inline or a relative path). Agents, commands (each file or
+  manifest `commands` map entry is one component), hooks, output styles,
+  LSP servers, monitors, `bin/`, plugin `settings.json`, `userConfig`,
+  channels, dependencies, and listing metadata are kept as
   Claude native remainder with their safety class. Pending keys are read as
   Claude extras.
 
