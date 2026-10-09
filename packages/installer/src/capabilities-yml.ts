@@ -13,6 +13,12 @@ import {
 import { isErrno } from "./errno.js";
 import { entrySourceId } from "./lockfile.js";
 
+/**
+ * Reads and validates a scope's `capabilities.yml`. A missing file reads as an empty
+ * manifest. Unparseable or invalid content, or a source URL carrying credentials, yields
+ * error diagnostics and an empty manifest, so nothing from it is used; duplicate source
+ * entries are reported and kept.
+ */
 export async function readCapabilitiesYml(
   manifestPath: string,
 ): Promise<{ value: CapabilitiesYml; diagnostics: Diagnostic[] }> {

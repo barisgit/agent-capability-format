@@ -18,12 +18,17 @@ type CloneOptions = {
 
 type ShallowCloneOptions = CloneOptions & { ref: string };
 
+/** Clones only `ref`, a branch or tag, at depth 1 into `destination`. */
 export async function cloneShallow(opts: ShallowCloneOptions): Promise<void> {
   const args = ["clone", "--depth", "1", "--branch", opts.ref];
   if (opts.blobless === true) args.push("--filter=blob:none");
   await clone(args, opts);
 }
 
+/**
+ * Clones the whole history into `destination` and checks out `ref` when given. Commit SHAs
+ * need this: a shallow clone can only name a branch or tag.
+ */
 export async function cloneFull(opts: CloneOptions): Promise<void> {
   const args = ["clone"];
   if (opts.blobless === true) args.push("--filter=blob:none");
@@ -47,6 +52,10 @@ async function clone(args: string[], opts: CloneOptions): Promise<RunGitOptions>
   return gitOptions;
 }
 
+/**
+ * Checks out `ref` detached in `repoDir`, falling back to `origin/<ref>` for a branch name.
+ * It runs no `git fetch`; a blobless clone fetches the objects it lacks during checkout.
+ */
 export async function fetchRef(
   repoDir: string,
   ref: string,
@@ -60,11 +69,13 @@ export async function fetchRef(
   }
 }
 
+/** The commit `HEAD` points to in `repoDir`. */
 export async function revParseHead(repoDir: string): Promise<string> {
   const { stdout } = await runGit(["rev-parse", "HEAD"], repoDir);
   return stdout.trim();
 }
 
+/** Whether `ref` is a full 40-character hexadecimal commit SHA. */
 export function looksLikeSha(ref: string | undefined): boolean {
   return ref !== undefined && /^[a-f0-9]{40}$/i.test(ref);
 }

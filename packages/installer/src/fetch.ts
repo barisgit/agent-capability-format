@@ -9,20 +9,39 @@ import { ensureCleanCache, getCachePath } from "./cache.js";
 import { cloneFull, cloneShallow, looksLikeSha, revParseHead } from "./git.js";
 import { canonicalizePathLocation, entrySourceId, sourceId } from "./lockfile.js";
 
+/** Where and how {@link fetchCapability} clones git sources. */
 export type FetchOptions = {
+  /** Holds one clone per source id and ref, replaced on every fetch. */
   cacheDir: string;
+  /** Clone only the ref at depth 1 unless it is a commit SHA. Defaults to true. */
   shallow?: boolean | undefined;
+  /** Clone with `--filter=blob:none`. Defaults to true. */
   blobless?: boolean | undefined;
+  /** Extra clone attempts after a failure. Defaults to 0. */
   retries?: number | undefined;
 };
 
-export type FetchedCapability = { root: string; commit: string | null; sourceId: string };
+/** A source made available locally. */
+export type FetchedCapability = {
+  /** The entry's `path:` within the source or clone. */
+  root: string;
+  /** Checked-out commit; null for `path:` sources. */
+  commit: string | null;
+  /** The entry's source id (`entrySourceId`). */
+  sourceId: string;
+};
 
+/**
+ * Makes an entry's source available locally: a `path:` source where it is, a git source as a
+ * fresh clone of `ref` in `opts.cacheDir`. Throws when a git source has no `ref` or a
+ * credential-bearing URL, when git still fails after `opts.retries`, or when `path:` escapes
+ * the source root.
+ */
 export async function fetchCapability(
   entry: CapabilityEntry,
   opts: FetchOptions,
 ): Promise<FetchedCapability> {
-  const normalized = normalizePublicPathEntry(entry);
+  const normalized = withAbsolutePathSource(entry);
   const repositoryId = sourceId(normalized.source);
   const id = entrySourceId(normalized);
   switch (normalized.source.kind) {
@@ -42,7 +61,8 @@ export async function fetchCapability(
   }
 }
 
-function normalizePublicPathEntry(entry: CapabilityEntry): CapabilityEntry {
+/** `entry` with a `path:` location made absolute against the working directory. */
+function withAbsolutePathSource(entry: CapabilityEntry): CapabilityEntry {
   if (entry.source.kind !== "path") return entry;
   return {
     ...entry,
