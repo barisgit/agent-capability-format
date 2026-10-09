@@ -21,7 +21,7 @@ import { isMap, parse, parseDocument } from "yaml";
 import { type AssetPayload, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { makeFileDiff } from "./diff.js";
 import { mcpSupport } from "./mcp.js";
-import { ownValue, setOwn } from "./records.js";
+import { isRecord, ownValue, setOwn } from "./records.js";
 import { CODEX_SKILL_METADATA, type NativeSkill, renderNativeSkill } from "./skill-serializer.js";
 import type { EmitReport } from "./support-report.js";
 import { renderMarkdownFile } from "./text.js";
@@ -45,8 +45,7 @@ export async function emitSkills(
   report: EmitReport,
 ): Promise<FileDiff[]> {
   const cap = input.capability;
-  const diffs: FileDiff[] = [];
-  const emittedPaths = new Set<string>();
+  const sink = new SkillFileSink(fs);
   const readers = sharedRootReaders(input, target);
   // A reader blocked by any refusal writes nothing of the capability, so a shared copy would
   // still reach it through discovery; every discovering target then uses its native root.
@@ -62,13 +61,17 @@ export async function emitSkills(
     if (copies.length === 0) continue;
     const assets = await readSkillAssets(cap, skill, fs);
     for (const copy of copies) {
-      await pushSkillCopy(diffs, emittedPaths, fs, cap, skill, copy, assets, report.diagnostics);
+      await pushSkillCopy(sink, cap, skill, copy, assets, report.diagnostics);
     }
   }
 
-  return diffs.sort((a, b) => a.path.localeCompare(b.path));
+  return sink.diffs.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * The copies of `skill` this target writes: the shared-root rendering when `readers` can share
+ * one, and the target's own rendering under its native root. Empty when the target refuses it.
+ */
 function renderedCopies(
   input: EmitInput,
   target: TargetDefinition,
@@ -127,7 +130,8 @@ function sharedRootReaders(input: EmitInput, target: TargetDefinition): TargetId
  * The one rendering of `skill` for the shared root that every reader accepts, or null when
  * there is none: a reader excludes the skill, the readers' own extras differ (an extra in a
  * shared file counts as emitted to every reader), or two renderings disagree on a key. The
- * caller has ruled out readers blocked by a refusal, this skill's included. Core translations of different readers are merged, since each states the same meaning.
+ * caller has ruled out readers blocked by a refusal, this skill's included. Core translations of
+ * different readers are merged, since each states the same meaning.
  */
 function sharedRendering(
   cap: AcfCapability,
@@ -167,6 +171,7 @@ function blocksCapability(cap: AcfCapability, reader: TargetId): boolean {
   return capabilityBlocked(support, reader);
 }
 
+/** Copies `source` into `target`; false when they disagree on a key. */
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(source)) {
     if (Object.hasOwn(target, key) && stableJson(ownValue(target, key)) !== stableJson(value))
@@ -176,20 +181,21 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
   return true;
 }
 
+/** JSON with object keys sorted, for comparing values regardless of key order. */
 function stableJson(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) =>
-    typeof item === "object" && item !== null && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
-        )
+    isRecord(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
       : item,
   );
 }
 
+/**
+ * Writes one copy of `skill`: SKILL.md, its generated files, the management notice and its
+ * assets. A bundled asset at the notice's path is reported instead of written.
+ */
 async function pushSkillCopy(
-  diffs: FileDiff[],
-  emittedPaths: Set<string>,
-  fs: ReadOnlyFs,
+  sink: SkillFileSink,
   cap: AcfCapability,
   skill: SkillFacet,
   copy: SkillCopy,
@@ -199,26 +205,16 @@ async function pushSkillCopy(
   const skillRoot = path.join(copy.root, skill.name);
   const facet = { family: "skill" as const, name: skill.name };
   const metadata = { artifactRoot: skillRoot, facet };
-  const skillPath = path.join(skillRoot, "SKILL.md");
   const { frontmatter } = copy.rendering;
   const files = withBundledMetadata(cap, skill, copy.rendering.files, assets, diagnostics);
-  await pushTextDiff(
-    diffs,
-    emittedPaths,
-    fs,
-    skillPath,
+  await sink.text(
+    path.join(skillRoot, "SKILL.md"),
     renderMarkdownFile(frontmatter, skill.body),
     metadata,
   );
-  for (const [relativePath, content] of Object.entries(files)) {
-    const outPath = path.join(skillRoot, ...relativePath.split("/"));
-    await pushTextDiff(diffs, emittedPaths, fs, outPath, content, metadata);
-  }
-
-  await pushTextDiff(
-    diffs,
-    emittedPaths,
-    fs,
+  for (const [relativePath, content] of Object.entries(files))
+    await sink.text(path.join(skillRoot, ...relativePath.split("/")), content, metadata);
+  await sink.text(
     path.join(skillRoot, MANAGEMENT_NOTICE_FILENAME),
     renderArtifactNotice(cap.manifest.name),
     { ...metadata, managementNotice: "artifact" },
@@ -237,14 +233,7 @@ async function pushSkillCopy(
       });
       continue;
     }
-    await pushAssetDiff(
-      diffs,
-      emittedPaths,
-      fs,
-      path.join(skillRoot, asset.relativePath),
-      asset,
-      metadata,
-    );
+    await sink.asset(path.join(skillRoot, asset.relativePath), asset, metadata);
   }
 }
 
@@ -317,25 +306,6 @@ function valueAt(value: unknown, keys: readonly string[]): unknown {
   return cursor;
 }
 
-async function pushAssetDiff(
-  diffs: FileDiff[],
-  emittedPaths: Set<string>,
-  fs: ReadOnlyFs,
-  outPath: string,
-  asset: AssetPayload,
-  metadata: Pick<FileDiff, "artifactRoot" | "facet">,
-): Promise<void> {
-  if (emittedPaths.has(outPath)) return;
-  emittedPaths.add(outPath);
-  const [before, beforeMode] = await Promise.all([fs.readBytes(outPath), fs.readMode(outPath)]);
-  const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
-    before: beforeMode,
-    after: asset.mode,
-  });
-  Object.assign(diff, metadata);
-  diffs.push(diff);
-}
-
 /** The shared ACF skills root for `scope`; a target's install root is not used for it. */
 export function skillsRootForScope(scope: Scope): string {
   return scope === "user"
@@ -364,18 +334,43 @@ export async function readSkillAssets(
   );
 }
 
-async function pushTextDiff(
-  diffs: FileDiff[],
-  emittedPaths: Set<string>,
-  fs: ReadOnlyFs,
-  outPath: string,
-  after: string,
-  metadata?: Pick<FileDiff, "artifactRoot" | "facet" | "managementNotice">,
-): Promise<void> {
-  if (emittedPaths.has(outPath)) return;
-  emittedPaths.add(outPath);
-  const before = await fs.readText(outPath);
-  const diff = makeFileDiff(outPath, before, after, [{ kind: "file" }]);
-  if (metadata !== undefined) Object.assign(diff, metadata);
-  diffs.push(diff);
+/** File diffs of one target's skills; the first write of a path wins, later ones are skipped. */
+class SkillFileSink {
+  readonly diffs: FileDiff[] = [];
+  private readonly emitted = new Set<string>();
+
+  constructor(private readonly fs: ReadOnlyFs) {}
+
+  async text(
+    outPath: string,
+    after: string,
+    metadata: Pick<FileDiff, "artifactRoot" | "facet" | "managementNotice">,
+  ): Promise<void> {
+    if (!this.claim(outPath)) return;
+    const before = await this.fs.readText(outPath);
+    this.diffs.push({ ...makeFileDiff(outPath, before, after, [{ kind: "file" }]), ...metadata });
+  }
+
+  async asset(
+    outPath: string,
+    asset: AssetPayload,
+    metadata: Pick<FileDiff, "artifactRoot" | "facet">,
+  ): Promise<void> {
+    if (!this.claim(outPath)) return;
+    const [before, beforeMode] = await Promise.all([
+      this.fs.readBytes(outPath),
+      this.fs.readMode(outPath),
+    ]);
+    const diff = makeFileDiff(outPath, before, asset.bytes, [{ kind: "file" }], {
+      before: beforeMode,
+      after: asset.mode,
+    });
+    this.diffs.push({ ...diff, ...metadata });
+  }
+
+  private claim(outPath: string): boolean {
+    if (this.emitted.has(outPath)) return false;
+    this.emitted.add(outPath);
+    return true;
+  }
 }
