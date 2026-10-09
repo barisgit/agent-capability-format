@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readCapletConfig, targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
-import { ownedPathViolations, readSidecar } from "../apply/sidecar.js";
+import { ownedPathViolations, readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
 import { appliedCounts, claudeJson, printClaude } from "../internal/apply-flow.js";
 import { applyEmitPlan } from "../internal/apply-plan.js";
 import { readCwd, readExplicitScope, validationError } from "../internal/args.js";
@@ -34,7 +34,7 @@ export const removeCommand = defineCommand({
       // the outputs and the sidecars as they were.
       const violations: string[] = [];
       for (const { installRoot, boundary } of roots) {
-        const sidecar = await readSidecar(path.join(installRoot, ".acf-managed.json"));
+        const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
         for (const name of names) {
           violations.push(...(await ownedPathViolations(sidecar, installRoot, name, boundary)));
         }

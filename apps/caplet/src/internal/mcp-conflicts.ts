@@ -15,7 +15,7 @@ import {
   type TargetId,
 } from "@caplet/core";
 import { hasJsonPointer } from "../apply/json-pointer.js";
-import { readSidecar, relativeSidecarPath } from "../apply/sidecar.js";
+import { readSidecar, relativeSidecarPath, SIDECAR_FILENAME } from "../apply/sidecar.js";
 
 export type McpConflictContext = {
   target: TargetId;
@@ -95,7 +95,7 @@ async function userDefinedServers(
     return () => false;
   }
   const relative = relativeSidecarPath(context.installRoot, file);
-  const owns = (await readSidecar(path.join(context.installRoot, ".acf-managed.json"))).managed
+  const owns = (await readSidecar(path.join(context.installRoot, SIDECAR_FILENAME))).managed
     .filter((entry) => entry.path === relative)
     .flatMap((entry) => entry.owns);
   if (owns.some((own) => own.kind === "file")) return () => false;
