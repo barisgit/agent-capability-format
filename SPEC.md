@@ -2496,7 +2496,8 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   refetching.
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
-  lock entry), and emission does not run.
+  lock entry), and emission does not run. A lock entry whose source
+  `capabilities.yml` no longer declares is a disagreement too.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
   diagnostic is present. Every fetch it makes, including one `--mode force`
   requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it

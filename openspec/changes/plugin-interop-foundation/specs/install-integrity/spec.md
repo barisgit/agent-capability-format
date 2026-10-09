@@ -16,7 +16,7 @@ Caplet SHALL compute a payload digest `acf-tree-2:sha256:<hex>` over a capabilit
 - **THEN** their payload digests differ
 
 ### Requirement: One lock schema with per-capability provenance
-The core and installer lock definitions SHALL be unified into one schema. Each lock entry SHALL additionally record, per capability: `name`, `format` (`acf`, `agent-plugins`, `claude-plugin`, `skills`), `formatVersion` where the format has one, the selected source path, and `payloadDigest`. The new fields are additive under `acf: 1`; readers SHALL accept lockfiles without them and write them on the next resolution. An entry's requested `format` SHALL be recorded apart from the detected per-capability `format`, so a changed or removed `format`, like a changed `rename`, is `acf.lock.drift`.
+The core and installer lock definitions SHALL be unified into one schema. Each lock entry SHALL additionally record, per capability: `name`, `format` (`acf`, `agent-plugins`, `claude-plugin`, `skills`), `formatVersion` where the format has one, the selected source path, and `payloadDigest`. The new fields are additive under `acf: 1`; readers SHALL accept lockfiles without them and write them on the next resolution. An entry's requested `format` SHALL be recorded apart from the detected per-capability `format`, so a changed or removed `format`, like a changed `rename`, is `acf.lock.drift`. A lock entry whose source `capabilities.yml` no longer declares SHALL be `acf.lock.drift` too, so drift is compared in both directions.
 
 #### Scenario: Multi-capability source
 - **WHEN** a source provides two capabilities
@@ -25,6 +25,10 @@ The core and installer lock definitions SHALL be unified into one schema. Each l
 #### Scenario: Changed resolution intent under a frozen install
 - **WHEN** an entry's `rename` or `format` changes, or its `format` is removed, and a frozen or offline install runs
 - **THEN** it fails with `acf.lock.drift` and changes neither the lock nor the installed snapshots
+
+#### Scenario: Source removed under a frozen install
+- **WHEN** a locked source is removed from `capabilities.yml` and a frozen or offline install runs
+- **THEN** it fails with `acf.lock.drift` naming that source and changes neither the lock nor the installed snapshots
 
 ### Requirement: Verify before emission and frozen restore
 Before emitting from a lock, caplet SHALL recompute each capability's payload digest from the snapshot and SHALL fail with `acf.lock.digest-mismatch` when it differs from the lock. A frozen or locked restore SHALL fetch the recorded `resolvedSha`, not the moving `ref`, and SHALL reproduce exactly the locked capability names and payload digests; otherwise it SHALL fail with `acf.lock.digest-mismatch` and install nothing from that entry. An installed capability SHALL count as present only when its digest verifies, not merely when its directory exists.

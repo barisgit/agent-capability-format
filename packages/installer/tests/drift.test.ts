@@ -143,3 +143,24 @@ test("include/exclude drift is diagnosed regardless of family and name order", (
     ymlSelection: { include: null, exclude: { skills: ["a"] } },
   });
 });
+
+test("a lock entry capabilities.yml no longer declares is drift", () => {
+  const kept = { kind: "github" as const, repo: "owner/kept" };
+  const yml: CapabilitiesYml = { acf: 1, capabilities: [{ source: kept, ref: "main" }] };
+  const entry = (name: string) => ({
+    capabilityHash: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    capabilityNames: [name],
+    ref: "main",
+    resolvedSha: "abc123",
+    source: `github:owner/${name}`,
+    sourceId: `github:owner/${name}`,
+  });
+  const lock: CapabilitiesLock = { acf: 1, entries: [entry("kept"), entry("removed")] };
+
+  const diagnostics = detectLockDrift(yml, lock);
+
+  expect(diagnostics.map((item) => [item.severity, item.code, item.data?.sourceId])).toEqual([
+    ["error", "acf.lock.drift", "github:owner/removed"],
+  ]);
+  expect(diagnostics[0]?.message).toContain("github:owner/removed");
+});

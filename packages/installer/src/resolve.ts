@@ -441,9 +441,10 @@ function normalizeEntry(entry: CapabilityEntry, manifestDir: string): Capability
 
 /**
  * Drift a fetching resolution reconciles, so it is no error there: a missing entry and a
- * changed ref, capability selectors, rename or format fetch, and a changed selection rewrites
- * the lock. An entry this resolution skips (`sourceIds`) or fails to fetch keeps its old lock
- * entry, so planning against the lock reports its drift.
+ * changed ref, capability selectors, rename or format fetch, a changed selection rewrites
+ * the lock, and a source capabilities.yml no longer declares leaves the next lock. An entry
+ * this resolution skips (`sourceIds`) or fails to fetch keeps its old lock entry, so planning
+ * against the lock reports its drift.
  */
 function reconciledByFetch(diagnostic: Diagnostic): boolean {
   return diagnostic.code === "acf.lock.missing-entry" || diagnostic.code === "acf.lock.drift";
