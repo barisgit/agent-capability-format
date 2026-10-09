@@ -235,3 +235,18 @@ test("a __proto__ key in plugin.json rejects the manifest instead of vanishing",
   expect(result.capability).toBeUndefined();
   expect(result.diagnostics.map((d) => d.code)).toEqual(["acf.source.manifest-invalid"]);
 });
+
+test("a listing key's value decides the listing component's class", async () => {
+  const listingClass = async (defaultEnabled: boolean) =>
+    (
+      await read({
+        ".claude-plugin/plugin.json": JSON.stringify({
+          name: "kit",
+          displayName: "Kit",
+          defaultEnabled,
+        }),
+      })
+    ).capability?.remainder?.find((item) => item.kind === "listing-metadata")?.class;
+  expect(await listingClass(true)).toBe("functional");
+  expect(await listingClass(false)).toBe("restricting");
+});

@@ -7,7 +7,7 @@
  */
 import path from "node:path";
 import { withPackageValues } from "../extras/index.js";
-import { nativeKeyInfo } from "../targets/native-keys.js";
+import { nativeKeyClass, nativeKeyInfo } from "../targets/native-keys.js";
 import type { PreservedForeignData } from "../targets/self-check.js";
 import type {
   Diagnostic,
@@ -195,10 +195,14 @@ const CLASS_RANK: Record<SafetyClass, number> = {
   restricting: 3,
 };
 
-/** The registry's class for Claude manifest keys, strictest first; unknown keys are functional. */
-function keyClass(keys: readonly string[]): SafetyClass {
+/**
+ * The strictest registry class of manifest keys `keys` under their values in `raw`; unknown
+ * keys are functional.
+ */
+function keyClass(raw: Record<string, unknown>, keys: readonly string[]): SafetyClass {
   return keys
-    .map((key) => nativeKeyInfo("claude", "package", key)?.class ?? "functional")
+    .map((key) => nativeKeyClass(nativeKeyInfo("claude", "package", key), raw[key]))
+    .map((found) => (found === "unclassified" ? "functional" : found))
     .reduce<SafetyClass>(
       (strictest, next) => (CLASS_RANK[next] > CLASS_RANK[strictest] ? next : strictest),
       "descriptive",
@@ -263,7 +267,7 @@ async function remainderComponents(
           name,
           paths: await commandSource(root, definition),
           manifestKeys: [spec.key],
-          class: keyClass([spec.key]),
+          class: keyClass(raw, [spec.key]),
         });
       continue;
     }
@@ -283,7 +287,7 @@ async function remainderComponents(
           name: path.posix.basename(file).replace(/\.[^.]*$/, ""),
           paths: [file],
           manifestKeys: raw[spec.key] === undefined ? [] : [spec.key],
-          class: keyClass([spec.key]),
+          class: keyClass(raw, [spec.key]),
         });
       }
     }
@@ -304,7 +308,7 @@ async function remainderComponents(
       name: spec.name,
       paths,
       manifestKeys,
-      class: keyClass([spec.key]),
+      class: keyClass(raw, [spec.key]),
     });
   }
 
@@ -325,7 +329,7 @@ async function remainderComponents(
       name: spec.key,
       paths: [],
       manifestKeys: [spec.key],
-      class: keyClass([spec.key]),
+      class: keyClass(raw, [spec.key]),
     });
   }
 
@@ -341,7 +345,7 @@ async function remainderComponents(
           ? [path.posix.normalize(raw.icon as string)]
           : [],
       manifestKeys: listing,
-      class: keyClass(listing),
+      class: keyClass(raw, listing),
     });
   }
   for (const key of Object.keys(raw).sort()) {
@@ -352,7 +356,7 @@ async function remainderComponents(
       name: key,
       paths: componentPaths(raw[key]).filter((relative) => contained(root, relative) !== undefined),
       manifestKeys: [key],
-      class: keyClass([key]),
+      class: keyClass(raw, [key]),
     });
   }
   return out;
