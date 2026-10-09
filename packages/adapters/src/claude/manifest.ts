@@ -69,7 +69,12 @@ export function pluginManifest(
   if (manifest.description !== undefined && carried("package.description"))
     mapped.description = manifest.description;
   const [first, ...additional] = manifest.authors ?? [];
-  if (first !== undefined && carried("package.authors")) mapped.author = claudeAuthor(first);
+  if (first !== undefined && carried("package.authors")) {
+    const author = claudeAuthor(first);
+    if (typeof first === "string" && author.email !== undefined)
+      carried("package.authors=Name <email>");
+    mapped.author = author;
+  }
   if (additional.length > 0) carried("package.authors.additional");
   if (manifest.homepage !== undefined && carried("package.homepage"))
     mapped.homepage = manifest.homepage;

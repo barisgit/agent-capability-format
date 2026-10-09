@@ -59,6 +59,7 @@ const PACKAGE_FIELDS = [
   "package.version",
   "package.description",
   "package.authors",
+  "package.authors=Name <email>",
   "package.authors.additional",
   "package.license",
   "package.homepage",

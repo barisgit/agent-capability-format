@@ -448,12 +448,10 @@ const packageFields: FieldSupport[] = [
     native("version", SRC.claudeManifest, { condition: "with the +acf.<digest> build suffix" }),
   ),
   packageField("package.description", native("description", SRC.claudeManifest)),
+  packageField("package.authors", translated("the first entry becomes author", SRC.claudeManifest)),
   packageField(
-    "package.authors",
-    translated(
-      'the first entry becomes author; legacy "Name <email>" strings are decoded',
-      SRC.claudeManifest,
-    ),
+    "package.authors=Name <email>",
+    translated('a legacy "Name <email>" string is decoded into name and email', SRC.claudeManifest),
   ),
   packageField(
     "package.authors.additional",

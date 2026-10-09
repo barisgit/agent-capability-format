@@ -93,6 +93,28 @@ test("Claude authors decode only an exact Name <email> string", () => {
   });
 });
 
+test("the Claude author outcome mentions decoding only when a string was decoded", async () => {
+  const authorOutcomes = async (author: string | { name: string; email: string }) => {
+    const capability = capabilityModel({
+      skills: [skillFacet({ name: "review", description: "Review a change" })],
+    });
+    capability.manifest = { ...capability.manifest, authors: [author] };
+    const result = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
+    return (result.outcomes ?? [])
+      .filter((outcome) => outcome.source?.startsWith("package.authors"))
+      .map((outcome) => outcome.consequence);
+  };
+
+  expect(await authorOutcomes({ name: "Ada", email: "ada@example.com" })).toEqual([
+    "the first entry becomes author",
+  ]);
+  expect(await authorOutcomes("Ada")).toEqual(["the first entry becomes author"]);
+  expect(await authorOutcomes("Ada <ada@example.com>")).toEqual([
+    "the first entry becomes author",
+    expect.stringContaining("decoded"),
+  ]);
+});
+
 test("an unchanged Claude plugin without a version gets one inserted and nothing else", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "acf-claude-plugin-"));
   const manifest = '{\n  "name": "notes",\n  "description": "Notes"\n}\n';
