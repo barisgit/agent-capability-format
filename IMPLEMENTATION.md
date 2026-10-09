@@ -2230,27 +2230,20 @@ the ref updates the same lock entry.
 
 ### 7.4 Fetch strategy
 
-```ts
-export type GitClient = {
-  clone(opts: CloneOpts): Promise<CloneResult>
-  resolveRef(opts: { repo: string; ref: string }): Promise<string>   // returns commit SHA
-}
+`fetchCapability(entry, opts)` (`packages/installer/src/fetch.ts`) returns the
+entry's `path:` within the source as `root`, the checked-out `commit` (null
+for `path:` sources) and the entry's `sourceId`. A `path:` source is read in
+place. A git source is cloned afresh into
+`<agentsDir>/.cache/acf-installer/<cacheKeyFor(sourceId(source), ref)>`
+through the `git` CLI (`packages/installer/src/git.ts`):
 
-export type CloneOpts = {
-  url: string
-  destination: string
-  ref?: string
-  shallow?: boolean
-  blobless?: boolean
-  sparsePaths?: string[]
-}
-```
-
-Default fetch (`SPEC.md` §18):
-
-- `--depth 1` (shallow) AND `--filter=blob:none` (blobless),
-- `--sparse-checkout` set to `entry.path` if declared,
-- fall back to full clone if `ref` looks like a 40-char SHA (shallow + arbitrary SHA needs `--shallow-since` or refspec gymnastics).
+- `--depth 1 --branch <ref>` (shallow) and `--filter=blob:none` (blobless) by
+  default; `defaults.fetch.shallow` and `defaults.fetch.blobless` in
+  `capabilities.yml` turn either off,
+- a full clone followed by a detached checkout of `ref` when shallow is off
+  or `ref` is a 40-character SHA, which a shallow clone cannot name,
+- no sparse checkout: the whole repository is fetched and `path:` selects
+  within it.
 
 For private `github:` sources, `GITHUB_TOKEN` supplies an HTTP Basic authorization
 header scoped to the source URL. Git receives it through process-local
@@ -2262,37 +2255,7 @@ percent-encoded token text. Without a token, normal Git authentication applies; 
 retain their existing behavior. Source URLs never carry credentials: a `git:` URL with
 userinfo (other than an SSH user name) or a credential-looking query or fragment parameter
 is rejected with `acf.source.credential-in-url` when added and when resolved, and the
-message masks the credential (`packages/installer/src/source-credentials.ts`).
-
-```ts
-export async function fetchCapability(
-  spec: SourceSpec,
-  entry: CapabilityEntry,
-  cacheDir: string,
-  client: GitClient,
-): Promise<{ root: string; commit: string }> {
-  switch (spec.kind) {
-    case "path": {
-      const resolved = resolveLocalPath(spec.location)
-      return { root: subPath(resolved, entry.path), commit: "local" }
-    }
-    case "github":
-    case "git": {
-      const url = spec.kind === "github" ? `https://github.com/${spec.repo}.git` : spec.url
-      const dest = path.join(cacheDir, hashSourceId(sourceId(spec, entry)))
-      const result = await client.clone({
-        url,
-        destination: dest,
-        ref: entry.ref,
-        shallow: !looksLikeSha(entry.ref),
-        blobless: true,
-        sparsePaths: entry.path ? [entry.path] : undefined,
-      })
-      return { root: subPath(dest, entry.path), commit: result.commit }
-    }
-  }
-}
-```
+message masks the credential (`packages/core/src/credentials/`).
 
 After fetch, the shared source inventory discovers valid capability candidates
 and assigns each a selector: a POSIX path relative to `<fetched-root>/acf/` for
@@ -2300,7 +2263,7 @@ manifested collections, or the discovered name (before `rename`) for direct
 manifested capabilities, synthesized skills, and foreign packages. `rename`
 is applied once, when the resolver names the staged snapshot. When `entry.capabilities` is present the
 resolver matches every exact/glob selector against those values, requires every
-selector to match, and deduplicates overlaps. It stages (without symlinks) each selected capability outside the live
+selector to match, and deduplicates overlaps. It stages each selected capability outside the live
 snapshot tree. Only after every source entry validates does it replace
 `scope/capabilities/<final-name>/`; a selector or source-entry failure discards
 all staging and preserves the prior lock and snapshots. After complete
@@ -2366,8 +2329,8 @@ bookkeeping, so older lockfiles keep reading.
 
 The resolver recomputes each snapshot's payload digest when it reads the
 capability and fails with `acf.lock.digest-mismatch` before anything is
-emitted from a snapshot that no longer matches its record; a frozen restore
-refetches `resolvedSha` and verifies the same way.
+emitted from a snapshot that no longer matches its record. Restoring a missing
+snapshot refetches `resolvedSha` and must reproduce the locked digests.
 
 `capabilityHash` uses the v1 algorithm of SPEC §19.5 over the whole
 snapshot, before selection, so a selection change never invalidates a hash
