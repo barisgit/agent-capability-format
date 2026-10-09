@@ -2839,7 +2839,7 @@ acf.support.refused                          # field or component refused; block
 acf.support.degraded                         # descriptive or granting field degraded (lossy)
 acf.support.component-omitted                # component the target cannot carry (lossy)
 acf.extras.dropped                           # native extra not carried by this target or carrier (lossy)
-acf.extras.conflict                          # extra sets a key the writer generates (error)
+acf.extras.conflict                          # extra sets a key the writer generates, or a bundled agents/openai.yaml contradicts the generated Codex metadata (error)
 acf.extras.unclassified                      # native key unknown to the registry (info)
 acf.extras.package-value-invalid             # invalid targets.<target>.package value (error)
 acf.extras.native-value-invalid              # known targets.<target>.native key with a value outside its native domain (error)
