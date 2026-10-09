@@ -166,6 +166,24 @@ export function marketplaceForeignDiagnostic(plan: ClaudeScopePlan): Diagnostic 
 }
 
 /**
+ * The project scope `plan` keeps `plugin`, which the user scope also has as `userId`, so Claude
+ * loads the capability twice in that project (design D27.3).
+ */
+export function duplicateScopeDiagnostic(
+  plan: ClaudeScopePlan,
+  plugin: PlannedClaudePlugin,
+  userId: string,
+): Diagnostic {
+  return {
+    severity: "warn",
+    code: "acf.claude.duplicate-scope",
+    targetId: "claude",
+    message: `Capability \`${plugin.name}\` is a Claude plugin at user scope (\`${userId}\`) and at project scope (\`${plugin.id}\`), so Claude loads it twice in ${plan.projectDir}. Caplet cannot hide the user plugin in one project; keep the capability at one of the two scopes.`,
+    data: { plugin: plugin.name, user: userId, project: plugin.id, projectDir: plan.projectDir },
+  };
+}
+
+/**
  * `plugin` moved to loose files but stays installed (action `kept`), because uninstalling it would
  * delete the options and secrets Claude may have saved for it.
  */

@@ -228,5 +228,5 @@ Dropped as fixed: `research/plugin-interop/facets/distribution.md` lock-types ro
 
 - `-t/--target` is not remembered; default targets come from configuration.
 - Codex project config: relative paths if Codex resolves them against the config file, else absolute paths remain until checked.
-- The same capability at user and project scope appears twice in Claude; caplet warns.
+- The same capability at user and project scope appears twice in Claude; caplet warns (`acf.claude.duplicate-scope`).
 - Invalid native values: foreign and imported sources leave out only the invalid component with a warning; native ACF stays strict.

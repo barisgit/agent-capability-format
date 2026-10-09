@@ -253,6 +253,50 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
     ]);
   });
 
+  describe("a capability at both user and project scope", () => {
+    const projectRoot = () => path.join(dir, "project");
+    const projectScope = (plugins: { name: string; version: string }[]) => {
+      const target = { scope: "project" as const, projectRoot: projectRoot() };
+      const marketplaceDir = path.join(projectRoot(), ".claude/.acf/marketplace");
+      return { target, marketplaceDir, plugins, recorded: true };
+    };
+    const probe = [{ name: "probe", version: "1.0.0+acf.aaa" }];
+    const codes = (report: { diagnostics: { code: string; severity: string }[] }) =>
+      report.diagnostics.map((d) => [d.code, d.severity]);
+
+    test("apply warns that Claude shows it twice when the user plugin is installed", async () => {
+      const projectMarketplace = claudeMarketplaceName(projectScope([]).target);
+      const project = { "acf-project-spike": projectMarketplace, local1: "probe" };
+      const fake = userFake([
+        "list-json-installed",
+        "marketplace-list-json",
+        { fixture: "marketplace-add-local", replace: { ...project, "<PROJECT>": projectRoot() } },
+        { fixture: "install-local", replace: project },
+        "list-json-installed",
+      ]);
+      const report = await reconcileClaudeHost(host(fake.cli), [projectScope(probe)]);
+      expect(fake.unused()).toEqual([]);
+      expect(codes(report)).toEqual([["acf.claude.duplicate-scope", "warn"]]);
+      expect(report.diagnostics[0]?.message).toContain("probe@acf-user");
+      expect(report.diagnostics[0]?.message).toContain(`probe@${projectMarketplace}`);
+    });
+
+    test("a dry run warns once when the same run wants it at both scopes", async () => {
+      const fake = userFake(["list-json-empty", "marketplace-list-json-empty"]);
+      const report = await previewClaudeHost(host(fake.cli), [
+        ...userScope(probe),
+        projectScope(probe),
+      ]);
+      expect(codes(report)).toEqual([["acf.claude.duplicate-scope", "warn"]]);
+    });
+
+    test("no warning when the user disabled the user plugin", async () => {
+      const fake = userFake(["list-json-disabled", "marketplace-list-json"]);
+      const report = await previewClaudeHost(host(fake.cli), [projectScope(probe)]);
+      expect(report.diagnostics).toEqual([]);
+    });
+  });
+
   test("an unchanged plugin gets only the idempotent marketplace add", async () => {
     const fake = userFake([
       "list-json-installed",

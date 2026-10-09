@@ -107,6 +107,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.claude.other-scope",
   "acf.claude.marketplace-kept",
   "acf.claude.marketplace-foreign",
+  "acf.claude.duplicate-scope",
   "acf.claude.uninstall-held",
   "acf.migration.drifted",
   "acf.cli.partial-implementation",

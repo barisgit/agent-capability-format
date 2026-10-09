@@ -75,11 +75,15 @@ Caplet SHALL register and enable Claude plugins only with the `claude` CLI, in t
 - **THEN** a new Claude session loads the changed skill body
 
 ### Requirement: Scope mapping
-ACF `user` scope SHALL map to Claude `user` scope. ACF `project` scope SHALL register the project marketplace and install its plugins at Claude `local` scope (`.claude/settings.local.json`), because Claude records a directory marketplace as a machine-specific absolute path in the scope's settings file, so `project` scope would commit one teammate's path into `.claude/settings.json` (verified with Claude 2.1.97; open question 7). Each teammate's `caplet apply` registers the project's plugins for their own checkout from the committed `capabilities.yml` and lock. Caplet SHALL NOT register at Claude `project` or `managed` scope. When `claude plugin list --json` shows the same plugin at another scope, caplet SHALL report it and SHALL NOT change that state. Caplet's own installation is the one at its Claude scope and, for `local`, its project root; Claude also lists the project and local installs of other directories (each with its `projectPath`), which caplet SHALL neither report nor treat as its own.
+ACF `user` scope SHALL map to Claude `user` scope. ACF `project` scope SHALL register the project marketplace and install its plugins at Claude `local` scope (`.claude/settings.local.json`), because Claude records a directory marketplace as a machine-specific absolute path in the scope's settings file, so `project` scope would commit one teammate's path into `.claude/settings.json` (verified with Claude 2.1.97; open question 7). Each teammate's `caplet apply` registers the project's plugins for their own checkout from the committed `capabilities.yml` and lock. Caplet SHALL NOT register at Claude `project` or `managed` scope. When `claude plugin list --json` shows the same plugin at another scope, caplet SHALL report it and SHALL NOT change that state. Caplet's own installation is the one at its Claude scope and, for `local`, its project root; Claude also lists the project and local installs of other directories (each with its `projectPath`), which caplet SHALL neither report nor treat as its own. When a project-scope plugin is also caplet's user plugin `<name>@acf-user`, wanted by the same run or installed and enabled at user scope, Claude loads the capability twice in that project and caplet cannot hide the user plugin for one project, so caplet SHALL warn with `acf.claude.duplicate-scope`.
 
 #### Scenario: Project registration stays out of committed settings
 - **WHEN** project apply registers capability `review`
 - **THEN** caplet runs `claude plugin marketplace add <project>/.claude/.acf/marketplace --scope local` and `claude plugin install review@acf-project-<h> --scope local`, and `.claude/settings.json` is not changed by registration
+
+#### Scenario: Capability at user and project scope
+- **WHEN** `review@acf-user` is installed and enabled at user scope and project apply installs `review@acf-project-<h>`
+- **THEN** apply installs the project plugin, leaves the user plugin alone, and warns with `acf.claude.duplicate-scope` that Claude loads `review` twice in the project
 
 #### Scenario: Teammate disabled the plugin
 - **WHEN** a teammate disabled `review@acf-project-<h>` in Claude and runs project apply after an update

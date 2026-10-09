@@ -2981,7 +2981,11 @@ itself adds `**/.claude/settings.local.json` to the user's global git
 ignore. Caplet never registers at Claude project or managed scope, and a
 plugin it finds in another scope is reported (`acf.claude.other-scope`), not
 changed. `claude plugin list --json` also shows the project and local
-installs of other directories; caplet ignores them.
+installs of other directories; caplet ignores them. A capability that is a
+plugin at project scope and also at user scope (`<name>@acf-user`, wanted
+by the same apply or installed and enabled) is loaded twice by Claude in
+that project; caplet cannot hide the user plugin for one project, so it
+warns with `acf.claude.duplicate-scope`.
 
 #### 22.8.4 Host state
 

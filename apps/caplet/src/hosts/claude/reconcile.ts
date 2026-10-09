@@ -12,6 +12,7 @@ import {
 import {
   cliUnavailableDiagnostic,
   commandFailedDiagnostic,
+  duplicateScopeDiagnostic,
   marketplaceForeignDiagnostic,
   marketplaceKeptDiagnostic,
   otherScopeDiagnostic,
@@ -211,6 +212,7 @@ export async function reconcileClaudeHost(
       diagnostics,
     ),
   );
+  diagnostics.push(...duplicateScopeDiagnostics(plans, after.ok ? after.value : []));
   return { scopes, diagnostics };
 }
 
@@ -226,13 +228,15 @@ export async function previewClaudeHost(
   const state = await readClaudeHostState(host, desired);
   if (!state.ok) return await notRun(desired, state, host, { preview: true });
   const diagnostics: Diagnostic[] = [];
-  const scopes = desired.map((scope) =>
+  const plans = desired.map((scope) => planClaudeScope(scope, state.value));
+  const scopes = plans.map((plan) =>
     scopeReport(
-      planClaudeScope(scope, state.value),
+      plan,
       { results: [], installed: state.value.plugins, unreadState: "unknown", preview: true },
       diagnostics,
     ),
   );
+  diagnostics.push(...duplicateScopeDiagnostics(plans, state.value.plugins));
   return { scopes, diagnostics };
 }
 
@@ -467,13 +471,17 @@ async function notRun(
   const { failure } = read;
   const settings = await host.readSettings();
   const scopeDiagnostics: Diagnostic[] = [];
-  const scopes = desired.map((scope) =>
+  const plans = desired.map((scope) =>
+    planClaudeScope(scope, assumedState(scope, host.projectDir, settings)),
+  );
+  const scopes = plans.map((plan) =>
     scopeReport(
-      planClaudeScope(scope, assumedState(scope, host.projectDir, settings)),
+      plan,
       { results: [], installed: undefined, unreadState: failureState(failure), preview: false },
       scopeDiagnostics,
     ),
   );
+  scopeDiagnostics.push(...duplicateScopeDiagnostics(plans, []));
   const commands = scopes.flatMap((scope) => scope.commands.map((c) => c.command));
   const diagnostics: Diagnostic[] = [];
   if (failure.kind !== "unavailable") {
@@ -482,6 +490,39 @@ async function notRun(
     diagnostics.push(cliUnavailableDiagnostic(failure, commands, "updated"));
   }
   return { scopes, diagnostics: [...diagnostics, ...scopeDiagnostics] };
+}
+
+/**
+ * `acf.claude.duplicate-scope` for each plugin a project scope keeps that the user scope has too:
+ * kept by a user scope plan of the same run, or listed in `installed` as an enabled user install
+ * of `<name>@acf-user`. Claude then loads the capability twice in that project and caplet cannot
+ * hide the user plugin for one project (design D27.3), so it warns instead.
+ */
+function duplicateScopeDiagnostics(
+  plans: readonly ClaudeScopePlan[],
+  installed: readonly ClaudeInstalledPlugin[],
+): Diagnostic[] {
+  const userMarketplace = claudeMarketplaceName({ scope: "user" });
+  const userIds = new Set([
+    ...plans
+      .filter((plan) => plan.target.scope === "user")
+      .flatMap((plan) => plan.plugins.filter(keptEnabled).map((plugin) => plugin.id)),
+    ...installed.filter((p) => p.scope === "user" && p.enabled).map((p) => p.id),
+  ]);
+  return plans
+    .filter((plan) => plan.target.scope === "project")
+    .flatMap((plan) =>
+      plan.plugins.filter(keptEnabled).flatMap((plugin) => {
+        const userId = `${plugin.name}@${userMarketplace}`;
+        return userIds.has(userId) ? [duplicateScopeDiagnostic(plan, plugin, userId)] : [];
+      }),
+    );
+}
+
+/** Whether the plan leaves `plugin` installed at its scope and the user has not disabled it. */
+function keptEnabled(plugin: PlannedClaudePlugin): boolean {
+  const installs = plugin.action === "install" || plugin.action === "update";
+  return (installs || plugin.action === "unchanged") && plugin.observed?.enabled !== false;
 }
 
 /**
