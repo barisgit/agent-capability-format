@@ -20,7 +20,7 @@ import {
   readLockfile,
   resolveCapabilities,
 } from "@caplet/installer";
-import { readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
+import { readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { type FetchMode, readCwd, readScope } from "./args.js";
 import { resolveScopeRoots } from "./scopes.js";
 import { targetSelection } from "./target-selection.js";
@@ -84,13 +84,13 @@ export async function installedExecutables(
   const executables: ExecutableComponent[] = [];
   for (const scopeRoot of await resolveScopeRoots(readScope(args), cwd)) {
     const { capabilities } = await resolveScopeCapabilities(scopeRoot);
-    const canonical = await readSidecar(path.join(scopeRoot.agentsDir, SIDECAR_FILENAME));
+    const canonical = await readSidecar(sidecarPath(scopeRoot.agentsDir));
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
       if (installRoot === null) continue;
       const written = new Set(
         [
-          ...(await readSidecar(path.join(installRoot, SIDECAR_FILENAME))).managed.filter(
+          ...(await readSidecar(sidecarPath(installRoot))).managed.filter(
             (entry) => entry.target === undefined || entry.target === targetId,
           ),
           ...(targetMap[targetId]?.discoversCanonicalSkills === true

@@ -36,7 +36,7 @@ import {
   sourceString,
 } from "@caplet/installer";
 import { isInsideOrEqual } from "../apply/containment.js";
-import { detectDrift, diskDriftFs, readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
+import { detectDrift, diskDriftFs, readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { readCwd, readScope } from "./args.js";
 import { gateClaudeChanges } from "./claude-gates.js";
 import { planClaudeMarketplaces } from "./claude-marketplace.js";
@@ -564,6 +564,6 @@ async function emitCapability(
 
 /** `acf.emit.drift` notes for the managed regions under `installRoot` changed since apply. */
 async function driftDiagnostics(installRoot: string): Promise<Diagnostic[]> {
-  const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
+  const sidecar = await readSidecar(sidecarPath(installRoot));
   return detectDrift(sidecar, diskDriftFs(installRoot));
 }

@@ -23,6 +23,7 @@ import {
   relativeSidecarPath,
   SIDECAR_FILENAME,
   type SidecarOwner,
+  sidecarPath,
   writeSidecar,
 } from "../apply/sidecar.js";
 import { gatedChange, gateOpen } from "./claude-gates.js";
@@ -104,7 +105,7 @@ async function applyItems(progress: ApplyProgress, items: readonly EmittedDiff[]
     const result = await applyDiffs(group.diffs, {
       installRoot: group.installRoot,
       capabilityName: group.capabilityName,
-      sidecarPath: path.join(group.installRoot, SIDECAR_FILENAME),
+      sidecarPath: sidecarPath(group.installRoot),
       owner: group.owner,
     });
     progress.results.push(result);
@@ -165,17 +166,17 @@ async function applyGatedChanges(
  */
 async function rewriteHeldBackInventories(progress: ApplyProgress): Promise<void> {
   for (const installRoot of progress.heldBackRoots) {
-    const sidecarPath = path.join(installRoot, SIDECAR_FILENAME);
+    const sidecarFile = sidecarPath(installRoot);
     const notice = await rootNoticeDiffFromSidecar(
       installRoot,
-      await readSidecar(sidecarPath),
+      await readSidecar(sidecarFile),
       diskReadOnlyFs(),
     );
     if (!fileDiffChanged(notice)) continue;
     const result = await applyDiffs([notice], {
       installRoot,
       capabilityName: ACF_SYSTEM_OWNER,
-      sidecarPath,
+      sidecarPath: sidecarFile,
       owner: { target: "claude", carrier: "loose" },
     });
     progress.results.push(result);
@@ -274,13 +275,13 @@ async function removeStaleSidecarEntries(stale: readonly StaleSidecarEntry[]): P
     byRoot.set(entry.installRoot, bucket);
   }
   for (const [installRoot, removals] of byRoot) {
-    const sidecarPath = path.join(installRoot, SIDECAR_FILENAME);
-    const sidecar = await readSidecar(sidecarPath);
+    const sidecarFile = sidecarPath(installRoot);
+    const sidecar = await readSidecar(sidecarFile);
     const before = sidecar.managed.length;
     const removed = new Set(removals.map(staleIdentity));
     sidecar.managed = sidecar.managed.filter((entry) => !removed.has(staleIdentity(entry)));
     if (sidecar.managed.length !== before) {
-      await writeSidecar(sidecarPath, sidecar, removals[0]?.owner);
+      await writeSidecar(sidecarFile, sidecar, removals[0]?.owner);
     }
   }
 }

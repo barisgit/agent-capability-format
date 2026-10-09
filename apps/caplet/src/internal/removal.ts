@@ -4,7 +4,6 @@
  * so pending changes of other capabilities stay pending.
  */
 import { existsSync } from "node:fs";
-import path from "node:path";
 import type {
   AcfManagedSidecar,
   CapletConfig,
@@ -13,7 +12,7 @@ import type {
   TargetId,
 } from "@caplet/core";
 import type { OutputBoundary } from "../apply/containment.js";
-import { readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
+import { readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { gateClaudeChanges } from "./claude-gates.js";
 import { planClaudeMarketplaces, sidecarPlugins } from "./claude-marketplace.js";
 import { diskReadOnlyFs } from "./fs.js";
@@ -49,7 +48,7 @@ export function removalRoots(input: {
   const roots: RemovalRoot[] = [];
   for (const candidate of scopeOutputRoots(scopeRoot, targets, config, cwd)) {
     if (roots.some((root) => root.installRoot === candidate.installRoot)) continue;
-    if (!existsSync(path.join(candidate.installRoot, SIDECAR_FILENAME))) continue;
+    if (!existsSync(sidecarPath(candidate.installRoot))) continue;
     const boundary = outputBoundary(
       { ...candidate.context, installRoot: candidate.installRoot },
       cwd,
@@ -76,10 +75,7 @@ export async function planRemoval(input: {
     await Promise.all(
       input.roots.map(
         async (root) =>
-          [
-            root.installRoot,
-            await readSidecar(path.join(root.installRoot, SIDECAR_FILENAME)),
-          ] as const,
+          [root.installRoot, await readSidecar(sidecarPath(root.installRoot))] as const,
       ),
     ),
   );

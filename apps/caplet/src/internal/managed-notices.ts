@@ -10,7 +10,7 @@ import {
   type RootInventoryArtifact,
   renderRootInventory,
 } from "@caplet/core";
-import { readSidecar, SIDECAR_FILENAME } from "../apply/sidecar.js";
+import { readSidecar, sidecarPath } from "../apply/sidecar.js";
 import type { EmittedDiff, RootContext } from "./workflow.js";
 
 export async function addManagementNotices(
@@ -28,7 +28,7 @@ export async function addManagementNotices(
   const roots = new Set([...byRoot.keys(), ...staleByRoot.keys()]);
   for (const installRoot of roots) {
     const items = byRoot.get(installRoot) ?? [];
-    const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
+    const sidecar = await readSidecar(sidecarPath(installRoot));
     const stale = staleByRoot.get(installRoot) ?? new Set<string>();
     const artifacts = mergedInventoryArtifacts(items, installRoot, sidecar, stale);
     const noticePath = path.join(installRoot, MANAGEMENT_NOTICE_FILENAME);
@@ -197,7 +197,7 @@ async function diagnoseNoticeCollisions(
     if (item.diff.managementNotice === undefined || item.diff.before === null) continue;
     let sidecar = sidecars.get(item.installRoot);
     if (sidecar === undefined) {
-      sidecar = await readSidecar(path.join(item.installRoot, SIDECAR_FILENAME));
+      sidecar = await readSidecar(sidecarPath(item.installRoot));
       sidecars.set(item.installRoot, sidecar);
     }
     const relative = noticeRelativePath(item.installRoot, item.diff.path);

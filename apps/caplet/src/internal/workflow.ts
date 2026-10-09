@@ -29,8 +29,8 @@ import {
   type ManagedEntry,
   readSidecar,
   removeOwnedRegionsFromText,
-  SIDECAR_FILENAME,
   type SidecarOwner,
+  sidecarPath,
 } from "../apply/sidecar.js";
 import { type ClaudeGate, claudeGate } from "./claude-gates.js";
 import type { ClaudeReport } from "./claude-host-flow.js";
@@ -410,7 +410,7 @@ async function managedRoots(plan: EmitPlan): Promise<ManagedRoot[]> {
       const destination = context.destination === "canonical" ? "canonical" : context.targetId;
       const key = `${scopeRoot.scope}\u0000${destination}`;
       if (seen.has(key)) continue;
-      const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
+      const sidecar = await readSidecar(sidecarPath(installRoot));
       if (sidecar.managed.length === 0) continue;
       seen.add(key);
       roots.push({ scope: scopeRoot.scope, destination, installRoot, entries: sidecar.managed });

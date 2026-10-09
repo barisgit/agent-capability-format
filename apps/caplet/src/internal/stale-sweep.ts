@@ -2,7 +2,6 @@
  * The stale sweep of planning: the sidecar entries a plan no longer wants, and the removals,
  * kept drifted files and forced re-records that follow from them.
  */
-import path from "node:path";
 import {
   ACF_SYSTEM_OWNER,
   type AcfCapability,
@@ -19,7 +18,7 @@ import {
   ownershipKey,
   readSidecar,
   relativeSidecarPath,
-  SIDECAR_FILENAME,
+  sidecarPath,
 } from "../apply/sidecar.js";
 import type { ClaudeRootPlan } from "./claude-marketplace.js";
 import {
@@ -98,7 +97,7 @@ export async function sweepStaleSidecarEntries(input: SweepInput): Promise<Sweep
     for (const root of scopeOutputRoots(scopeRoot, input.targets, input.config, input.cwd)) {
       if (result.rootContexts.has(root.installRoot)) continue;
       result.rootContexts.set(root.installRoot, root.context);
-      const sidecar = await readSidecar(path.join(root.installRoot, SIDECAR_FILENAME));
+      const sidecar = await readSidecar(sidecarPath(root.installRoot));
       for (const entry of sidecar.managed) {
         if (entry.capability === ACF_SYSTEM_OWNER) continue;
         sweepEntry(entry, { root, desired, scopeFacets, input, result });

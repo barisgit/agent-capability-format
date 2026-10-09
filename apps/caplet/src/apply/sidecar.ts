@@ -24,6 +24,11 @@ import { deleteJsonPointerText, getJsonPointer, hasJsonPointer } from "./json-po
 /** The sidecar's file name directly under each output root it describes. */
 export const SIDECAR_FILENAME = ".acf-managed.json";
 
+/** Path of the sidecar that records what caplet manages under `installRoot`. */
+export function sidecarPath(installRoot: string): string {
+  return path.join(installRoot, SIDECAR_FILENAME);
+}
+
 /** One sidecar record: a path, the regions of it one capability owns and their hash. */
 export type ManagedEntry = AcfManagedSidecar["managed"][number];
 /** Target and carrier recorded on entries written for one output root. */

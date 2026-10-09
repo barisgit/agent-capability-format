@@ -16,7 +16,7 @@ import {
   type ManagedEntry,
   readSidecar,
   relativeSidecarPath,
-  SIDECAR_FILENAME,
+  sidecarPath,
   writeSidecar,
 } from "../apply/sidecar.js";
 import type { DesiredClaudePlugin } from "../hosts/claude/plan.js";
@@ -67,7 +67,7 @@ export async function planClaudeMarketplaces(input: {
   for (const { scopeRoot, installRoot } of input.roots) {
     const listed = await listedPlugins(scopeRoot, installRoot, input);
     const file = marketplaceFile(installRoot);
-    const sidecar = await readSidecar(path.join(installRoot, SIDECAR_FILENAME));
+    const sidecar = await readSidecar(sidecarPath(installRoot));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
     const leftover = sidecarPlugins(sidecar.managed).filter((name) => !listed.has(name));
     if (listed.size === 0 && leftover.length === 0 && !owned && sidecar.marketplace === undefined) {
@@ -153,14 +153,14 @@ export function sidecarPlugins(managed: readonly ManagedEntry[]): string[] {
  */
 export async function recordClaudeMarketplaces(roots: readonly ClaudeRootPlan[]): Promise<void> {
   for (const root of roots) {
-    const sidecarPath = path.join(root.installRoot, SIDECAR_FILENAME);
-    const sidecar = await readSidecar(sidecarPath);
+    const sidecarFile = sidecarPath(root.installRoot);
+    const sidecar = await readSidecar(sidecarFile);
     const wanted = ownsMarketplaceFile(sidecar.managed, root.installRoot) ? root.record : undefined;
     const current = sidecar.marketplace;
     if (current?.name === wanted?.name && current?.scope === wanted?.scope) continue;
     if (wanted === undefined) delete sidecar.marketplace;
     else sidecar.marketplace = wanted;
-    await writeSidecar(sidecarPath, sidecar);
+    await writeSidecar(sidecarFile, sidecar);
   }
 }
 

@@ -7,12 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { Diagnostic } from "@caplet/core";
 import { colors } from "consola/utils";
-import {
-  hashOwnedRegions,
-  type ManagedEntry,
-  readSidecar,
-  SIDECAR_FILENAME,
-} from "../apply/sidecar.js";
+import { hashOwnedRegions, type ManagedEntry, readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { execClaudeCli } from "../hosts/claude/cli.js";
 import { createClaudeHost } from "../hosts/claude/host.js";
 import type { ClaudePluginAction } from "../hosts/claude/plan.js";
@@ -88,9 +83,7 @@ async function withFileStates(
   for (const scope of report.scopes) {
     const root = roots.find((item) => item.marketplaceDir === scope.marketplaceDir);
     const managed =
-      root === undefined
-        ? []
-        : (await readSidecar(path.join(root.installRoot, SIDECAR_FILENAME))).managed;
+      root === undefined ? [] : (await readSidecar(sidecarPath(root.installRoot))).managed;
     const plugins: ClaudePluginStatus[] = [];
     for (const plugin of scope.plugins) {
       if (root === undefined || plugin.action === "uninstall") {
