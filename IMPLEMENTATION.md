@@ -2117,9 +2117,9 @@ export type ScopeRoot = {
   lockPath: string                     // <agentsDir>/capabilities.lock
 }
 
-export async function discoverScopes(cwd: string): Promise<ScopeRoot[]> {
-  const userDir = path.join(homedir(), ".agents")
-  const projectDir = await findProjectAgentsDir(cwd)   // searches upward for ./.agents
+export async function discoverScopes(cwd: string, home = homedir()): Promise<ScopeRoot[]> {
+  const userDir = path.join(home, ".agents")
+  const projectDir = await findProjectAgentsDir(cwd, { home }) // local ./.agents only
 
   const scopes: ScopeRoot[] = []
   if (await exists(userDir)) scopes.push(scopeRoot("user", userDir))
@@ -2583,9 +2583,20 @@ Behavior table:
 | `user`      | Only `~/.agents/`.                                                      |
 | `project`   | Only `./.agents/`.                                                      |
 
-Outside any project directory (no `./.agents/` found upward), `all` and
-`project` fall back to user-only with an `acf.scope.project-not-found` info
-diagnostic.
+The project root is exactly the selected working directory (`--cwd`), never
+an ancestor. Core's `findProjectAgentsDir` is the shared discovery rule for
+caplet and the SDK; it requires a local `.agents/` directory, not the optional
+`capabilities.yml`, and excludes the user scope by canonical path, including
+when cwd is the home directory or `.agents` is a symlink to the user scope.
+A project `.agents` symlink outside the selected project is also excluded.
+
+Outside a project, emission with `all` uses user-only with an
+`acf.scope.project-not-found` info diagnostic. Explicit `project` selection
+fails with that code (exit 2) and an `init` hint, without writing to either
+scope. `init` creates only the local scope and refuses a user-scope alias.
+`add` and `remove` infer project only from the local `.agents/` directory;
+otherwise they select user scope. Manifest, lock, snapshots and generated
+project output all use the selected project root.
 
 CLI flag `--scope <user|project|all>` overrides config. If an adapter
 declares `installPaths[scope] === null` for a requested scope, the adapter
@@ -2767,7 +2778,7 @@ acf.adapter.not-registered                   # target id has no adapter (impl er
 acf.adapter.superseded                       # emit target has a direct-consumer extension available (info)
 
 # Scope discovery
-acf.scope.project-not-found                  # caplet asked for project scope outside a project (info)
+acf.scope.project-not-found                  # absent local project: all emits user-only (info), explicit project fails (error)
 
 # Runtime/taxonomy
 acf.runtime.unknown-operation                # operation not in SPEC §24 provisional set

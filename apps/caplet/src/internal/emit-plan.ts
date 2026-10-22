@@ -85,7 +85,7 @@ export async function buildEmitPlan(
   process.chdir(cwd);
   const configResult = await readCapletConfig(cwd);
   const config = configResult.config;
-  const scopes = await resolveScopeRoots(readScope(args), cwd);
+  const scopes = await resolveScopeRoots(readScope(args), cwd, configResult.diagnostics);
   const targets = targetSelection(args, config);
   const context: PlanContext = { cwd, config, targets, fs: diskReadOnlyFs() };
   const state: PlanState = {

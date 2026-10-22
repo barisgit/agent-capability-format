@@ -76,11 +76,9 @@ test("ls alias is permanent and silent", async () => {
   }
 });
 
-test("add infers project scope inside a project and echoes it", async () => {
+test("add infers project scope at the project root and echoes it", async () => {
   const scope = await makeScope();
   try {
-    const nested = path.join(scope.cwd, "src", "deep");
-    await writeText(path.join(nested, ".keep"), "");
     const result = await runCaplet(scope, [
       "add",
       `path:${await writeGamma(scope)}`,
@@ -88,7 +86,7 @@ test("add infers project scope inside a project and echoes it", async () => {
       "alpha-copy",
       "--no-apply",
       "--cwd",
-      nested,
+      scope.cwd,
     ]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("(project scope)");
