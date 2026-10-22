@@ -90,6 +90,10 @@ All Markdown-backed facets require frontmatter `name` and `description`.
 `name` matches the discovered file/directory basename and is a slug
 (`^[a-z0-9]+(-[a-z0-9]+)*$`).
 
+`-C <directory>` / `--cwd <directory>` selects the working directory for the
+entire command. Relative paths are resolved once, from the invocation directory;
+source paths and generated outputs then use that selected directory.
+
 ## Resolution scopes
 
 Capabilities are autoloaded from two scopes:
