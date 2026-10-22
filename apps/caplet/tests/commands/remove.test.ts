@@ -1,8 +1,17 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { readLockfile, scopeRoot } from "@caplet/core";
 import { removeManifestEntries } from "../../src/internal/manifest";
-import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+import {
+  applyProject,
+  cleanup,
+  forceCanonicalSkills,
+  makeScope,
+  readText,
+  runCaplet,
+  writeText,
+} from "../helpers";
 
 /** Every `.acf-managed.json` under `dir`, relative to it. */
 async function sidecarFiles(dir: string): Promise<string[]> {
@@ -47,6 +56,42 @@ test("caplet remove updates manifest and cleans sidecar-owned output", async () 
           entry.path === "ACF-MANAGED.md" && entry.capability === "acf-system",
       ),
     ).toBe(true);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("caplet remove prunes nested skill directories in canonical and Claude roots", async () => {
+  const scope = await makeScope();
+  try {
+    await forceCanonicalSkills(scope);
+    const source = path.join(scope.sourceRoot, "bare-skills");
+    await writeText(
+      path.join(source, "skills", "foo", "SKILL.md"),
+      "---\nname: foo\ndescription: foo\n---\nbody\n",
+    );
+    const assets = ["kit/k.txt", "src/lib/helper.txt", "vendor/x/data.txt"];
+    for (const asset of assets) {
+      await writeText(path.join(source, "skills", "foo", asset), `${asset}\n`);
+    }
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude", "-y"];
+    const added = await runCaplet(scope, ["add", source, ...args]);
+    expect(added.exitCode).toBe(0);
+    const roots = [path.join(scope.agentsDir, "skills"), path.join(scope.cwd, ".claude", "skills")];
+    for (const root of roots) {
+      for (const asset of ["SKILL.md", ...assets]) {
+        expect(await readText(path.join(root, "foo", asset))).not.toBe("");
+      }
+    }
+
+    const removed = await runCaplet(scope, ["remove", "foo", ...args]);
+    expect(removed.exitCode).toBe(0);
+    for (const root of roots) expect(existsSync(path.join(root, "foo"))).toBe(false);
+
+    const applied = await runCaplet(scope, ["apply", ...args]);
+    expect(applied.exitCode).toBe(0);
+    expect(applied.stdout).toContain("Everything up to date");
+    for (const root of roots) expect(existsSync(path.join(root, "foo"))).toBe(false);
   } finally {
     await cleanup(scope);
   }

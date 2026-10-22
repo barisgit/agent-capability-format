@@ -6,6 +6,14 @@ import { INTERNAL_ERROR_CODE, reportCommandFailure } from "./internal/command.js
 import { CAPLET_VERSION } from "./internal/json.js";
 import { commandSpec, unknownFlagError, wantsJson } from "./internal/spec.js";
 
+// A downstream reader exiting early is normal pipeline termination, not a CLI failure.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") process.exit(0);
+    throw error;
+  });
+}
+
 const rawArgs = process.argv.slice(2);
 const first = rawArgs[0];
 const hasCommand = first !== undefined && !first.startsWith("-");

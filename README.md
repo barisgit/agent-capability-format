@@ -200,6 +200,11 @@ recovery action. Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--of
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 
+Piping output to an early-closing reader (for example, `caplet check | head -1`)
+exits quietly with status 0 on `EPIPE`, for text and `--json` output on either
+stdout or stderr. This terminates the command immediately; do not pipe mutations
+to early-closing readers if they must finish. Other output errors remain failures.
+
 Older command names still work but print a deprecation notice and rewrite to
 the canonical command:
 

@@ -3273,12 +3273,17 @@ For a preview of what `apply` would change on disk, use
 
 | Code | Meaning                                                                       |
 | ---- | ----------------------------------------------------------------------------- |
-| 0    | Success, no `error` diagnostics.                                              |
+| 0    | Success, no `error` diagnostics, or early pipe closure (`EPIPE`).                                              |
 | 1    | `check` found stale emitted outputs, or the user declined a confirmation.     |
 | 2    | `error` diagnostics (validation, IO, fetch) or bad CLI input.                 |
 | 3    | `--frozen` and the lockfile is stale (`apply`, `check`).                      |
 | 4    | `lossy` diagnostics with `--strict` (`check` reports this as 2).              |
 | 130  | Interactive `add` picker was cancelled.                                       |
+
+At the CLI entry point, `EPIPE` on stdout or stderr terminates immediately and quietly
+with exit 0, including with `--json`. This is pipeline termination, not confirmation
+that a mutating command finished; do not pipe mutations to early-closing readers.
+Other output errors remain failures.
 
 `warn`, `lossy`, and `info` diagnostics are printed (subject to caplet
 config toggles) but do not affect exit code unless `--strict` is set.
