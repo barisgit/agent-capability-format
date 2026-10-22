@@ -176,23 +176,40 @@ function smoke(outDir: string | undefined): void {
   console.log(`node ${node}: caplet -V ${reported}; library import printed: ${output}`);
 }
 
+/**
+ * Whether the registry has `name@version`. npm reports a missing package or version as
+ * E404; any other npm failure (network, auth) aborts the publish.
+ */
+function isPublished(spec: string, version: string): boolean {
+  try {
+    const output = execFileSync("npm", ["view", spec, "version"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    return output.trim() === version;
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    if (typeof stderr === "string" && stderr.includes("E404")) return false;
+    throw error;
+  }
+}
+
 function publish(outDir: string | undefined): void {
   if (outDir === undefined) fail("usage: publish <outDir>");
   for (const { manifest } of publishOrder()) {
     const spec = `${manifest.name}@${manifest.version}`;
-    let published = false;
-    try {
-      published = run("npm", ["view", spec, "version"], ROOT).trim() === manifest.version;
-    } catch {
-      // npm view exits non-zero (E404) for unpublished versions.
-    }
-    if (published) {
+    if (isPublished(spec, manifest.version)) {
       console.log(`${spec} is already published; skipping`);
       continue;
     }
     // In the release workflow npm authenticates through trusted publishing (OIDC) and
-    // attaches provenance itself; a local run uses the `npm login` session.
-    run("npm", ["publish", path.resolve(outDir, tarballName(manifest))], ROOT);
+    // attaches provenance itself. A local run uses the `npm login` session, so npm
+    // gets the terminal to run its two-factor prompt or browser confirmation.
+    execFileSync("npm", ["publish", path.resolve(outDir, tarballName(manifest))], {
+      cwd: ROOT,
+      stdio: "inherit",
+    });
     console.log(`published ${spec}`);
   }
 }
