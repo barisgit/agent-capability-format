@@ -13,6 +13,8 @@ for (const mapping of [false, true]) {
         "---\nname: original\ndescription: Original\n---\nBody\n",
       );
       const manifest = path.join(scope.agentsDir, "capabilities.yml");
+      const scopeArgs = ["--cwd", scope.cwd, "--scope", "project"];
+      const targetArgs = [...scopeArgs, "--target", "codex"];
       if (mapping) {
         await writeText(
           manifest,
@@ -21,74 +23,25 @@ for (const mapping of [false, true]) {
       }
       const result = await runCaplet(
         scope,
-        mapping
-          ? ["apply", "--cwd", scope.cwd, "--scope", "project", "--target", "codex"]
-          : [
-              "add",
-              source,
-              "--as",
-              "renamed-cap",
-              "--cwd",
-              scope.cwd,
-              "--scope",
-              "project",
-              "--target",
-              "codex",
-            ],
+        mapping ? ["apply", ...targetArgs] : ["add", source, "--as", "renamed-cap", ...targetArgs],
       );
       expect(result.exitCode).toBe(0);
-      expect(
-        await readText(path.join(scope.agentsDir, "capabilities", "renamed-cap", "acf.yml")),
-      ).toContain("name: renamed-cap");
-      expect(
-        await Bun.file(
-          path.join(
-            scope.agentsDir,
-            "capabilities",
-            "renamed-cap",
-            "skills",
-            "original",
-            "SKILL.md",
-          ),
-        ).exists(),
-      ).toBe(true);
+      const snapshot = path.join(scope.agentsDir, "capabilities", "renamed-cap");
+      expect(await readText(path.join(snapshot, "acf.yml"))).toContain("name: renamed-cap");
+      expect(await Bun.file(path.join(snapshot, "skills", "original", "SKILL.md")).exists()).toBe(
+        true,
+      );
       expect(await readText(path.join(scope.agentsDir, "capabilities.lock"))).toContain(
         '"renamed-cap"',
       );
-      const check = await runCaplet(scope, [
-        "check",
-        "--cwd",
-        scope.cwd,
-        "--scope",
-        "project",
-        "--target",
-        "codex",
-      ]);
+      const check = await runCaplet(scope, ["check", ...targetArgs]);
       expect(check.exitCode).toBe(0);
-      const shown = await runCaplet(scope, [
-        "show",
-        "renamed-cap",
-        "--cwd",
-        scope.cwd,
-        "--scope",
-        "project",
-        "--json",
-      ]);
+      const shown = await runCaplet(scope, ["show", "renamed-cap", ...scopeArgs, "--json"]);
       expect(shown.exitCode).toBe(0);
       expect(shown.stdout).toContain('"name": "renamed-cap"');
       const sidecar = await readText(path.join(scope.agentsDir, ".acf-managed.json"));
       expect(sidecar).toContain('"capability": "renamed-cap"');
-      const removed = await runCaplet(scope, [
-        "remove",
-        "renamed-cap",
-        "--cwd",
-        scope.cwd,
-        "--scope",
-        "project",
-        "--target",
-        "codex",
-        "--yes",
-      ]);
+      const removed = await runCaplet(scope, ["remove", "renamed-cap", ...targetArgs, "--yes"]);
       expect(removed.exitCode).toBe(0);
       expect(await readText(path.join(scope.agentsDir, "capabilities.lock"))).not.toContain(
         '"renamed-cap"',

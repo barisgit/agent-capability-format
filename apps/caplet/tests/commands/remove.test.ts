@@ -25,7 +25,9 @@ async function sidecarFiles(dir: string): Promise<string[]> {
 test("caplet remove updates manifest and cleans sidecar-owned output", async () => {
   const scope = await makeScope();
   try {
-    await applyProject(scope);
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const snapshot = path.join(scope.agentsDir, "capabilities", "alpha-cap");
+    expect(existsSync(snapshot)).toBe(true);
     const result = await runCaplet(scope, [
       "remove",
       "alpha-cap",
@@ -37,9 +39,7 @@ test("caplet remove updates manifest and cleans sidecar-owned output", async () 
       "claude",
     ]);
     expect(result.exitCode).toBe(0);
-    expect(await Bun.file(path.join(scope.agentsDir, "capabilities", "alpha-cap")).exists()).toBe(
-      false,
-    );
+    expect(existsSync(snapshot)).toBe(false);
     expect(await readText(path.join(scope.agentsDir, "capabilities.yml"))).not.toContain("alpha");
     expect(await readText(path.join(scope.cwd, ".claude", "CLAUDE.md"))).not.toContain(
       "Alpha guidance",

@@ -132,6 +132,11 @@ test("all outside a project emits only user artifacts with an info diagnostic", 
   try {
     const cwd = path.join(scope.cwd, "nested");
     await mkdir(cwd);
+    await cp(
+      path.join(scope.sourceRoot, "alpha"),
+      path.join(scope.home, ".agents", "capabilities", "alpha-cap"),
+      { recursive: true },
+    );
     const result = await runCaplet(scope, [
       "apply",
       "--cwd",
@@ -147,6 +152,9 @@ test("all outside a project emits only user artifacts with an info diagnostic", 
         severity: "info",
         code: "acf.scope.project-not-found",
       }),
+    );
+    expect(await readText(path.join(scope.home, ".codex", "config.toml"))).toContain(
+      "alpha-server",
     );
     expect(await readdir(cwd)).toEqual([]);
     expect(await readdir(scope.agentsDir)).toEqual(["capabilities.yml"]);

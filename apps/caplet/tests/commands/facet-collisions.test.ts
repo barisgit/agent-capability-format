@@ -14,7 +14,7 @@ test("same-scope facet collision blocks emission and exclude restores a fixed po
         `---\nname: foo\ndescription: From ${name}\n---\n${name}\n`,
       );
     }
-    for (const command of ["apply", "apply", "check", "status"]) {
+    for (const command of ["apply", "check", "status"]) {
       const result = await runCaplet(scope, [
         command,
         "--cwd",
