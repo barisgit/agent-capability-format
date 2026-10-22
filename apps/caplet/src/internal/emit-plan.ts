@@ -150,7 +150,8 @@ export async function buildEmitPlan(
 
 /**
  * Applies target filters before resolving identity across scopes; unsupported scopes contribute
- * no facets and therefore cannot shadow or collide with supported output.
+ * no facets and therefore cannot shadow or collide with supported output. Emits the per-scope
+ * selections, not the project-merged effective view: a project's shadowing is not user deselection.
  */
 function applicableAcrossScopes(
   resolved: ReadonlyMap<ScopeRoot, AcfCapability[]>,
@@ -168,7 +169,7 @@ function applicableAcrossScopes(
       targetId,
     );
     diagnostics.push(...selected.diagnostics);
-    applicable.set(targetId, selected.capabilities);
+    applicable.set(targetId, selected.scopedCapabilities);
   }
   return applicable;
 }

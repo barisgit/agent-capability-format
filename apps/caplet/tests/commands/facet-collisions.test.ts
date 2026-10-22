@@ -93,9 +93,9 @@ test("project facet shadows a differently named user capability with an info dia
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("acf.facet.shadowed");
     expect(result.stdout).toContain('"severity": "info"');
-    expect(
-      await Bun.file(path.join(scope.home, ".agents", "skills", "foo", "SKILL.md")).exists(),
-    ).toBe(false);
+    expect(await readText(path.join(scope.home, ".agents", "skills", "foo", "SKILL.md"))).toContain(
+      "user-cap",
+    );
     expect(await readText(path.join(scope.agentsDir, "skills", "foo", "SKILL.md"))).toContain(
       "project-cap",
     );

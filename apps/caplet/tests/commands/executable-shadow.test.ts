@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { cleanup, makeScope, runCaplet, writeText } from "../helpers";
 
-test("shadowed executable facets are reported as removed, not desired", async () => {
+test("project shadowing does not report still-selected global executables as removed", async () => {
   const scope = await makeScope();
   try {
     await writeText(path.join(scope.agentsDir, "capabilities.yml"), "acf: 1\ncapabilities: []\n");
@@ -25,9 +25,7 @@ test("shadowed executable facets are reported as removed, not desired", async ()
     const result = JSON.parse(applied.stdout) as {
       executables: Array<{ capability: string; change: string }>;
     };
-    expect(result.executables).toContainEqual(
-      expect.objectContaining({ capability: "user-cap", change: "removed" }),
-    );
+    expect(result.executables.filter((item) => item.capability === "user-cap")).toEqual([]);
     expect(result.executables).toContainEqual(
       expect.objectContaining({ capability: "project-cap", change: "added" }),
     );
@@ -38,8 +36,10 @@ test("shadowed executable facets are reported as removed, not desired", async ()
     const unshadowed = await runCaplet(scope, ["apply", ...flags]);
     expect(unshadowed.exitCode).toBe(0);
     expect(
-      (JSON.parse(unshadowed.stdout) as { executables: unknown[] }).executables,
-    ).toContainEqual(expect.objectContaining({ capability: "user-cap", change: "added" }));
+      (
+        JSON.parse(unshadowed.stdout) as { executables: Array<{ capability: string }> }
+      ).executables.filter((item) => item.capability === "user-cap"),
+    ).toEqual([]);
   } finally {
     await cleanup(scope);
   }

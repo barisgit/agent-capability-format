@@ -144,7 +144,11 @@ facet names. Use a `rename: {old-name: new-name}` mapping for a collection,
 and `exclude: {skills: [duplicate-name]}` to resolve a skill collision.
 After target filtering, same-scope `(family, name)` collisions fail emission
 with `acf.facet.name-collision`; project facets shadow user facets with
-`acf.facet.shadowed` (info).
+`acf.facet.shadowed` (info) in the project-merged effective view only.
+Each scope still emits its own selection: a project never removes global user
+files, ownership, or plugin registration by shadowing them. Claude can load both
+scope plugins and reports `acf.claude.duplicate-scope` rather than hiding the user
+plugin for one project.
 
 Repositories do not need to adopt ACF before caplet can consume them. Caplet
 reads four source formats and takes the first it finds: ACF (`acf.yml` or an

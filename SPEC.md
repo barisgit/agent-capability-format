@@ -2307,11 +2307,20 @@ Collisions are resolved by these rules, in order:
    `(family, name)` as a user-scope facet wins; the user-scope facet is
    skipped with the `info` diagnostic `acf.facet.shadowed`, naming both
    capabilities and the facet. Whole-capability shadowing reports
-   `acf.capability.shadowed`.
+   `acf.capability.shadowed`. Shadowing applies only to the project-merged
+   effective view, not to either scope's selection or emitted artifacts.
+   User-scope outputs and ownership are global: emission MUST plan the
+   still-selected user capability independently of any project's shadows,
+   including on a first apply from a project. Shadowing MUST NOT remove or
+   rewrite user files, release their ownership, or deselect/unregister a
+   user plugin. Claude cannot hide a user plugin for one project; both
+   scope plugins remain registered and §22.8.3's
+   `acf.claude.duplicate-scope` warning applies.
 2. **Within one scope:** if `(family, name)` collides across
    capabilities, emission MUST fail with the `error` diagnostic
    `acf.facet.name-collision`, naming the capabilities, family, name and
    target, with `exclude` as the recovery.
+   This check includes user facets shadowed in the project-merged view.
    Resolution is the author's responsibility via `exclude` (a facet
    collision) or `rename` (a capability-name collision) in
    `capabilities.yml`.

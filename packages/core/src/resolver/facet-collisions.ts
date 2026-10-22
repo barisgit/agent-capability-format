@@ -12,13 +12,19 @@ const families = Object.keys(selectorKeys) as FacetFamily[];
 
 /**
  * Resolves cross-capability identity after selection and target applicability (SPEC §17.6).
- * Project capabilities/facets shadow user ones. Every remaining same-scope facet clash is an
- * error naming all owners; no owner wins. Returns new capabilities without mutating inputs.
+ * Project capabilities/facets shadow user ones only in the project-merged effective view
+ * (`capabilities`). `scopedCapabilities` preserves each scope's selection for emission: project
+ * context must not change global user output. Same-scope clashes are errors even when shadowed.
+ * Neither view mutates the inputs.
  */
 export function resolveFacetCollisions(
   capabilities: readonly AcfCapability[],
   targetId: TargetId,
-): { capabilities: AcfCapability[]; diagnostics: Diagnostic[] } {
+): {
+  capabilities: AcfCapability[];
+  scopedCapabilities: AcfCapability[];
+  diagnostics: Diagnostic[];
+} {
   const diagnostics: Diagnostic[] = [];
   const projectNames = new Set(
     capabilities.filter((cap) => cap.scope === "project").map((cap) => cap.manifest.name),
@@ -60,12 +66,13 @@ export function resolveFacetCollisions(
       if (shadowed.length > 0) exclude[selectorKeys[family]] = shadowed;
     }
     if (Object.keys(exclude).length === 0) return [cap];
-    const selected = applyEntrySelection(cap, { exclude });
-    diagnostics.push(...selected.diagnostics);
-    return [selected.capability];
+    // These exclusions describe precedence, not actual removal from the user's package.
+    // Selection lossiness (native remainder references) would falsely gate scoped emission;
+    // genuine manifest include/exclude diagnostics are reported during scope resolution.
+    return [applyEntrySelection(cap, { exclude }).capability];
   });
-  diagnostics.push(...sameScopeFacetDiagnostics(effective, targetId));
-  return { capabilities: effective, diagnostics };
+  diagnostics.push(...sameScopeFacetDiagnostics(capabilities, targetId));
+  return { capabilities: effective, scopedCapabilities: [...capabilities], diagnostics };
 }
 
 /** All owners of a same-scope facet are reported together, independent of input order. */

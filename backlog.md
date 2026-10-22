@@ -8,6 +8,14 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ## Completed
 
+### Project shadowing preserves user selection
+
+Separated the project-merged effective view from per-scope emission (SPEC §17.6).
+Selected user Claude plugins stay installed, with or without saved config;
+project applies preserve global loose output and sidecar ownership. Regression
+coverage includes whole-capability and cross-capability facet shadows, and
+Claude's duplicate-scope warning.
+
 ### CLI Output Redesign
 
 Plan-view tree (scope → destination → directory rollups) with action-count summary table; 140-file apply renders in ≤25 lines. Message-first deduped diagnostics with summary line. Glyph status lines (`✓/✗/!`, ASCII `ok/fail/warn` piped), banner removed. Hand-rolled `render.ts` (no table deps). `--verbose` expansion, home-anchored `~` paths.
@@ -215,7 +223,7 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 - **Loose hook pointers are positional.** `packages/adapters/src/common/hooks.ts` owns `/hooks/<event>/<index>`; when a user inserts or removes a hook before an owned one, the recorded pointer names the user's entry and the next apply can overwrite or remove it.
 - **`no-capabilities` severity differs.** `acf.resolve.no-capabilities` is `info` in `packages/core/src/resolver/index.ts` and `error` in `packages/installer/src/inventory.ts`; the same empty source passes or fails depending on the path taken.
 - **SDK omits native hooks.** `hookViews` (`packages/sdk/src/helpers/views.ts`) reads only `capability.hooks.buckets`, so `getHooks` misses hooks a capability ships under `targets.<id>.native` or as plugin remainder.
-- **Installed hook inventory is capability-granular.** `apps/caplet/src/internal/fetch-scopes.ts` treats any managed output as evidence for every hook in that snapshot. Partial project/user hook shadowing while another user facet remains may repeatedly report the absent hook as removed; MCP now uses component-level installed evidence, but hooks need equivalent ownership identity (native hook pointers are positional).
+- **Installed hook inventory is capability-granular.** `apps/caplet/src/internal/fetch-scopes.ts` treats any managed output as evidence for every hook in that snapshot. Partial hook selection while another facet remains can overstate installed hooks; MCP uses component-level installed evidence, but hooks need equivalent ownership identity (native hook pointers are positional). Project shadowing no longer removes global user hooks.
 - **Remainder report rows keyed by name.** Two remainder components of different kinds with the same name share one row in the compatibility report (`apps/caplet/src/internal/compatibility.ts`).
 - **`caplet remove` is not atomic across roots.** `apps/caplet/src/commands/remove.ts` now refuses before changing anything when a root would be violated, but it rewrites the manifest before `applyEmitPlan`; a write failure in a later root leaves the manifest and earlier roots changed.
 - **Containment check races the write.** The containment preflight and the later write are separate steps (TOCTOU); a symlink swapped in between is followed.

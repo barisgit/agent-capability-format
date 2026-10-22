@@ -2392,8 +2392,16 @@ Per-scope resolution rejects duplicate capability names before emission.
 After selection and target applicability, emission calls
 `resolveFacetCollisions` across the supported scopes for each target:
 project capabilities shadow same-named user capabilities, then project
-facets shadow user facets by `(family, name)`. Remaining same-scope facet
-collisions report all owners as errors; no owner wins (SPEC §17.6).
+facets shadow user facets by `(family, name)` in the returned `capabilities`
+(the project-merged effective view). Emission uses `scopedCapabilities`, which
+preserves each scope's target-applicable selection, so project shadowing cannot
+uninstall a selected user Claude plugin or change global user loose output or
+its sidecar ownership. Claude's duplicate-scope warning still applies.
+Same-scope facet collisions, including shadowed user facets, report all owners
+as errors; no owner wins (SPEC §17.6). Artificial exclusions used to form the
+merged view do not produce selection lossiness: native user remainder still
+receives every scope-selected component. Actual manifest include/exclude
+lossiness remains blocking under `--strict`.
 
 The SDK's `deduplicateCapabilities` helper merges whole-capability names
 only; emission's cross-target ordering is described in §12.
@@ -2896,11 +2904,12 @@ orchestrator. Planning proceeds in this order:
    diagnostics to the plan; validation errors block apply (SPEC.md §14.2).
 2. For each target, `applyApplicability` filters capabilities from every
    supported scope, then `resolveFacetCollisions` resolves cross-scope
-   shadowing and reports same-scope facet collisions (§7.6).
+   shadowing for diagnostics and reports same-scope facet collisions (§7.6).
+   Emission takes the independent per-scope selections, not the merged view.
 3. For each scope and target, planning reports `acf.adapter.scope-unsupported`
    when there is no install root. Otherwise it withholds conflicting MCP
    server names in shared native configuration and calls the adapter's
-   `validate` and `emit` per effective capability. A capability whose
+   `validate` and `emit` per scope-selected capability. A capability whose
    diagnostics block it on that target (`capabilityBlocked`) contributes
    diagnostics but no diffs, and its previous output is kept.
 
