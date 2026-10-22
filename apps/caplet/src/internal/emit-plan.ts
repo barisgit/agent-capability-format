@@ -9,7 +9,6 @@ import {
   type AcfCapability,
   applyApplicability,
   type CapletConfig,
-  type ComponentOutcome,
   capabilityBlocked,
   componentOutcomes,
   type Diagnostic,
@@ -51,6 +50,7 @@ import {
   fileDiffChanged,
   installRootFor,
   type PlannedPlugin,
+  type ScopedComponentOutcome,
 } from "./workflow.js";
 
 /**
@@ -188,8 +188,8 @@ type PlanState = ClaudeRetention & {
   desiredDiffs: EmittedDiff[];
   plugins: PlannedPlugin[];
   blocked: BlockedCapability[];
-  /** The first outcome per capability, target, family and component. */
-  outcomes: Map<string, ComponentOutcome>;
+  /** The first outcome per scope, capability, target, family and component. */
+  outcomes: Map<string, ScopedComponentOutcome>;
   executables: ExecutableComponent[];
   /** `<scope>\0<capability>\0<path>` of the canonical skill files already planned. */
   canonicalDiffs: Set<string>;
@@ -431,7 +431,7 @@ async function planCapability(
   }
 }
 
-/** Records the capability's component outcomes on the target, keeping the first of each. */
+/** Records the capability's component outcomes on the target, keeping each scope distinct. */
 function recordOutcomes(
   state: PlanState,
   capability: AcfCapability,
@@ -444,8 +444,8 @@ function recordOutcomes(
     diagnostics: [...capability.diagnostics, ...validation, ...result.diagnostics],
     reported: result.outcomes,
   })) {
-    const key = `${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
-    if (!state.outcomes.has(key)) state.outcomes.set(key, outcome);
+    const key = `${capability.scope}\u0000${outcome.capability}\u0000${outcome.target}\u0000${outcome.family}\u0000${outcome.component}`;
+    if (!state.outcomes.has(key)) state.outcomes.set(key, { ...outcome, scope: capability.scope });
   }
 }
 

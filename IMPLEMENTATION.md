@@ -885,6 +885,9 @@ export type EmitResult = {
   plugins?: EmittedPlugin[]
 }
 
+// Writers report within one capability; Caplet qualifies outcomes when assembling a plan.
+export type ScopedComponentOutcome = ComponentOutcome & { scope: Scope }
+
 export type ComponentOutcome = {
   capability: string
   target: TargetId
@@ -3242,7 +3245,11 @@ Aliases are rewritten before parsing (`rewriteAlias` in
   and one line of dropped descriptive fields. A refusal blocks the rest of
   its capability for that target, reported on one grouped line; apply
   leaves that capability's output for the target untouched, applies
-  everything else and exits 2. `--json` carries the same records as `outcomes`.
+  everything else and exits 2. Caplet adds the capability's scope to writer
+  outcomes as `ScopedComponentOutcome`; deduplication keys scope, capability,
+  target, family and component. Human grouping never merges scopes, and labels
+  include scope when the report spans scopes. `--json` carries the same records
+  as `outcomes`, each with an explicit `scope`.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
   exits 3 without fetching or writing when the lockfile is stale. A plan
@@ -3258,7 +3265,8 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - `caplet list` (alias `ls`) — list installed capabilities per scope.
 - `caplet show <name>` — show one capability's facets, scope root, and
   target support; `--json` gives machine output. Support per target comes
-  from the compatibility outcomes a plan for every target reports: `no` when
+  from the matching scope and capability's compatibility outcomes in a plan
+  for every target: `no` when
   the target installs none of the capability (not applicable, blocked, or
   every component omitted), `partial` when a component is omitted or changes
   behavior, else `yes`.

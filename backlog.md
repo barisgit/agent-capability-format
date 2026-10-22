@@ -8,6 +8,16 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ## Completed
 
+### Scope-qualified compatibility outcomes
+
+Plans retain outcomes by scope, capability, target, family and component;
+`show` uses only the matching scope's results. Multi-scope compatibility rows
+name the scope and cannot group across scopes; JSON outcomes include `scope`.
+Regression coverage distinguishes native user and refused project capabilities
+with identical names and verifies only the unblocked user executables are
+reported. Executable identities, blocked filters and file-plan JSON were
+already scope-qualified; SDK merged-view name deduplication is intentional.
+
 ### Closed output preserves command completion
 
 `EPIPE` drops subsequent writes only on the closed stream, without exiting early
@@ -224,6 +234,7 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 - **Frozen restore rewrites lock entries written before per-capability records.** `packages/installer/src/resolve.ts` `fetchEntry`: under `--frozen`, restoring such an entry writes the fresh entry, so the lock gains `resolvedCapabilities` at the same sha, and an entry keyed by a legacy source id keeps that id. Provenance is unchanged, but it is a lock write under frozen. Suspected fix: under frozen keep the locked entry (`withSelection(locked)`).
 - **Non-EPIPE output errors bypass command error reporting.** `apps/caplet/src/bin.ts` throws from the stream error listener (for example `ENOSPC` writing to `/dev/full`), outside the command's catch. The process fails, but prints an uncaught stack and can omit the `--json` error envelope. This remains separate from dropping closed-pipe output.
+- **Configured scope output roots can alias.** `apps/caplet/src/internal/workflow.ts` `installRootFor` accepts equal `targets.<t>.out.user` and `out.project` directories. Root and sidecar maps identify roots by path, so two same-named scope capabilities can address the same native artifacts despite scope-qualified report identities. Needs a separate output-root isolation contract and regression.
 - **Target-excluded canonical facets may keep stale ownership.** `apps/caplet/src/internal/emit-plan.ts` records `resolvedFacets` before target applicability; `apps/caplet/src/internal/stale-sweep.ts` uses those names in `keptInCanonicalRoot`. Suspected: an excluded facet with no desired canonical writer can retain its earlier shared-root output. Needs a focused reproduction and a decision about unselected readers' shared-root ownership.
 - **`caplet.yml`'s `emit.scope` is accepted but ignored by the CLI.** `packages/core/src/schemas/index.ts` validates it, but `apps/caplet/src/internal/args.ts` `readScope` defaults directly to `all` without consulting config, unlike target selection. `IMPLEMENTATION.md` §8.3 describes a flag override of config. Decide whether to honor the setting or remove it from the config contract.
 

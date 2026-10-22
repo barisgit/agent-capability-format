@@ -221,7 +221,10 @@ The reference CLI `caplet` (`caplet --help` is authoritative):
 
 The plan starts with a compatibility report listing, per target, each
 component that is translated, changed in behavior, omitted or blocked, with a
-recovery action. Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
+recovery action. Results stay separate by scope: multi-scope reports label
+non-native components with their scope, JSON `outcomes` records include `scope`,
+and `show` derives each capability's support from that scope's results.
+Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 

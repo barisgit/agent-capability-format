@@ -4,6 +4,7 @@ import type { ComponentOutcome } from "@caplet/core";
 import { assertGoldenTree, goldenCase, treeFromFiles } from "@caplet/golden";
 import { renderCompatibility } from "../../src/internal/compatibility.js";
 import { stripAnsi } from "../../src/internal/render.js";
+import type { ScopedComponentOutcome } from "../../src/internal/workflow.js";
 import { cleanup, makeScope, runCaplet, type TestScope, writeText } from "../helpers.js";
 
 const testsDir = path.resolve(import.meta.dir, "..");
@@ -12,7 +13,7 @@ const testsDir = path.resolve(import.meta.dir, "..");
  * One of every outcome kind, so the renderer is pinned independently of which outcomes the
  * writers happen to produce for the fixture capabilities.
  */
-const constructed: ComponentOutcome[] = [
+const examples: ComponentOutcome[] = [
   {
     capability: "tools",
     target: "claude",
@@ -86,6 +87,10 @@ const constructed: ComponentOutcome[] = [
     dropped: ["native/claude/"],
   },
 ];
+const constructed: ScopedComponentOutcome[] = examples.map((item) => ({
+  ...item,
+  scope: "project",
+}));
 
 /** The report as written, one line per entry; its trailing section separator ends the file. */
 function plain(lines: readonly string[]): string {
@@ -99,6 +104,15 @@ describe("behavior-first compatibility report", () => {
       treeFromFiles({ "report.txt": report }),
       goldenCase(testsDir, "compatibility-report").expected,
     );
+  });
+
+  test("does not group identical non-native results across scopes", () => {
+    const user = constructed.map((item) => ({ ...item, scope: "user" as const }));
+    const report = plain(renderCompatibility([...constructed, ...user], ["pi"]));
+    expect(report).toContain("review (tools, project) / pi - blocked:");
+    expect(report).toContain("review (tools, user) / pi - blocked:");
+    expect(report).toContain("skill.argument-hint (review (tools, project))");
+    expect(report).toContain("skill.argument-hint (review (tools, user))");
   });
 
   test("names the capability when the report spans several", () => {

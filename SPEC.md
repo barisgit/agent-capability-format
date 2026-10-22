@@ -1966,8 +1966,12 @@ target.
 component as native, translated, changed behavior, omitted, or blocked,
 before listing files. Each non-native outcome names the source field or
 component, the target, the consequence, and the recovery; descriptive drops
-are grouped into one line per target. JSON output carries the same
-outcomes.
+are grouped into one line per target. Outcomes MUST remain distinct by
+scope, capability, target, family and component; a user capability's outcome
+MUST NOT replace the outcome of a same-named project capability. Reports
+spanning scopes identify each non-native component's scope. JSON output
+carries the same outcomes with an explicit `scope`. Capability inspection
+MUST derive support from the matching scope's outcomes.
 
 ### 14.4 Native artifacts
 

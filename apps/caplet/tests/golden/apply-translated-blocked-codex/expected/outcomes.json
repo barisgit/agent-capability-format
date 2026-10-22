@@ -7,21 +7,24 @@
     "outcome": "native",
     "dropped": [
       "targets.claude.native.when_to_use"
-    ]
+    ],
+    "scope": "project"
   },
   {
     "capability": "alpha-cap",
     "target": "codex",
     "family": "agent",
     "component": "alpha-helper",
-    "outcome": "native"
+    "outcome": "native",
+    "scope": "project"
   },
   {
     "capability": "alpha-cap",
     "target": "codex",
     "family": "instruction",
     "component": "always",
-    "outcome": "native"
+    "outcome": "native",
+    "scope": "project"
   },
   {
     "capability": "alpha-cap",
@@ -30,7 +33,8 @@
     "component": "alpha-server",
     "outcome": "translated",
     "source": "mcp.command=${ACF_CAPABILITY_DIR}",
-    "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory"
+    "consequence": "${ACF_CAPABILITY_DIR} becomes the absolute path of the installed capability directory",
+    "scope": "project"
   },
   {
     "capability": "beta-cap",
@@ -40,7 +44,8 @@
     "outcome": "blocked",
     "source": "skill.invocation.user=false",
     "consequence": "skill background is not installed for codex",
-    "recovery": "exclude: { skills: [background] } or except: [codex]"
+    "recovery": "exclude: { skills: [background] } or except: [codex]",
+    "scope": "project"
   },
   {
     "capability": "beta-cap",
@@ -50,7 +55,8 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]",
+    "scope": "project"
   },
   {
     "capability": "beta-cap",
@@ -60,7 +66,8 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]",
+    "scope": "project"
   },
   {
     "capability": "beta-cap",
@@ -70,7 +77,8 @@
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",
-    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { skills: [background], mcp: [events] } or except: [codex]",
+    "scope": "project"
   },
   {
     "capability": "beta-cap",
@@ -80,6 +88,7 @@
     "outcome": "blocked",
     "source": "mcp.transport=sse",
     "consequence": "MCP server events is not installed for codex",
-    "recovery": "exclude: { mcp: [events] } or except: [codex]"
+    "recovery": "exclude: { mcp: [events] } or except: [codex]",
+    "scope": "project"
   }
 ]

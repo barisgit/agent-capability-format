@@ -1,10 +1,10 @@
 import {
   type AcfCapability,
   applyApplicability,
-  type ComponentOutcome,
   type Diagnostic,
   hookEntries,
   resolveScopeCapabilities,
+  type Scope,
   type TargetId,
   targetIds,
 } from "@caplet/core";
@@ -23,6 +23,7 @@ import {
 import { columns, displayVersion } from "../internal/render.js";
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
+import type { ScopedComponentOutcome } from "../internal/workflow.js";
 
 export const showCommand = defineCommand({
   meta: { name: "show", description: "show a capability's contents and target support" },
@@ -66,10 +67,7 @@ async function showCapability(args: Record<string, unknown>): Promise<void> {
       scope: match.scope,
       ...capabilitySummary(match.capability),
       support: Object.fromEntries(
-        targetIds.map((target) => [
-          target,
-          supportLevel(outcomes, match.capability.manifest.name, target),
-        ]),
+        targetIds.map((target) => [target, supportLevel(outcomes, match, target)]),
       ),
     }));
     printJson("show", code === 0, diagnostics, { capabilities: payload });
@@ -83,10 +81,14 @@ async function showCapability(args: Record<string, unknown>): Promise<void> {
 }
 
 /** A capability installed in one scope. */
-type Match = { scope: string; capability: AcfCapability };
+type Match = { scope: Scope; capability: AcfCapability };
 
 /** Prints one installed capability: its header, its facets and its support on every target. */
-function printMatch(out: Reporter, match: Match, outcomes: readonly ComponentOutcome[]): void {
+function printMatch(
+  out: Reporter,
+  match: Match,
+  outcomes: readonly ScopedComponentOutcome[],
+): void {
   const capability = match.capability;
   out.log(
     `${colors.bold(capability.manifest.name)} ${displayVersion(capability.manifest.version)}${
@@ -104,7 +106,7 @@ function printMatch(out: Reporter, match: Match, outcomes: readonly ComponentOut
   const support = [
     "  supported",
     ...targetIds.map((targetId) => {
-      const level = supportLevel(outcomes, capability.manifest.name, targetId);
+      const level = supportLevel(outcomes, match, targetId);
       return level === "yes" ? level : colors.yellow(level);
     }),
   ];
@@ -151,16 +153,21 @@ function hookEvents(capability: AcfCapability): string[] {
 }
 
 /**
- * How fully `target` carries capability `name`, from the plan's compatibility outcomes: `no` when
+ * How fully `target` carries the matching scope's capability, from compatibility outcomes: `no` when
  * it installs none of it (not applicable or planned there, blocked, or every component omitted),
  * `partial` when a component is omitted or changes behavior, and `yes` otherwise.
  */
 function supportLevel(
-  outcomes: readonly ComponentOutcome[],
-  name: string,
+  outcomes: readonly ScopedComponentOutcome[],
+  match: Match,
   target: TargetId,
 ): "yes" | "partial" | "no" {
-  const own = outcomes.filter((item) => item.capability === name && item.target === target);
+  const own = outcomes.filter(
+    (item) =>
+      item.scope === match.scope &&
+      item.capability === match.capability.manifest.name &&
+      item.target === target,
+  );
   if (own.some((item) => item.outcome === "blocked")) return "no";
   const components = own.filter((item) => item.family !== "package");
   if (components.every((item) => item.outcome === "omitted")) return "no";

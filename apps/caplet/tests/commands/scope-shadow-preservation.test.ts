@@ -88,6 +88,73 @@ for (const projectName of ["shared-cap", "project-cap"]) {
   });
 }
 
+test("same-named scopes retain distinct support outcomes in apply and show", async () => {
+  const scope = await makeScope();
+  try {
+    await select(scope, "user", "shared-cap");
+    await select(scope, "project", "shared-cap");
+    for (const agents of [path.join(scope.home, ".agents"), scope.agentsDir]) {
+      await writeText(
+        path.join(agents, "capabilities", "shared-cap", "mcp", "mcp.yml"),
+        "servers:\n  - name: shared-server\n    transport: stdio\n    command: node\n",
+      );
+    }
+    await writeText(
+      path.join(scope.agentsDir, "capabilities", "shared-cap", "skills", "shared", "SKILL.md"),
+      "---\nname: shared\ndescription: Project skill\ninvocation:\n  user: false\n---\nProject guidance\n",
+    );
+    const flags = ["--cwd", scope.cwd];
+    const args = ["apply", ...flags, "--target", "codex", "--dry-run"];
+    const applied = await runCaplet(scope, [...args, "--json"]);
+    expect(applied.exitCode).toBe(2);
+    const json = JSON.parse(applied.stdout) as {
+      outcomes: unknown[];
+      diagnostics: Diagnostic[];
+      executables: Array<{ scope: string; capability: string; name: string }>;
+    };
+    expect(json.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "acf.support.refused" }),
+    );
+    expect(json.outcomes).toContainEqual(
+      expect.objectContaining({
+        scope: "user",
+        capability: "shared-cap",
+        component: "shared",
+        target: "codex",
+        outcome: "native",
+      }),
+    );
+    expect(json.outcomes).toContainEqual(
+      expect.objectContaining({
+        scope: "project",
+        capability: "shared-cap",
+        component: "shared",
+        target: "codex",
+        outcome: "blocked",
+        recovery: expect.any(String),
+      }),
+    );
+    expect(json.executables).toHaveLength(1);
+    expect(json.executables).toContainEqual(
+      expect.objectContaining({ scope: "user", capability: "shared-cap", name: "shared-server" }),
+    );
+    const human = await runCaplet(scope, args);
+    expect(human.exitCode).toBe(2);
+    expect(human.stdout).toContain("shared (shared-cap, project) / codex - blocked:");
+    const shown = await runCaplet(scope, ["show", "shared-cap", ...flags, "--json"]);
+    expect(shown.exitCode).toBe(0);
+    const details = JSON.parse(shown.stdout) as {
+      capabilities: Array<{ scope: string; support: { codex: string } }>;
+    };
+    expect(details.capabilities.map((item) => [item.scope, item.support.codex])).toEqual([
+      ["user", "yes"],
+      ["project", "no"],
+    ]);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("a project shadow cannot hide a collision in global user output", async () => {
   const scope = await makeScope();
   try {

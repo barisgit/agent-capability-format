@@ -96,6 +96,9 @@ export type PluginlessClaudeCapability = {
   output: "loose" | "empty";
 };
 
+/** A writer's component outcome qualified by the scope whose capability was planned. */
+export type ScopedComponentOutcome = ComponentOutcome & { scope: Scope };
+
 /** Everything one plan holds for reporting and applying ({@link ApplicablePlan}). */
 export type EmitPlan = {
   /** Directory relative target paths resolve against (the process cwd while planning). */
@@ -122,10 +125,10 @@ export type EmitPlan = {
    */
   blocked: BlockedCapability[];
   /**
-   * Compatibility-report outcome of every planned component per target, independent of whether
-   * its files changed. A capability planned in several scopes is reported once per target.
+   * Compatibility-report outcome of every planned component per scope and target, independent
+   * of whether its files changed. Same-named capabilities in different scopes remain distinct.
    */
-  outcomes: ComponentOutcome[];
+  outcomes: ScopedComponentOutcome[];
   /**
    * Executable components of every planned capability per scope and target, read while the
    * planned snapshots (or previews) exist; compare with `installedExecutables` through

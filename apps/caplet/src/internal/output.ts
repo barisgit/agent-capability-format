@@ -1,16 +1,11 @@
-import {
-  type ComponentOutcome,
-  type Diagnostic,
-  type ExecutableChange,
-  type TargetId,
-  targetIds,
-} from "@caplet/core";
+import { type Diagnostic, type ExecutableChange, type TargetId, targetIds } from "@caplet/core";
 import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
 import { renderCompatibility } from "./compatibility.js";
 import { renderExecutableChanges } from "./executables.js";
 import type { PlanView } from "./plan-view.js";
 import { columns, glyphs } from "./render.js";
+import type { ScopedComponentOutcome } from "./workflow.js";
 
 /**
  * How a command writes human output. Under `--quiet` only errors, the problem summary and
@@ -30,7 +25,7 @@ export type Reporter = {
   status(status: "pass" | "warn" | "fail", message: string): void;
   plan(view: PlanView): void;
   /** Behavior-first compatibility report; precedes the plan's file list. */
-  compatibility(outcomes: readonly ComponentOutcome[], targets: readonly TargetId[]): void;
+  compatibility(outcomes: readonly ScopedComponentOutcome[], targets: readonly TargetId[]): void;
   /**
    * Executable components added, changed or removed; printed whenever non-empty, even with
    * `--quiet`, because the report is how an install of executing code stays visible.
