@@ -124,7 +124,10 @@ resolver writes one copy into `capabilities/<name>/`. Per-host fan-out
 happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
 resolved by `rename:` or `exclude:`. `caplet add --as <slug>` validates the
-name before writing; a failed add leaves `capabilities.yml` unchanged.
+name before writing and requires exactly one selected capability; a failed add
+leaves `capabilities.yml` unchanged. `rename` changes capability identity, not
+facet names. Use a `rename: {old-name: new-name}` mapping for a collection,
+and `exclude: {skills: [duplicate-name]}` to resolve a skill collision.
 
 Repositories do not need to adopt ACF before caplet can consume them. Caplet
 reads four source formats and takes the first it finds: ACF (`acf.yml` or an

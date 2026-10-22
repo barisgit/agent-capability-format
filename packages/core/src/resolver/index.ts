@@ -189,7 +189,7 @@ async function applyLockedSource(
 ): Promise<void> {
   const source = await lockedSource(record, dir);
   if (source === undefined) return;
-  // The snapshot keeps the package's own acf.yml; `rename` lives only in the lock.
+  // Older snapshots keep their original name; honor their locked identity too.
   if (record !== undefined && record.name !== cap.manifest.name) {
     source.renamedFrom = cap.manifest.name;
     cap.manifest.name = record.name;

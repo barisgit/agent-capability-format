@@ -1,4 +1,4 @@
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilityEntry,
@@ -6,7 +6,11 @@ import {
   type Diagnostic,
   entryCapabilityHash,
   IMPORT_MARKER_FILENAME,
+  isErrno,
+  isRecord,
   type LockedCapability,
+  parseYaml,
+  stringifyYml,
 } from "@caplet/core";
 import { matchCapabilitySelectors } from "./capability-selectors.js";
 import type { FetchedCapability } from "./fetch.js";
@@ -48,13 +52,15 @@ export type MaterializedSource = {
 /**
  * Stages the capabilities `entry` selects from a fetched source under `stagingDir`, one
  * snapshot per final name, and builds the lock entry with each snapshot's digests. Uses
- * `inspectedInventory` when the caller already inspected the source (`caplet add`).
+ * `inspectedInventory` when the caller already inspected the source (`caplet add`). Restoring
+ * records preserve a pre-rename snapshot only when its full payload matches the approved digest.
  */
 export async function materializeFetched(
   entry: CapabilityEntry,
   fetched: FetchedCapability,
   stagingDir: string,
   inspectedInventory?: SourceInventory,
+  restoring?: readonly LockedCapability[],
 ): Promise<MaterializedSource> {
   const inventory =
     inspectedInventory ??
@@ -67,6 +73,13 @@ export async function materializeFetched(
   const records: CapabilityRecord[] = [];
   const selected = matchCapabilitySelectors(entry, fetched.root, inventory);
   diagnostics.push(...selected.diagnostics);
+  if (typeof entry.rename === "string" && selected.candidates.length !== 1) {
+    diagnostics.push({
+      severity: "error",
+      code: "acf.selection.rename-ambiguous",
+      message: "scalar rename requires exactly one capability; select one or use a rename mapping",
+    });
+  }
   if (diagnostics.some((item) => item.severity === "error")) {
     return { ok: false, records, lockEntry: null, diagnostics };
   }
@@ -76,7 +89,7 @@ export async function materializeFetched(
     const destination = capabilityPath(stagingDir, name);
     try {
       if (candidate.synthesized) {
-        await materializeImportedSkill(candidate, destination, fetched.commit);
+        await materializeImportedSkill(candidate, destination, fetched.commit, candidate.name);
       } else {
         await copySnapshot(candidate.root, destination);
       }
@@ -84,6 +97,16 @@ export async function materializeFetched(
       if (!(error instanceof SnapshotRejectedError)) throw error;
       diagnostics.push(snapshotRejectedDiagnostic(name, error));
       return { ok: false, records: [], lockEntry: null, diagnostics };
+    }
+    if ((candidate.synthesized || candidate.format === "acf") && name !== candidate.name) {
+      const approved = restoring?.find((record) => record.name === name)?.payloadDigest;
+      const original =
+        approved === undefined ? undefined : await computeCapabilityDigests(destination);
+      // Older locks approved the original manifest bytes. Never migrate an approved payload
+      // during restoration; a normal update writes the new identity and accepts new digests.
+      if (approved === undefined || original?.payloadDigest !== approved) {
+        await renameManifest(destination, name);
+      }
     }
     const digests = await computeCapabilityDigests(destination);
     records.push({
@@ -147,6 +170,7 @@ async function materializeImportedSkill(
   candidate: SourceCapabilityCandidate,
   destination: string,
   revision: string | null,
+  name: string,
 ): Promise<void> {
   await rm(destination, { recursive: true, force: true });
   // Leave out notices caplet itself emitted, so a target directory read back as a source
@@ -157,7 +181,7 @@ async function materializeImportedSkill(
   const version = `0.0.0-unmanifested+${revision ?? "local"}`;
   await writeFile(
     path.join(destination, "acf.yml"),
-    `acf: 1\nname: ${candidate.name}\nversion: ${version}\n`,
+    `acf: 1\nname: ${name}\nversion: ${version}\n`,
     "utf8",
   );
   await writeFile(
@@ -165,6 +189,19 @@ async function materializeImportedSkill(
     `${JSON.stringify({ acf: 1, synthesized: true, sourcePath: candidate.sourcePath })}\n`,
     "utf8",
   );
+}
+
+/** Rewrites only the ACF capability identity; foreign manifests and facet names stay native. */
+async function renameManifest(destination: string, name: string): Promise<void> {
+  let manifestPath = path.join(destination, "acf.yml");
+  const raw = await readFile(manifestPath, "utf8").catch((error: unknown) => {
+    if (!isErrno(error, "ENOENT")) throw error;
+    manifestPath = path.join(destination, "acf.yaml");
+    return readFile(manifestPath, "utf8");
+  });
+  const manifest = parseYaml(raw);
+  if (!isRecord(manifest)) throw new Error(`invalid capability manifest: ${manifestPath}`);
+  await writeFile(manifestPath, stringifyYml({ ...manifest, name }), "utf8");
 }
 
 /** Package root of `candidate` relative to the source root (before `path:`), POSIX. */

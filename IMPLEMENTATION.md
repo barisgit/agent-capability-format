@@ -2812,6 +2812,7 @@ acf.lock.digest-mismatch                     # snapshot no longer matches its pa
 
 # Selection
 acf.selection.unmatched                      # selector matches nothing (warn)
+acf.selection.rename-ambiguous               # scalar rename selects other than one capability (error)
 acf.selection.remainder-references           # removed component or old name may be referenced by remainder (lossy)
 
 # Support registry and extras

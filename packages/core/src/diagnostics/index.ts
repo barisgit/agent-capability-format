@@ -126,6 +126,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.support.degraded",
   "acf.support.component-omitted",
   "acf.selection.unmatched",
+  "acf.selection.rename-ambiguous",
   "acf.selection.remainder-references",
   "acf.extras.dropped",
   "acf.core.pending",

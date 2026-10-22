@@ -2254,6 +2254,14 @@ Each entry under `capabilities[]`:
 | `only`     | list    | no       | Entry-level target applicability (§6).                                         |
 | `except`   | list    | no       | Entry-level target applicability (§6).                                         |
 
+`rename` changes capability identity everywhere it is used: the installed
+directory, the materialized ACF manifest `name`, collision checks, lock and
+ownership records, and capability-keyed output. It does not rename facets.
+Foreign source manifests remain byte-preserved; their projected identity is
+the locked name. A scalar against several selected capabilities is the
+`error` `acf.selection.rename-ambiguous`; `add --as` rejects this before
+writing the manifest, including with `--no-apply`.
+
 `include`/`exclude` family keys are the facet folder names (`skills`,
 `agents`, `commands`, `instructions`, `hooks`, `mcp`), the plural forms of
 the facet family kinds; any other key is invalid. Values are names or
@@ -2656,6 +2664,12 @@ is the manifest `name`, which MUST be a slug or be renamed with the entry's
 `rename`. Its version is the manifest `version` when it is SemVer, else
 `0.0.0-unversioned+<resolved-revision-or-local>`; the Claude plugin reader
 keeps the original value as `targets.claude.package.version` (§7.6).
+
+For native ACF, a capability rename rewrites the snapshot manifest's `name`
+before computing its digests. A restore from an older lock retains the original
+manifest bytes only when the full payload matches its approved digest; an
+explicit update accepts the renamed snapshot and its new digests. Foreign
+manifests keep their source bytes.
 
 The snapshot holds every regular file under the package root except
 `.git/`, including hidden files, with exact bytes and the executable bit.

@@ -81,6 +81,11 @@ async function addSource(args: Record<string, unknown>): Promise<void> {
       .filter((candidate) => names.has(candidate.name))
       .map((candidate) => candidate.selector);
   }
+  if (typeof entry.rename === "string" && selected.length !== 1) {
+    throw validationError(
+      "--as requires exactly one capability; select one capability or use a rename mapping in capabilities.yml",
+    );
+  }
   const previous = await readFile(root.manifestPath).catch((error: unknown) => {
     if (isErrno(error, "ENOENT")) return null;
     throw error;
@@ -116,7 +121,9 @@ async function applyAddedSource(
     source,
     scope,
     manifest: root.manifestPath,
-    capabilities: selected,
+    capabilities: selected.map((name) =>
+      typeof entry.rename === "string" ? entry.rename : (entry.rename?.[name] ?? name),
+    ),
     ...(entry.path === undefined ? {} : { path: entry.path }),
   };
   if (!json) printAdded(out, entry.source.kind, added);
