@@ -241,8 +241,8 @@ test("add confirms the source and manifest it changed", async () => {
       "acf: 1\nname: gamma-cap\nversion: 1.0.0\ndescription: gamma\n",
     );
     await writeText(
-      `${scope.sourceRoot}/gamma/instructions/always.md`,
-      "---\nname: always\ndescription: G\nactivation: always\n---\nGamma.\n",
+      `${scope.sourceRoot}/gamma/instructions/gamma-always.md`,
+      "---\nname: gamma-always\ndescription: G\nactivation: always\n---\nGamma.\n",
     );
     const result = await runCaplet(scope, [
       "add",

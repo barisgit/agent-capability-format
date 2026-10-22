@@ -130,9 +130,10 @@ async function writeCapability(
     `acf: 1\nname: ${name}\nversion: 1.0.0\ndescription: ${name}\n`,
     "utf8",
   );
+  const instructionName = name === "alpha-cap" ? "always" : `${name}-always`;
   await writeFile(
-    path.join(root, "instructions", "always.md"),
-    `---\nname: always\ndescription: Always ${name}\nactivation: always\n---\n${instruction}\n`,
+    path.join(root, "instructions", `${instructionName}.md`),
+    `---\nname: ${instructionName}\ndescription: Always ${name}\nactivation: always\n---\n${instruction}\n`,
     "utf8",
   );
   await writeFile(

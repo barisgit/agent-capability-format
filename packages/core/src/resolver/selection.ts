@@ -1,5 +1,5 @@
 import { computeSet } from "../applicability/index.js";
-import { remainderFamilies } from "../targets/remainder-support.js";
+import { remainderFamilies, remainderTargets } from "../targets/remainder-support.js";
 import type {
   AcfCapability,
   Diagnostic,
@@ -155,10 +155,18 @@ function selectorMatcher(field: "include" | "exclude", selector: FacetSelector |
   } satisfies SelectorMatcher;
 }
 
-/** Every selectable name of `family`: canonical facets plus native remainder components. */
-function componentNames(capability: AcfCapability, family: FacetFamily): string[] {
+/** Selectable names of `family`; when a target is given, omit remainder it cannot carry. */
+export function componentNames(
+  capability: AcfCapability,
+  family: FacetFamily,
+  target?: TargetId,
+): string[] {
   const native = (capability.remainder ?? [])
-    .filter((item) => remainderFamilies[item.kind] === family)
+    .filter(
+      (item) =>
+        remainderFamilies[item.kind] === family &&
+        (target === undefined || remainderTargets[item.format].includes(target)),
+    )
     .map((item) => item.name);
   switch (family) {
     case "skill":

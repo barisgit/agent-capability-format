@@ -321,6 +321,7 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
     fetchedCapability,
     sourceStagingDir,
     prefetched?.inventory,
+    restoring ? locked.resolvedCapabilities : undefined,
   );
   const mismatches =
     restoring && materialized.ok ? restoreMismatches(locked, materialized.records) : [];

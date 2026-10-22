@@ -40,11 +40,11 @@
     "capability": "beta-cap",
     "target": "cursor",
     "family": "instruction",
-    "component": "always",
+    "component": "beta-cap-always",
     "outcome": "omitted",
     "source": "activation: always",
     "consequence": "cursor only emits file_context instructions as Cursor rules",
-    "recovery": "exclude: { instructions: [always] } or except: [cursor]"
+    "recovery": "exclude: { instructions: [beta-cap-always] } or except: [cursor]"
   },
   {
     "capability": "beta-cap",

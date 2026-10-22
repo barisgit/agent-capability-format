@@ -137,7 +137,14 @@ Sources are `github:owner/repo`, `git:<url>`, or `path:<location>`. The
 resolver writes one copy into `capabilities/<name>/`. Per-host fan-out
 happens at emit time, not resolve time. Project shadows user on name
 collision with an info diagnostic; same-scope collisions are an error unless
-resolved by `rename:` or `exclude:`.
+resolved by `rename:` or `exclude:`. `caplet add --as <slug>` validates the
+name before writing and requires exactly one selected capability; a failed add
+leaves `capabilities.yml` unchanged. `rename` changes capability identity, not
+facet names. Use a `rename: {old-name: new-name}` mapping for a collection,
+and `exclude: {skills: [duplicate-name]}` to resolve a skill collision.
+After target filtering, same-scope `(family, name)` collisions fail emission
+with `acf.facet.name-collision`; project facets shadow user facets with
+`acf.facet.shadowed` (info).
 
 Repositories do not need to adopt ACF before caplet can consume them. Caplet
 reads four source formats and takes the first it finds: ACF (`acf.yml` or an

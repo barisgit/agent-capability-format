@@ -8,7 +8,7 @@ test("caplet update with a name refreshes only that capability", async () => {
   try {
     await fetchProject(scope);
     const alphaSource = path.join(scope.sourceRoot, "alpha", "instructions", "always.md");
-    const betaSource = path.join(scope.sourceRoot, "beta", "instructions", "always.md");
+    const betaSource = path.join(scope.sourceRoot, "beta", "instructions", "beta-cap-always.md");
     await writeText(
       alphaSource,
       (await readText(alphaSource)).replace("Alpha guidance", "Alpha updated"),
@@ -32,7 +32,7 @@ test("caplet update with a name refreshes only that capability", async () => {
       path.join(scope.agentsDir, "capabilities", "alpha-cap", "instructions", "always.md"),
     );
     const betaInstalled = await readText(
-      path.join(scope.agentsDir, "capabilities", "beta-cap", "instructions", "always.md"),
+      path.join(scope.agentsDir, "capabilities", "beta-cap", "instructions", "beta-cap-always.md"),
     );
     expect(alphaInstalled).toContain("Alpha updated");
     expect(betaInstalled).toContain("Beta guidance");

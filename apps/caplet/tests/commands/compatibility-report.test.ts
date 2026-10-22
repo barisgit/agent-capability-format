@@ -209,6 +209,10 @@ test("add and update report compatibility like apply, also for a plan without fi
     expect(added.stdout.indexOf(blocked)).toBeGreaterThan(-1);
     expect(added.stdout.indexOf(blocked)).toBeLessThan(added.stdout.indexOf("Plan:"));
 
+    // The failed add rolled back its declaration; declare it without applying before updating.
+    expect(
+      (await runCaplet(scope, ["add", `path:${gamma}`, "--no-apply", ...flags])).exitCode,
+    ).toBe(0);
     const updated = await runCaplet(scope, ["update", ...flags]);
     expect(updated.exitCode).toBe(2);
     expect(updated.stdout).toContain(blocked);

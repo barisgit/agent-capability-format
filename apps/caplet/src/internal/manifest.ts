@@ -3,9 +3,11 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
+  capabilitiesYmlSchema,
   retainLockedCapabilities,
   type ScopeRoot,
   type SourceSpec,
+  slugSchema,
   sourceUrlCredentialProblem,
   stringifyYml,
 } from "@caplet/core";
@@ -224,6 +226,10 @@ export async function writeCapabilitiesYml(
   root: ScopeRoot,
   manifest: CapabilitiesYml,
 ): Promise<void> {
+  const parsed = capabilitiesYmlSchema.safeParse(manifest);
+  if (!parsed.success) {
+    throw validationError(`invalid capabilities.yml: ${parsed.error.message}`);
+  }
   await mkdir(path.dirname(root.manifestPath), { recursive: true });
   const humanReadable = manifest.capabilities.map(
     ({ source, capabilities: selected, ...entry }) => ({
@@ -263,7 +269,14 @@ function buildEntry(source: string, opts: ManifestEntryOptions): CapabilityEntry
   const entry: CapabilityEntry = { source: parseSourceSpec(source) };
   if (opts.ref !== undefined) entry.ref = opts.ref;
   if (opts.path !== undefined) entry.path = opts.path;
-  if (opts.rename !== undefined) entry.rename = opts.rename;
+  if (opts.rename !== undefined) {
+    if (!slugSchema.safeParse(opts.rename).success) {
+      throw validationError(
+        `invalid --as: ${opts.rename} (use lowercase letters, digits and single hyphens)`,
+      );
+    }
+    entry.rename = opts.rename;
+  }
   if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
     throw validationError(
       `git and github sources require --ref (try: caplet add ${source} --ref main)`,

@@ -22,6 +22,7 @@ import {
 } from "@caplet/installer";
 import { readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { type FetchMode, readCwd, readScope } from "./args.js";
+import { installedMcpExecutables } from "./installed-executables.js";
 import { resolveScopeRoots } from "./scopes.js";
 import { targetSelection } from "./target-selection.js";
 import { type EmitPlan, installRootFor } from "./workflow.js";
@@ -88,11 +89,12 @@ export async function installedExecutables(
     for (const targetId of targets) {
       const installRoot = installRootFor(targetId, scopeRoot, config, cwd);
       if (installRoot === null) continue;
+      const managed = (await readSidecar(sidecarPath(installRoot))).managed.filter(
+        (entry) => entry.target === undefined || entry.target === targetId,
+      );
       const written = new Set(
         [
-          ...(await readSidecar(sidecarPath(installRoot))).managed.filter(
-            (entry) => entry.target === undefined || entry.target === targetId,
-          ),
+          ...managed,
           ...(targetMap[targetId]?.discoversCanonicalSkills === true
             ? canonical.managed.filter(
                 (entry) => entry.target === undefined || entry.target === "canonical",
@@ -102,11 +104,18 @@ export async function installedExecutables(
       );
       for (const capability of capabilities) {
         if (!written.has(capability.manifest.name)) continue;
+        const components = await executableComponents(
+          capability,
+          targetId,
+          config.targets?.[targetId]?.carrier,
+        );
         executables.push(
-          ...(await executableComponents(
-            capability,
+          ...(await installedMcpExecutables(
+            components,
+            managed.filter((entry) => entry.capability === capability.manifest.name),
             targetId,
-            config.targets?.[targetId]?.carrier,
+            installRoot,
+            capability,
           )),
         );
       }

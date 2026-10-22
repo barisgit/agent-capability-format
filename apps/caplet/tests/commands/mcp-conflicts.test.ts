@@ -112,7 +112,7 @@ async function serverSource(root: string, name: string, server: string): Promise
   return source;
 }
 
-test("Claude plugins keep their servers in their own .mcp.json, so a shared name is no conflict", async () => {
+test("Claude plugin packaging does not bypass same-scope facet identity checks", async () => {
   const scope = await makeScope();
   try {
     const sources = await Promise.all(
@@ -132,14 +132,13 @@ test("Claude plugins keep their servers in their own .mcp.json, so a shared name
     const result = await runCaplet(scope, ["apply", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.stderr).not.toContain("acf.mcp.config-conflict");
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("acf.facet.name-collision");
+    expect(result.stderr).toContain("exclude: { mcp: [diff] }");
     expect(await readText(path.join(scope.cwd, ".mcp.json"))).toBe(userConfig);
     for (const name of ["first", "second"]) {
       const plugin = path.join(scope.cwd, ".claude", ".acf", "marketplace", "plugins", name);
-      const json = JSON.parse(await readText(path.join(plugin, ".mcp.json"))) as {
-        mcpServers: Record<string, unknown>;
-      };
-      expect(Object.keys(json.mcpServers)).toEqual(["diff"]);
+      expect(await Bun.file(path.join(plugin, ".mcp.json")).exists()).toBe(false);
     }
   } finally {
     await cleanup(scope);

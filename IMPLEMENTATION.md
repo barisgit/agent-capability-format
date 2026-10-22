@@ -2729,6 +2729,8 @@ acf.capability.name-collision                # same-scope same-name (error)
 acf.facet.name-mismatch
 acf.facet.primary-missing
 acf.facet.duplicate
+acf.facet.name-collision                     # same-scope (family, name) across capabilities (error)
+acf.facet.shadowed                           # project facet shadows user facet (info)
 
 # Layout
 acf.layout.singular-facet-folder             # root `skill/`, `agent/`, etc. (error)
@@ -2823,6 +2825,7 @@ acf.lock.digest-mismatch                     # snapshot no longer matches its pa
 
 # Selection
 acf.selection.unmatched                      # selector matches nothing (warn)
+acf.selection.rename-ambiguous               # scalar rename selects other than one capability (error)
 acf.selection.remainder-references           # removed component or old name may be referenced by remainder (lossy)
 
 # Support registry and extras

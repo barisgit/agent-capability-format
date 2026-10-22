@@ -1,5 +1,12 @@
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CapabilityEntry, Diagnostic, Scope, ScopeRoot } from "@caplet/core";
+import {
+  type CapabilityEntry,
+  type Diagnostic,
+  isErrno,
+  type Scope,
+  type ScopeRoot,
+} from "@caplet/core";
 import { fetchCapability, inspectSource, type PrefetchedSource } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { planAndApply } from "../internal/apply-flow.js";
@@ -74,12 +81,49 @@ async function addSource(args: Record<string, unknown>): Promise<void> {
       .filter((candidate) => names.has(candidate.name))
       .map((candidate) => candidate.selector);
   }
-  await addManifestEntry(root, entry);
+  if (typeof entry.rename === "string" && selected.length !== 1) {
+    throw validationError(
+      "--as requires exactly one capability; select one capability or use a rename mapping in capabilities.yml",
+    );
+  }
+  const previous = await readFile(root.manifestPath).catch((error: unknown) => {
+    if (isErrno(error, "ENOENT")) return null;
+    throw error;
+  });
+  let succeeded = false;
+  try {
+    await addManifestEntry(root, entry);
+    await applyAddedSource(args, root, entry, parsedSource.source, selected, inspection, out);
+    succeeded = Number(process.exitCode ?? 0) === 0;
+  } finally {
+    // Preserve comments, formatting and even absence on every failed add, not a reserialization.
+    if (!succeeded) {
+      if (previous === null) await rm(root.manifestPath, { force: true });
+      else await writeFile(root.manifestPath, previous);
+    }
+  }
+}
+
+/** Resolves and applies the newly declared source, or reports a manifest-only add. */
+async function applyAddedSource(
+  args: Record<string, unknown>,
+  root: ScopeRoot,
+  entry: CapabilityEntry,
+  source: string,
+  selected: string[],
+  inspection: SelectionInspection,
+  out: Reporter,
+): Promise<void> {
+  const { scope } = root;
+  const { inventory } = inspection;
+  const json = readJson(args);
   const added: Added = {
-    source: parsedSource.source,
+    source,
     scope,
     manifest: root.manifestPath,
-    capabilities: selected,
+    capabilities: selected.map((name) =>
+      typeof entry.rename === "string" ? entry.rename : (entry.rename?.[name] ?? name),
+    ),
     ...(entry.path === undefined ? {} : { path: entry.path }),
   };
   if (!json) printAdded(out, entry.source.kind, added);
