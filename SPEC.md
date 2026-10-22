@@ -2274,6 +2274,10 @@ Snapshots, `capabilityHash`, and the payload digest therefore describe the
 unfiltered package, and changing a selection never refetches. Changing
 `ref`, `path`, `capabilities`, `rename`, or `format` re-resolves the entry.
 
+`caplet add --as` (alias `--rename`) validates its slug before fetching or
+writing. A failed `add` MUST leave `capabilities.yml` unchanged, including
+when subsequent resolution or emission fails.
+
 Credentials do not belong in `capabilities.yml`; authentication comes from
 the environment (§18.4).
 
