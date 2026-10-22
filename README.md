@@ -22,7 +22,7 @@ The `caplet` CLI needs Node.js 20 or later (and `git` for remote sources):
 ```bash
 npm install --global @caplet/cli
 caplet init
-caplet add github:owner/repo
+caplet add github:owner/repo --ref main
 ```
 
 ## Terminology in one minute
@@ -338,8 +338,7 @@ plugin, enabled or disabled, and leaves any you edited in place with an
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
-implementation (`caplet` 0.1.0, packaged for npm as `@caplet/*` but not yet
-published). It supports bare skill imports, Claude plugin and Agent Plugins
+implementation (`caplet` 0.1.0, published on npm as `@caplet/*`). It supports bare skill imports, Claude plugin and Agent Plugins
 sources, Claude plugin output, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).

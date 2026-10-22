@@ -18,7 +18,7 @@ Or run it once without installing: `npx @caplet/cli --help`.
 
 ```bash
 caplet init                                   # create .agents/capabilities.yml
-caplet add github:owner/repo                  # add a source, resolve, and apply
+caplet add github:owner/repo --ref main       # add a source, resolve, and apply
 caplet apply --dry-run                        # preview emitted file changes
 caplet apply                                  # write native artifacts for each target
 caplet                                        # status summary
@@ -33,7 +33,7 @@ until you run `claude plugin uninstall <id> --scope <scope> --keep-data`, so a c
 moved to loose files loads twice meanwhile.
 
 An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
-left out for every target with the warning `acf.source.component-invalid`; caplet 0.1.0 loaded it as written.
+left out for every target with the warning `acf.source.component-invalid`.
 
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
