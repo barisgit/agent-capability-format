@@ -22,12 +22,14 @@ import {
 } from "@caplet/installer";
 import { validationError } from "./args.js";
 
+/** A CLI source and its parsed transport, with an optional GitHub capability selector. */
 export type ParsedAddSource = {
   source: string;
   spec: SourceSpec;
   selector?: string;
 };
 
+/** Splits GitHub's `@capability` shorthand and rejects selectors that are not slugs. */
 export function parseAddSource(input: string): ParsedAddSource {
   if (!input.startsWith("github:")) return { source: input, spec: parseSourceSpec(input) };
   const separator = input.lastIndexOf("@");
@@ -35,12 +37,13 @@ export function parseAddSource(input: string): ParsedAddSource {
   const source = input.slice(0, separator);
   const selector = input.slice(separator + 1);
   if (selector.length === 0) throw validationError("capability name after @ must not be empty");
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(selector)) {
+  if (!slugSchema.safeParse(selector).success) {
     throw validationError(`invalid capability selector: ${selector}`);
   }
   return { source, spec: parseSourceSpec(source), selector };
 }
 
+/** Optional source selection, revision and capability alias supplied by `add`. */
 export type ManifestEntryOptions = {
   ref?: string | undefined;
   path?: string | undefined;
@@ -48,15 +51,32 @@ export type ManifestEntryOptions = {
   capabilities?: string[] | undefined;
 };
 
+/** Builds an add entry, rejecting invalid aliases and unpinned remote sources before fetching. */
 export function buildManifestEntry(
   source: string,
   opts: ManifestEntryOptions = {},
 ): CapabilityEntry {
-  const entry = buildEntry(source, opts);
+  const entry: CapabilityEntry = { source: parseSourceSpec(source) };
+  if (opts.ref !== undefined) entry.ref = opts.ref;
+  if (opts.path !== undefined) entry.path = opts.path;
+  if (opts.rename !== undefined) {
+    if (!slugSchema.safeParse(opts.rename).success) {
+      throw validationError(
+        `invalid --as: ${opts.rename} (use lowercase letters, digits and single hyphens)`,
+      );
+    }
+    entry.rename = opts.rename;
+  }
+  if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
+    throw validationError(
+      `git and github sources require --ref (try: caplet add ${source} --ref main)`,
+    );
+  }
   if (opts.capabilities !== undefined) entry.capabilities = opts.capabilities;
   return entry;
 }
 
+/** Parses CLI source shorthand, rejecting inline Git credentials and empty sources. */
 export function parseSourceSpec(source: string): SourceSpec {
   if (source.startsWith("github:")) return { kind: "github", repo: source.slice("github:".length) };
   if (source.startsWith("git:")) {
@@ -70,6 +90,7 @@ export function parseSourceSpec(source: string): SourceSpec {
   throw validationError("source must not be empty");
 }
 
+/** Appends a source to a valid manifest; duplicate source identities fail before writing. */
 export async function addManifestEntry(
   root: ScopeRoot,
   source: string | CapabilityEntry,
@@ -105,15 +126,7 @@ export async function removeManifestEntries(
   const manifest = await readManifestForMutation(root);
   const lock = await readLockfile(root.lockPath);
   const sourceIdsToRemove = new Set<string>();
-  const lockUpdates = new Map<
-    string,
-    {
-      capabilityNames: string[];
-      capabilities: string[];
-      selectorsByCapability: Record<string, string>;
-      rename?: CapabilityEntry["rename"];
-    }
-  >();
+  const lockUpdates = new Map<string, RetainedSelection>();
   const found = new Set<string>();
   const kept = manifest.capabilities.flatMap((entry) => {
     const id = entrySourceId(entry, path.dirname(root.manifestPath));
@@ -133,51 +146,9 @@ export async function removeManifestEntries(
       return [];
     }
 
-    function originalCapabilityName(entry: CapabilityEntry, installedName: string): string {
-      if (typeof entry.rename !== "object") return installedName;
-      return (
-        Object.entries(entry.rename).find(([, renamed]) => renamed === installedName)?.[0] ??
-        installedName
-      );
-    }
-    function selectorForRemoval(
-      entry: CapabilityEntry,
-      lockEntry: LockEntry | undefined,
-      installedName: string,
-    ): string {
-      const mapped = lockEntry?.selectorsByCapability?.[installedName];
-      if (mapped !== undefined) return mapped;
-      const originalName = originalCapabilityName(entry, installedName);
-      if (entry.capabilities?.includes(originalName)) return originalName;
-      throw validationError(
-        "lockfile lacks exact selectors for safe removal; run caplet update --no-apply, then retry",
-      );
-    }
-    const selectorsByCapability = Object.fromEntries(
-      survivors.map((candidate) => [candidate, selectorForRemoval(entry, lockEntry, candidate)]),
-    );
-    const capabilities = survivors.map(
-      (candidate) => selectorsByCapability[candidate] ?? originalCapabilityName(entry, candidate),
-    );
-    const next: CapabilityEntry = { ...entry, capabilities };
-    if (typeof entry.rename === "object") {
-      const rename = Object.fromEntries(
-        Object.entries(entry.rename).filter(
-          ([original, renamed]) => capabilities.includes(original) || survivors.includes(renamed),
-        ),
-      );
-      if (Object.keys(rename).length === 0) delete next.rename;
-      else next.rename = rename;
-    }
-    if (lockEntry !== undefined) {
-      lockUpdates.set(lockEntry.sourceId, {
-        capabilityNames: survivors,
-        capabilities,
-        selectorsByCapability,
-        ...(next.rename === undefined ? {} : { rename: next.rename }),
-      });
-    }
-    return [next];
+    const retained = retainSourceSelection(entry, lockEntry, survivors);
+    if (lockEntry !== undefined) lockUpdates.set(lockEntry.sourceId, retained.update);
+    return [retained.entry];
   });
   const unknown = names.filter((name) => !found.has(name));
   if (unknown.length > 0) {
@@ -205,6 +176,69 @@ export async function removeManifestEntries(
   }
 }
 
+/** The surviving capability identities and exact source selectors mirrored into a lock entry. */
+type RetainedSelection = {
+  capabilityNames: string[];
+  capabilities: string[];
+  selectorsByCapability: Record<string, string>;
+  rename?: CapabilityEntry["rename"];
+};
+
+/** Narrows source intent and its lock mirror together, preserving original selectors after rename. */
+function retainSourceSelection(
+  entry: CapabilityEntry,
+  lockEntry: LockEntry | undefined,
+  survivors: string[],
+): { entry: CapabilityEntry; update: RetainedSelection } {
+  const selectorsByCapability = Object.fromEntries(
+    survivors.map((candidate) => [candidate, selectorForRemoval(entry, lockEntry, candidate)]),
+  );
+  const capabilities = survivors.map(
+    (candidate) => selectorsByCapability[candidate] ?? originalCapabilityName(entry, candidate),
+  );
+  const next: CapabilityEntry = { ...entry, capabilities };
+  if (typeof entry.rename === "object") {
+    const rename = Object.fromEntries(
+      Object.entries(entry.rename).filter(
+        ([original, renamed]) => capabilities.includes(original) || survivors.includes(renamed),
+      ),
+    );
+    if (Object.keys(rename).length === 0) delete next.rename;
+    else next.rename = rename;
+  }
+  return {
+    entry: next,
+    update: {
+      capabilityNames: survivors,
+      capabilities,
+      selectorsByCapability,
+      ...(next.rename === undefined ? {} : { rename: next.rename }),
+    },
+  };
+}
+
+function originalCapabilityName(entry: CapabilityEntry, installedName: string): string {
+  if (typeof entry.rename !== "object") return installedName;
+  return (
+    Object.entries(entry.rename).find(([, renamed]) => renamed === installedName)?.[0] ??
+    installedName
+  );
+}
+
+function selectorForRemoval(
+  entry: CapabilityEntry,
+  lockEntry: LockEntry | undefined,
+  installedName: string,
+): string {
+  const mapped = lockEntry?.selectorsByCapability?.[installedName];
+  if (mapped !== undefined) return mapped;
+  const originalName = originalCapabilityName(entry, installedName);
+  if (entry.capabilities?.includes(originalName)) return originalName;
+  throw validationError(
+    "lockfile lacks exact selectors for safe removal; run caplet update --no-apply, then retry",
+  );
+}
+
 /**
  * Reads capabilities.yml for an add/remove rewrite. An unreadable or invalid manifest parses as
  * empty, so rewriting it would silently drop every existing entry (and reconciliation would then
@@ -222,6 +256,7 @@ export async function readManifestForMutation(root: ScopeRoot): Promise<Capabili
   return manifest.value;
 }
 
+/** Validates and serializes a scope manifest, preserving source-relative path intent. */
 export async function writeCapabilitiesYml(
   root: ScopeRoot,
   manifest: CapabilitiesYml,
@@ -263,26 +298,6 @@ export function anchorPathSource(entry: CapabilityEntry, baseDir: string): Capab
     ...entry,
     source: { kind: "path", location: canonicalizePathLocation(entry.source.location, baseDir) },
   };
-}
-
-function buildEntry(source: string, opts: ManifestEntryOptions): CapabilityEntry {
-  const entry: CapabilityEntry = { source: parseSourceSpec(source) };
-  if (opts.ref !== undefined) entry.ref = opts.ref;
-  if (opts.path !== undefined) entry.path = opts.path;
-  if (opts.rename !== undefined) {
-    if (!slugSchema.safeParse(opts.rename).success) {
-      throw validationError(
-        `invalid --as: ${opts.rename} (use lowercase letters, digits and single hyphens)`,
-      );
-    }
-    entry.rename = opts.rename;
-  }
-  if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
-    throw validationError(
-      `git and github sources require --ref (try: caplet add ${source} --ref main)`,
-    );
-  }
-  return entry;
 }
 
 function namesFromEntry(entry: CapabilityEntry): string[] {

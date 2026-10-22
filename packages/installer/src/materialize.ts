@@ -8,6 +8,7 @@ import {
   IMPORT_MARKER_FILENAME,
   isErrno,
   isRecord,
+  isSlug,
   type LockedCapability,
   parseYaml,
   stringifyYml,
@@ -88,25 +89,11 @@ export async function materializeFetched(
     const name = finalCapabilityName(entry, candidate.name);
     const destination = capabilityPath(stagingDir, name);
     try {
-      if (candidate.synthesized) {
-        await materializeImportedSkill(candidate, destination, fetched.commit, candidate.name);
-      } else {
-        await copySnapshot(candidate.root, destination);
-      }
+      await materializeSnapshot(candidate, destination, name, fetched.commit, restoring);
     } catch (error) {
       if (!(error instanceof SnapshotRejectedError)) throw error;
       diagnostics.push(snapshotRejectedDiagnostic(name, error));
       return { ok: false, records: [], lockEntry: null, diagnostics };
-    }
-    if ((candidate.synthesized || candidate.format === "acf") && name !== candidate.name) {
-      const approved = restoring?.find((record) => record.name === name)?.payloadDigest;
-      const original =
-        approved === undefined ? undefined : await computeCapabilityDigests(destination);
-      // Older locks approved the original manifest bytes. Never migrate an approved payload
-      // during restoration; a normal update writes the new identity and accepts new digests.
-      if (approved === undefined || original?.payloadDigest !== approved) {
-        await renameManifest(destination, name);
-      }
     }
     const digests = await computeCapabilityDigests(destination);
     records.push({
@@ -166,11 +153,35 @@ function lockEntryFor(
   return lockEntry;
 }
 
+/**
+ * Copies a package without renaming its facets or foreign metadata. A legacy restore keeps
+ * the original ACF manifest bytes when they reproduce the lock's approved payload.
+ */
+async function materializeSnapshot(
+  candidate: SourceCapabilityCandidate,
+  destination: string,
+  name: string,
+  revision: string | null,
+  restoring: readonly LockedCapability[] | undefined,
+): Promise<void> {
+  if (candidate.synthesized) {
+    await materializeImportedSkill(candidate, destination, revision);
+  } else {
+    await copySnapshot(candidate.root, destination);
+  }
+  if ((!candidate.synthesized && candidate.format !== "acf") || name === candidate.name) return;
+  const approved = restoring?.find((record) => record.name === name)?.payloadDigest;
+  const original = approved === undefined ? undefined : await computeCapabilityDigests(destination);
+  // A normal update accepts new digests; restoration must reproduce the approved bytes.
+  if (approved === undefined || original?.payloadDigest !== approved) {
+    await renameManifest(destination, name);
+  }
+}
+
 async function materializeImportedSkill(
   candidate: SourceCapabilityCandidate,
   destination: string,
   revision: string | null,
-  name: string,
 ): Promise<void> {
   await rm(destination, { recursive: true, force: true });
   // Leave out notices caplet itself emitted, so a target directory read back as a source
@@ -181,7 +192,7 @@ async function materializeImportedSkill(
   const version = `0.0.0-unmanifested+${revision ?? "local"}`;
   await writeFile(
     path.join(destination, "acf.yml"),
-    `acf: 1\nname: ${name}\nversion: ${version}\n`,
+    `acf: 1\nname: ${candidate.name}\nversion: ${version}\n`,
     "utf8",
   );
   await writeFile(
@@ -227,7 +238,7 @@ function snapshotRejectedDiagnostic(name: string, error: SnapshotRejectedError):
 
 /** Directory of the capability `name` under `capabilitiesDir`; throws unless `name` is a slug. */
 export function capabilityPath(capabilitiesDir: string, name: string): string {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+  if (!isSlug(name)) {
     throw new Error(`invalid capability destination name: ${name}`);
   }
   return path.join(capabilitiesDir, name);

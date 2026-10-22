@@ -7,12 +7,12 @@ import {
   isErrno,
   isTargetId,
   makeDiagnostic,
-  type Scope,
   type ScopeRoot,
   scopeRoot,
   type TargetId,
 } from "@caplet/core";
 
+/** Scope, fetch policy and filtering for direct SDK facet queries. */
 export type GetOptions = {
   scope?: "user" | "project" | "all";
   cwd?: string;
@@ -22,6 +22,7 @@ export type GetOptions = {
   includeDiagnostics?: boolean;
 };
 
+/** Query options with defaults fixed and paths anchored before any resolution. */
 export type NormalizedGetOptions = {
   target: TargetId;
   scope: "user" | "project" | "all";
@@ -32,6 +33,7 @@ export type NormalizedGetOptions = {
   capabilities?: readonly string[] | undefined;
 };
 
+/** Anchors query paths against the invocation directory and supplies SDK defaults. */
 export function normalizeGetOptions(opts: GetOptions & { target: TargetId }): NormalizedGetOptions {
   const normalized: NormalizedGetOptions = {
     target: opts.target,
@@ -45,6 +47,7 @@ export function normalizeGetOptions(opts: GetOptions & { target: TargetId }): No
   return normalized;
 }
 
+/** Reports an unregistered target before reading scopes or fetching sources. */
 export function validateTarget(target: TargetId): Diagnostic[] {
   if (isTargetId(target)) return [];
   return [
@@ -57,6 +60,7 @@ export function validateTarget(target: TargetId): Diagnostic[] {
   ];
 }
 
+/** Selects existing scopes in user-before-project order, using core's project discovery rule. */
 export async function selectedScopeRoots(opts: NormalizedGetOptions): Promise<ScopeRoot[]> {
   const roots: ScopeRoot[] = [];
   if (opts.scope === "user" || opts.scope === "all") {
@@ -64,15 +68,11 @@ export async function selectedScopeRoots(opts: NormalizedGetOptions): Promise<Sc
     if (await isDirectory(userDir)) roots.push(scopeRoot("user", userDir));
   }
   if (opts.scope === "project" || opts.scope === "all") {
-    const project = await projectScopeRoot(opts.cwd, opts.home);
+    const discovered = await discoverScopes(opts.cwd, opts.home);
+    const project = discovered.find((root) => root.scope === "project");
     if (project !== undefined) roots.push(project);
   }
   return roots;
-}
-
-async function projectScopeRoot(cwd: string, home: string): Promise<ScopeRoot | undefined> {
-  const discovered = await discoverScopes(cwd, home);
-  return discovered.find((root) => root.scope === "project");
 }
 
 async function isDirectory(candidate: string): Promise<boolean> {
@@ -83,5 +83,3 @@ async function isDirectory(candidate: string): Promise<boolean> {
     throw error;
   }
 }
-
-export type ScopeBuckets = Record<Scope, ScopeRoot[]>;
