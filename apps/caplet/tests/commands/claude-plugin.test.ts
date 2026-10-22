@@ -136,6 +136,10 @@ test("the scope's marketplace lists every generated plugin and follows desired s
   const scope = await pluginProject();
   const review = await pluginSource(scope, "review");
   const lint = await pluginSource(scope, "lint");
+  await writeText(
+    path.join(lint, "mcp", "mcp.yml"),
+    "servers:\n  - name: lint-diff\n    transport: http\n    url: https://mcp.example.com/diff\n",
+  );
   await selectSources(scope, [review, lint]);
   const claudeRoot = path.join(scope.cwd, ".claude");
   const name = await projectMarketplace(scope);

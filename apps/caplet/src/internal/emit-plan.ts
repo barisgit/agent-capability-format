@@ -21,6 +21,7 @@ import {
   executableComponents,
   type ReadOnlyFs,
   readCapletConfig,
+  resolveFacetCollisions,
   resolveScopeCapabilities,
   type ScopeRoot,
   type TargetAdapter,
@@ -101,7 +102,26 @@ export async function buildEmitPlan(
     canonicalDiffs: new Set(),
     resolvedFacets: new Map(),
   };
-  for (const scopeRoot of scopes) await planScope(scopeRoot, context, state, opts);
+  const resolved = new Map<ScopeRoot, AcfCapability[]>();
+  for (const scopeRoot of scopes) {
+    resolved.set(scopeRoot, await plannedCapabilities(scopeRoot, state.diagnostics, opts));
+  }
+  const applicable = new Map<TargetId, AcfCapability[]>();
+  for (const targetId of targets) {
+    const selected = resolveFacetCollisions(
+      [...resolved].flatMap(([root, capabilities]) =>
+        installRootFor(targetId, root, config, cwd) === null
+          ? []
+          : capabilities.flatMap((cap) => applyApplicability(cap, targetId) ?? []),
+      ),
+      targetId,
+    );
+    state.diagnostics.push(...selected.diagnostics);
+    applicable.set(targetId, selected.capabilities);
+  }
+  for (const [scopeRoot, capabilities] of resolved) {
+    await planScope(scopeRoot, capabilities, applicable, context, state);
+  }
 
   const { diagnostics, desiredDiffs, plugins, blocked } = state;
   const claude = await planClaudeMarketplaces({
@@ -212,11 +232,11 @@ type ScopePlanning = {
 
 async function planScope(
   scopeRoot: ScopeRoot,
+  capabilities: AcfCapability[],
+  applicableCapabilities: ReadonlyMap<TargetId, AcfCapability[]>,
   context: PlanContext,
   state: PlanState,
-  overrides: PlanOverrides | undefined,
 ): Promise<void> {
-  const capabilities = await plannedCapabilities(scopeRoot, state.diagnostics, overrides);
   state.resolvedFacets.set(
     scopeRoot.scope,
     new Map(
@@ -229,7 +249,7 @@ async function planScope(
       targetMap[targetId]?.discoversCanonicalSkills === true &&
       installRootFor(targetId, scopeRoot, context.config, context.cwd) !== null,
   );
-  const applicable = await applicableByTarget(scopeRoot, capabilities, context);
+  const applicable = await applicableByTarget(scopeRoot, applicableCapabilities, context);
   const emit = memoizedEmitter(scopeRoot, context, canonicalSkillReaders);
   const scope: ScopePlanning = {
     scopeRoot,
@@ -256,10 +276,12 @@ async function planScope(
       target.capabilities.map((capability) => [capability.manifest.name, capability]),
     );
     for (const capability of capabilities) {
-      await planCapability(scope, targetId, target.installRoot, {
-        capability,
-        filtered: emitted.get(capability.manifest.name),
-      });
+      await planCapability(
+        scope,
+        targetId,
+        target.installRoot,
+        emitted.get(capability.manifest.name),
+      );
     }
   }
 }
@@ -345,7 +367,7 @@ function manifestSelects(
  */
 async function applicableByTarget(
   scopeRoot: ScopeRoot,
-  capabilities: readonly AcfCapability[],
+  capabilities: ReadonlyMap<TargetId, AcfCapability[]>,
   context: PlanContext,
 ): Promise<Map<TargetId, ApplicableCapabilities>> {
   const applicable = new Map<TargetId, ApplicableCapabilities>();
@@ -353,7 +375,9 @@ async function applicableByTarget(
     const installRoot = installRootFor(targetId, scopeRoot, context.config, context.cwd);
     if (installRoot === null) continue;
     const withheld = await withholdConflictingMcpServers(
-      capabilities.flatMap((capability) => applyApplicability(capability, targetId) ?? []),
+      (capabilities.get(targetId) ?? []).filter(
+        (capability) => capability.scope === scopeRoot.scope,
+      ),
       {
         target: targetId,
         scope: scopeRoot.scope,
@@ -432,25 +456,22 @@ async function blockedSkillReaders(
 
 /**
  * Plans one resolved capability on one target: its executables, outcomes and diffs, or, when a
- * refusal blocks it there, the output it keeps. `filtered` is the capability after applicability
- * and MCP withholding, absent when nothing of it applies to the target.
+ * refusal blocks it there, the output it keeps. `filtered` is the effective capability after
+ * applicability, shadowing and MCP withholding, absent when nothing of it applies to the target.
  */
 async function planCapability(
   scope: ScopePlanning,
   targetId: TargetId,
   installRoot: string,
-  { capability, filtered }: { capability: AcfCapability; filtered: AcfCapability | undefined },
+  filtered: AcfCapability | undefined,
 ): Promise<void> {
   const { scopeRoot, context, state } = scope;
+  if (filtered === undefined) return;
   const capabilityExecutables = await executableComponents(
-    capability,
+    filtered,
     targetId,
     context.config.targets?.[targetId]?.carrier,
   );
-  if (filtered === undefined) {
-    state.executables.push(...capabilityExecutables);
-    return;
-  }
   const adapter = targetMap[targetId]?.adapter;
   if (adapter === undefined) {
     state.diagnostics.push({

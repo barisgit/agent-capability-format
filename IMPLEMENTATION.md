@@ -2718,6 +2718,8 @@ acf.capability.name-collision                # same-scope same-name (error)
 acf.facet.name-mismatch
 acf.facet.primary-missing
 acf.facet.duplicate
+acf.facet.name-collision                     # same-scope (family, name) across capabilities (error)
+acf.facet.shadowed                           # project facet shadows user facet (info)
 
 # Layout
 acf.layout.singular-facet-folder             # root `skill/`, `agent/`, etc. (error)

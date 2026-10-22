@@ -23,6 +23,7 @@ import type {
 import { exists } from "../utils/fs.js";
 import { applyEntrySelection } from "./selection.js";
 
+export { resolveFacetCollisions } from "./facet-collisions.js";
 export { applyEntrySelection, type EntrySelection } from "./selection.js";
 
 /** Options for {@link resolveScopeCapabilities}. */

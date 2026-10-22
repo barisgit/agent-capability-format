@@ -2032,7 +2032,7 @@ Implementations MUST follow this namespace convention:
 | `acf.cli.*`                          | CLI-host reported diagnostics.                   |
 | `acf.scope.*`                        | Scope discovery diagnostics.                     |
 | `acf.capability.*`                   | Cross-capability diagnostics (shadow, collision).|
-| `acf.facet.*`                        | Cross-facet diagnostics (name mismatch, duplicates).|
+| `acf.facet.*`                        | Cross-facet diagnostics (name mismatch, duplicates, collisions, shadows).|
 | `acf.lossy.*`                        | Cross-cutting lossy emission diagnostics.        |
 | `acf.support.*`                      | Support-table refusals, degradations, omissions. |
 | `acf.extras.*`, `acf.native.*`       | Native extras and `native/<target>/` trees.      |
@@ -2041,6 +2041,14 @@ Implementations MUST follow this namespace convention:
 | `acf.selection.*`                    | `include`/`exclude`/`only`/`except` selection.   |
 | `acf.apply.*`                        | Plan-time drift and output containment.          |
 | `acf.claude.*`, `acf.migration.*`    | Claude carrier, host registration, migration.    |
+
+Cross-capability naming diagnostics (§17.5–§17.6):
+
+| Code | Severity | Trigger and recovery |
+| ---- | -------- | -------------------- |
+| `acf.facet.name-collision` | error | Same-scope capabilities share an applicable `(family, name)`; use `exclude` on one entry. |
+| `acf.facet.shadowed` | info | A project facet replaces the same user-scope `(family, name)`; the user facet is skipped. |
+| `acf.selection.rename-ambiguous` | error | Scalar `rename` selects other than one capability; narrow selection or use a mapping. |
 
 The authoritative code list (with severity, phase, trigger, source.path,
 and recovery columns) is maintained in `IMPLEMENTATION.md` §11.2 as the
@@ -2298,9 +2306,13 @@ Collisions are resolved by these rules, in order:
 
 1. **Project shadows user.** A project-scope facet with the same
    `(family, name)` as a user-scope facet wins; the user-scope facet is
-   skipped with an `info` diagnostic.
+   skipped with the `info` diagnostic `acf.facet.shadowed`, naming both
+   capabilities and the facet. Whole-capability shadowing reports
+   `acf.capability.shadowed`.
 2. **Within one scope:** if `(family, name)` collides across
-   capabilities, emission MUST fail with an `error` diagnostic.
+   capabilities, emission MUST fail with the `error` diagnostic
+   `acf.facet.name-collision`, naming the capabilities, family, name and
+   target, with `exclude` as the recovery.
    Resolution is the author's responsibility via `exclude` (a facet
    collision) or `rename` (a capability-name collision) in
    `capabilities.yml`.

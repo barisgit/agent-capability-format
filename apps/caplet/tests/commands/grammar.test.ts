@@ -9,8 +9,8 @@ async function writeGamma(scope: { sourceRoot: string }): Promise<string> {
     "acf: 1\nname: gamma-cap\nversion: 1.0.0\ndescription: gamma\n",
   );
   await writeText(
-    path.join(root, "instructions", "always.md"),
-    "---\nname: always\ndescription: G\nactivation: always\n---\nGamma.\n",
+    path.join(root, "instructions", "gamma-always.md"),
+    "---\nname: gamma-always\ndescription: G\nactivation: always\n---\nGamma.\n",
   );
   return root;
 }

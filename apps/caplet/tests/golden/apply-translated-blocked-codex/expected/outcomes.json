@@ -56,7 +56,7 @@
     "capability": "beta-cap",
     "target": "codex",
     "family": "instruction",
-    "component": "always",
+    "component": "beta-cap-always",
     "outcome": "blocked",
     "source": "skill background, MCP server events",
     "consequence": "capability beta-cap is not installed for codex",

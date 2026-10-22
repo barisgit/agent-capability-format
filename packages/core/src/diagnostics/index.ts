@@ -21,6 +21,8 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.facet.name-mismatch",
   "acf.facet.primary-missing",
   "acf.facet.duplicate",
+  "acf.facet.name-collision",
+  "acf.facet.shadowed",
   "acf.layout.singular-facet-folder",
   "acf.skill.shape.not-directory",
   "acf.skill.placeholder-unexpanded",
