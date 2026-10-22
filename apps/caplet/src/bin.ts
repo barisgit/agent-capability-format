@@ -6,11 +6,20 @@ import { INTERNAL_ERROR_CODE, reportCommandFailure } from "./internal/command.js
 import { CAPLET_VERSION } from "./internal/json.js";
 import { commandSpec, unknownFlagError, wantsJson } from "./internal/spec.js";
 
-// A downstream reader exiting early is normal pipeline termination, not a CLI failure.
+// Losing an output reader must not interrupt mutations, rollback or cleanup, or mask failure.
 for (const stream of [process.stdout, process.stderr]) {
   stream.on("error", (error: NodeJS.ErrnoException) => {
-    if (error.code === "EPIPE") process.exit(0);
-    throw error;
+    if (error.code !== "EPIPE") throw error;
+    // Drop only this stream's later output. Honor write callbacks so callers can still finish.
+    stream.write = (
+      _chunk,
+      encodingOrCallback?: BufferEncoding | ((error?: Error) => void),
+      callback?: (error?: Error) => void,
+    ) => {
+      const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+      if (done !== undefined) queueMicrotask(() => done());
+      return true;
+    };
   });
 }
 

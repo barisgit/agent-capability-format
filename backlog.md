@@ -8,6 +8,14 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ## Completed
 
+### Closed output preserves command completion
+
+`EPIPE` drops subsequent writes only on the closed stream, without exiting early
+or masking command failure. Node CLI regressions cover read-only commands,
+first-line-closed mutating `add` with an artifact tree equal to an unpiped run,
+and failed adds that retain exit 2 and restore the manifest with stdout or stderr
+closed.
+
 ### Project shadowing preserves user selection
 
 Separated the project-merged effective view from per-scope emission (SPEC §17.6).
@@ -215,6 +223,8 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 - **Removed paths derived outside the component table.** `packages/adapters/src/claude/plugin-source.ts` decides removed paths and manifest keys from remainder components rather than from `claudePluginComponents`; no defect seen, but a second place that can drift from the table.
 
 - **Frozen restore rewrites lock entries written before per-capability records.** `packages/installer/src/resolve.ts` `fetchEntry`: under `--frozen`, restoring such an entry writes the fresh entry, so the lock gains `resolvedCapabilities` at the same sha, and an entry keyed by a legacy source id keeps that id. Provenance is unchanged, but it is a lock write under frozen. Suspected fix: under frozen keep the locked entry (`withSelection(locked)`).
+- **Non-EPIPE output errors bypass command error reporting.** `apps/caplet/src/bin.ts` throws from the stream error listener (for example `ENOSPC` writing to `/dev/full`), outside the command's catch. The process fails, but prints an uncaught stack and can omit the `--json` error envelope. This remains separate from dropping closed-pipe output.
+- **Target-excluded canonical facets may keep stale ownership.** `apps/caplet/src/internal/emit-plan.ts` records `resolvedFacets` before target applicability; `apps/caplet/src/internal/stale-sweep.ts` uses those names in `keptInCanonicalRoot`. Suspected: an excluded facet with no desired canonical writer can retain its earlier shared-root output. Needs a focused reproduction and a decision about unselected readers' shared-root ownership.
 - **`caplet.yml`'s `emit.scope` is accepted but ignored by the CLI.** `packages/core/src/schemas/index.ts` validates it, but `apps/caplet/src/internal/args.ts` `readScope` defaults directly to `all` without consulting config, unlike target selection. `IMPLEMENTATION.md` §8.3 describes a flag override of config. Decide whether to honor the setting or remove it from the config contract.
 
 - **Unreadable lockfile is an internal error.** `readLockfile` (`packages/core/src/lock/index.ts`) rethrows everything but ENOENT, so a directory at the lock path surfaces as `acf.cli.internal` instead of a diagnostic, and `list` exits 0.
