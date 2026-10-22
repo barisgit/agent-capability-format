@@ -71,11 +71,8 @@ export async function selectedScopeRoots(opts: NormalizedGetOptions): Promise<Sc
 }
 
 async function projectScopeRoot(cwd: string, home: string): Promise<ScopeRoot | undefined> {
-  const homeAgentsDir = path.join(home, ".agents");
-  const discovered = await discoverScopes(cwd);
-  const project = discovered.find((root) => root.scope === "project");
-  if (project === undefined || project.agentsDir === homeAgentsDir) return undefined;
-  return project;
+  const discovered = await discoverScopes(cwd, home);
+  return discovered.find((root) => root.scope === "project");
 }
 
 async function isDirectory(candidate: string): Promise<boolean> {

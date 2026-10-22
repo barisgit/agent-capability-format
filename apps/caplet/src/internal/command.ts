@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import type { Diagnostic } from "@caplet/core";
+import { readCwd } from "./args.js";
 import { printJson, readJson } from "./json.js";
 import { reporter } from "./output.js";
 
@@ -22,6 +23,9 @@ export async function runCommandSafely(
   fn: () => Promise<void>,
 ): Promise<void> {
   try {
+    // Carry the absolute invocation root through every stage before any command can chdir.
+    // In particular, a relative -C must never be interpreted from the selected directory.
+    args.cwd = readCwd(args);
     await fn();
   } catch (error) {
     if (isCommandError(error)) {

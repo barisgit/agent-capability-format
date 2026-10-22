@@ -51,9 +51,10 @@ export async function runCaplet(
   scope: TestScope,
   args: string[],
   env: Record<string, string> = {},
+  cwd: string = path.resolve("../.."),
 ): Promise<RunResult> {
   const proc = Bun.spawn([process.execPath, scope.bin, ...args], {
-    cwd: path.resolve("../.."),
+    cwd,
     stdout: "pipe",
     stderr: "pipe",
     env: {

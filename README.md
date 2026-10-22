@@ -90,12 +90,26 @@ All Markdown-backed facets require frontmatter `name` and `description`.
 `name` matches the discovered file/directory basename and is a slug
 (`^[a-z0-9]+(-[a-z0-9]+)*$`).
 
+`-C <directory>` / `--cwd <directory>` selects the working directory for the
+entire command. Relative paths are resolved once, from the invocation directory;
+source paths and generated outputs then use that selected directory.
+
 ## Resolution scopes
 
 Capabilities are autoloaded from two scopes:
 
 - **User** — `~/.agents/capabilities/`.
-- **Project** — `./.agents/capabilities/` (searched upward).
+- **Project** — `./.agents/capabilities/` in the selected working directory.
+  Ancestors are never searched; run from the project root or select it with `-C`.
+
+Explicit `--scope project` requires a local `.agents/` directory; run `caplet
+init` first if it is absent. It never falls back to user scope, and the user
+home (including symlink aliases) cannot be a project scope. A project `.agents`
+symlink must stay inside the selected project. With `--scope all`
+(the default for emission), an absent project scope means user scope only.
+`add` and `remove` infer project only from the selected directory's own
+`.agents/`; otherwise they select user scope. A manifest is optional when
+loading an existing capability tree.
 
 Each scope may have a `capabilities.yml` declaring remote and local sources
 to fetch into that scope's `capabilities/` directory:

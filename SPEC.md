@@ -2181,7 +2181,12 @@ adapters:
 | project   | `./.agents/capabilities/`      | `./.agents/capabilities.yml`     |
 
 `~/` is the user's home directory. `./` is the current project working
-directory.
+directory selected for the invocation (for caplet, `--cwd` or the process
+working directory). Project scope MUST NOT search ancestor directories or
+resolve to the user scope, including through a symlink or when the working
+directory is the user's home. A project `.agents` symlink MUST NOT point
+outside the selected project root. A project's manifest, lockfile, capability
+tree, and project-native outputs MUST use that same project root.
 
 ### 17.2 What's autoloaded
 
@@ -2305,8 +2310,13 @@ Implementations MUST support three scope-selection modes when emitting:
 - `user` — process only the user scope.
 - `project` — process only the project scope.
 
-When running outside any project, `all` and `project` fall back to
-`user` only, with an `info` diagnostic.
+When the invocation directory has no project `.agents/` directory, `all`
+falls back to `user` only, with an `info` diagnostic. An explicit `project`
+selection MUST fail without modifying either scope and explain how to
+initialize or select a project; it MUST NOT fall back to user scope.
+`caplet init` creates a project scope in the selected directory, except
+where that would alias the user scope. The manifest remains optional for
+loading an existing local capability tree (§17.3).
 
 Adapters use the source scope of each capability to choose the target
 native install location (§22).
@@ -3116,8 +3126,8 @@ targets. Direct-consumer extensions for those hosts are planned but
 deferred. The rules below define the semantics that apply once they
 ship; they are informative for `acf: 1`.
 
-- A direct consumer reads `~/.agents/capabilities/` and the nearest
-  project's `./.agents/capabilities/` via `@caplet/sdk`. It MUST apply the
+- A direct consumer reads `~/.agents/capabilities/` and the selected working
+  directory's `./.agents/capabilities/` via `@caplet/sdk`. It MUST apply the
   same applicability cascade (§6.4) as adapters, with its own target id
   passed explicitly.
 - A direct consumer MUST handle each facet family natively at runtime
