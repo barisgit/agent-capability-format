@@ -477,8 +477,13 @@ ships besides `package.json`, `README.md`, and `LICENSE`.
 under Node to exercise the CLI and library imports; CI does the same on
 Node 20. To release, bump every package to the same version, commit, and push
 a `vX.Y.Z` tag: `.github/workflows/release.yml` checks the tag against the
-package versions, reruns CI, publishes in dependency order with the
-`NPM_TOKEN` secret and npm provenance, and creates a GitHub release (pre-release for 0.x).
+package versions, reruns CI, publishes in dependency order through npm
+trusted publishing (no token; npm adds provenance), and creates a GitHub
+release (pre-release for 0.x). Trusted publishing is configured per package
+on npmjs.com (repository `barisgit/agent-capability-format`, workflow
+`release.yml`) and needs the package to exist, so a package's first version
+is published by hand: `bun run build`, `bun scripts/packages.ts pack .packs`,
+then `npm login` and `bun scripts/packages.ts publish .packs`.
 
 ## License
 

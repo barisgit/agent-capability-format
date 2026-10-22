@@ -190,6 +190,8 @@ function publish(outDir: string | undefined): void {
       console.log(`${spec} is already published; skipping`);
       continue;
     }
+    // In the release workflow npm authenticates through trusted publishing (OIDC) and
+    // attaches provenance itself; a local run uses the `npm login` session.
     run("npm", ["publish", path.resolve(outDir, tarballName(manifest))], ROOT);
     console.log(`published ${spec}`);
   }

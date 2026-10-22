@@ -26,22 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+      # Trusted publishing (OIDC, no token) needs npm 11.5.1 or later and id-token: write.
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@^11.5.1
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun scripts/packages.ts pack "$RUNNER_TEMP/packs"
-      # No --provenance: npm provenance requires a public source repository, and this one is private.
       - run: bun scripts/packages.ts publish "$RUNNER_TEMP/packs"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
