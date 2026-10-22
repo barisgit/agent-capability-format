@@ -10,8 +10,6 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ### CLI Output Redesign
 
-Closed stdout/stderr pipes (`EPIPE`) terminate quietly with exit 0, including JSON output.
-
 Plan-view tree (scope → destination → directory rollups) with action-count summary table; 140-file apply renders in ≤25 lines. Message-first deduped diagnostics with summary line. Glyph status lines (`✓/✗/!`, ASCII `ok/fail/warn` piped), banner removed. Hand-rolled `render.ts` (no table deps). `--verbose` expansion, home-anchored `~` paths.
 
 ### Command Grammar v0.2
@@ -204,12 +202,12 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 - **Invalid core field in a bare imported skill is an error, while Agent Plugins leaves such a skill out.** `packages/installer/src/inventory.ts` `readBareSkill` rejects the import with `acf.import.skill-frontmatter-invalid`; the Agent Plugins reader leaves the skill out with a warning. D27.4 covers native values only; decide whether core-field failures in foreign sources follow the same rule.
 
 - **Root-level plugin skill copies its package root as support files.** `packages/adapters/src/claude/plugin.ts` `supportFiles`: a foreign skill at the package root (manifest `skills: "."`) maps to an empty relative path, so the package root's files are copied again next to the regenerated `skills/<name>/`. Predates the review round.
+- **Capability rename projection is repeated across packages.** `packages/installer/src/materialize.ts` (`finalCapabilityName`), `packages/core/src/formats/shared.ts` (`packageIdentity`), and `apps/caplet/src/commands/add.ts` (`added.capabilities`) independently apply scalar/mapping aliases. No divergence observed; a shared core helper would keep identity projection consistent, but requires a cross-package export change.
+
 - **Removed paths derived outside the component table.** `packages/adapters/src/claude/plugin-source.ts` decides removed paths and manifest keys from remainder components rather than from `claudePluginComponents`; no defect seen, but a second place that can drift from the table.
 
 - **Frozen restore rewrites lock entries written before per-capability records.** `packages/installer/src/resolve.ts` `fetchEntry`: under `--frozen`, restoring such an entry writes the fresh entry, so the lock gains `resolvedCapabilities` at the same sha, and an entry keyed by a legacy source id keeps that id. Provenance is unchanged, but it is a lock write under frozen. Suspected fix: under frozen keep the locked entry (`withSelection(locked)`).
 - **`caplet.yml`'s `emit.scope` is accepted but ignored by the CLI.** `packages/core/src/schemas/index.ts` validates it, but `apps/caplet/src/internal/args.ts` `readScope` defaults directly to `all` without consulting config, unlike target selection. `IMPLEMENTATION.md` §8.3 describes a flag override of config. Decide whether to honor the setting or remove it from the config contract.
-
-- **Hand-resolved path sources before drift detection.** `apps/caplet/src/internal/emit-plan.ts` (~275-282) resolves relative `path:` sources itself before `detectLockDrift`; pass `manifestDir` instead, as `commands/check.ts` now does.
 
 - **Unreadable lockfile is an internal error.** `readLockfile` (`packages/core/src/lock/index.ts`) rethrows everything but ENOENT, so a directory at the lock path surfaces as `acf.cli.internal` instead of a diagnostic, and `list` exits 0.
 - **Pending inline MCP server fingerprinted by the whole manifest.** `remainderExecutables` (`packages/core/src/emit/remainder-executables.ts`) fingerprints every file in a remainder component's `paths`; a foreign Claude plugin's pending server lists `.claude-plugin/plugin.json`, so a version-only bump reports an executable change. `nativeServerExecutables` already drops the manifest path; the foreign path should do the same.

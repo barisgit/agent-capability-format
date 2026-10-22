@@ -432,9 +432,10 @@ writable directory per capability that survives updates. Caplet writes
 servers into each host's own config: the plugin's `.mcp.json` for Claude
 (the project `.mcp.json` with `carrier: loose`, which omits user-scope
 servers), `.codex/config.toml`, `.cursor/mcp.json`, `opencode.json`, and
-`.pi/mcp.json` (user-scope paths in SPEC.md §22.5). A server name already
-used by another capability or by your own config is withheld with
-`acf.mcp.config-conflict`. ACF declares servers; MCP itself owns runtime
+`.pi/mcp.json` (user-scope paths in SPEC.md §22.5). Cross-capability server
+names follow the facet-collision rules above. A conflicting server in shared
+native configuration is withheld with `acf.mcp.config-conflict`; user-defined
+entries are never overwritten. ACF declares servers; MCP itself owns runtime
 protocol semantics.
 
 ## Runtime taxonomy boundary

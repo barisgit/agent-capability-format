@@ -2388,36 +2388,15 @@ Drift handling:
 
 ### 7.6 Cross-capability uniqueness
 
-After all capabilities for all scopes are read:
+Per-scope resolution rejects duplicate capability names before emission.
+After selection and target applicability, emission calls
+`resolveFacetCollisions` across the supported scopes for each target:
+project capabilities shadow same-named user capabilities, then project
+facets shadow user facets by `(family, name)`. Remaining same-scope facet
+collisions report all owners as errors; no owner wins (SPEC §17.6).
 
-```ts
-export function deduplicateCapabilities(
-  user: AcfCapability[],
-  project: AcfCapability[],
-): { effective: AcfCapability[]; diagnostics: Diagnostic[] } {
-  const diagnostics: Diagnostic[] = []
-  const byName = new Map<string, AcfCapability>()
-
-  // Project shadows user.
-  for (const cap of user) byName.set(cap.manifest.name, cap)
-  for (const cap of project) {
-    const existing = byName.get(cap.manifest.name)
-    if (existing) {
-      diagnostics.push({
-        severity: "info",
-        code: "acf.capability.shadowed",
-        message: `project capability "${cap.manifest.name}" shadows user capability`,
-      })
-    }
-    byName.set(cap.manifest.name, cap)
-  }
-
-  // Within a scope, two capabilities sharing a name is fatal unless rename in capabilities.yml.
-  // (That check runs earlier, inside per-scope resolution.)
-
-  return { effective: [...byName.values()], diagnostics }
-}
-```
+The SDK's `deduplicateCapabilities` helper merges whole-capability names
+only; emission's cross-target ordering is described in §12.
 
 ### 7.7 Repository layouts
 
@@ -2910,18 +2889,20 @@ applies them via a writer that updates `.acf-managed.json`.
 
 Caplet owns the orchestration (`buildEmitPlan` in
 `apps/caplet/src/internal/emit-plan.ts`); core exports the pieces, not an
-orchestrator. For each scope root it:
+orchestrator. Planning proceeds in this order:
 
-1. resolves the scope's capabilities (`resolveScopeCapabilities`) and adds
-   every capability's own `error` diagnostics to the plan, so a capability
-   that fails validation blocks apply (SPEC.md §14.2);
-2. for each target, reports `acf.adapter.scope-unsupported` when the target
-   has no install root for the scope, otherwise filters each capability with
-   `applyApplicability` and withholds conflicting MCP server names;
-3. calls the target adapter's `validate` and `emit` per capability; a
-   capability whose diagnostics block it on that target
-   (`capabilityBlocked`) contributes diagnostics but no diffs, and its
-   previous output is kept.
+1. `plannedCapabilities` reads each scope's snapshots and reconciles manifest
+   intent with its disk or preview lock. It adds scope and capability
+   diagnostics to the plan; validation errors block apply (SPEC.md §14.2).
+2. For each target, `applyApplicability` filters capabilities from every
+   supported scope, then `resolveFacetCollisions` resolves cross-scope
+   shadowing and reports same-scope facet collisions (§7.6).
+3. For each scope and target, planning reports `acf.adapter.scope-unsupported`
+   when there is no install root. Otherwise it withholds conflicting MCP
+   server names in shared native configuration and calls the adapter's
+   `validate` and `emit` per effective capability. A capability whose
+   diagnostics block it on that target (`capabilityBlocked`) contributes
+   diagnostics but no diffs, and its previous output is kept.
 
 `applyApplicability(cap, targetId)`:
 

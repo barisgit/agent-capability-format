@@ -2042,13 +2042,7 @@ Implementations MUST follow this namespace convention:
 | `acf.apply.*`                        | Plan-time drift and output containment.          |
 | `acf.claude.*`, `acf.migration.*`    | Claude carrier, host registration, migration.    |
 
-Cross-capability naming diagnostics (§17.5–§17.6):
-
-| Code | Severity | Trigger and recovery |
-| ---- | -------- | -------------------- |
-| `acf.facet.name-collision` | error | Same-scope capabilities share an applicable `(family, name)`; use `exclude` on one entry. |
-| `acf.facet.shadowed` | info | A project facet replaces the same user-scope `(family, name)`; the user facet is skipped. |
-| `acf.selection.rename-ambiguous` | error | Scalar `rename` selects other than one capability; narrow selection or use a mapping. |
+Cross-capability naming diagnostics and recovery are defined in §17.5–§17.6.
 
 The authoritative code list (with severity, phase, trigger, source.path,
 and recovery columns) is maintained in `IMPLEMENTATION.md` §11.2 as the
