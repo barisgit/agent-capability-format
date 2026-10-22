@@ -10,6 +10,8 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ### CLI Output Redesign
 
+Closed stdout/stderr pipes (`EPIPE`) terminate quietly with exit 0, including JSON output.
+
 Plan-view tree (scope → destination → directory rollups) with action-count summary table; 140-file apply renders in ≤25 lines. Message-first deduped diagnostics with summary line. Glyph status lines (`✓/✗/!`, ASCII `ok/fail/warn` piped), banner removed. Hand-rolled `render.ts` (no table deps). `--verbose` expansion, home-anchored `~` paths.
 
 ### Command Grammar v0.2

@@ -2711,6 +2711,11 @@ Earlier command names remain as deprecated aliases: `inspect` runs `show`,
 `diff` runs `apply --dry-run` (a plan of emitted-file changes, not a lockfile
 diff), `emit` runs `apply --offline`, and `fetch` runs `update --no-apply`.
 
+When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
+caplet terminates immediately and quietly with status 0, including for `--json`
+output. This status denotes pipeline termination, not completion of mutations.
+Other output errors remain failures.
+
 Other tools MAY implement a different command surface; the above is the
 reference shape used in `IMPLEMENTATION.md`.
 
