@@ -343,9 +343,7 @@ published). It supports bare skill imports, Claude plugin and Agent Plugins
 sources, Claude plugin output, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).
-`RESULTS.md` and `IMPLEMENTER-AUDIT.md` are historical reports, not current
-status. Run `bun run ci` for current health rather than relying on any
-recorded result.
+Run `bun run ci` for current health.
 
 ## Packages
 
@@ -480,7 +478,7 @@ under Node to exercise the CLI and library imports; CI does the same on
 Node 20. To release, bump every package to the same version, commit, and push
 a `vX.Y.Z` tag: `.github/workflows/release.yml` checks the tag against the
 package versions, reruns CI, publishes in dependency order with the
-`NPM_TOKEN` secret, and creates a GitHub release (pre-release for 0.x).
+`NPM_TOKEN` secret and npm provenance, and creates a GitHub release (pre-release for 0.x).
 
 ## License
 

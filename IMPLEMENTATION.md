@@ -3029,11 +3029,11 @@ Gating rule: an adapter milestone is **complete** only when
    files),
 4. every degraded effect/event/trigger emits the listed lossy diagnostic
    code,
-5. gaps are documented in `RESULTS.md` and map to listed diagnostic codes
+5. gaps are documented in `backlog.md` and map to listed diagnostic codes
    (no silent omission).
 
 Implementers MAY skip ahead with documented reason but the skip itself is
-recorded in `RESULTS.md`.
+recorded in `backlog.md`.
 
 ### 13.1 Direct ACF consumers (deferred extensions)
 

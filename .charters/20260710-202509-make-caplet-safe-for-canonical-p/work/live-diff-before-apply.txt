@@ -1,9 +1,0 @@
-Caplet diff
-
-Changes
-  CREATE  /Users/blaz/.agents/skills/simplify/SKILL.md
-          user / pi / simplify
-  CREATE  /Users/blaz/.pi/agent/skills/simplify/SKILL.md
-          user / pi / simplify
-
-PENDING  2 files

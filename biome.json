@@ -15,8 +15,7 @@
       "!**/.pi",
       "!**/fixtures",
       "!**/tests/fixtures",
-      "!**/tests/golden",
-      "!**/.charters/**/state.json"
+      "!**/tests/golden"
     ]
   },
   "formatter": {
