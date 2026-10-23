@@ -383,6 +383,13 @@ export function unknownFlagError(command: string | undefined, argv: string[]): s
       const letters = name.slice(1).split("");
       if (letters.every((letter) => booleanShorts.has(letter))) continue;
     }
+    const replacements: Readonly<Record<string, string>> = {
+      "--ref": "--pin",
+      "--rename": "--as",
+      "--fail-on-lossy": "--strict",
+    };
+    const replacement = replacements[name];
+    if (replacement !== undefined) return `unknown flag: ${name} — use ${replacement} instead`;
     const suggestion = closest(name, [...known]);
     const hint = suggestion === undefined ? "" : ` — did you mean ${suggestion}?`;
     return `unknown flag: ${name}${hint}`;
