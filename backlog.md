@@ -133,13 +133,16 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 `@caplet/*` 0.1.0 as published; clean-machine acceptance below remains to be verified.
 The tag workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`.
 
-**Remaining**: verify the public install and add journey on clean macOS and Linux machines.
+**Remaining**: manually publish the first version, configure npm trusted publishing
+for each package, then verify the public install and add journey on clean macOS
+and Linux machines.
 
 **Implementation**:
 
 - npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
 - The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
-- Tag releases use npm trusted publishing with automatic provenance; first publication and per-package npm trust setup are documented in README.md.
+- First publish: `bun run build`, `bun scripts/packages.ts pack .packs`, `npm login`, then `bun scripts/packages.ts publish .packs` (see README.md).
+- Once each package exists on npm, configure its trusted publisher for repository `barisgit/agent-capability-format` and workflow `release.yml`. Later `vX.Y.Z` tag releases publish through OIDC with automatic provenance; no `NPM_TOKEN` secret is needed.
 - README quickstart rewritten around the npx onramp
 
 **Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)
