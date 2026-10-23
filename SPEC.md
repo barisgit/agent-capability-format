@@ -2565,6 +2565,14 @@ When `capabilities.yml` and `capabilities.lock` disagree:
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.
 
+Lockfile writes MUST be atomic replacements (temporary file and rename on the
+same filesystem), never truncation in place. If a resolution cannot commit its
+lock, it MUST restore snapshot replacements, additions and removals made by that
+resolution. An `add` MUST validate the complete selection and emission plan,
+including facet and ownership conflicts, before committing snapshots and lock;
+a later failure MUST restore the manifest and installer state changed by that add.
+This does not require a crash-safe journal spanning native output roots or hosts.
+
 ## 20. Repository layouts
 
 A repository MAY host capabilities in two layouts. The two are mutually

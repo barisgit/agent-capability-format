@@ -1,9 +1,8 @@
-import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
-  computePayloadDigest,
   type Diagnostic,
   digestMismatchDiagnostic,
   isErrno,
@@ -25,6 +24,7 @@ import {
   writeLockfile,
 } from "./lockfile.js";
 import { type CapabilityRecord, capabilityPath, materializeFetched } from "./materialize.js";
+import { commitStagedRecords, unownedSnapshotDiagnostics } from "./snapshot-transaction.js";
 
 /** What {@link resolveCapabilities} reconciles and how far it may go. */
 export type ResolveOptions = {
@@ -239,18 +239,24 @@ async function resolveCapabilitiesStaged(
     };
   }
 
+  const lockChanged =
+    usableLock === null ||
+    JSON.stringify(canonicalizeLock(usableLock)) !== JSON.stringify(lockfile);
+  const persist = opts.mode !== "never" && opts.updateLock !== false && (fetched || lockChanged);
+  const stale = persist
+    ? (usableLock?.entries.flatMap((entry) => entry.capabilityNames) ?? []).filter(
+        (name) => !lockfile.entries.some((entry) => entry.capabilityNames.includes(name)),
+      )
+    : [];
   const committedRecords = await commitStagedRecords(
     records,
     stagingDir,
     opts.scopeRoot.capabilitiesDir,
+    stale,
+    async () => {
+      if (persist) await writeLockfile(opts.scopeRoot.lockPath, lockfile);
+    },
   );
-  const lockChanged =
-    usableLock === null ||
-    JSON.stringify(canonicalizeLock(usableLock)) !== JSON.stringify(lockfile);
-  if (opts.mode !== "never" && opts.updateLock !== false && (fetched || lockChanged)) {
-    await removeStaleSnapshots(usableLock, lockfile, opts.scopeRoot.capabilitiesDir);
-    await writeLockfile(opts.scopeRoot.lockPath, lockfile);
-  }
   return { capabilities: committedRecords.sort(byRecordName), lockfile, diagnostics };
 }
 
@@ -377,67 +383,6 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
   };
 }
 
-/**
- * Moves staged snapshots into `capabilitiesDir`, replacing any installed copy. Records not
- * inside staging (read from an installed lock) already live at their final root and pass through.
- */
-async function commitStagedRecords(
-  records: CapabilityRecord[],
-  stagingDir: string,
-  capabilitiesDir: string,
-): Promise<CapabilityRecord[]> {
-  const committed: CapabilityRecord[] = [];
-  for (const record of records) {
-    const relative = path.relative(stagingDir, record.root);
-    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
-      committed.push(record);
-      continue;
-    }
-    const destination = capabilityPath(capabilitiesDir, record.name);
-    await rm(destination, { recursive: true, force: true });
-    await rename(record.root, destination);
-    committed.push({ ...record, root: destination });
-  }
-  return committed;
-}
-
-/** Refuses a staged snapshot's destination unless the prior lock owns it or bytes agree. */
-async function unownedSnapshotDiagnostics(
-  records: CapabilityRecord[],
-  previous: CapabilitiesLock | null,
-  capabilitiesDir: string,
-): Promise<Diagnostic[]> {
-  const owned = new Set(previous?.entries.flatMap((entry) => entry.capabilityNames) ?? []);
-  const diagnostics: Diagnostic[] = [];
-  for (const record of records) {
-    const destination = capabilityPath(capabilitiesDir, record.name);
-    if (owned.has(record.name) || record.root === destination) continue;
-    try {
-      await lstat(destination);
-    } catch (error) {
-      if (isErrno(error, "ENOENT")) continue;
-      throw error;
-    }
-    // A malformed tree is not adoptable. Digesting also rejects links and special files.
-    let identical = false;
-    try {
-      identical =
-        (await computePayloadDigest(destination)) === (await computePayloadDigest(record.root));
-    } catch {
-      identical = false;
-    }
-    if (!identical)
-      diagnostics.push({
-        severity: "error",
-        code: "acf.apply.unowned",
-        path: destination,
-        capability: { name: record.name },
-        message: `refusing to replace unowned capability directory ${destination}; move or delete it, then retry (or restore its lock record from backup)`,
-      });
-  }
-  return diagnostics;
-}
-
 function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
   const byName = new Map<string, CapabilityRecord[]>();
   for (const record of records) {
@@ -459,21 +404,6 @@ function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
     });
   }
   return diagnostics;
-}
-
-/** Deletes installed snapshots the previous lock owned and the next lock no longer names. */
-async function removeStaleSnapshots(
-  previous: CapabilitiesLock | null,
-  next: CapabilitiesLock,
-  capabilitiesDir: string,
-): Promise<void> {
-  if (previous === null) return;
-  const keep = new Set(next.entries.flatMap((entry) => entry.capabilityNames));
-  for (const name of previous.entries.flatMap((entry) => entry.capabilityNames)) {
-    if (!keep.has(name)) {
-      await rm(capabilityPath(capabilitiesDir, name), { recursive: true, force: true });
-    }
-  }
 }
 
 function normalizeCapabilitiesYml(value: CapabilitiesYml, manifestDir: string): CapabilitiesYml {

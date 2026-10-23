@@ -228,6 +228,10 @@ Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is (missing snapshots fail without removing output), and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 
+`add` validates the full plan before committing installer state. On failure it
+restores the prior manifest, lock and snapshots. Native writes and host operations
+are not a cross-root transaction.
+
 Caplet refuses to replace or delete unowned files or capability directories.
 Identical content can be adopted; a conflict names the path to move or delete.
 If a sidecar or lock record was lost, restoring it from backup also restores ownership.

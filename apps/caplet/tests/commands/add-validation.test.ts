@@ -70,6 +70,7 @@ test("add restores the exact manifest on resolution failure", async () => {
       "project",
     ]);
     expect(result.exitCode).toBe(2);
+    expect(result.stdout).not.toContain("Added ");
     expect(await readText(manifest)).toBe(before);
   } finally {
     await cleanup(scope);

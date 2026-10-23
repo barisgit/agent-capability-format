@@ -124,8 +124,9 @@ test("caplet add refuses a Claude plugin's agent on loose Claude files", async (
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("agent reviewer");
     expect(result.stderr).toContain("targets.claude.carrier: plugin or except: [claude]");
-    const claudeMcp = JSON.parse(await readText(path.join(scope.cwd, ".mcp.json")));
-    expect(claudeMcp.mcpServers.files).toBeUndefined();
+    // A refused add rejects the complete plan before writing unrelated native output.
+    expect(await Bun.file(path.join(scope.cwd, ".mcp.json")).exists()).toBe(false);
+    expect(await Bun.file(path.join(scope.agentsDir, "capabilities.lock")).exists()).toBe(false);
   } finally {
     await cleanup(scope);
   }

@@ -8,7 +8,7 @@
  * entries sorted by `sourceId`, keys in the fixed order of `canonicalizeEntry`, selector values
  * sorted.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PAYLOAD_DIGEST_PATTERN } from "../hash/payload-digest.js";
 import { type SourceFormat, sourceFormats } from "../types/interop.js";
@@ -84,10 +84,17 @@ export async function readLockfile(lockPath: string): Promise<CapabilitiesLock |
   return parseLock(JSON.parse(raw) as unknown, lockPath);
 }
 
-/** Writes the canonical form of `lock`, creating the parent directory. */
+/** Atomically replaces the canonical lock via a temporary file on the same filesystem. */
 export async function writeLockfile(lockPath: string, lock: CapabilitiesLock): Promise<void> {
   await mkdir(path.dirname(lockPath), { recursive: true });
-  await writeFile(lockPath, serializeLock(lock), "utf8");
+  const temporary = await mkdtemp(`${lockPath}.tmp-`);
+  try {
+    const file = path.join(temporary, "lock");
+    await writeFile(file, serializeLock(lock), "utf8");
+    await rename(file, lockPath);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 /** The exact bytes {@link writeLockfile} writes. */

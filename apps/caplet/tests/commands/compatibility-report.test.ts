@@ -221,7 +221,8 @@ test("add and update report compatibility like apply, also for a plan without fi
     const added = await runCaplet(scope, ["add", `path:${gamma}`, ...flags]);
     expect(added.exitCode).toBe(2);
     expect(added.stdout.indexOf(blocked)).toBeGreaterThan(-1);
-    expect(added.stdout.indexOf(blocked)).toBeLessThan(added.stdout.indexOf("Plan:"));
+    expect(added.stdout).not.toContain("Plan:");
+    expect(await Bun.file(path.join(scope.agentsDir, "capabilities.lock")).exists()).toBe(false);
 
     // The failed add rolled back its declaration; declare it without applying before updating.
     expect(

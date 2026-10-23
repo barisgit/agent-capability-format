@@ -237,7 +237,7 @@ type RootLabel = { label: string; targetId?: TargetId };
  * entries or record a Claude marketplace. Each failing root gets one `acf.apply.outside-root`
  * error; the returned roots must be left untouched.
  */
-async function outsideRootFailures(
+export async function outsideRootFailures(
   plan: ApplicablePlan,
   diagnostics: Diagnostic[],
 ): Promise<Set<string>> {

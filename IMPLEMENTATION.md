@@ -2284,7 +2284,10 @@ snapshot tree. Only after every source entry validates does it replace
 `scope/capabilities/<final-name>/`; a selector or source-entry failure discards
 all staging and preserves the prior lock and snapshots. After complete
 successful resolution, snapshots formerly owned by the source but absent from
-the next lock are removed.
+the next lock are removed. Replacements and removals are held as same-filesystem
+backups until the lock is committed. The lock is written to a temporary file and
+renamed atomically; a failed commit restores replaced, removed and newly installed
+snapshots before propagating the error.
 
 If neither a root `acf.yml` nor an `acf/` collection exists, source inventory
 falls back to bare-skill discovery using SPEC §20.3 precedence. Each discovered
@@ -3213,7 +3216,11 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   accepts exactly one source (extra positionals exit 2 before any write),
   inventories the source and reports selected capabilities before mutation,
   mutates `capabilities.yml`, resolves, and
-  applies by default. `github:owner/repo@name` is an add-only exact capability
+  applies by default. Before committing installer state, it validates the entire
+  emission plan against disposable snapshots, including facet and unowned-path
+  conflicts. A later apply failure restores the exact prior manifest, lock and
+  snapshots. Native output and host operations are not rolled back across roots;
+  this is in-process recovery, not a crash-safe journal. `github:owner/repo@name` is an add-only exact capability
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`
   select all.

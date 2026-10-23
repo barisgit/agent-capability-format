@@ -1,7 +1,3 @@
-ok Added path source (project scope)
-    Manifest      <tmp>/project/.agents/capabilities.yml
-    Source        <tmp>/sources/tools
-    Capabilities  tools
 
 Compatibility
   docs / claude - translated: ${ACF_CAPABILITY_DIR} becomes ${CLAUDE_PLUGIN_ROOT} (mcp.args=${ACF_CAPABILITY_DIR})
@@ -27,3 +23,7 @@ ok Applied 5 files (5 writes, 0 deletes)
 
 Claude plugins project scope · acf-project-<h>
   tools  registration required  files current
+ok Added path source (project scope)
+    Manifest      <tmp>/project/.agents/capabilities.yml
+    Source        <tmp>/sources/tools
+    Capabilities  tools

@@ -38,6 +38,9 @@ left out for every target with the warning `acf.source.component-invalid`.
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
+`add` preflights the full plan and restores the prior manifest, lock and snapshots
+on failure. Native output and host operations are not rolled back across roots.
+
 Unowned files and capability directories are never replaced or deleted. Identical
 content may be adopted; otherwise `acf.apply.unowned` names the path to move or
 delete. Restore a lost sidecar or lock from backup to recover its ownership.
