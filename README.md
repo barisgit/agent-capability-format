@@ -17,7 +17,8 @@ cleanly.
 
 ## Install
 
-The `caplet` CLI needs Node.js 20 or later (and `git` for remote sources):
+The `caplet` CLI needs Node.js 20 or later (and `git` for remote sources).
+macOS and Linux are supported; Windows is untested.
 
 ```bash
 npm install --global @caplet/cli
@@ -238,8 +239,9 @@ Every command accepts `--json` and writes one envelope with `caplet`, `command`,
 adds `shell` and `script` instead of printing raw shell code.
 
 `add` validates the full plan before committing installer state. On failure it
-restores the prior manifest, lock and snapshots. Native writes and host operations
-are not a cross-root transaction.
+restores the prior manifest, lock, snapshots and ownership sidecars, relinquishing
+any files it adopted. Native writes and host operations are not a cross-root transaction.
+Run only one caplet mutation at a time per scope.
 
 Caplet refuses to replace or delete unowned files or capability directories.
 Identical content can be adopted; a conflict names the path to move or delete.
@@ -255,8 +257,10 @@ errors remain failures.
 Emitted destinations contain visible `ACF-MANAGED.md` notices: one aggregate
 inventory at each install root and one local marker inside each fully-owned
 loose skill directory. Generated Claude plugins carry none, so their content
-and version stay stable. Edit the declared capability source, not these
-generated files, then run `caplet apply`. The machine-readable
+and version stay stable. Generated outputs and fetched snapshots in
+`capabilities/` are replaced on update/apply; edit the declared capability
+source instead, then run `caplet update` for source changes or `caplet apply`
+for output reconciliation. The machine-readable
 `.acf-managed.json` sidecar remains the authority used for drift detection
 and safe cleanup.
 
