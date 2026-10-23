@@ -2901,7 +2901,8 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   reflects the restored content rather than proposing deletions. `--offline` never fetches and uses the lockfile as-is; absent or
   non-directory locked snapshots report `acf.lock.snapshot-missing` and block
   writes, preserving output and ownership. Empty or unreadable snapshots, missing
-  manifests, and synthesized snapshots without skills also report this error before
+  root manifests (even when nested examples have manifests), and synthesized
+  snapshots without skills also report this error before
   emission, including legacy locks without `resolvedCapabilities`. Present damaged
   snapshots are never silently restored: delete them before requesting a restore.
   `--frozen`

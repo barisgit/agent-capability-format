@@ -533,15 +533,20 @@ async function unusableSnapshots(entry: LockEntry, capabilitiesDir: string): Pro
     const record = entry.resolvedCapabilities?.find((item) => item.name === name);
     const format = record?.format ?? entry.format ?? (entry.synthesized ? "skills" : "acf");
     const formats = format === "skills" ? (["acf", "skills"] as const) : [format];
+    const snapshot = capabilityPath(capabilitiesDir, name);
     try {
       for (const snapshotFormat of formats) {
-        const inventory = await inspectSource(capabilityPath(capabilitiesDir, name), {
+        const inventory = await inspectSource(snapshot, {
           format: snapshotFormat,
           rename: name,
           revision: entry.resolvedSha,
         });
         if (
           inventory.candidates.length === 0 ||
+          // Installed snapshots are individual packages, never source collections. Nested
+          // examples must not stand in for a missing root manifest, even with a legacy lock.
+          (snapshotFormat === "acf" &&
+            !inventory.candidates.some((item) => item.root === snapshot)) ||
           inventory.diagnostics.some((item) => item.severity === "error")
         ) {
           unusable.add(name);

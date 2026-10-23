@@ -4,7 +4,12 @@ import path from "node:path";
 import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
 for (const legacy of [true, false]) {
-  for (const damage of ["empty", "unreadable manifest", "missing skills"] as const) {
+  for (const damage of [
+    "empty",
+    "unreadable manifest",
+    "missing root manifest",
+    "missing skills",
+  ] as const) {
     test(`offline apply preserves outputs for ${legacy ? "legacy" : "current"} locks with ${damage}`, async () => {
       const scope = await makeScope();
       try {
@@ -49,6 +54,12 @@ for (const legacy of [true, false]) {
         } else if (damage === "unreadable manifest") {
           await rm(path.join(snapshot, "acf.yml"));
           await mkdir(path.join(snapshot, "acf.yml"));
+        } else if (damage === "missing root manifest") {
+          await rm(path.join(snapshot, "acf.yml"));
+          await writeText(
+            path.join(snapshot, "examples", "child", "acf.yml"),
+            "acf: 1\nname: example\nversion: 1.0.0\n",
+          );
         } else await rm(path.join(snapshot, "skills"), { recursive: true });
         const result = await runCaplet(scope, ["apply", "--offline", ...args]);
         expect(result.exitCode).toBe(2);
