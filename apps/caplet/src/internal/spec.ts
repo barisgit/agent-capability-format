@@ -101,7 +101,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     name: "add",
     group: "MANAGE",
     summary: "add capabilities from a source and apply them",
-    usage: "caplet add <source>... [flags]",
+    usage: "caplet add <source> [flags]",
     positionals: [
       {
         name: "source",

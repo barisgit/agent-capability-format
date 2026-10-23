@@ -2039,7 +2039,9 @@ Implementations MUST follow this namespace convention:
 | `acf.assets.*`                       | Asset reference resolution.                      |
 | `acf.resolve.*`                      | Resolver / `capabilities.yml` validation.        |
 | `acf.capabilities-yml.*`             | Resolver source spec validation.                 |
+| `acf.lock.snapshot-missing`          | Locked snapshot absent or unusable offline (error); preserve outputs and restore online. |
 | `acf.lock.*`                         | Lockfile validation.                             |
+| `acf.apply.unowned`                  | Unowned output or capability directory conflicts with desired content (error); move or delete the named path. |
 | `acf.emit.*`                         | Emission orchestrator and diff application.      |
 | `acf.adapter.*`                      | Adapter-specific degradation diagnostics.        |
 | `acf.cli.*`                          | CLI-host reported diagnostics.                   |
@@ -2561,13 +2563,24 @@ When `capabilities.yml` and `capabilities.lock` disagree:
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
   lock entry), and emission does not run. A lock entry whose source
-  `capabilities.yml` no longer declares is a disagreement too.
+  `capabilities.yml` no longer declares is a disagreement too. A selected locked
+  snapshot that is absent or not a directory MUST produce the error
+  `acf.lock.snapshot-missing`; existing output and ownership MUST remain intact.
+  An unusable present snapshot MUST likewise fail before emission.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
   diagnostic is present. Every fetch it makes MUST be a restore from the recorded `resolvedSha` (§19.4), so it
   never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
 describe the current `capabilities.yml`.
+
+Lockfile writes MUST be atomic replacements (temporary file and rename on the
+same filesystem), never truncation in place. If a resolution cannot commit its
+lock, it MUST restore snapshot replacements, additions and removals made by that
+resolution. An `add` MUST validate the complete selection and emission plan,
+including facet and ownership conflicts, before committing snapshots and lock;
+a later failure MUST restore the manifest and installer state changed by that add.
+This does not require a crash-safe journal spanning native output roots or hosts.
 
 ## 20. Repository layouts
 
@@ -2752,7 +2765,7 @@ This section is informative. The reference CLI (`caplet`) provides:
 | Command             | Purpose                                                                                   |
 | ------------------- | ----------------------------------------------------------------------------------------- |
 | `caplet init`       | Create a project `.agents/capabilities.yml`.                                              |
-| `caplet add`        | Add source entries to `capabilities.yml`, resolve, and apply (`--no-apply` edits only).   |
+| `caplet add <source>` | Add exactly one source to `capabilities.yml`, resolve, and apply (`--no-apply` edits only); extra positionals exit 2 before any write. |
 | `caplet remove`     | Remove a capability selection or entry and its managed output.                            |
 | `caplet update`     | Re-resolve sources to their latest refs, refresh the lockfile, and apply (`--no-apply`).  |
 | `caplet apply`      | Resolve declared sources as needed and reconcile native artifacts (`--dry-run`, `--offline`, `--frozen`). |
@@ -2945,7 +2958,14 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   (or any other emit driver) applies diffs.
 - A diff carries `path`, `before` (current content or `null` if absent),
   `after` (desired content or `null` if delete), and `owns` — a list of
-  ACF-owned regions inside the file. Ownership is either whole-file or
+  ACF-owned regions inside the file. An implementation MUST NOT replace or delete
+  an existing whole file without a sidecar ownership record, or a capability
+  directory without a lock record. Identical desired bytes MAY be adopted;
+  otherwise planning MUST report `acf.apply.unowned`, mark the path as a conflict
+  rather than an update, and write nothing for that capability. Recovery is to
+  move or delete the path, or restore the missing ownership record from backup.
+  Shared native configuration retains region-level ownership.
+  Ownership is either whole-file or
   a structural pointer (JSON pointer, YAML pointer, TOML pointer, or a
   named region marker).
 - The emit driver MUST record ownership in a per-install-root sidecar

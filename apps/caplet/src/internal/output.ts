@@ -283,7 +283,8 @@ export function renderPlan(view: PlanView, options: { quiet: boolean }): string[
   return lines;
 }
 
-function actionSymbol(action: "create" | "update" | "delete"): string {
+function actionSymbol(action: "create" | "update" | "delete" | "conflict"): string {
+  if (action === "conflict") return colors.red("conflict");
   if (action === "create") return colors.green("+");
   if (action === "update") return colors.yellow("~");
   return colors.red("-");

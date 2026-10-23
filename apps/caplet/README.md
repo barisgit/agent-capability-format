@@ -18,7 +18,7 @@ Or run it once without installing: `npx @caplet/cli --help`.
 
 ```bash
 caplet init                                   # create .agents/capabilities.yml
-caplet add github:owner/repo --pin main       # add a source, resolve, and apply
+caplet add github:owner/repo --pin main       # add exactly one source, resolve, and apply
 caplet apply --dry-run                        # preview emitted file changes
 caplet apply                                  # write native artifacts for each target
 caplet                                        # status summary
@@ -59,6 +59,16 @@ it was created; `completion` returns the shell script inside the JSON envelope.
 
 Local `path:` sources can name a capability, a collection's parent, or its
 `acf/` directory directly. Collection selectors are relative to `acf/`.
+
+`add` preflights the full plan and restores the prior manifest, lock and snapshots
+on failure. Native output and host operations are not rolled back across roots.
+
+Unowned files and capability directories are never replaced or deleted. Identical
+content may be adopted; otherwise `acf.apply.unowned` names the path to move or
+delete. Restore a lost sidecar or lock from backup to recover its ownership.
+
+`apply --offline` never fetches. A missing or unusable locked snapshot fails without
+removing its output or ownership; run `apply` online to restore a missing snapshot.
 
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 

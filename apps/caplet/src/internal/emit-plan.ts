@@ -25,6 +25,7 @@ import {
   type TargetId,
   targetMap,
 } from "@caplet/core";
+import { inspectFileOwnership } from "../apply/apply-diffs.js";
 import { isInsideOrEqual } from "../apply/containment.js";
 import { detectDrift, diskDriftFs, readSidecar, sidecarPath } from "../apply/sidecar.js";
 import { readCwd, readScope } from "./args.js";
@@ -124,9 +125,13 @@ export async function buildEmitPlan(
     staleByRoot: sweep.staleByRoot,
     rootContexts: sweep.rootContexts,
   });
+  const ownershipChanges = await checkPlannedOwnership(desiredWithNotices, diagnostics);
   const diffs = [
     ...desiredWithNotices.filter(
-      (item) => fileDiffChanged(item.diff) || sweep.forcedPaths.has(diffPathKey(item)),
+      (item) =>
+        ownershipChanges.has(item) ||
+        fileDiffChanged(item.diff) ||
+        sweep.forcedPaths.has(diffPathKey(item)),
     ),
     ...sweep.deletes.filter((item) => fileDiffChanged(item.diff)),
   ];
@@ -146,6 +151,35 @@ export async function buildEmitPlan(
     outcomes: [...state.outcomes.values()],
     executables: state.executables,
   };
+}
+
+/** Marks conflicts and keeps identical unowned files in the plan so apply records adoption. */
+async function checkPlannedOwnership(
+  desiredWithNotices: EmittedDiff[],
+  diagnostics: Diagnostic[],
+): Promise<Set<EmittedDiff>> {
+  const ownershipChanges = new Set<EmittedDiff>();
+  const ownershipSidecars = new Map<string, Awaited<ReturnType<typeof readSidecar>>>();
+  for (const item of desiredWithNotices) {
+    let sidecar = ownershipSidecars.get(item.installRoot);
+    if (sidecar === undefined) {
+      sidecar = await readSidecar(sidecarPath(item.installRoot));
+      ownershipSidecars.set(item.installRoot, sidecar);
+    }
+    const ownership = await inspectFileOwnership(
+      [item.diff],
+      {
+        installRoot: item.installRoot,
+        sidecarPath: sidecarPath(item.installRoot),
+        capabilityName: item.capabilityName,
+      },
+      sidecar,
+    );
+    diagnostics.push(...ownership.diagnostics);
+    if (ownership.diagnostics.length > 0) item.conflict = true;
+    if (item.conflict || ownership.adoptions.size > 0) ownershipChanges.add(item);
+  }
+  return ownershipChanges;
 }
 
 /**

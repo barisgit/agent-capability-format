@@ -73,7 +73,10 @@ async function applyManifests(args: Record<string, unknown>): Promise<void> {
   };
   if (blocking !== 0) {
     if (json) printJson("apply", false, diagnostics, envelope(run, undefined));
-    else run.out.compatibility(plan.outcomes, plan.targets);
+    else {
+      run.out.compatibility(plan.outcomes, plan.targets);
+      if (plan.diffs.some((item) => item.conflict === true)) run.out.plan(view);
+    }
     process.exitCode = blocking;
     return;
   }
@@ -106,8 +109,8 @@ type ApplyRun = {
 };
 
 /**
- * Fetches the sources (unless a frozen dry run, which plans what is installed) and plans them.
- * A dry run that is not frozen plans against the previewed lock and snapshots, then discards them.
+ * Fetches sources and plans them. Frozen dry runs use installed state; offline ones still
+ * validate snapshot availability without fetching. Dry runs discard their disposable resolution.
  */
 async function planApply(
   args: Record<string, unknown>,
@@ -116,11 +119,11 @@ async function planApply(
 ): Promise<{ plan: EmitPlan; diagnostics: Diagnostic[] }> {
   const simulate = dryRun && !frozen;
   const fetched =
-    dryRun && frozen
+    dryRun && frozen && args.offline !== true
       ? { scopes: [], results: [], diagnostics: [] }
       : await fetchScopes(args, args.offline === true ? "never" : "auto", undefined, {
           frozen,
-          ...(simulate ? { updateLock: false } : {}),
+          ...(dryRun ? { updateLock: false } : {}),
         });
   const previews = fetched.scopes.flatMap((scopeRoot, index) => {
     const result = fetched.results[index];

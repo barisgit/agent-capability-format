@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilitiesYml,
@@ -24,6 +24,7 @@ import {
   writeLockfile,
 } from "./lockfile.js";
 import { type CapabilityRecord, capabilityPath, materializeFetched } from "./materialize.js";
+import { commitStagedRecords, unownedSnapshotDiagnostics } from "./snapshot-transaction.js";
 
 /** What {@link resolveCapabilities} reconciles and how far it may go. */
 export type ResolveOptions = {
@@ -222,6 +223,13 @@ async function resolveCapabilitiesStaged(
   diagnostics.push(...collisions);
   if (collisions.length > 0) failed = true;
 
+  const unowned = await unownedSnapshotDiagnostics(
+    records,
+    usableLock,
+    opts.scopeRoot.capabilitiesDir,
+  );
+  diagnostics.push(...unowned);
+  failed ||= unowned.length > 0;
   const lockfile = canonicalizeLock({ acf: 1, entries: nextEntries });
   if (failed) {
     return {
@@ -231,18 +239,24 @@ async function resolveCapabilitiesStaged(
     };
   }
 
+  const lockChanged =
+    usableLock === null ||
+    JSON.stringify(canonicalizeLock(usableLock)) !== JSON.stringify(lockfile);
+  const persist = opts.mode !== "never" && opts.updateLock !== false && (fetched || lockChanged);
+  const stale = persist
+    ? (usableLock?.entries.flatMap((entry) => entry.capabilityNames) ?? []).filter(
+        (name) => !lockfile.entries.some((entry) => entry.capabilityNames.includes(name)),
+      )
+    : [];
   const committedRecords = await commitStagedRecords(
     records,
     stagingDir,
     opts.scopeRoot.capabilitiesDir,
+    stale,
+    async () => {
+      if (persist) await writeLockfile(opts.scopeRoot.lockPath, lockfile);
+    },
   );
-  const lockChanged =
-    usableLock === null ||
-    JSON.stringify(canonicalizeLock(usableLock)) !== JSON.stringify(lockfile);
-  if (opts.mode !== "never" && opts.updateLock !== false && (fetched || lockChanged)) {
-    await removeStaleSnapshots(usableLock, lockfile, opts.scopeRoot.capabilitiesDir);
-    await writeLockfile(opts.scopeRoot.lockPath, lockfile);
-  }
   return { capabilities: committedRecords.sort(byRecordName), lockfile, diagnostics };
 }
 
@@ -263,12 +277,23 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
     };
   }
   if (!(await fetchNeeded(context, paired))) {
+    const missing =
+      context.opts.mode === "never" && locked !== undefined
+        ? await missingSnapshots(locked, capabilitiesDir)
+        : new Set<string>();
+    const diagnostics: Diagnostic[] = [...missing].map((name) => ({
+      severity: "error",
+      code: "acf.lock.snapshot-missing",
+      capability: { name },
+      path: capabilityPath(capabilitiesDir, name),
+      message: `capability ${name}: locked snapshot is missing or is not a directory; run apply without --offline to restore it; existing outputs are preserved`,
+    }));
     return {
       records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),
       lockEntry: locked === undefined ? undefined : withSelection(locked, entry),
-      diagnostics: [],
+      diagnostics,
       fetched: false,
-      failed: false,
+      failed: diagnostics.length > 0,
     };
   }
   return await fetchEntry(context, paired);
@@ -358,30 +383,6 @@ async function fetchEntry(context: ResolveContext, paired: PairedEntry): Promise
   };
 }
 
-/**
- * Moves staged snapshots into `capabilitiesDir`, replacing any installed copy. Records not
- * inside staging (read from an installed lock) already live at their final root and pass through.
- */
-async function commitStagedRecords(
-  records: CapabilityRecord[],
-  stagingDir: string,
-  capabilitiesDir: string,
-): Promise<CapabilityRecord[]> {
-  const committed: CapabilityRecord[] = [];
-  for (const record of records) {
-    const relative = path.relative(stagingDir, record.root);
-    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
-      committed.push(record);
-      continue;
-    }
-    const destination = capabilityPath(capabilitiesDir, record.name);
-    await rm(destination, { recursive: true, force: true });
-    await rename(record.root, destination);
-    committed.push({ ...record, root: destination });
-  }
-  return committed;
-}
-
 function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
   const byName = new Map<string, CapabilityRecord[]>();
   for (const record of records) {
@@ -403,21 +404,6 @@ function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {
     });
   }
   return diagnostics;
-}
-
-/** Deletes installed snapshots the previous lock owned and the next lock no longer names. */
-async function removeStaleSnapshots(
-  previous: CapabilitiesLock | null,
-  next: CapabilitiesLock,
-  capabilitiesDir: string,
-): Promise<void> {
-  if (previous === null) return;
-  const keep = new Set(next.entries.flatMap((entry) => entry.capabilityNames));
-  for (const name of previous.entries.flatMap((entry) => entry.capabilityNames)) {
-    if (!keep.has(name)) {
-      await rm(capabilityPath(capabilitiesDir, name), { recursive: true, force: true });
-    }
-  }
 }
 
 function normalizeCapabilitiesYml(value: CapabilitiesYml, manifestDir: string): CapabilitiesYml {

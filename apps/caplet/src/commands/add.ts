@@ -9,7 +9,9 @@ import {
 } from "@caplet/core";
 import { fetchCapability, inspectSource, type PrefetchedSource } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
+import { withInstallerRollback } from "../internal/add-transaction.js";
 import { planAndApply } from "../internal/apply-flow.js";
+import { outsideRootFailures } from "../internal/apply-plan.js";
 import {
   readCwd,
   readExplicitScope,
@@ -18,6 +20,7 @@ import {
   validationError,
 } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
+import { buildEmitPlan } from "../internal/emit-plan.js";
 import { fetchScopes, installedExecutables } from "../internal/fetch-scopes.js";
 import { printJson, readJson } from "../internal/json.js";
 import {
@@ -33,6 +36,7 @@ import {
   type Reporter,
   reporter,
 } from "../internal/output.js";
+import { buildPlanView, planToJson } from "../internal/plan-view.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { chooseSourceCapabilities } from "../internal/source-selection.js";
 import { specToCittyArgs } from "../internal/spec.js";
@@ -47,6 +51,9 @@ export const addCommand = defineCommand({
 
 /** Adds the source to the scope's manifest, then applies it unless `--no-apply`. */
 async function addSource(args: Record<string, unknown>): Promise<void> {
+  if (Array.isArray(args._) && args._.length > 1) {
+    throw validationError("add takes exactly one source; run add separately for each source");
+  }
   const rawSource = args.source;
   if (typeof rawSource !== "string" || rawSource.length === 0)
     throw validationError("source is required");
@@ -126,25 +133,83 @@ async function applyAddedSource(
     ),
     ...(entry.path === undefined ? {} : { path: entry.path }),
   };
-  if (!json) printAdded(out, entry.source.kind, added);
   if (args.apply === false) {
+    if (!json) printAdded(out, entry.source.kind, added);
     // Nothing is resolved or installed yet; the apply that installs it reports executables.
     if (json) printJson("add", true, inventory.diagnostics, unappliedEnvelope(added));
     else printDiagnostics(inventory.diagnostics, args);
     return;
   }
   const scopedArgs = { ...args, scope };
+  const prefetchedSources = new Map([
+    [inspection.prefetched.fetched.sourceId, inspection.prefetched],
+  ]);
+  if (!(await validateAddedSource(scopedArgs, prefetchedSources, added, out))) return;
   const installed = await installedExecutables(scopedArgs);
-  const fetched = await fetchScopes(scopedArgs, "auto", undefined, {
-    prefetchedSources: new Map([[inspection.prefetched.fetched.sourceId, inspection.prefetched]]),
+  await withInstallerRollback(root, async () => {
+    const fetched = await fetchScopes(scopedArgs, "auto", undefined, { prefetchedSources });
+    await planAndApply({
+      command: "add",
+      args: scopedArgs,
+      diagnostics: fetched.diagnostics,
+      installed,
+      payload: { added },
+    });
+    const succeeded = Number(process.exitCode ?? 0) === 0;
+    if (succeeded && !json) printAdded(out, entry.source.kind, added);
+    return succeeded;
   });
-  await planAndApply({
-    command: "add",
-    args: scopedArgs,
-    diagnostics: fetched.diagnostics,
-    installed,
-    payload: { added },
+}
+
+/** Rejects resolution, facet and destination conflicts against disposable snapshots before commit. */
+async function validateAddedSource(
+  args: Record<string, unknown>,
+  prefetchedSources: ReadonlyMap<string, PrefetchedSource>,
+  added: Added,
+  out: Reporter,
+): Promise<boolean> {
+  const fetched = await fetchScopes(args, "auto", undefined, {
+    updateLock: false,
+    prefetchedSources,
   });
+  try {
+    const plan = await buildEmitPlan(args, {
+      locks: new Map(
+        fetched.scopes.flatMap((root, index) => {
+          const result = fetched.results[index];
+          return result === undefined ? [] : [[root.scope, result.lockfile] as const];
+        }),
+      ),
+      capabilitiesDirs: new Map(
+        fetched.scopes.flatMap((root, index) => {
+          const preview = fetched.results[index]?.preview;
+          return preview === undefined ? [] : [[root.scope, preview.capabilitiesDir] as const];
+        }),
+      ),
+    });
+    const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
+    await outsideRootFailures(plan, diagnostics);
+    const code = exitCodeForDiagnostics(diagnostics, args);
+    if (code === 0) return true;
+    process.exitCode = code;
+    const view = buildPlanView(plan.diffs);
+    if (readJson(args))
+      printJson("add", false, diagnostics, {
+        added,
+        plan: planToJson(view),
+        applied: null,
+        outcomes: plan.outcomes,
+        executables: [],
+      });
+    else {
+      printDiagnostics(diagnostics, args);
+      out.compatibility(plan.outcomes, plan.targets);
+      if (plan.diffs.some((item) => item.conflict === true)) out.plan(view);
+    }
+    return false;
+  } finally {
+    await Promise.all(fetched.results.map((result) => result.preview?.dispose()));
+  }
 }
 
 /** The `added` field of the `--json` envelope. */

@@ -215,7 +215,7 @@ The reference CLI `caplet` (`caplet --help` is authoritative):
 | Group   | Command                     | What it does                                                                 |
 | ------- | --------------------------- | ---------------------------------------------------------------------------- |
 | Manage  | `caplet init`               | Create `.agents/capabilities.yml` for this project.                          |
-| Manage  | `caplet add <source>...`    | Add sources to `capabilities.yml`, resolve, and apply (`--no-apply` to skip). |
+| Manage  | `caplet add <source>`       | Add one source to `capabilities.yml`, resolve, and apply (`--no-apply` to skip). |
 | Manage  | `caplet remove <name>...`   | Remove a capability and its managed output.                                  |
 | Manage  | `caplet update [name]`      | Re-resolve sources to their latest refs and apply (`--no-apply`: lock only). |
 | Sync    | `caplet apply`              | Resolve (fetching as needed) and reconcile native artifacts.                 |
@@ -232,7 +232,7 @@ recovery action. Results stay separate by scope: multi-scope reports label
 non-native components with their scope, JSON `outcomes` records include `scope`,
 and `show` derives each capability's support from that scope's results.
 Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
-fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
+fetches and uses the lockfile as-is (missing snapshots fail without removing output), and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 `check` exits 0 with no errors, 1 for stale outputs, 2 for invalid input
 (including lock errors), or 3 for a stale lock under `--frozen`. Edited stale
@@ -241,6 +241,14 @@ artifacts preserved for manual cleanup keep exit 0 but are not reported as clean
 Every command accepts `--json` and writes one envelope with `caplet`, `command`,
 `ok` and `diagnostics`. `init` adds `manifest` and `created`; `completion`
 adds `shell` and `script` instead of printing raw shell code.
+
+`add` validates the full plan before committing installer state. On failure it
+restores the prior manifest, lock and snapshots. Native writes and host operations
+are not a cross-root transaction.
+
+Caplet refuses to replace or delete unowned files or capability directories.
+Identical content can be adopted; a conflict names the path to move or delete.
+If a sidecar or lock record was lost, restoring it from backup also restores ownership.
 
 Piping output to an early-closing reader (for example, `caplet check | head -1`)
 quietly drops further writes to that stream on `EPIPE`, for text and `--json`

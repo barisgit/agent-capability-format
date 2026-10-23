@@ -973,6 +973,14 @@ markers.
 
 ### 4.2.2 Ownership sidecar (`.acf-managed.json`)
 
+Planning and apply refuse to replace or delete unowned whole files with
+`acf.apply.unowned`; the plan reports a `conflict`, not an update. Byte-identical
+files are adopted and recorded even when their content needs no write. Losing a
+sidecar therefore permits only identical adoption; move/delete conflicting files
+or restore the sidecar from backup. Shared native configuration uses region
+ownership. The installer applies the same rule to snapshot directories, using
+the prior lock as ownership and comparing complete payload digests for adoption.
+
 At each `installRoot`, caplet maintains an `.acf-managed.json` sidecar listing
 every `(path, AcfOwnership)` tuple ACF currently owns at that root. On
 subsequent emits and on `caplet remove`, the sidecar lets caplet:
@@ -2306,7 +2314,10 @@ snapshot tree. Only after every source entry validates does it replace
 `scope/capabilities/<final-name>/`; a selector or source-entry failure discards
 all staging and preserves the prior lock and snapshots. After complete
 successful resolution, snapshots formerly owned by the source but absent from
-the next lock are removed.
+the next lock are removed. Replacements and removals are held as same-filesystem
+backups until the lock is committed. The lock is written to a temporary file and
+renamed atomically; a failed commit restores replaced, removed and newly installed
+snapshots before propagating the error.
 
 If neither a root `acf.yml` nor an `acf/` collection exists, source inventory
 falls back to bare-skill discovery using SPEC §20.3 precedence. Each discovered
@@ -2829,6 +2840,7 @@ acf.lock.unsupported-version
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
 acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
+acf.apply.unowned                            # unowned file or capability directory differs from desired content (error)
 acf.emit.managed-notice-reserved-path        # capability ships a file at the reserved notice name (error)
 acf.emit.managed-notice-destination-collision # reserved notice path holds a file caplet does not own (error)
 
@@ -2843,6 +2855,7 @@ acf.source.component-invalid                 # invalid foreign or bare imported 
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
+acf.lock.snapshot-missing                    # locked snapshot absent or not a directory offline (error)
 
 # Selection
 acf.selection.unmatched                      # selector matches nothing (warn)
@@ -3233,9 +3246,14 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
 ### 14.1 Mutating commands
 
 - `caplet add <source> [--pin <ref>] [--path <subdir>] [--scope user|project] [--no-apply]`
+  accepts exactly one source (extra positionals exit 2 before any write),
   inventories the source and reports selected capabilities before mutation,
   mutates `capabilities.yml`, resolves, and
-  applies by default. `github:owner/repo@name` is an add-only exact capability
+  applies by default. Before committing installer state, it validates the entire
+  emission plan against disposable snapshots, including facet and unowned-path
+  conflicts. A later apply failure restores the exact prior manifest, lock and
+  snapshots. Native output and host operations are not rolled back across roots;
+  this is in-process recovery, not a crash-safe journal. `github:owner/repo@name` is an add-only exact capability
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`
   select all.
@@ -3275,7 +3293,10 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   include scope when the report spans scopes. `--json` carries the same records
   as `outcomes`, each with an explicit `scope`.
 - `-n/--dry-run` prints the change plan without writing files or the
-  lockfile. `--offline` never fetches and uses the lockfile as-is. `--frozen`
+  lockfile. `--offline` never fetches and uses the lockfile as-is; absent or
+  non-directory locked snapshots report `acf.lock.snapshot-missing` and block
+  writes, preserving output and ownership. Unusable present snapshots also fail
+  validation before emission. `--frozen`
   exits 3 without fetching or writing when the lockfile is stale. A plan
   that deletes files asks for confirmation on a TTY unless `--yes` or
   `--json` is set. Removing a capability's regions from a shared file (a

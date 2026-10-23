@@ -67,6 +67,7 @@ export async function planAndApply(input: PlanAndApplyInput): Promise<void> {
     else {
       printDiagnostics(diagnostics, args);
       out.compatibility(plan.outcomes, plan.targets);
+      if (plan.diffs.some((item) => item.conflict === true)) out.plan(view);
     }
     return;
   }

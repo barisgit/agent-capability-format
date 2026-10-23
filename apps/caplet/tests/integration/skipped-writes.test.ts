@@ -115,7 +115,7 @@ test("a skipped plugin package write holds back the install and the loose retire
   expect(await host.calls()).toEqual([]);
   expect(existsSync(looseSkill)).toBe(true);
   expect(summary.diagnostics.map((item) => item.code)).toEqual(
-    expect.arrayContaining(["acf.apply.drift", "acf.claude.host-deferred"]),
+    expect.arrayContaining(["acf.apply.unowned", "acf.claude.host-deferred"]),
   );
   const sidecar = await readText(path.join(scope.cwd, ".claude", ".acf-managed.json"));
   expect(sidecar).toContain('"skills/review/SKILL.md"');
