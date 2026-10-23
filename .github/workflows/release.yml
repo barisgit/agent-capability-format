@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      publish: ${{ steps.gate.outputs.publish }}
+      changed: ${{ steps.gate.outputs.changed }}
       version: ${{ steps.gate.outputs.version }}
     steps:
       - uses: actions/checkout@v7
@@ -28,7 +28,7 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - name: Check shared version and exact registry versions
+      - name: Check shared version bump
         id: gate
         env:
           BEFORE: ${{ github.event.before }}
@@ -36,7 +36,7 @@ jobs:
 
   build:
     needs: gate
-    if: needs.gate.outputs.publish == 'true'
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -66,7 +66,7 @@ jobs:
 
   publish:
     needs: [gate, build]
-    if: needs.gate.outputs.publish == 'true'
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm-production
@@ -97,7 +97,7 @@ jobs:
 
   github-release:
     needs: [gate, publish]
-    if: needs.gate.outputs.publish == 'true'
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

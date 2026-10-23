@@ -15,14 +15,17 @@ version bump with the next push (pushes beyond that limit are cancelled):
 
 1. Compare against `github.event.before`. Versions must be canonical SemVer and
    agree across manifests at both commits. An unchanged version skips the
-   release; a changed version must be strictly newer. Query exact npm versions,
-   treating only E404 as absent. If none are missing, finish green.
+   release; a changed version must be strictly newer and always proceeds through
+   build, archive verification, and release finalization, even if every npm version
+   already exists.
 2. Run `bun run ci` (including builds) and pack each package once. Check the existing
    allowlist (`dist/`, manifest, README, LICENSE), write `SHA256SUMS`, and
    smoke-install those exact tarballs on Node 20 before uploading the artifact.
 3. In the `npm-production` GitHub environment, download and verify checksums,
-   repeat the registry preflight, and publish those archives in dependency order
-   derived by `scripts/packages.ts`. Only this job has `id-token: write`.
+   preflight every exact npm version against its prepared archive, treating only
+   E404 as absent. Accept existing versions only when their SHA-512 integrity
+   matches exactly; publish missing versions in dependency order derived by
+   `scripts/packages.ts`. Only this job has `id-token: write`.
    npm 11.5.1 uses trusted publishing and automatic provenance, without a token.
 4. Create `v<version>` at the published commit, or verify an existing tag points
    there. Create or refresh the GitHub Release with the tarballs and checksums.
@@ -38,9 +41,11 @@ tarball. A mismatch fails closed; do not overwrite an npm version. Preflight
 also refuses to publish a missing version when its destination npm dist-tag
 already points to a newer version, preventing superseded retries from rolling
 `latest` or `next` backward. Repacking in a new build can change archive bytes,
-so prefer rerunning failed jobs to retain the original artifact. If every package already exists, rerunning the entire
-workflow skips release creation too; rerun the failed GitHub Release job to
-repair missing attachments or a missing tag.
+so prefer rerunning failed jobs to retain the original artifact. If every package
+already exists and matches, the run still verifies the tag at the original commit
+and creates or refreshes the GitHub Release and its assets. Rerunning only the
+failed GitHub Release job also repairs a missing tag, release, or attachments
+without rebuilding the archives.
 
 ## Trusted publishing
 

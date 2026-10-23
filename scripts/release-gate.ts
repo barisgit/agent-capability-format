@@ -1,9 +1,8 @@
-/** Main-push release eligibility: shared canonical SemVer, monotonic bumps, exact npm versions. */
+/** Main-push release eligibility: every shared canonical SemVer bump requires archive verification. */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { publishedIntegrity } from "./release/publish.js";
 import { evaluateVersions } from "./release/version.js";
 import { publishOrder } from "./release/workspaces.js";
 
@@ -39,19 +38,13 @@ function main(): void {
     ]),
   );
   const result = evaluateVersions(before, current);
-  const missing = result.changed
-    ? packages
-        .filter(
-          ({ manifest }) => publishedIntegrity(`${manifest.name}@${result.version}`) === undefined,
-        )
-        .map(({ manifest }) => manifest.name)
-    : [];
-  const publish = missing.length > 0;
-  console.log(JSON.stringify({ ...result, publish, missing }, null, 2));
+  // Registry presence cannot decide eligibility: retries must verify the exact
+  // prepared bytes and finalize the release even when all npm uploads succeeded.
+  console.log(JSON.stringify(result, null, 2));
   if (process.env.GITHUB_OUTPUT !== undefined) {
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `publish=${publish}\nversion=${result.version}\nmissing=${JSON.stringify(missing)}\n`,
+      `changed=${result.changed}\nversion=${result.version}\n`,
     );
   }
 }
