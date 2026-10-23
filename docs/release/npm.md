@@ -18,7 +18,9 @@ is not published.
 After bootstrap, do not publish manually or create tags. Bump the shared version
 in the root and six public manifests, run `bun install` to refresh the lockfile,
 commit, and merge to `main`. `.github/workflows/release.yml` serializes releases
-in concurrency group `npm-production`, without cancelling an active release:
+in concurrency group `npm-production`, without cancelling an active release.
+`queue: max` preserves up to 100 pending runs rather than replacing a queued
+version bump with the next push (pushes beyond that limit are cancelled):
 
 1. Compare against `github.event.before`. Versions must be canonical SemVer and
    agree across manifests at both commits. An unchanged version skips the
