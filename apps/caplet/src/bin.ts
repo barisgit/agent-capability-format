@@ -2,7 +2,11 @@
 import { runCommand } from "citty";
 import { rewriteAlias, rootCommand } from "./cli.js";
 import { renderCommandHelp, renderRootHelp } from "./help.js";
-import { INTERNAL_ERROR_CODE, reportCommandFailure } from "./internal/command.js";
+import {
+  describeUnexpectedError,
+  INTERNAL_ERROR_CODE,
+  reportCommandFailure,
+} from "./internal/command.js";
 import { CAPLET_VERSION } from "./internal/json.js";
 import { commandSpec, unknownFlagError, wantsJson } from "./internal/spec.js";
 
@@ -81,10 +85,9 @@ try {
  * `--json` the command's envelope with an `acf.cli.internal` error so stdout always parses.
  */
 function internalFailure(error: unknown): never {
-  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  const { message, detail } = describeUnexpectedError(error);
   process.stderr.write(`${detail}\n`);
   if (json) {
-    const message = error instanceof Error ? error.message : String(error);
     reportCommandFailure(
       command ?? "caplet",
       { json: true },

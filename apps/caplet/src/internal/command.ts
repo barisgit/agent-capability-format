@@ -10,6 +10,26 @@ export const USAGE_ERROR_CODE = "acf.cli.usage";
 /** Diagnostic code of an error no command handles: a caplet bug or an unforeseen environment. */
 export const INTERNAL_ERROR_CODE = "acf.cli.internal";
 
+/** Describes an unexpected throw for the JSON diagnostic and stderr, retaining its stack. */
+export function describeUnexpectedError(error: unknown): { message: string; detail: string } {
+  if (!(error instanceof Error)) {
+    const message = String(error);
+    return { message, detail: message };
+  }
+  const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+  const message =
+    code === undefined || error.message.includes(code)
+      ? error.message
+      : `${code}: ${error.message}`;
+  const stack = error.stack;
+  // A runtime's stack can omit the message, as seen with async fs errors in Bun 1.3.12.
+  // Keep complete stacks unchanged, but never let an incomplete stack hide the actual failure.
+  const detail = stack?.includes(message)
+    ? stack
+    : `${error.name}: ${message}${stack ? `\n${stack}` : ""}`;
+  return { message, detail };
+}
+
 /** An error a command throws to stop with `exitCode`; `code` is its diagnostic code. */
 export type CommandError = Error & { exitCode: 1 | 2 | 4; code?: string | undefined };
 

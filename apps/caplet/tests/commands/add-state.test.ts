@@ -70,6 +70,7 @@ for (const nativeAdoption of [false, true]) {
       const failed = await runCaplet(scope, ["add", source, ...args]);
       expect(failed.exitCode).toBe(1);
       expect(failed.stderr).toContain("EACCES");
+      expect(failed.stderr).toContain("permission denied");
       expect(failed.stderr).not.toContain("rollback failed");
       expect(await readText(sidecar)).toBe(ownership);
       await chmod(native, 0o755);
@@ -111,6 +112,7 @@ test("rollback skips an unchanged read-only sidecar and restores later roots", a
     const failed = await runCaplet(scope, ["add", source, ...args]);
     expect(failed.exitCode).toBe(1);
     expect(failed.stderr).toContain("EACCES");
+    expect(failed.stderr).toContain("permission denied");
     expect(failed.stderr).not.toContain("rollback failed");
     expect(await Promise.all(sidecars.map(readText))).toEqual(before);
     await chmod(cursor, 0o755);
