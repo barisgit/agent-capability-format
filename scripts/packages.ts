@@ -71,12 +71,13 @@ function tarballName(manifest: Manifest): string {
   return `${manifest.name.replace(/^@/, "").replace("/", "-")}-${manifest.version}.tgz`;
 }
 
-function run(command: string, args: string[], cwd: string): string {
+function run(command: string, args: string[], cwd: string, env = process.env): string {
   return execFileSync(command, args, {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
   });
+    env,
 }
 
 function fail(message: string): never {
@@ -130,6 +131,17 @@ console.log(skills.length, provisionalOperations.length, ACF_DIAGNOSTIC_CODES.le
 
 /**
  * Installs the packed tarballs from npm into a fresh directory and drives them
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+    XDG_CONFIG_HOME: path.join(home, ".config"),
+    XDG_CACHE_HOME: path.join(home, ".cache"),
+    XDG_DATA_HOME: path.join(home, ".local", "share"),
+    XDG_STATE_HOME: path.join(home, ".local", "state"),
+  };
+  const execute = (command: string, args: string[]): string => run(command, args, home, env);
  * with Node only: the CLI bin, a type-checked library import, and the main
  * project journey (init, then a dry-run apply).
  */
@@ -142,10 +154,9 @@ function smoke(outDir: string | undefined): void {
   const project = path.join(home, "project");
   console.log(`smoke directory: ${home}`);
   writeFileSync(path.join(home, "package.json"), '{ "private": true, "type": "module" }\n');
-  run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", ...tarballs], home);
+  execute("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", ...tarballs]);
 
-  const caplet = (...args: string[]): string =>
-    run("npx", ["--no-install", "caplet", ...args], home);
+  const caplet = (...args: string[]): string => execute("npx", ["--no-install", "caplet", ...args]);
   const reported = caplet("-V").trim();
   if (reported !== version) fail(`caplet -V printed ${reported}, expected ${version}`);
   if (!caplet("--help").includes("USAGE")) fail("caplet --help did not print usage");
@@ -170,9 +181,9 @@ function smoke(outDir: string | undefined): void {
       files: ["smoke.ts"],
     }),
   );
-  run("node", [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"], home);
-  const output = run("node", ["out/smoke.js"], home).trim();
-  const node = run("node", ["--version"], home).trim();
+  execute("node", [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"]);
+  const output = execute("node", ["out/smoke.js"]).trim();
+  const node = execute("node", ["--version"]).trim();
   console.log(`node ${node}: caplet -V ${reported}; library import printed: ${output}`);
 }
 
