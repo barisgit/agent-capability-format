@@ -10,7 +10,6 @@ export type FlagSpec = {
   default?: boolean | string;
   description: string;
   negativeDescription?: string;
-  hidden?: boolean;
 };
 
 export type PositionalSpec = {

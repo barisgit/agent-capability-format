@@ -26,8 +26,8 @@ function usageToken(spec: CommandSpec): string {
   return positional.length === 0 ? spec.name : `${spec.name} ${positional}`;
 }
 
-function visibleFlags(spec: CommandSpec): FlagSpec[] {
-  const own = (spec.flags ?? []).filter((flag) => flag.hidden !== true);
+function commandFlags(spec: CommandSpec): FlagSpec[] {
+  const own = spec.flags ?? [];
   return spec.target ? [TARGET_FLAG, ...own] : own;
 }
 
@@ -48,7 +48,7 @@ export function renderRootHelp(): string {
       rows.push([colors.bold(colors.cyan(usageToken(spec))), colors.dim(spec.summary)]);
     }
   }
-  const globalRows = GLOBAL_FLAGS.filter((flag) => flag.hidden !== true).map((flag) => [
+  const globalRows = GLOBAL_FLAGS.map((flag) => [
     colors.bold(colors.cyan(flagLabel(flag))),
     colors.dim(flag.description),
   ]);
@@ -97,7 +97,7 @@ export function renderCommandHelp(name: string): string | undefined {
       lines.push(line);
     }
   }
-  const flags = visibleFlags(spec);
+  const flags = commandFlags(spec);
   if (flags.length > 0) {
     lines.push("");
     lines.push(colors.bold("FLAGS"));
