@@ -48,7 +48,7 @@ export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[] }
 export async function discoverRepository(repoRoot: string): Promise<RepositoryDiscovery> {
   const root = path.resolve(repoRoot);
   if (await hasManifest(root)) return { roots: [root], diagnostics: [] };
-  const acfDir = collectionRoot(root);
+  const acfDir = await collectionRoot(root);
   if (await exists(acfDir)) {
     const roots = await findManifestDirs(acfDir);
     return { roots: roots.sort(), diagnostics: [] };

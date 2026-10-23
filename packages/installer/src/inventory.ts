@@ -108,7 +108,7 @@ async function foreignInventory(
 /** An ACF source: its root capability or `acf/` collection, selected by collection path. */
 async function acfInventory(root: string): Promise<SourceInventory> {
   const repository = await readRepositoryCapabilities(root);
-  const collection = collectionRoot(root);
+  const collection = await collectionRoot(root);
   const candidates = repository.capabilities.map((capability): SourceCapabilityCandidate => {
     const relative = path.relative(collection, capability.root).replaceAll(path.sep, "/");
     const inCollection = relative.length > 0 && relative !== ".." && !relative.startsWith("../");

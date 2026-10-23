@@ -56,8 +56,11 @@ export async function recognizedFormats(root: string): Promise<RecognizedFormat[
       break;
     }
   }
-  if (found.length === 0 && (await isDirectory(collectionRoot(root))))
-    found.push({ format: "acf", manifest: `${path.relative(root, collectionRoot(root)) || "."}/` });
+  if (found.length === 0) {
+    const collection = await collectionRoot(root);
+    if (await isDirectory(collection))
+      found.push({ format: "acf", manifest: `${path.relative(root, collection) || "."}/` });
+  }
   if (agentPluginsSchemaVersion(await parsedJson(path.join(root, "plugin.json"))) !== undefined)
     found.push({ format: "agent-plugins", manifest: "plugin.json" });
   if (await isFile(path.join(root, CLAUDE_PLUGIN_MANIFEST)))

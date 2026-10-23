@@ -2609,6 +2609,11 @@ An `acf/` directory at the selected source root may contain capabilities at
 arbitrary depth. Each capability is the directory containing its own
 `acf.yml`. The optional source-entry `path` first changes the selected source
 root; `capabilities` selectors then select paths beneath that root's `acf/`.
+An existing child `acf/` collection takes precedence over treating the selected
+root as a collection itself. Without that child, the selected root is a
+collection only when its contents contain ACF capability manifests, not merely
+because its directory is named `acf`. Format detection, capability discovery,
+and selector anchoring MUST use the same collection root.
 
 ### 20.3 Unmanifested skill import
 
