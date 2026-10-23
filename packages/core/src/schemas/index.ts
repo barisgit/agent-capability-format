@@ -3,6 +3,7 @@ import { carriersOf } from "../targets/field-support.js";
 import { sourceFormats } from "../types/interop.js";
 import type { SelectorKey } from "../types/model.js";
 import { SLUG_PATTERN } from "../utils/guards.js";
+import { isSemVer } from "../utils/semver.js";
 
 export const slugSchema = z.string().regex(SLUG_PATTERN);
 export const targetIdSchema = slugSchema;
@@ -37,18 +38,21 @@ const authorSchema = z.union([
     .strict(),
 ]);
 
-export const manifestSchema = withOnlyExcept({
-  acf: z.literal(1),
-  name: slugSchema,
-  version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
-  description: z.string().optional(),
-  authors: z.array(authorSchema).optional(),
-  license: z.string().optional(),
-  homepage: z.string().url().optional(),
-  repository: z.string().optional(),
-  keywords: z.array(z.string()).optional(),
-  targets: targetsSchema.optional(),
-});
+export const manifestSchema = z
+  .strictObject({
+    ...onlyExceptSchema.shape,
+    acf: z.literal(1),
+    name: slugSchema,
+    version: z.string().refine(isSemVer, "version must be SemVer 2.0.0"),
+    description: z.string().optional(),
+    authors: z.array(authorSchema).optional(),
+    license: z.string().optional(),
+    homepage: z.string().url().optional(),
+    repository: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+    targets: targetsSchema.optional(),
+  })
+  .and(onlyExceptSchema);
 
 const frontmatterBase = {
   assets: z.array(z.string()).optional(),

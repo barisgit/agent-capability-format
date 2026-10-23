@@ -1,4 +1,4 @@
-import { computeSet } from "../applicability/index.js";
+import { computeSet, validateApplicabilityDecl } from "../applicability/index.js";
 import { remainderFamilies, remainderTargets } from "../targets/remainder-support.js";
 import type {
   AcfCapability,
@@ -44,6 +44,9 @@ export function applyEntrySelection(
   resolved: AcfCapability,
   selection: EntrySelection,
 ): { capability: AcfCapability; diagnostics: Diagnostic[] } {
+  const invalid: Diagnostic[] = [];
+  validateApplicabilityDecl(selection, invalid, resolved.root);
+  if (invalid.length > 0) return { capability: resolved, diagnostics: invalid };
   const capability = narrowTargets(resolved, selection);
   if (isEmpty(selection.include) && isEmpty(selection.exclude))
     return { capability, diagnostics: remainderReferences(capability, capability) };

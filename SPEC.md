@@ -302,7 +302,10 @@ The manifest is a YAML mapping with the following fields:
 Implementations MUST reject manifests that contain top-level fields not
 listed above unless those fields are defined as forward-compatible
 extensions in a later spec version, in which case they MUST emit an
-`info` diagnostic.
+`info` diagnostic. Rejection MUST include an error naming each unrecognized key;
+this is distinct from permissive unknown-key handling in Markdown frontmatter.
+Native `version` values MUST conform to SemVer 2.0.0 without coercion (including
+its prohibition on leading zeroes in numeric version and prerelease identifiers).
 
 #### 4.2.1 Authors
 
@@ -480,7 +483,9 @@ not the family set.
 
 If `only` or `except` lists a target id not present in the target
 registry, implementations MUST emit an `error` diagnostic and ignore the
-unknown id when computing applicability for known targets.
+unknown id when computing applicability for known targets. This validation
+also applies to `capabilities.yml` entry-level `only` and `except`. Implementations
+SHOULD suggest a registry id when a near match exists.
 
 ## 7. Target extension data (`targets.<target>`)
 

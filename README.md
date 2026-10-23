@@ -135,6 +135,11 @@ recursive. Use `path` first when the collection lives in a monorepo subtree.
 Pointing directly at its `acf/` directory also works; selectors remain relative
 to that directory.
 
+Native `acf.yml` rejects unknown top-level keys and requires strict SemVer 2.0.0
+versions. Unknown `only`/`except` target ids in manifests or source entries are
+errors, with suggestions for nearby registry ids. Markdown frontmatter remains
+permissive for non-core fields.
+
 Sources are `github:owner/repo`, `git:<url>`, or `path:<location>`. The
 resolver writes one copy into `capabilities/<name>/`. Per-host fan-out
 happens at emit time, not resolve time. Project shadows user on name

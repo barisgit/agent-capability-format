@@ -1,5 +1,6 @@
-import { targetIds } from "../targets/index.js";
+import { isTargetId, targetIds } from "../targets/index.js";
 import type { AcfCapability, Diagnostic, TargetId } from "../types/index.js";
+import { closestKey } from "../utils/suggestions.js";
 
 export type ApplicabilityDecl = { only?: TargetId[] | undefined; except?: TargetId[] | undefined };
 
@@ -19,11 +20,23 @@ export function applicableTargets(cap: AcfCapability, facet: ApplicabilityDecl):
   return capSet.filter((id) => facetSet.includes(id));
 }
 
+/** Reports conflicting selectors and unknown target ids before applicability is computed. */
 export function validateApplicabilityDecl(
   decl: ApplicabilityDecl,
   diagnostics: Diagnostic[],
   path?: string,
 ): void {
+  for (const id of [...(decl.only ?? []), ...(decl.except ?? [])]) {
+    if (isTargetId(id)) continue;
+    const suggestion = closestKey(id, targetIds);
+    diagnostics.push({
+      severity: "error",
+      code: "acf.target.unknown-id",
+      message: `unknown target id: ${id}${suggestion === undefined ? "" : ` — did you mean "${suggestion}"?`}`,
+      targetId: id,
+      ...(path === undefined ? {} : { path }),
+    });
+  }
   if (decl.only !== undefined && decl.except !== undefined) {
     diagnostics.push({
       severity: "error",

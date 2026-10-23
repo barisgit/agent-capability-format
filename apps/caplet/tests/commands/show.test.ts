@@ -94,7 +94,7 @@ test("caplet show reports no support on a target that carries none of the capabi
     await writeText(path.join(hooks, "acf.yml"), "acf: 1\nname: hooks-only\nversion: 1.0.0\n");
     await writeText(
       path.join(hooks, "hooks", "hooks.yml"),
-      'pre_tool:\n  - name: guard\n    effect: observe\n    run:\n      command: "echo guard"\n',
+      'pre_tool:\n  - name: guard\n    effect: observe\n    match:\n      operation: shell\n    run:\n      command: "echo guard"\n',
     );
     await writeText(
       path.join(scope.agentsDir, "capabilities.yml"),

@@ -14,7 +14,6 @@ import type {
 import { exists } from "../utils/fs.js";
 import { isRecord } from "../utils/guards.js";
 import {
-  collectUnknown,
   fallbackManifest,
   parseMarkdownFile,
   parseYamlFile,
@@ -36,20 +35,6 @@ export { readMcp } from "./mcp.js";
 export { readSkills } from "./skills.js";
 export { validateCapability } from "./validation.js";
 
-const manifestKeys = new Set([
-  "acf",
-  "name",
-  "version",
-  "description",
-  "authors",
-  "license",
-  "homepage",
-  "repository",
-  "keywords",
-  "only",
-  "except",
-  "targets",
-]);
 const markdownKeys = new Set(["sections", "targets"]);
 
 /**
@@ -121,8 +106,8 @@ export async function readCapability(
 
 /**
  * Reads `acf.yml` (or `acf.yaml`). `undefined` when neither exists or the manifest fails its
- * schema, with the problems pushed to `diagnostics`. Top-level keys outside the schema are
- * reported and kept on `manifest.unknown`.
+ * schema, with the problems pushed to `diagnostics`. Unknown manifest keys are errors;
+ * permissive unknown-frontmatter handling belongs only to Markdown documents.
  */
 export async function readManifest(
   root: string,
@@ -153,7 +138,6 @@ async function parseManifest(
     });
     return undefined;
   }
-  pushUnknownFields(raw, manifestKeys, diagnostics, file);
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
     pushZodIssues(diagnostics, parsed.error, file, {
@@ -162,10 +146,7 @@ async function parseManifest(
     });
     return undefined;
   }
-  const unknown = collectUnknown(raw, manifestKeys);
-  const manifest = parsed.data as Manifest;
-  if (Object.keys(unknown).length > 0) manifest.unknown = unknown;
-  return manifest;
+  return parsed.data as Manifest;
 }
 
 /**

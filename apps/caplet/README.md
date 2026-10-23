@@ -42,6 +42,10 @@ left out for every target with the warning `acf.source.component-invalid`.
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
+Native manifests reject unknown top-level keys and invalid SemVer 2.0.0 versions.
+Unknown `only`/`except` target ids in `acf.yml` or `capabilities.yml` are errors,
+with did-you-mean hints for typos; non-core Markdown frontmatter stays permissive.
+
 Every command supports `--json`. `init` reports the manifest path and whether
 it was created; `completion` returns the shell script inside the JSON envelope.
 

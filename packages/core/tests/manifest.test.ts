@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
+import { manifestSchema } from "../src";
 import { cleanup, codes, readTempCapability, tempDir, writeText } from "./helpers";
 
 test("duplicate acf.yml and acf.yaml fails", async () => {
@@ -21,9 +22,65 @@ test("invalid name/version and unknown fields are diagnosed", async () => {
   });
   try {
     expect(codes(cap)).toContain("acf.manifest.invalid-name");
-    expect(codes(cap)).toContain("acf.markdown.unknown-frontmatter-field");
+    expect(codes(cap)).toContain("acf.manifest.invalid-field");
   } finally {
     await cleanup(dir);
+  }
+});
+
+test("unknown manifest fields are errors while Markdown frontmatter remains permissive", async () => {
+  const { cap, dir } = await readTempCapability({
+    "acf.yml": "acf: 1\nname: test-cap\nversion: 1.0.0\nunknownFutureField: typo\n",
+    "ACF.md": "---\ncustom: overview\n---\nNotes.\n",
+    "skills/demo/SKILL.md": "---\nname: demo\ndescription: Demo\ncustom: skill\n---\nBody.\n",
+  });
+  try {
+    expect(cap.diagnostics).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        code: "acf.manifest.invalid-field",
+        message: expect.stringContaining("unknownFutureField"),
+        path: path.join(dir, "acf.yml"),
+      }),
+    );
+    expect(
+      cap.diagnostics.filter((d) => d.code === "acf.markdown.unknown-frontmatter-field"),
+    ).toHaveLength(2);
+    expect(
+      manifestSchema.safeParse({
+        acf: 1,
+        name: "test-cap",
+        version: "1.0.0",
+        unknownFutureField: "typo",
+      }).success,
+    ).toBe(false);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test("manifest versions obey strict SemVer 2.0.0", () => {
+  for (const version of [
+    "01.0.0",
+    "1.02.0",
+    "1.0.03",
+    "1.0.0-01",
+    "1.0.0-a..b",
+    "1.0.0+",
+    "1.0.0\n",
+    "v1.0.0",
+    "1.0.0-",
+  ]) {
+    expect({
+      version,
+      valid: manifestSchema.safeParse({ acf: 1, name: "demo", version }).success,
+    }).toEqual({ version, valid: false });
+  }
+  for (const version of ["0.0.0", "1.0.0-alpha.1+build.01", "1.0.0-0", "1.0.0+001"]) {
+    expect({
+      version,
+      valid: manifestSchema.safeParse({ acf: 1, name: "demo", version }).success,
+    }).toEqual({ version, valid: true });
   }
 });
 

@@ -370,8 +370,6 @@ export type Manifest = {
   only?: TargetId[]
   except?: TargetId[]
   targets?: TargetExtensions
-  // For forward compatibility:
-  unknown?: Record<string, unknown>
 }
 
 export type PackageAuthor = { name: string; email?: string; url?: string }
@@ -380,8 +378,11 @@ export type SemVer = string
 export type TargetExtensions = Partial<Record<TargetId, unknown>>
 ```
 
-`unknown` is internal: validation captures unrecognized top-level keys here
-and emits informational diagnostics for them. Production builds may drop it.
+The native manifest schema rejects unknown top-level keys with
+`acf.manifest.invalid-field` errors naming the keys. Only Markdown frontmatter
+keeps permissive unknown-field diagnostics. Native versions and foreign package
+identity projection share the strict SemVer 2.0.0 predicate in `utils/semver.ts`;
+foreign non-SemVer versions still use the documented unversioned fallback.
 
 ### 3.3 Markdown-backed facets
 
@@ -1320,6 +1321,11 @@ const hookExtension = z
   })
   .strict()
 ```
+
+Unknown `only`/`except` target ids are errors in native capabilities and
+`capabilities.yml` entries, validated against the target registry before entry
+selection narrows applicability. Near matches include a did-you-mean hint using
+the same edit-distance helper as unknown `capabilities.yml` keys.
 
 Unknown target ids or unknown keys under a known target id are diagnostics
 (§11), not silent passes.
@@ -2265,8 +2271,11 @@ userinfo (other than an SSH user name) or a credential-looking query or fragment
 is rejected with `acf.source.credential-in-url` when added and when resolved, and the
 message masks the credential (`packages/core/src/credentials/`).
 
-After fetch, the shared source inventory discovers valid capability candidates
-and assigns each a selector: a POSIX path relative to the collection directory
+After fetch, the shared source inventory discovers capability candidates and
+includes native reader errors, so invalid ACF sources fail even on
+`add --no-apply` before the manifest is changed. Warnings are reported when the
+resolved snapshots are read, not repeated from inventory. It assigns each a
+selector: a POSIX path relative to the collection directory
 for manifested collections (`<fetched-root>/acf/`, or `<fetched-root>` when it
 is itself `acf/`), or the discovered name (before `rename`) for direct
 manifested capabilities, synthesized skills, and foreign packages. `rename`

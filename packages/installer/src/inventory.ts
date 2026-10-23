@@ -121,7 +121,18 @@ async function acfInventory(root: string): Promise<SourceInventory> {
       format: "acf",
     };
   });
-  return { candidates, diagnostics: repository.diagnostics, synthesized: false };
+  return {
+    candidates,
+    diagnostics: [
+      ...repository.diagnostics,
+      // Resolved snapshots report warnings later; retain only errors here so invalid
+      // sources also block add --no-apply without duplicating non-blocking findings.
+      ...repository.capabilities.flatMap((capability) =>
+        capability.diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+      ),
+    ],
+    synthesized: false,
+  };
 }
 
 /**
