@@ -292,7 +292,7 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
       code: "acf.lock.snapshot-missing",
       capability: { name },
       path: capabilityPath(capabilitiesDir, name),
-      message: `capability ${name}: locked snapshot is missing, unreadable or unusable; delete an unusable snapshot and run apply without --offline to restore it; existing outputs are preserved`,
+      message: `capability ${name}: locked snapshot is missing, unreadable or unusable; delete an unusable snapshot and run \`caplet apply\` to restore it; existing outputs are preserved`,
     }));
     return {
       records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),

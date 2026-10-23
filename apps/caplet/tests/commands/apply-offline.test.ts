@@ -3,6 +3,28 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
+for (const offline of [false, true]) {
+  test(`snapshot recovery names a usable command (${offline ? "offline" : "online"})`, async () => {
+    const scope = await makeScope();
+    try {
+      const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "codex", "--json"];
+      expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
+      const snapshot = path.join(scope.agentsDir, "capabilities", "beta-cap");
+      await rm(snapshot, { recursive: true });
+      await mkdir(snapshot);
+      const result = await runCaplet(scope, ["apply", ...args, ...(offline ? ["--offline"] : [])]);
+      expect(result.exitCode).toBe(2);
+      const diagnostic = JSON.parse(result.stdout).diagnostics.find(
+        (item: { code: string }) => item.code === "acf.lock.snapshot-missing",
+      );
+      expect(diagnostic.message).toContain("run `caplet apply`");
+      expect(diagnostic.message).not.toContain("without --offline");
+    } finally {
+      await cleanup(scope);
+    }
+  });
+}
+
 for (const legacy of [true, false]) {
   for (const damage of [
     "empty",
