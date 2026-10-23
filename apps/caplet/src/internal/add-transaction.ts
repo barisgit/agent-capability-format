@@ -1,5 +1,5 @@
 /** Recoverable installer-state checkpoint for the self-applying `add` command. */
-import { cp, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isErrno, type ScopeRoot } from "@caplet/core";
 import { sidecarPath } from "../apply/sidecar.js";
@@ -61,9 +61,18 @@ export async function withInstallerRollback(
 
 /** Restores via a sibling temporary file: output roots may live on another filesystem. */
 async function restoreOwnership(checkpoint: Checkpoint): Promise<void> {
-  const temporary = await mkdtemp(
-    path.join(path.dirname(checkpoint.destination), ".acf-ownership-rollback-"),
-  );
+  let temporary: string;
+  try {
+    temporary = await mkdtemp(
+      path.join(path.dirname(checkpoint.destination), ".acf-ownership-rollback-"),
+    );
+  } catch (error) {
+    if (!isErrno(error, "EACCES")) throw error;
+    // Emission can overwrite a writable sidecar in a read-only directory. No sibling
+    // replacement is possible there; restore through that same file without unlinking it.
+    await writeFile(checkpoint.destination, await readFile(checkpoint.backup));
+    return;
+  }
   try {
     const replacement = path.join(temporary, "sidecar");
     await cp(checkpoint.backup, replacement, { preserveTimestamps: true });
