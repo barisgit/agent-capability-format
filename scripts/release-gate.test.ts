@@ -5,8 +5,8 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { assertIntegrity, publishOrder, releaseTag, tarballName } from "./packages.js";
-import { evaluateVersions } from "./release-gate.js";
+import { evaluateVersions, releaseTag } from "./release/version.js";
+import { publishOrder, tarballName } from "./release/workspaces.js";
 
 const versions = (version: string) => ({ root: version, core: version, cli: version });
 
@@ -34,9 +34,9 @@ test("changed versions must increase by SemVer precedence", () => {
     ["0.1.0", "0.2.0"],
     ["1.0.0-rc.2", "1.0.0-rc.10"],
     ["1.0.0-rc.10", "1.0.0"],
-  ]) {
-    expect(evaluateVersions(versions(previous!), versions(current!)).changed).toBe(true);
-    expect(() => evaluateVersions(versions(current!), versions(previous!))).toThrow("newer");
+  ] as const) {
+    expect(evaluateVersions(versions(previous), versions(current)).changed).toBe(true);
+    expect(() => evaluateVersions(versions(current), versions(previous))).toThrow("newer");
   }
   expect(() => evaluateVersions(versions("1.0.0+one"), versions("1.0.0+two"))).toThrow("newer");
 });
@@ -45,11 +45,6 @@ test("stable 0.x uses latest; prereleases use next", () => {
   expect(releaseTag("0.1.0")).toBe("latest");
   expect(releaseTag("0.1.0+build-with-dash")).toBe("latest");
   expect(releaseTag("0.2.0-beta.1")).toBe("next");
-});
-
-test("published retries require the exact prepared archive integrity", () => {
-  expect(() => assertIntegrity("pkg@0.1.0", "sha512-same", "sha512-same")).not.toThrow();
-  expect(() => assertIntegrity("pkg@0.1.0", "sha512-old", "sha512-new")).toThrow("integrity");
 });
 
 test("publish preflights all packages, fails closed, and preserves dependency order", () => {
@@ -109,7 +104,7 @@ if (args[0] === "view") {
       if (registry === "absent") {
         expect(result.status).toBe(0);
         expect(calls.slice(0, packages.length).every((args) => args[0] === "view")).toBe(true);
-        expect(publishes.map((args) => path.basename(args[1]!))).toEqual(
+        expect(publishes.map((args) => path.basename(args[1] ?? ""))).toEqual(
           packages.map(({ manifest }) => tarballName(manifest)),
         );
         expect(publishes.every((args) => args.includes("latest"))).toBe(true);

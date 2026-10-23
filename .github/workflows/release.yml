@@ -51,7 +51,6 @@ jobs:
           node-version: 20
       - run: bun install --frozen-lockfile
       - run: bun run ci
-      - run: bun run build
       - run: bun scripts/packages.ts pack .packs
       - name: Checksum exact archives
         working-directory: .packs
@@ -132,7 +131,9 @@ jobs:
         shell: bash
         run: |
           prerelease=false
-          if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then prerelease=true; fi
+          if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then
+            prerelease=true
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --prerelease="$prerelease"
             gh release upload "$RELEASE_TAG" .packs/*.tgz .packs/SHA256SUMS --clobber

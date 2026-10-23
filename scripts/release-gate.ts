@@ -3,34 +3,9 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { compare, SemVer } from "semver";
-import { publishedIntegrity, publishOrder } from "./packages.js";
-
-function sharedVersion(versions: Readonly<Record<string, string>>): string {
-  const values = Object.values(versions);
-  const version = values[0];
-  if (version === undefined || values.some((value) => value !== version)) {
-    throw new Error("All root and published package versions must agree");
-  }
-  // SemVer's convenience parser also accepts a v prefix and whitespace; manifests must not.
-  const parsed = new SemVer(version);
-  const canonical = parsed.version + (parsed.build.length ? `+${parsed.build.join(".")}` : "");
-  if (canonical !== version) throw new Error(`${version} is not canonical SemVer`);
-  return version;
-}
-
-/** Unchanged versions skip publication; any change must increase SemVer precedence. */
-export function evaluateVersions(
-  previous: Readonly<Record<string, string>>,
-  current: Readonly<Record<string, string>>,
-): { changed: boolean; version: string } {
-  const version = sharedVersion(current);
-  const before = sharedVersion(previous);
-  if (version === before) return { changed: false, version };
-  if (compare(version, before) <= 0)
-    throw new Error("Release version must be newer than previous version");
-  return { changed: true, version };
-}
+import { publishedIntegrity } from "./release/publish.js";
+import { evaluateVersions } from "./release/version.js";
+import { publishOrder } from "./release/workspaces.js";
 
 function manifestVersion(text: string): string {
   const manifest: unknown = JSON.parse(text);

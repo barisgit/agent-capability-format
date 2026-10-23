@@ -17,6 +17,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isolatedHomeEnv } from "./isolated-home.js";
 
 /** Names the throwaway home of the run this script started. */
 const MARKER = "CAPLET_TEST_HOME";
@@ -32,13 +33,7 @@ function runIsolated(args: readonly string[]): number {
         ...process.env,
         [MARKER]: home,
         [REAL_HOME]: process.env[REAL_HOME] || homedir(),
-        HOME: home,
-        USERPROFILE: home,
-        CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
-        XDG_CONFIG_HOME: path.join(home, ".config"),
-        XDG_CACHE_HOME: path.join(home, ".cache"),
-        XDG_DATA_HOME: path.join(home, ".local", "share"),
-        XDG_STATE_HOME: path.join(home, ".local", "state"),
+        ...isolatedHomeEnv(home),
       },
     });
     if (result.error !== undefined) throw result.error;
