@@ -2742,7 +2742,7 @@ This section is informative. The reference CLI (`caplet`) provides:
 | Command             | Purpose                                                                                   |
 | ------------------- | ----------------------------------------------------------------------------------------- |
 | `caplet init`       | Create a project `.agents/capabilities.yml`.                                              |
-| `caplet add`        | Add source entries to `capabilities.yml`, resolve, and apply (`--no-apply` edits only).   |
+| `caplet add <source>` | Add exactly one source to `capabilities.yml`, resolve, and apply (`--no-apply` edits only); extra positionals exit 2 before any write. |
 | `caplet remove`     | Remove a capability selection or entry and its managed output.                            |
 | `caplet update`     | Re-resolve sources to their latest refs, refresh the lockfile, and apply (`--no-apply`).  |
 | `caplet apply`      | Resolve declared sources as needed and reconcile native artifacts (`--dry-run`, `--offline`, `--frozen`). |

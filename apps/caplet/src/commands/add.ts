@@ -47,6 +47,9 @@ export const addCommand = defineCommand({
 
 /** Adds the source to the scope's manifest, then applies it unless `--no-apply`. */
 async function addSource(args: Record<string, unknown>): Promise<void> {
+  if (Array.isArray(args._) && args._.length > 1) {
+    throw validationError("add takes exactly one source; run add separately for each source");
+  }
   const rawSource = args.source;
   if (typeof rawSource !== "string" || rawSource.length === 0)
     throw validationError("source is required");

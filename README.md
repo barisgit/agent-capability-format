@@ -208,7 +208,7 @@ The reference CLI `caplet` (`caplet --help` is authoritative):
 | Group   | Command                     | What it does                                                                 |
 | ------- | --------------------------- | ---------------------------------------------------------------------------- |
 | Manage  | `caplet init`               | Create `.agents/capabilities.yml` for this project.                          |
-| Manage  | `caplet add <source>...`    | Add sources to `capabilities.yml`, resolve, and apply (`--no-apply` to skip). |
+| Manage  | `caplet add <source>`       | Add one source to `capabilities.yml`, resolve, and apply (`--no-apply` to skip). |
 | Manage  | `caplet remove <name>...`   | Remove a capability and its managed output.                                  |
 | Manage  | `caplet update [name]`      | Re-resolve sources to their latest refs and apply (`--no-apply`: lock only). |
 | Sync    | `caplet apply`              | Resolve (fetching as needed) and reconcile native artifacts.                 |

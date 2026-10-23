@@ -18,7 +18,7 @@ Or run it once without installing: `npx @caplet/cli --help`.
 
 ```bash
 caplet init                                   # create .agents/capabilities.yml
-caplet add github:owner/repo --pin main       # add a source, resolve, and apply
+caplet add github:owner/repo --pin main       # add exactly one source, resolve, and apply
 caplet apply --dry-run                        # preview emitted file changes
 caplet apply                                  # write native artifacts for each target
 caplet                                        # status summary

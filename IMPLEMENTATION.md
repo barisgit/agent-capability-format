@@ -3200,6 +3200,7 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
 ### 14.1 Mutating commands
 
 - `caplet add <source> [--pin <ref>] [--path <subdir>] [--scope user|project] [--no-apply]`
+  accepts exactly one source (extra positionals exit 2 before any write),
   inventories the source and reports selected capabilities before mutation,
   mutates `capabilities.yml`, resolves, and
   applies by default. `github:owner/repo@name` is an add-only exact capability
