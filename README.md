@@ -323,9 +323,8 @@ plugin, enabled or disabled, and leaves any you edited in place with an
   hook events are classified, so a Claude plugin with hooks is refused on
   Codex, Cursor, OpenCode, and Pi. Exclude the hooks or the host to install
   the rest.
-- Hooks written as loose Claude files are not in Claude's settings shape,
-  so Claude ignores them (see Hooks below). Hooks inside Claude plugins are
-  copied unchanged and work.
+- ACF hooks are refused on every target in 0.1.0 (see Hooks below).
+  Hooks inside foreign Claude plugins are copied unchanged.
 
 ## Project status
 
@@ -397,13 +396,16 @@ verbatim; `description` stays metadata.
 
 ## Hooks in one paragraph
 
-> **Experimental in caplet 0.1.x.** caplet writes ACF hook entries in a
-> caplet-specific shape rather than each tool's native hook format, so tools
-> ignore them. For Claude, `.claude/settings.json` gets caplet's hook object
-> instead of Claude's `hooks.<Event>[].hooks[]` entries, and
-> `permission_request` maps to `PreToolUse` instead of `PermissionRequest`.
-> Do not rely on ACF hooks, especially blocking ones, until the follow-up
-> change `claude-loose-hooks-repair` rebuilds the writers.
+> **Refused in caplet 0.1.0.** No target has a working native writer for
+> ACF hooks yet, including ACF entries under `targets.<target>.hooks`.
+> Caplet writes no hook files and reports `acf.support.refused` with a
+> blocked outcome, consequence, and recovery; `caplet show` reports `no`
+> support for the capability on that target. Apply leaves that capability's
+> existing output unchanged there and exits non-zero. Exclude the hook or
+> target to install the rest. Restricting effects are never downgraded to
+> `observe`. Foreign Claude-plugin hooks remain unchanged inside Claude
+> plugins. Native writer work remains in `claude-loose-hooks-repair` and
+> the Codex hooks backlog item.
 
 Hooks live in a single `hooks/hooks.yml` keyed by canonical type:
 `session_start`, `user_prompt_submit`, `pre_tool`, `permission_request`,

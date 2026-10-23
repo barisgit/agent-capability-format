@@ -1,6 +1,7 @@
 /**
- * The loose writer for agents, commands, instructions and hooks. Skills (`skills.ts`) and MCP
- * servers (`mcp.ts`) have their own writers; `emitTarget` (`target.ts`) runs all three.
+ * The loose writer for agents, commands and instructions, plus the ACF hook refusal gate.
+ * Skills (`skills.ts`) and MCP servers (`mcp.ts`) have their own writers;
+ * `emitTarget` (`target.ts`) runs all three.
  */
 import path from "node:path";
 import {
@@ -25,7 +26,7 @@ import {
 import { assetsForFacet, readAssets, relativeAssetPathFromBase } from "./assets.js";
 import { pushLossy } from "./diagnostics.js";
 import { makeFileDiff } from "./diff.js";
-import { emitHooks } from "./hooks.js";
+import { refuseHooks } from "./hooks.js";
 import { replaceMarkedBlock } from "./markers.js";
 import { mcpPathFor } from "./mcp.js";
 import { renderGeneratedMarkdown, renderMarkdownFile } from "./text.js";
@@ -37,8 +38,6 @@ export type AdapterLayout = {
   commandDir?: string | undefined;
   instructionWhenDir?: string | undefined;
   alwaysInstructionFile?: string | undefined;
-  hookDir?: string | undefined;
-  hookSettingsFile?: string | undefined;
   /** Undefined when the target has no MCP file caplet may write at the scope. */
   mcpFile: string | undefined;
   cursorRulesDir?: string | undefined;
@@ -48,8 +47,6 @@ export type AdapterLayout = {
 export type AdapterOptions = {
   /** Writes instructions only, as Cursor rules, and reports agents and commands unsupported. */
   cursorRulesOnly?: boolean | undefined;
-  /** Writes no hook files; the family-level support diagnostic still reports the hooks. */
-  skipUnsupportedHooks?: boolean | undefined;
   /** Families whose `partial` support is reported lossy (`changed-behavior`). */
   lossyPartialFamilies?: readonly FamilySupportFamily[] | undefined;
 };
@@ -66,16 +63,14 @@ export function layoutFor(targetId: TargetId, installRoot: string, scope: Scope)
     commandDir: path.join(installRoot, "commands"),
     instructionWhenDir: path.join(installRoot, ".acf", "instructions"),
     alwaysInstructionFile: targetId === "claude" ? path.join(installRoot, "CLAUDE.md") : undefined,
-    hookDir: path.join(installRoot, "hooks"),
-    hookSettingsFile: path.join(installRoot, "settings.json"),
     mcpFile: mcpPathFor(targetId, installRoot, scope),
     cursorRulesDir: path.join(installRoot, "rules"),
   };
 }
 
 /**
- * Writes the capability's agents, commands, instructions and hooks for `layout.targetId` and
- * pushes family-level support diagnostics to `diagnostics`. Returns the diffs sorted by path.
+ * Writes agents, commands and instructions for `layout.targetId`, refuses ACF hooks, and
+ * pushes support diagnostics to `diagnostics`. Returns the diffs sorted by path.
  */
 export async function emitStandardAdapter(
   input: EmitInput,
@@ -104,8 +99,7 @@ export async function emitStandardAdapter(
   diffs.push(
     ...(await emitInstructions(input, fs, layout, diagnostics, Boolean(options.cursorRulesOnly))),
   );
-  if (!options.skipUnsupportedHooks)
-    diffs.push(...(await emitHooks(input, fs, layout, diagnostics)));
+  refuseHooks(input, layout.targetId, diagnostics);
   return diffs.sort((a, b) => a.path.localeCompare(b.path));
 }
 
@@ -322,7 +316,8 @@ function diagnoseSupport(
   const support = targetMap[targetId]?.support ?? {};
   // Skills and MCP have no family-level gate; field-level support cells govern them.
   for (const family of familySupportFamilies) {
-    if (!familyHasItems(cap, family)) continue;
+    // ACF hooks use field-level refusals, not a lossy family-level omission.
+    if (family === "hook" || !familyHasItems(cap, family)) continue;
     const level = support[family];
     if (level === "none") {
       pushLossy(diagnostics, {

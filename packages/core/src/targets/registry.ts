@@ -60,7 +60,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "full",
       instruction: "partial",
-      hook: "full",
+      hook: "none",
     },
     installPaths: { user: path.join(HOME, ".claude"), project: path.join(".", ".claude") },
     skillInstallPaths: {
@@ -98,7 +98,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "partial",
       instruction: "partial",
-      hook: "full",
+      hook: "none",
     },
     installPaths: { user: path.join(HOME, ".codex"), project: path.join(".", ".codex") },
     skillInstallPaths: {
@@ -170,7 +170,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "partial",
       instruction: "partial",
-      hook: "partial",
+      hook: "none",
     },
     installPaths: {
       user: path.join(HOME, ".config", "opencode"),
@@ -211,7 +211,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "full",
       instruction: "full",
-      hook: "full",
+      hook: "none",
     },
     installPaths: {
       user: path.join(HOME, ".pi", "agent"),

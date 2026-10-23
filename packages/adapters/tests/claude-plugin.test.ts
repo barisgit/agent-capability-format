@@ -202,7 +202,7 @@ test("an unchanged Claude plugin keeps its manifest's file mode", async () => {
   );
 });
 
-test("a native ACF capability with a skill and a hook stays whole on loose Claude files", async () => {
+test("an ACF hook routes through the loose gate and refuses an otherwise plugin-eligible capability", async () => {
   const capability = capabilityModel({
     skills: [skillFacet({ name: "review", description: "Review a change" })],
   });
@@ -212,6 +212,13 @@ test("a native ACF capability with a skill and a hook stays whole on loose Claud
   };
   const result = await emitModel(claudeAdapter, capability, INSTALL_ROOT);
   expect(result.plugins ?? []).toEqual([]);
+  expect(result.diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "acf.support.refused",
+      family: "hook",
+      data: expect.objectContaining({ outcome: "blocked", source: "hook.run" }),
+    }),
+  );
   expect(result.diagnostics.filter((d) => d.code === "acf.claude.legacy-carrier")).toEqual([
     expect.objectContaining({
       severity: "info",

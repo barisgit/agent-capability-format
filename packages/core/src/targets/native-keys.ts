@@ -379,6 +379,7 @@ const packageKeys: Record<TargetId, Record<string, KeySpec>> = {
 const tables: Record<InteropFamily, Record<TargetId, Record<string, KeySpec>>> = {
   skill: skillKeys,
   mcp: mcpKeys,
+  hook: { claude: {}, codex: {}, cursor: {}, opencode: {}, pi: {} },
   package: packageKeys,
 };
 

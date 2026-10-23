@@ -64,7 +64,7 @@ export type SupportCell =
     };
 
 /** Component families covered by the field-level table in this change. */
-export type InteropFamily = "skill" | "mcp" | "package";
+export type InteropFamily = "skill" | "mcp" | "hook" | "package";
 
 /**
  * Support declaration for one core field or value condition, e.g.

@@ -22,7 +22,7 @@ const SAFETY_CLASSES: ReadonlySet<string> = new Set<SafetyClass>([
 /** Options for {@link checkSupportRegistry}. */
 export type SupportRegistryCheckOptions = {
   /**
-   * Require a cell for every built-in target and offered carrier on skill and MCP fields.
+   * Require a cell for every built-in target and offered carrier on non-package fields.
    * Package fields are exempt: they only have a destination in the Claude plugin manifest.
    */
   requireComplete?: boolean;
@@ -55,7 +55,7 @@ export type PreservedForeignData = {
  * Returns one human-readable problem per violation; an empty list means the registry is
  * consistent. Fails when a restricting or functional cell is degraded, a refusing
  * restricting cell lacks a `negativeFixture` (or names one missing from
- * `options.negativeFixtures`), a skill or MCP field lacks a cell, a native key
+ * `options.negativeFixtures`), a non-package field lacks a cell, a native key
  * lacks a safety class or is listed twice, or a key's `generatedFrom` or `pending` names a
  * field that does not exist (or, for `generatedFrom`, has no usable cell on the key's target),
  * or a datum in `options.preserved` has no native authoring form.

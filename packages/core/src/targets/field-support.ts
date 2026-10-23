@@ -1,10 +1,9 @@
 /**
- * Field-level support registry for skills, MCP servers and package metadata
+ * Field-level support registry for skills, MCP servers, ACF hooks and package metadata
  * (capability-model-layers, Field-level support registry).
  *
- * Each {@link FieldSupport} entry is one row of the canonical-skills, canonical-mcp or
- * canonical-package-metadata support table, split so that every field and every value
- * condition has its own row. Writers look up the cell for their target and carrier with
+ * Each {@link FieldSupport} entry is one row of a canonical field support table, split so
+ * every field and every value condition has its own row. Writers look up the target/carrier with
  * {@link supportCell}; diagnostics take their code, severity and text from the cell.
  */
 import type {
@@ -485,10 +484,42 @@ const packageFields: FieldSupport[] = [
   packageField("package.keywords", native("keywords", SRC.claudeManifest)),
 ];
 
-/** Every field-level support declaration, in table order: skills, MCP, package metadata. */
+/**
+ * ACF hook records are not host-native handlers. Refuse the functional run field until a
+ * native writer exists; foreign plugin hooks are native remainder, not this core field.
+ */
+const hookFields: FieldSupport[] = [
+  field("hook", "hook.run", "functional", {
+    ...claude(
+      refused(
+        "caplet has no native ACF hook writer; Claude requires nested hooks.<Event>[].hooks[] handlers",
+        `${RESEARCH}/tools/claude-code.md#Hooks`,
+      ),
+    ),
+    codex: refused(
+      "Codex requires nested handlers in hooks.json or config.toml, not caplet settings.json records",
+      `${RESEARCH}/tools/codex.md#Hooks`,
+    ),
+    cursor: refused(
+      "caplet has no writer for Cursor's native hooks.json handlers",
+      `${RESEARCH}/tools/cursor.md#Hooks`,
+    ),
+    opencode: refused(
+      "OpenCode requires executable JS/TS plugin functions, not declarative hook records",
+      `${RESEARCH}/tools/opencode.md#Hooks: every lifecycle event and its meaning, matchers, handler types (command, http, prompt, script module), input payload, output contract, exit codes and decisions (allow/deny/ask/modify/inject context), timeouts, env vars, ordering, scope`,
+    ),
+    pi: refused(
+      "Pi requires executable JS/TS extension subscriptions, not declarative hook records",
+      `${RESEARCH}/tools/pi.md#Hooks`,
+    ),
+  }),
+];
+
+/** Every field-level support declaration, in table order: skills, MCP, hooks, package metadata. */
 export const fieldSupport: readonly FieldSupport[] = [
   ...skillFields,
   ...mcpFields,
+  ...hookFields,
   ...packageFields,
 ];
 
