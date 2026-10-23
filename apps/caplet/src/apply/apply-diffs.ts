@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   extractMarkedBlock,
@@ -58,6 +58,17 @@ export type ApplyDiffsOptions = {
  */
 export async function applyDiffs(diffs: FileDiff[], opts: ApplyDiffsOptions): Promise<ApplyResult> {
   const sidecar = await readSidecar(opts.sidecarPath);
+  const ownership = await inspectFileOwnership(diffs, opts, sidecar);
+  if (ownership.diagnostics.length > 0) {
+    return {
+      written: [],
+      deleted: [],
+      unchanged: [],
+      skipped: diffs.map((diff) => resolveDiffPath(opts.installRoot, diff.path)),
+      diagnostics: ownership.diagnostics,
+      sidecar,
+    };
+  }
   const written: string[] = [];
   const deleted: string[] = [];
   const unchanged: string[] = [];
@@ -67,9 +78,6 @@ export async function applyDiffs(diffs: FileDiff[], opts: ApplyDiffsOptions): Pr
   for (const diff of diffs) {
     const absolutePath = resolveDiffPath(opts.installRoot, diff.path);
     const relativePath = relativeSidecarPath(opts.installRoot, absolutePath);
-    if (diff.managementNotice !== undefined) {
-      await assertNoticePathOwnedOrAbsent(sidecar, relativePath, absolutePath);
-    }
     if (!(await matchesPlan(diff, absolutePath))) {
       skipped.push(absolutePath);
       diagnostics.push(driftDiagnostic(diff, absolutePath, opts.capabilityName));
@@ -184,22 +192,49 @@ function isWholeFile(owns: readonly AcfOwnership[]): boolean {
   return owns.some((own) => own.kind === "file");
 }
 
-async function assertNoticePathOwnedOrAbsent(
-  sidecar: AcfManagedSidecar,
-  relativePath: string,
-  absolutePath: string,
-): Promise<void> {
-  const owned = sidecar.managed.some(
-    (entry) => entry.path === relativePath && isWholeFile(entry.owns),
-  );
-  if (owned) return;
-  try {
-    await stat(absolutePath);
-  } catch (error) {
-    if (isErrno(error, "ENOENT")) return;
-    throw error;
+/**
+ * Checks whole-file ownership before planning or applying a capability. Existing identical
+ * files may be adopted; regions in shared native files retain their adapter-defined ownership.
+ * Adoptions must reach apply even when the file bytes do not change, to record the sidecar.
+ */
+export async function inspectFileOwnership(
+  diffs: readonly FileDiff[],
+  opts: ApplyDiffsOptions,
+  recorded?: AcfManagedSidecar,
+): Promise<{ diagnostics: Diagnostic[]; adoptions: Set<string> }> {
+  const sidecar = recorded ?? (await readSidecar(opts.sidecarPath));
+  const diagnostics: Diagnostic[] = [];
+  const adoptions = new Set<string>();
+  for (const diff of diffs) {
+    if (!isWholeFile(diff.owns)) continue;
+    const absolutePath = resolveDiffPath(opts.installRoot, diff.path);
+    const relativePath = relativeSidecarPath(opts.installRoot, absolutePath);
+    if (sidecar.managed.some((entry) => entry.path === relativePath && isWholeFile(entry.owns)))
+      continue;
+    let current: Uint8Array | null;
+    try {
+      current = await readBytesIfExists(absolutePath);
+    } catch (error) {
+      if (!isErrno(error, "EISDIR")) throw error;
+      current = null;
+      diagnostics.push(unownedDiagnostic(absolutePath, opts.capabilityName));
+      continue;
+    }
+    if (current === null) continue;
+    if (diff.after !== null && contentEquals(current, diff.after)) adoptions.add(diff.path);
+    else diagnostics.push(unownedDiagnostic(absolutePath, opts.capabilityName));
   }
-  throw new Error(`refusing to overwrite unowned reserved notice path: ${absolutePath}`);
+  return { diagnostics, adoptions };
+}
+
+function unownedDiagnostic(absolutePath: string, capability: string): Diagnostic {
+  return {
+    severity: "error",
+    code: "acf.apply.unowned",
+    path: absolutePath,
+    capability: { name: capability },
+    message: `refusing to replace or delete unowned path ${absolutePath}; move or delete it, then run apply again (if the ownership sidecar was lost, restore it from backup)`,
+  };
 }
 
 /** What applying one diff left in its file, and whether the file changed. */

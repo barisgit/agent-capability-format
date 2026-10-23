@@ -48,6 +48,8 @@ export type EmittedDiff = {
   /** Carrier of the output the diff belongs to, recorded on its sidecar entry. */
   carrier: Carrier;
   diff: FileDiff;
+  /** An existing unowned whole file differs from the desired bytes; never apply it. */
+  conflict?: boolean;
   /** Host state the change waits for; such a change applies after Claude reconciliation. */
   gate?: ClaudeGate | undefined;
   /**

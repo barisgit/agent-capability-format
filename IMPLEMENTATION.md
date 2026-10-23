@@ -972,6 +972,14 @@ markers.
 
 ### 4.2.2 Ownership sidecar (`.acf-managed.json`)
 
+Planning and apply refuse to replace or delete unowned whole files with
+`acf.apply.unowned`; the plan reports a `conflict`, not an update. Byte-identical
+files are adopted and recorded even when their content needs no write. Losing a
+sidecar therefore permits only identical adoption; move/delete conflicting files
+or restore the sidecar from backup. Shared native configuration uses region
+ownership. The installer applies the same rule to snapshot directories, using
+the prior lock as ownership and comparing complete payload digests for adoption.
+
 At each `installRoot`, caplet maintains an `.acf-managed.json` sidecar listing
 every `(path, AcfOwnership)` tuple ACF currently owns at that root. On
 subsequent emits and on `caplet remove`, the sidecar lets caplet:
@@ -2797,6 +2805,7 @@ acf.lock.unsupported-version
 acf.emit.drift                               # managed region changed on disk since the last apply; reported by plan (info)
 acf.apply.drift                              # owned content changed since planning, or a stale removal the user edited; skipped (warn)
 acf.apply.outside-root                       # write would escape the output root (error)
+acf.apply.unowned                            # unowned file or capability directory differs from desired content (error)
 acf.emit.managed-notice-reserved-path        # capability ships a file at the reserved notice name (error)
 acf.emit.managed-notice-destination-collision # reserved notice path holds a file caplet does not own (error)
 

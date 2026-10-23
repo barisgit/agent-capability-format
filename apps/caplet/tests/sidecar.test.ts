@@ -48,7 +48,9 @@ test("applying a whole-file delete refuses to recursively delete a managed direc
       { installRoot, capabilityName: "alpha-cap", sidecarPath },
     );
 
-    await expect(deleteDirectory).rejects.toThrow();
+    expect((await deleteDirectory).diagnostics).toContainEqual(
+      expect.objectContaining({ code: "acf.apply.unowned", severity: "error" }),
+    );
     expect(await readText(sentinel)).toBe("keep\n");
   } finally {
     await cleanup(scope);

@@ -2032,6 +2032,7 @@ Implementations MUST follow this namespace convention:
 | `acf.capabilities-yml.*`             | Resolver source spec validation.                 |
 | `acf.lock.snapshot-missing`          | Locked snapshot absent or unusable offline (error); preserve outputs and restore online. |
 | `acf.lock.*`                         | Lockfile validation.                             |
+| `acf.apply.unowned`                  | Unowned output or capability directory conflicts with desired content (error); move or delete the named path. |
 | `acf.emit.*`                         | Emission orchestrator and diff application.      |
 | `acf.adapter.*`                      | Adapter-specific degradation diagnostics.        |
 | `acf.cli.*`                          | CLI-host reported diagnostics.                   |
@@ -2921,7 +2922,14 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   (or any other emit driver) applies diffs.
 - A diff carries `path`, `before` (current content or `null` if absent),
   `after` (desired content or `null` if delete), and `owns` — a list of
-  ACF-owned regions inside the file. Ownership is either whole-file or
+  ACF-owned regions inside the file. An implementation MUST NOT replace or delete
+  an existing whole file without a sidecar ownership record, or a capability
+  directory without a lock record. Identical desired bytes MAY be adopted;
+  otherwise planning MUST report `acf.apply.unowned`, mark the path as a conflict
+  rather than an update, and write nothing for that capability. Recovery is to
+  move or delete the path, or restore the missing ownership record from backup.
+  Shared native configuration retains region-level ownership.
+  Ownership is either whole-file or
   a structural pointer (JSON pointer, YAML pointer, TOML pointer, or a
   named region marker).
 - The emit driver MUST record ownership in a per-install-root sidecar

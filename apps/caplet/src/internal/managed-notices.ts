@@ -10,6 +10,7 @@ import {
   type RootInventoryArtifact,
   renderRootInventory,
 } from "@caplet/core";
+import { contentEquals } from "../apply/apply-diffs.js";
 import { readSidecar, sidecarPath } from "../apply/sidecar.js";
 import type { EmittedDiff, RootContext } from "./workflow.js";
 
@@ -205,7 +206,7 @@ async function diagnoseNoticeCollisions(
       (entry) =>
         entry.path === relative && entry.owns.some((ownership) => ownership.kind === "file"),
     );
-    if (owned) continue;
+    if (owned || contentEquals(item.diff.before, item.diff.after)) continue;
     diagnostics.push({
       severity: "error",
       code: "acf.emit.managed-notice-destination-collision",

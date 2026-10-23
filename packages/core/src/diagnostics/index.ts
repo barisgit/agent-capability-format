@@ -98,6 +98,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.emit.managed-notice-reserved-path",
   "acf.emit.managed-notice-destination-collision",
   "acf.apply.drift",
+  "acf.apply.unowned",
   "acf.apply.outside-root",
   "acf.claude.legacy-carrier",
   "acf.claude.plugin-file-ignored",

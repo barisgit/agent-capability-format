@@ -7,7 +7,7 @@ import { isStrictlyInside } from "../apply/containment.js";
 import { columns } from "./render.js";
 import type { EmittedDiff, FootprintEntry, Reach } from "./workflow.js";
 
-export type PlanAction = "create" | "update" | "delete";
+export type PlanAction = "create" | "update" | "delete" | "conflict";
 
 export type PlanRow = {
   action: PlanAction;
@@ -35,6 +35,7 @@ export type PlanTotals = {
   create: number;
   update: number;
   delete: number;
+  conflict?: number;
 };
 
 export type PlanChange = {
@@ -64,7 +65,7 @@ export function buildPlanView(
     scope: item.scopeRoot.scope,
     target: item.destination === "canonical" ? "canonical" : item.targetId,
     destination: item.destination,
-    action: diffAction(item.diff),
+    action: item.conflict === true ? "conflict" : diffAction(item.diff),
     path: item.diff.path,
     capabilities: item.capabilityName === ACF_SYSTEM_OWNER ? [] : [item.capabilityName],
     notice: item.diff.managementNotice !== undefined,
@@ -173,7 +174,8 @@ export function buildPlanView(
       update: 0,
       delete: 0,
     };
-    totals[change.action] += 1;
+    if (change.action === "conflict") totals.conflict = (totals.conflict ?? 0) + 1;
+    else totals[change.action] += 1;
     totalsMap.set(key, totals);
   }
   const totals = [...totalsMap.values()].sort((a, b) => {

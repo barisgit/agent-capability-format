@@ -38,6 +38,10 @@ left out for every target with the warning `acf.source.component-invalid`.
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
+Unowned files and capability directories are never replaced or deleted. Identical
+content may be adopted; otherwise `acf.apply.unowned` names the path to move or
+delete. Restore a lost sidecar or lock from backup to recover its ownership.
+
 `apply --offline` never fetches. A missing or unusable locked snapshot fails without
 removing its output or ownership; run `apply` online to restore a missing snapshot.
 

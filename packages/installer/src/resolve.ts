@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type CapabilitiesYml,
   type CapabilityEntry,
+  computePayloadDigest,
   type Diagnostic,
   digestMismatchDiagnostic,
   isErrno,
@@ -222,6 +223,13 @@ async function resolveCapabilitiesStaged(
   diagnostics.push(...collisions);
   if (collisions.length > 0) failed = true;
 
+  const unowned = await unownedSnapshotDiagnostics(
+    records,
+    usableLock,
+    opts.scopeRoot.capabilitiesDir,
+  );
+  diagnostics.push(...unowned);
+  failed ||= unowned.length > 0;
   const lockfile = canonicalizeLock({ acf: 1, entries: nextEntries });
   if (failed) {
     return {
@@ -391,6 +399,43 @@ async function commitStagedRecords(
     committed.push({ ...record, root: destination });
   }
   return committed;
+}
+
+/** Refuses a staged snapshot's destination unless the prior lock owns it or bytes agree. */
+async function unownedSnapshotDiagnostics(
+  records: CapabilityRecord[],
+  previous: CapabilitiesLock | null,
+  capabilitiesDir: string,
+): Promise<Diagnostic[]> {
+  const owned = new Set(previous?.entries.flatMap((entry) => entry.capabilityNames) ?? []);
+  const diagnostics: Diagnostic[] = [];
+  for (const record of records) {
+    const destination = capabilityPath(capabilitiesDir, record.name);
+    if (owned.has(record.name) || record.root === destination) continue;
+    try {
+      await lstat(destination);
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) continue;
+      throw error;
+    }
+    // A malformed tree is not adoptable. Digesting also rejects links and special files.
+    let identical = false;
+    try {
+      identical =
+        (await computePayloadDigest(destination)) === (await computePayloadDigest(record.root));
+    } catch {
+      identical = false;
+    }
+    if (!identical)
+      diagnostics.push({
+        severity: "error",
+        code: "acf.apply.unowned",
+        path: destination,
+        capability: { name: record.name },
+        message: `refusing to replace unowned capability directory ${destination}; move or delete it, then retry (or restore its lock record from backup)`,
+      });
+  }
+  return diagnostics;
 }
 
 function nameCollisionDiagnostics(records: CapabilityRecord[]): Diagnostic[] {

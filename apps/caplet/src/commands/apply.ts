@@ -73,7 +73,10 @@ async function applyManifests(args: Record<string, unknown>): Promise<void> {
   };
   if (blocking !== 0) {
     if (json) printJson("apply", false, diagnostics, envelope(run, undefined));
-    else run.out.compatibility(plan.outcomes, plan.targets);
+    else {
+      run.out.compatibility(plan.outcomes, plan.targets);
+      if (plan.diffs.some((item) => item.conflict === true)) run.out.plan(view);
+    }
     process.exitCode = blocking;
     return;
   }
