@@ -2030,6 +2030,7 @@ Implementations MUST follow this namespace convention:
 | `acf.assets.*`                       | Asset reference resolution.                      |
 | `acf.resolve.*`                      | Resolver / `capabilities.yml` validation.        |
 | `acf.capabilities-yml.*`             | Resolver source spec validation.                 |
+| `acf.lock.snapshot-missing`          | Locked snapshot absent or unusable offline (error); preserve outputs and restore online. |
 | `acf.lock.*`                         | Lockfile validation.                             |
 | `acf.emit.*`                         | Emission orchestrator and diff application.      |
 | `acf.adapter.*`                      | Adapter-specific degradation diagnostics.        |
@@ -2552,7 +2553,10 @@ When `capabilities.yml` and `capabilities.lock` disagree:
 - When fetching is not allowed (`--offline`), any disagreement MUST be the
   `error` `acf.lock.drift` (`acf.lock.missing-entry` for an entry without a
   lock entry), and emission does not run. A lock entry whose source
-  `capabilities.yml` no longer declares is a disagreement too.
+  `capabilities.yml` no longer declares is a disagreement too. A selected locked
+  snapshot that is absent or not a directory MUST produce the error
+  `acf.lock.snapshot-missing`; existing output and ownership MUST remain intact.
+  An unusable present snapshot MUST likewise fail before emission.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
   diagnostic is present. Every fetch it makes MUST be a restore from the recorded `resolvedSha` (§19.4), so it
   never installs content the lock does not describe.

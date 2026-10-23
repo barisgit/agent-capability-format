@@ -38,6 +38,9 @@ left out for every target with the warning `acf.source.component-invalid`.
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
+`apply --offline` never fetches. A missing or unusable locked snapshot fails without
+removing its output or ownership; run `apply` online to restore a missing snapshot.
+
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 
 ## License

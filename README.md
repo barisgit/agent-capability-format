@@ -225,7 +225,7 @@ recovery action. Results stay separate by scope: multi-scope reports label
 non-native components with their scope, JSON `outcomes` records include `scope`,
 and `show` derives each capability's support from that scope's results.
 Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
-fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
+fetches and uses the lockfile as-is (missing snapshots fail without removing output), and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
 
 Piping output to an early-closing reader (for example, `caplet check | head -1`)

@@ -263,12 +263,23 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
     };
   }
   if (!(await fetchNeeded(context, paired))) {
+    const missing =
+      context.opts.mode === "never" && locked !== undefined
+        ? await missingSnapshots(locked, capabilitiesDir)
+        : new Set<string>();
+    const diagnostics: Diagnostic[] = [...missing].map((name) => ({
+      severity: "error",
+      code: "acf.lock.snapshot-missing",
+      capability: { name },
+      path: capabilityPath(capabilitiesDir, name),
+      message: `capability ${name}: locked snapshot is missing or is not a directory; run apply without --offline to restore it; existing outputs are preserved`,
+    }));
     return {
       records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),
       lockEntry: locked === undefined ? undefined : withSelection(locked, entry),
-      diagnostics: [],
+      diagnostics,
       fetched: false,
-      failed: false,
+      failed: diagnostics.length > 0,
     };
   }
   return await fetchEntry(context, paired);

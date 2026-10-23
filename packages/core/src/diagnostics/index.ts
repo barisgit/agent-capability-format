@@ -81,6 +81,7 @@ export const ACF_DIAGNOSTIC_CODES = [
   "acf.resolve.ref-required",
   "acf.prune.failed",
   "acf.lock.digest-mismatch",
+  "acf.lock.snapshot-missing",
   "acf.lock.drift",
   "acf.lock.missing-entry",
   "acf.lock.unsupported-version",
