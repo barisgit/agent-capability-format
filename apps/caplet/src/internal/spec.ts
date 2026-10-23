@@ -140,7 +140,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     target: true,
     examples: [
       "caplet add github:vercel-labs/skills@find-skills --pin main",
-      "caplet add github:acme/design-caps",
+      "caplet add github:acme/design-caps --pin main",
       "caplet add ../local-caps --scope user",
       "caplet add github:acme/caps --pin v2.1.0 --no-apply",
     ],

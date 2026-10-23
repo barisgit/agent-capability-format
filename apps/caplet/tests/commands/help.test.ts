@@ -64,6 +64,7 @@ test("per-command help shares root help formatting", async () => {
     }
     const add = await runCaplet(scope, ["add", "--help"]);
     expect(add.stdout).toContain("github:vercel-labs/skills@find-skills");
+    expect(add.stdout).toContain("caplet add github:acme/design-caps --pin main");
     const apply = await runCaplet(scope, ["apply", "--help"]);
     expect(apply.stdout).toContain("FLAGS");
     expect(apply.stdout).toContain("-n, --dry-run");
