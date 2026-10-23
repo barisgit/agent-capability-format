@@ -70,9 +70,13 @@ const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.CALL_LOG, JSON.stringify(args) + "\\n");
 if (args[0] === "view") {
-  if (process.env.REGISTRY === "absent" || process.env.REGISTRY === "network") {
+  if (args[2] === "dist-tags") {
+    console.log(JSON.stringify({ latest: process.env.REGISTRY === "superseded" ? "99.0.0" : "0.0.1" }));
+    process.exit(0);
+  }
+  if (["absent", "superseded", "network"].includes(process.env.REGISTRY)) {
     console.error("A diagnostic mentioning E404 must not mask network errors");
-    console.log(JSON.stringify({ error: { code: process.env.REGISTRY === "absent" ? "E404" : "ENETUNREACH" } }));
+    console.log(JSON.stringify({ error: { code: process.env.REGISTRY !== "network" ? "E404" : "ENETUNREACH" } }));
     process.exit(1);
   }
   console.log(JSON.stringify(process.env.REGISTRY === "matching" ? process.env.INTEGRITY : "sha512-other"));
@@ -80,7 +84,7 @@ if (args[0] === "view") {
 `,
       { mode: 0o755 },
     );
-    for (const registry of ["absent", "matching", "different", "network"]) {
+    for (const registry of ["absent", "matching", "different", "network", "superseded"]) {
       writeFileSync(log, "");
       const result = spawnSync(
         process.execPath,

@@ -23,6 +23,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { compare } from "semver";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKSPACE_PARENTS = ["apps", "packages"];
@@ -181,21 +182,26 @@ function smoke(outDir: string | undefined): void {
  * Registry/network/auth failures and malformed metadata abort publication.
  */
 export function publishedIntegrity(spec: string): string | undefined {
+  const integrity = registryField(spec, "dist.integrity");
+  if (integrity === undefined) return undefined;
+  if (typeof integrity !== "string" || !integrity.startsWith("sha512-")) {
+    throw new Error(`${spec}: npm did not return a SHA-512 integrity`);
+  }
+  return integrity;
+}
+
+function registryField(spec: string, field: string): unknown {
   try {
     const output = execFileSync(
       "npm",
-      ["view", spec, "dist.integrity", "--json", "--registry=https://registry.npmjs.org"],
+      ["view", spec, field, "--json", "--registry=https://registry.npmjs.org"],
       {
         cwd: ROOT,
         encoding: "utf8",
         stdio: "pipe",
       },
     );
-    const integrity: unknown = JSON.parse(output);
-    if (typeof integrity !== "string" || !integrity.startsWith("sha512-")) {
-      throw new Error(`${spec}: npm did not return a SHA-512 integrity`);
-    }
-    return integrity;
+    return JSON.parse(output) as unknown;
   } catch (error) {
     const stdout = (error as { stdout?: unknown }).stdout;
     // npm --json exposes the error code separately from human-readable diagnostics.
@@ -243,6 +249,18 @@ function preflight(outDir: string): Set<string> {
     if (published !== undefined) {
       assertIntegrity(spec, published, prepared);
       existing.add(spec);
+    } else {
+      const tags = registryField(manifest.name, "dist-tags");
+      if (tags === undefined) continue; // New package: npm returned E404.
+      if (typeof tags !== "object" || tags === null) {
+        throw new Error(`${spec}: npm did not return dist-tags`);
+      }
+      const tag = releaseTag(manifest.version);
+      const destination = (tags as Record<string, unknown>)[tag];
+      if (destination === undefined) continue; // No destination tag exists yet.
+      if (typeof destination !== "string" || compare(manifest.version, destination) < 0) {
+        throw new Error(`${spec}: refusing to regress npm ${tag} from ${String(destination)}`);
+      }
     }
   }
   return existing;

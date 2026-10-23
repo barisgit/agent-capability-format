@@ -41,7 +41,10 @@ Build metadata does not change SemVer precedence and is not a version bump.
 On a partial failure, rerun the original workflow run at the original commit
 (so its original `before` comparison is retained). An already-published exact
 version is accepted only if npm's SHA-512 archive integrity matches the prepared
-tarball. A mismatch fails closed; do not overwrite an npm version. Repacking in
+tarball. A mismatch fails closed; do not overwrite an npm version. Preflight
+also refuses to publish a missing version when its destination npm dist-tag
+already points to a newer version, preventing superseded retries from rolling
+`latest` or `next` backward. Repacking in
 a new build can change archive bytes, so prefer rerunning failed jobs to retain
 the original artifact. If every package already exists, rerunning the entire
 workflow skips release creation too; rerun the failed GitHub Release job to
