@@ -41,8 +41,8 @@ export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[] }
 
 /**
  * Finds the capabilities of a repository: the root itself when it has `acf.yml` or `acf.yaml`;
- * otherwise every outermost directory with one under `acf/` (or root when it is `acf/`),
- * skipping dot entries. Finding
+ * otherwise every outermost directory with one beneath the contents-based collection root,
+ * preferring a child `acf/` and skipping dot entries. Finding
  * neither yields no roots and an `acf.resolve.no-capabilities` info diagnostic.
  */
 export async function discoverRepository(repoRoot: string): Promise<RepositoryDiscovery> {

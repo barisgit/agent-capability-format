@@ -1891,8 +1891,8 @@ includes native reader errors, so invalid ACF sources fail even on
 `add --no-apply` before the manifest is changed. Warnings are reported when the
 resolved snapshots are read, not repeated from inventory. It assigns each a
 selector: a POSIX path relative to the collection directory
-for manifested collections (`<fetched-root>/acf/`, or `<fetched-root>` when it
-is itself `acf/`), or the discovered name (before `rename`) for direct
+for manifested collections (the child `<fetched-root>/acf/` takes precedence;
+otherwise `<fetched-root>` qualifies when it contains ACF manifests), or the discovered name (before `rename`) for direct
 manifested capabilities, synthesized skills, and foreign packages. `rename`
 is applied once, when the resolver names the staged snapshot. When `entry.capabilities` is present the
 resolver matches every exact/glob selector against those values, requires every
@@ -2076,9 +2076,12 @@ is not a slug fails with `acf.manifest.invalid-name`, whose
 
 `discoverRepository` in `packages/core/src/resolver/` finds the capabilities of
 an ACF repository: the root itself when it has `acf.yml` or `acf.yaml`;
-otherwise every outermost directory with one under `acf/` (or the root itself
-when named `acf/`), skipping dot entries, sorted. Format detection, discovery
-and installer selector paths share `collectionRoot` in core's `utils/paths.ts`. Finding neither yields no roots and an
+otherwise every outermost directory with one under the collection root,
+skipping dot entries, sorted. An existing child `acf/` takes precedence;
+without it, the selected root qualifies only when its contents contain ACF
+manifests. Format detection, discovery and installer selector paths share this
+contents-based decision in `collectionRoot` in core's `utils/paths.ts`.
+Finding neither yields no roots and an
 `acf.resolve.no-capabilities` info diagnostic. Bare `skills/` synthesis
 happens earlier, in the installer's `inspectSource`.
 
