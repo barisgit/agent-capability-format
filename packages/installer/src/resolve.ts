@@ -114,6 +114,7 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
       stagingDir,
       manifest,
       existingLock,
+      opts.scopeRoot.capabilitiesDir,
     );
     return preview === undefined ? result : { ...result, preview };
   } catch (error) {
@@ -175,6 +176,7 @@ async function resolveCapabilitiesStaged(
   stagingDir: string,
   manifest: Awaited<ReturnType<typeof readCapabilitiesYml>>,
   existingLock: Awaited<ReturnType<typeof readLockfile>>,
+  reportedCapabilitiesDir: string,
 ): Promise<ResolveResult> {
   const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
@@ -232,6 +234,7 @@ async function resolveCapabilitiesStaged(
     records,
     usableLock,
     opts.scopeRoot.capabilitiesDir,
+    reportedCapabilitiesDir,
   );
   diagnostics.push(...unowned);
   failed ||= unowned.length > 0;
