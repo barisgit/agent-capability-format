@@ -269,9 +269,9 @@ test("usage errors under --json print the command's envelope with an error diagn
 test("an unexpected failure under --json still prints the envelope and exits 1", async () => {
   const scope = await makeScope();
   try {
-    // A directory where the lockfile belongs makes the lockfile read throw EISDIR, which no
-    // command handles.
-    await mkdir(path.join(scope.agentsDir, "capabilities.lock"));
+    // A file where the snapshot directory belongs makes enumeration throw ENOTDIR.
+    // Lock read failures are handled input diagnostics, not unexpected failures.
+    await writeText(path.join(scope.agentsDir, "capabilities"), "not a directory\n");
     for (const json of ["--json", "--json=true"]) {
       const result = await runCaplet(scope, ["status", json, "--cwd", scope.cwd]);
 
@@ -282,7 +282,7 @@ test("an unexpected failure under --json still prints the envelope and exits 1",
       expect(envelope.diagnostics).toEqual([
         expect.objectContaining({ severity: "error", code: "acf.cli.internal" }),
       ]);
-      expect(result.stderr).toContain("EISDIR");
+      expect(result.stderr).toContain("ENOTDIR");
     }
     // The last of a flag and its negation wins, as the command reads it.
     const plain = await runCaplet(scope, ["status", "--json", "--no-json", "--cwd", scope.cwd]);
