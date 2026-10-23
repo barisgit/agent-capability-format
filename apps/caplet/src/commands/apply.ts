@@ -109,22 +109,18 @@ type ApplyRun = {
 };
 
 /**
- * Fetches sources and plans them. Frozen dry runs use installed state; offline ones still
- * validate snapshot availability without fetching. Dry runs discard their disposable resolution.
+ * Fetches sources and plans them, including locked restores for frozen previews. Offline
+ * runs validate snapshot availability without fetching. Dry runs discard disposable resolution.
  */
 async function planApply(
   args: Record<string, unknown>,
   dryRun: boolean,
   frozen: boolean,
 ): Promise<{ plan: EmitPlan; diagnostics: Diagnostic[] }> {
-  const simulate = dryRun && !frozen;
-  const fetched =
-    dryRun && frozen && args.offline !== true
-      ? { scopes: [], results: [], diagnostics: [] }
-      : await fetchScopes(args, args.offline === true ? "never" : "auto", undefined, {
-          frozen,
-          ...(dryRun ? { updateLock: false } : {}),
-        });
+  const fetched = await fetchScopes(args, args.offline === true ? "never" : "auto", undefined, {
+    frozen,
+    ...(dryRun ? { updateLock: false } : {}),
+  });
   const previews = fetched.scopes.flatMap((scopeRoot, index) => {
     const result = fetched.results[index];
     return result?.preview === undefined ? [] : [{ scopeRoot, result, preview: result.preview }];
@@ -132,7 +128,7 @@ async function planApply(
   try {
     const plan = await buildEmitPlan(
       args,
-      simulate
+      dryRun
         ? {
             locks: new Map(previews.map((item) => [item.scopeRoot.scope, item.result.lockfile])),
             capabilitiesDirs: new Map(

@@ -101,6 +101,33 @@ test("offline apply preserves output and ownership when a locked snapshot is mis
   }
 });
 
+test("a frozen dry run plans a missing snapshot restore without changing installed state", async () => {
+  const scope = await makeScope();
+  try {
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude", "--json"];
+    expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
+    const lock = path.join(scope.agentsDir, "capabilities.lock");
+    const sidecar = path.join(scope.cwd, ".claude", ".acf-managed.json");
+    const before = { lock: await readText(lock), sidecar: await readText(sidecar) };
+    const snapshot = path.join(scope.agentsDir, "capabilities", "beta-cap");
+    await rm(snapshot, { recursive: true });
+    const preview = await runCaplet(scope, ["apply", "--frozen", "--dry-run", ...args]);
+    expect(preview.exitCode).toBe(0);
+    expect(JSON.parse(preview.stdout).plan.fileCount).toBe(0);
+    expect(await Bun.file(path.join(snapshot, "acf.yml")).exists()).toBe(false);
+    expect(await readText(lock)).toBe(before.lock);
+    expect(await readText(sidecar)).toBe(before.sidecar);
+    const applied = await runCaplet(scope, ["apply", "--frozen", ...args]);
+    expect(applied.exitCode).toBe(0);
+    expect(JSON.parse(applied.stdout).plan).toEqual(JSON.parse(preview.stdout).plan);
+    expect(await Bun.file(path.join(snapshot, "acf.yml")).exists()).toBe(true);
+    expect(await readText(lock)).toBe(before.lock);
+    expect(await readText(sidecar)).toBe(before.sidecar);
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("caplet apply --dry-run --offline rejects declared sources that have not been resolved", async () => {
   const scope = await makeScope();
   try {

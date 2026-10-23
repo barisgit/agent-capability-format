@@ -2892,8 +2892,10 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   target, family and component. Human grouping never merges scopes, and labels
   include scope when the report spans scopes. `--json` carries the same records
   as `outcomes`, each with an explicit `scope`.
-- `-n/--dry-run` prints the change plan without writing files or the
-  lockfile. `--offline` never fetches and uses the lockfile as-is; absent or
+- `-n/--dry-run` prints the change plan without writing installed snapshots,
+  native files or the lockfile. It resolves into disposable snapshots, including
+  any locked restore a real `--frozen` apply would perform, so its emission plan
+  reflects the restored content rather than proposing deletions. `--offline` never fetches and uses the lockfile as-is; absent or
   non-directory locked snapshots report `acf.lock.snapshot-missing` and block
   writes, preserving output and ownership. Empty or unreadable snapshots, missing
   manifests, and synthesized snapshots without skills also report this error before
