@@ -227,9 +227,10 @@ component that is translated, changed in behavior, omitted or blocked, with a
 recovery action. Results stay separate by scope: multi-scope reports label
 non-native components with their scope, JSON `outcomes` records include `scope`,
 and `show` derives each capability's support from that scope's results.
-Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
-fetches and uses the lockfile as-is (missing snapshots fail without removing output), and `--frozen` fails with exit 3 when the
-lockfile is stale. `caplet check --frozen --strict` is the CI form.
+Useful `apply` flags: `-n`/`--dry-run` previews the plan; `--offline` never
+fetches and uses the lockfile as-is (missing snapshots fail without removing
+output); `--frozen` fails with exit 3 when the lockfile is stale.
+`caplet check --frozen --strict` is the CI form.
 `check` exits 0 with no errors, 1 for stale outputs, 2 for invalid input
 (including lock errors), or 3 for a stale lock under `--frozen`. Edited stale
 artifacts preserved for manual cleanup keep exit 0 but are not reported as clean.
@@ -240,7 +241,8 @@ adds `shell` and `script` instead of printing raw shell code.
 
 `add` validates the full plan before committing installer state. On failure it
 restores the prior manifest, lock, snapshots and ownership sidecars, relinquishing
-any files it adopted. Native writes and host operations are not a cross-root transaction.
+any files it adopted. Native writes and host operations are not a cross-root
+transaction.
 Run only one caplet mutation at a time per scope.
 
 Caplet refuses to replace or delete unowned files or capability directories.
@@ -349,8 +351,9 @@ plugin, enabled or disabled, and leaves any you edited in place with an
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
-implementation (`caplet` 0.1.0, prepared for first npm publication as `@caplet/*`). It supports bare skill imports, Claude plugin and Agent Plugins
-sources, Claude plugin output, source capability selection, and
+implementation (`caplet` 0.1.0, prepared for first npm publication as `@caplet/*`).
+It supports bare skill imports, Claude plugin and Agent Plugins sources,
+Claude plugin output, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
 completed change records live in [openspec/changes/archive/](./openspec/changes/archive/).
 Run `bun run ci` for current health.
@@ -486,9 +489,9 @@ caplet:link` builds the CLI and links `caplet` globally. Every package
 builds Node-compatible ESM and `.d.ts` into `dist/`, which is all a tarball
 ships besides `package.json`, `README.md`, and `LICENSE`.
 
-`bun run smoke:packages` smoke-installs the six tarballs under Node; CI uses
-Node 20. Shared version bumps on `main` release automatically; 0.x versions
-are stable. See [npm releases](docs/release/npm.md) for the release process,
+`bun run smoke:packages` builds, packs and smoke-installs the six tarballs under
+Node; CI uses Node 20. Shared version bumps on `main` release automatically;
+0.x versions are stable. See [npm releases](docs/release/npm.md) for the release process,
 first-publication bootstrap, and trusted-publisher setup.
 
 ## License

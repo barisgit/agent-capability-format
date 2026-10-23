@@ -33,8 +33,8 @@ it was created; `completion` returns the shell script inside the JSON envelope.
 
 ### Validation and CI
 
-`check` exits 0 with no errors, 1 for stale outputs, 2 for errors (including
-missing lock entries), or 3 for stale locks with `--frozen`. Preserved edited
+`check` exits 0 with no errors, 1 for stale outputs, 2 for invalid input (including
+malformed or unreadable locks), or 3 for stale locks with `--frozen`. Preserved edited
 artifacts needing manual cleanup keep exit 0, with a warning rather than a clean result.
 
 Native manifests reject unknown top-level keys and invalid SemVer 2.0.0 versions.

@@ -3236,7 +3236,7 @@ ship; they are informative for `acf: 1`.
 - A direct consumer MUST NOT install or duplicate native artifacts that
   the corresponding emit adapter would produce. If both a direct
   consumer extension and an emit adapter are present for the same host,
-  caplet `emit --target <host>` SHOULD emit `acf.adapter.superseded`
+  caplet `apply --target <host>` SHOULD emit `acf.adapter.superseded`
   (info) and skip emission, deferring to the extension.
 
 ## 23. Naming aliases

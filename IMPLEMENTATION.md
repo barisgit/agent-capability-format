@@ -199,10 +199,10 @@ produced inconsistent and lower-quality results.
 | Monorepo | Turborepo (`turbo.json` at root); workspaces in root `package.json` |
 | Language | TypeScript 5+ strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` |
 | Module resolution | `"Bundler"` for source and tests; `"NodeNext"` for the publish build |
-| Typecheck | `tsgo --noEmit` (10× faster than tsc; production-ready) |
+| Typecheck | `tsgo --noEmit` for packages; `tsc --noEmit -p scripts` for tooling |
 | Build (dev) | None: `tsconfig.base.json` `paths` map `@caplet/*` to source, and Bun honors them at runtime |
 | Build (publish) | `tsc -p tsconfig.build.json` per package → ESM + `.d.ts` in `dist/`; `exports` point only at `dist/` |
-| Release | Shared canonical SemVer bumps on `main`; CI, allowlisted pack, checksums and Node smoke precede OIDC publication in `npm-production`. Exact archive integrity gates retries; publication precedes automatic tags and GitHub Releases. Stable 0.x uses `latest`, prereleases use `next`. See [npm releases](docs/release/npm.md). |
+| Release | Shared-version main-push releases; policy, bootstrap and recovery in [npm releases](docs/release/npm.md). |
 | Schema validation | Zod v4 |
 | CLI framework | `citty` |
 | Test runner | `bun test`, started by each package's `bun run test` under a throwaway HOME (`scripts/test-home.ts`; Bun fixes `os.homedir()` at process start, and a direct `bun test` fails) |
@@ -233,24 +233,10 @@ Reference implementations using this exact stack live in sibling repos
 `turbo.json`, `biome.json`, `tsconfig.json`, `.swcrc`, and `package.json`
 script shapes. Domain code, names, and types MUST NOT be copied.
 
-Canonical root `package.json` scripts:
-
-```json
-{
-  "scripts": {
-    "build": "turbo run build",
-    "check-types": "turbo run check-types",
-    "test": "turbo run test --force",
-    "lint": "biome check .",
-    "format": "biome format --write .",
-    "ci": "bun run lint && tsc --noEmit -p scripts && turbo run check-types test build --force",
-    "smoke:packages": "turbo run build && bun scripts/packages.ts pack .packs && bun scripts/packages.ts smoke .packs"
-  }
-}
-```
-
-Lint runs once at the repository root with Biome; Turbo runs the per-package
-`check-types`, `test`, and `build` tasks.
+[Root `package.json`](package.json) owns the development commands. `bun run ci`
+runs Biome once, typechecks and tests release tooling, then runs per-package
+`check-types`, `test`, and `build` tasks through Turbo. `bun run smoke:packages`
+also packs and exercises the published Node entry points.
 
 Every package MUST declare a `test` script. Packages with no tests yet use a
 non-failing placeholder (`echo 'no tests for @caplet/<pkg>'`) so
@@ -1758,7 +1744,7 @@ For each `ScopeRoot`, the resolver:
 3. enumerates directories under `capabilitiesDir/` (autoloaded capabilities),
 4. for each entry in `capabilities.yml`, fetches the selected source root if
    missing, out of date, or its `ref`, `capabilities` selectors, `rename`, or
-   `format` changed (a selection change never refetches),
+   `format` changed (a selection change never refetches).
    The selected `path` is checked lexically and by realpath against the source
    root; symlink escapes report `acf.source.path-escape` without installing.
 5. detects each package's format (§7.7), discovers capability roots, applies
@@ -1909,8 +1895,9 @@ backups until the lock is committed. The lock is written to a temporary file and
 renamed atomically; a failed commit restores replaced, removed and newly installed
 snapshots before propagating the error.
 
-Two recovery lifetimes are intentional. The installer's
-`snapshot-transaction.ts` holds renamed destinations only until the lock
+The installer's `locked-snapshots.ts` owns snapshot availability checks,
+locked-record projection and verified restore selection. Two recovery lifetimes
+are intentional: `snapshot-transaction.ts` holds renamed destinations until the lock
 commit. The CLI's `internal/add-transaction.ts` copies the prior snapshots
 and lock so it can also recover after resolution succeeded but emission or
 host reconciliation failed. Manifest restoration surrounds that applying-add
@@ -2977,10 +2964,7 @@ At the CLI entry point, `EPIPE` on stdout or stderr replaces only that stream's
 `write` with a sink that drops output and still completes write callbacks. The
 command continues through mutations, rollback and cleanup, with its real exit
 status and no `EPIPE` stack trace, including with `--json`. The other stream is
-unchanged; non-`EPIPE` output errors remain failures. The Node closed-output
-regressions compare a first-line-closed `add` against an unpiped run's full
-artifact tree (normalizing only lock resolution timestamps), and verify a
-refused add still exits 2 and restores the manifest with either stream closed.
+unchanged; non-`EPIPE` output errors remain failures.
 
 `warn`, `lossy`, and `info` diagnostics are printed (subject to caplet
 config toggles) but do not affect exit code unless `--strict` is set.

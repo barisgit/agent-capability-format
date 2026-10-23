@@ -1,17 +1,8 @@
 # npm releases
 
-Caplet releases six public packages at one shared version. The root manifest and
-all six package manifests must agree; the private `@caplet/golden` test package
-is not published.
-
-| Package | Manifest |
-|---|---|
-| `@caplet/runtime-taxonomy` | `packages/runtime-taxonomy/package.json` |
-| `@caplet/core` | `packages/core/package.json` |
-| `@caplet/adapters` | `packages/adapters/package.json` |
-| `@caplet/installer` | `packages/installer/package.json` |
-| `@caplet/sdk` | `packages/sdk/package.json` |
-| `@caplet/cli` (bin `caplet`) | `apps/caplet/package.json` |
+The root manifest and all [public package manifests](../../README.md#packages)
+must share one version. `bun scripts/packages.ts list` prints their directories
+in dependency order; private workspaces such as `@caplet/golden` are excluded.
 
 ## Normal releases
 
@@ -26,7 +17,7 @@ version bump with the next push (pushes beyond that limit are cancelled):
    agree across manifests at both commits. An unchanged version skips the
    release; a changed version must be strictly newer. Query exact npm versions,
    treating only E404 as absent. If none are missing, finish green.
-2. Run `bun run ci`, build, and pack each package once. Check the existing
+2. Run `bun run ci` (including builds) and pack each package once. Check the existing
    allowlist (`dist/`, manifest, README, LICENSE), write `SHA256SUMS`, and
    smoke-install those exact tarballs on Node 20 before uploading the artifact.
 3. In the `npm-production` GitHub environment, download and verify checksums,
@@ -46,9 +37,8 @@ version is accepted only if npm's SHA-512 archive integrity matches the prepared
 tarball. A mismatch fails closed; do not overwrite an npm version. Preflight
 also refuses to publish a missing version when its destination npm dist-tag
 already points to a newer version, preventing superseded retries from rolling
-`latest` or `next` backward. Repacking in
-a new build can change archive bytes, so prefer rerunning failed jobs to retain
-the original artifact. If every package already exists, rerunning the entire
+`latest` or `next` backward. Repacking in a new build can change archive bytes,
+so prefer rerunning failed jobs to retain the original artifact. If every package already exists, rerunning the entire
 workflow skips release creation too; rerun the failed GitHub Release job to
 repair missing attachments or a missing tag.
 
@@ -65,12 +55,11 @@ Configure a trusted publisher on **each** of the six npm packages:
 | Environment | `npm-production` |
 | Allowed actions | `npm publish` |
 
-The GitHub environment already exists, but a read-only setup check found no
-protection rules or deployment-branch policy. Environment naming alone does not
-provide protection. The integrator must choose and configure the intended
-branch/review restrictions separately; this change does not modify settings.
-Keep publisher records aligned with the workflow. No `NPM_TOKEN` belongs in
-repository secrets or workflow configuration.
+The `npm-production` GitHub environment restricts deployments to `main` through
+a custom deployment-branch policy. It has no required reviewers: eligible
+releases do not wait for manual approval. Keep publisher records aligned with
+the workflow and environment. No `NPM_TOKEN` belongs in repository secrets or
+workflow configuration.
 
 ## Bootstrap: first publication and publisher setup
 
@@ -83,7 +72,6 @@ to exist before its trusted publisher can be configured.
    ```sh
    bun install --frozen-lockfile
    bun run ci
-   bun run build
    bun scripts/packages.ts pack .packs
    (cd .packs && sha256sum ./*.tgz > SHA256SUMS)
    bun scripts/packages.ts smoke .packs
@@ -94,7 +82,7 @@ to exist before its trusted publisher can be configured.
    same dependency order, integrity checks, and `latest`/`next` rules as CI;
    only E404 means unpublished. The first `0.1.0` release goes to `latest`.
 3. Configure the six per-package trusted publishers with the records above.
-4. Verify `npx @caplet/cli@latest add github:vercel-labs/skills` on clean macOS
+4. Verify `npx @caplet/cli@latest add github:vercel-labs/skills --pin main` on clean macOS
    and Linux machines using disposable HOME, `CLAUDE_CONFIG_DIR`, and XDG base
    directories. Mark bootstrap complete here and update backlog B1.
 

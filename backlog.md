@@ -50,17 +50,13 @@ Personal skills adopted into managed capabilities: `engineering-workflows` 2.0.0
 
 Single `COMMAND_SPECS` table renders root help, per-command help, and completions from one source; citty demoted to pure parser (its help renderer unreachable, args generated from spec). `apply`/`status` always show reach: sources (with capability counts) and targets (with install roots).
 
----
-
-## Tooling follow-ups
-
 ### Package smoke home isolation
 
-`scripts/packages.ts` creates a temporary working directory but its subprocesses
-inherit the caller's HOME and XDG directories. npm can therefore write caches or
-logs into the real profile. Run it with an isolated HOME until the smoke runner
-sets HOME, USERPROFILE, Claude configuration and XDG paths itself; acceptance is
-that the complete package smoke journey leaves the caller's profile unchanged.
+The package smoke runner redirects HOME, USERPROFILE, Claude configuration and
+XDG paths into its disposable directory, using the same path mapping as the
+test runner.
+
+---
 
 ## Phase 1: Consume the Ecosystem
 
@@ -82,8 +78,8 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 
 **Acceptance**:
 
-- `caplet add github:vercel-labs/skills` installs each discovered skill as a managed capability, apply emits to all targets, and remove cleans up
-- `caplet add github:anthropics/skills` works
+- `caplet add github:vercel-labs/skills --pin main` installs each discovered skill as a managed capability, apply emits to all targets, and remove cleans up
+- `caplet add github:anthropics/skills --pin main` works
 - Existing manifested sources unaffected; `check` passes after import
 
 ### Spec A2: Source Filter Syntax + Interactive Picker
@@ -102,7 +98,7 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 - Non-TTY without selector: install all (current behavior), print what was selected
 - `caplet remove <name>` narrows a shared source entry and retains selected siblings
 
-**Acceptance**: `caplet add github:vercel-labs/skills@find-skills` installs exactly one skill; picker appears on TTY only; `-y` skips picker
+**Acceptance**: `caplet add github:vercel-labs/skills@find-skills --pin main` installs exactly one skill; picker appears on TTY only; `-y` skips picker
 
 ### Spec A3: `caplet find` — Discovery
 
@@ -131,24 +127,21 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 **Estimate**: 2-3 days
 **Status**: Packaging and main-push release automation implemented. First
 `@caplet/*` 0.1.0 publication and per-package trusted-publisher setup are pending.
-The release workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`;
-0.x versions without a SemVer prerelease part are stable (`latest`).
+Release policy and recovery steps live in [npm releases](docs/release/npm.md).
 
 **Remaining**: manually publish the first version, configure npm trusted publishing
 for each package, then verify the public install and add journey on clean macOS
-and Linux machines. A read-only check found no protection rules or deployment
-branch policy on the existing `npm-production` GitHub environment; the integrator
-must choose/configure that policy separately (settings changes are outside this lane).
+and Linux machines. The `npm-production` GitHub environment now permits only
+`main` via a custom deployment-branch policy, with no required reviewers.
 
 **Implementation**:
 
 - npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
 - The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
 - First publish and per-package trusted-publisher setup: follow [npm release bootstrap](docs/release/npm.md#bootstrap-first-publication-and-publisher-setup).
-- Later shared version bumps on `main` run CI, pack and smoke exact checksum-verified archives, and publish through OIDC in environment `npm-production`. Published retries must match archive integrity; successful publication creates the tag and GitHub Release. No manual tags or `NPM_TOKEN` are needed.
-- README quickstart rewritten around the npx onramp
+- Later shared version bumps on `main` publish verified archives through OIDC, then create the tag and GitHub Release. No manual tags or `NPM_TOKEN` are needed.
 
-**Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)
+**Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills --pin main` works on a clean machine (macOS + Linux)
 
 ### Spec B2: Registry-Style Docs & Onboarding Surface
 
@@ -230,7 +223,7 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 ### Quality gates
 
 - **Taxonomy package header describes the inverse dependency.** `packages/runtime-taxonomy/src/index.ts` says core owns the constants and this package re-exports them, but the declarations live here and core imports them. Its README also omits hook/trigger exports. Update those package-local docs; root documentation now reflects the actual ownership.
-- **Cognitive complexity rule is off.** `biome.json` does not enable `complexity/noExcessiveCognitiveComplexity` (max 15); 24 functions exceed it, worst `validateActivationConstraints` (34, `packages/core/src/reader/validation.ts`), `tomlDefinesTable` (31, `packages/adapters/src/common/toml.ts`), `buildPlanView` (30, `apps/caplet/src/internal/plan-view.ts`), `unknownFlagError` (29, `apps/caplet/src/internal/spec.ts`). Split them, then enable the rule.
+- **Cognitive complexity rule is off.** `biome.json` does not enable `complexity/noExcessiveCognitiveComplexity` (max 15). Remaining violations include `validateActivationConstraints` (`packages/core/src/reader/validation.ts`), `tomlDefinesTable` and `indexOutsideQuotes` (`packages/adapters/src/common/toml.ts`), and `buildPlanView` (`apps/caplet/src/internal/plan-view.ts`). Split the remaining complex functions, then enable the rule; CLI flag validation and installer recovery no longer exceed the limit.
 - **Two apply flows.** `apps/caplet/src/commands/apply.ts` plans and applies on its own while `add`/`update` go through `planAndApply` in `apps/caplet/src/internal/apply-flow.ts`; fixes to one flow miss the other.
 - **Locale-dependent order in emitted bytes.** `localeCompare` still orders written output: `packages/adapters/src/claude/plugin.ts` (MCP server order in `.mcp.json` and the plugin version digest), `packages/adapters/src/common/{mcp,emitter,skills,assets}.ts`, `apps/caplet/src/internal/claude-marketplace.ts` (`marketplace.json`), core reader/format sorts. Output can differ between machines; use `compareCodeUnits`.
 
@@ -268,7 +261,7 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 - **Remainder report rows keyed by name.** Two remainder components of different kinds with the same name share one row in the compatibility report (`apps/caplet/src/internal/compatibility.ts`).
 - **Concurrent mutations are not serialized.** `packages/installer/src/fetch.ts` clears the cache directory shared by a source/ref before cloning; snapshot/lock commits and native sidecar read-modify-write operations have no interprocess lock. Concurrent runs can invalidate each other's reads or overwrite state. The pre-publish transaction fix assumes a single writer; a coordinated scope/output/cache locking contract needs a separate change.
 
-- **No cross-root or crash-safe add journal.** `apps/caplet/src/commands/add.ts` preflights the complete plan and restores installer state on a later failure, but native output, sidecars and Claude host operations already completed in earlier roots remain. `packages/installer/src/resolve.ts` recovers snapshot/lock write failures in-process only; a crash between snapshot replacement and lock rename can still leave mismatched state. A durable cross-root journal is out of scope for the pre-publish fixes.
+- **No cross-root or crash-safe add journal.** `apps/caplet/src/commands/add.ts` preflights the complete plan and restores installer state on a later failure, but native output bytes and Claude host operations already completed in earlier roots remain. `packages/installer/src/resolve.ts` recovers snapshot/lock write failures in-process only; a crash between snapshot replacement and lock rename can still leave mismatched state. A durable cross-root journal is out of scope for the pre-publish fixes.
 
 - **`caplet remove` is not atomic across roots.** `apps/caplet/src/commands/remove.ts` now refuses before changing anything when a root would be violated, but it rewrites the manifest before `applyEmitPlan`; a write failure in a later root leaves the manifest and earlier roots changed.
 - **Containment check races the write.** The containment preflight and the later write are separate steps (TOCTOU); a symlink swapped in between is followed.
