@@ -42,6 +42,9 @@ left out for every target with the warning `acf.source.component-invalid`.
 Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
 does not yet write them in each tool's native format, so tools may ignore them.
 
+Local `path:` sources can name a capability, a collection's parent, or its
+`acf/` directory directly. Collection selectors are relative to `acf/`.
+
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 
 ## License

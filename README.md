@@ -132,6 +132,8 @@ A multi-capability repository uses `acf/<capability-path>/acf.yml`.
 a scalar selects one, a list selects several, and omission selects all. `*`
 stays within one segment, `?` matches one character, and a `**` segment is
 recursive. Use `path` first when the collection lives in a monorepo subtree.
+Pointing directly at its `acf/` directory also works; selectors remain relative
+to that directory.
 
 Sources are `github:owner/repo`, `git:<url>`, or `path:<location>`. The
 resolver writes one copy into `capabilities/<name>/`. Per-host fan-out

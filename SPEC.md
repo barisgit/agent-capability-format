@@ -2642,7 +2642,8 @@ Resolver behavior:
 A source entry MAY declare `capabilities` as one selector string or a non-empty
 list. Scalar syntax normalizes to a one-item list. Omission selects every
 discovered capability. Manifested collections match selectors against normalized
-POSIX paths relative to the selected source root's `acf/` directory. A direct
+POSIX paths relative to the selected source root's `acf/` directory (or the
+selected directory itself when it is `acf/`). A direct
 manifested capability, a synthesized skill, and an Agent Plugins or Claude
 plugin package use their discovered name (the manifest or skill name, before
 `rename`) as the selector; `rename` then applies once to the selected

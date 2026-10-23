@@ -9,7 +9,7 @@ import path from "node:path";
 import { CLAUDE_PLUGIN_MANIFEST } from "../targets/plugin-layout.js";
 import type { Diagnostic, SourceFormat } from "../types/index.js";
 import { isRecord } from "../utils/guards.js";
-import { leavesBase } from "../utils/paths.js";
+import { collectionRoot, leavesBase } from "../utils/paths.js";
 import { agentPluginsSchemaVersion, readAgentPluginsPackage } from "./agent-plugins.js";
 import { readClaudePluginPackage } from "./claude-plugin.js";
 import type { ForeignReadOptions, ForeignReadResult } from "./package.js";
@@ -56,8 +56,8 @@ export async function recognizedFormats(root: string): Promise<RecognizedFormat[
       break;
     }
   }
-  if (found.length === 0 && (await isDirectory(path.join(root, "acf"))))
-    found.push({ format: "acf", manifest: "acf/" });
+  if (found.length === 0 && (await isDirectory(collectionRoot(root))))
+    found.push({ format: "acf", manifest: `${path.relative(root, collectionRoot(root)) || "."}/` });
   if (agentPluginsSchemaVersion(await parsedJson(path.join(root, "plugin.json"))) !== undefined)
     found.push({ format: "agent-plugins", manifest: "plugin.json" });
   if (await isFile(path.join(root, CLAUDE_PLUGIN_MANIFEST)))

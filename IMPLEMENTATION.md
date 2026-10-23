@@ -2266,8 +2266,9 @@ is rejected with `acf.source.credential-in-url` when added and when resolved, an
 message masks the credential (`packages/core/src/credentials/`).
 
 After fetch, the shared source inventory discovers valid capability candidates
-and assigns each a selector: a POSIX path relative to `<fetched-root>/acf/` for
-manifested collections, or the discovered name (before `rename`) for direct
+and assigns each a selector: a POSIX path relative to the collection directory
+for manifested collections (`<fetched-root>/acf/`, or `<fetched-root>` when it
+is itself `acf/`), or the discovered name (before `rename`) for direct
 manifested capabilities, synthesized skills, and foreign packages. `rename`
 is applied once, when the resolver names the staged snapshot. When `entry.capabilities` is present the
 resolver matches every exact/glob selector against those values, requires every
@@ -2437,8 +2438,9 @@ is not a slug fails with `acf.manifest.invalid-name`, whose
 
 `discoverRepository` in `packages/core/src/resolver/` finds the capabilities of
 an ACF repository: the root itself when it has `acf.yml` or `acf.yaml`;
-otherwise every outermost directory with one under `acf/`, skipping dot
-entries, sorted. Finding neither yields no roots and an
+otherwise every outermost directory with one under `acf/` (or the root itself
+when named `acf/`), skipping dot entries, sorted. Format detection, discovery
+and installer selector paths share `collectionRoot` in core's `utils/paths.ts`. Finding neither yields no roots and an
 `acf.resolve.no-capabilities` info diagnostic. Bare `skills/` synthesis
 happens earlier, in the installer's `inspectSource`.
 
