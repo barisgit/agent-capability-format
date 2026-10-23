@@ -3,7 +3,7 @@
 # Used by evidence/video/ recording.
 set -e
 
-REPO="/Users/blaz/Programming_local/Projects/agent-capability-format/.worktrees/feature-reference-implementation"
+REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO="$(mktemp -d -t caplet-demo-XXXX)"
 HOME_FAKE="$DEMO/home"
 PROJ="$DEMO/project"
@@ -76,9 +76,10 @@ pre_tool:
   - name: guard-bash
     effect: observe
     run:
-      command: "echo reviewing"
+      command: echo
+      args: [reviewing]
     match:
-      operation: "Bash"
+      operation: shell
 YML
 
 find "$SRC/code-review" -type f | sed "s|$SRC/||"
