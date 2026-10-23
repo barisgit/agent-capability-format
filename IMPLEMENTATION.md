@@ -2856,8 +2856,9 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   mutates `capabilities.yml`, resolves, and
   applies by default. Before committing installer state, it validates the entire
   emission plan against disposable snapshots, including facet and unowned-path
-  conflicts. A later apply failure restores the exact prior manifest, lock and
-  snapshots. Native output and host operations are not rolled back across roots;
+  conflicts. A later apply failure restores the exact prior manifest, lock,
+  snapshots and ownership sidecars, including relinquishing adopted files.
+  Native output bytes and host operations are not rolled back across roots;
   this is in-process recovery, not a crash-safe journal. `github:owner/repo@name` is an add-only exact capability
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`

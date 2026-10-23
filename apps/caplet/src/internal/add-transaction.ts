@@ -2,25 +2,36 @@
 import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { isErrno, type ScopeRoot } from "@caplet/core";
+import { sidecarPath } from "../apply/sidecar.js";
+import type { ApplicablePlan } from "./workflow.js";
 
 /**
- * Restores the exact prior snapshots and lock when `action` throws or reports failure.
- * Native output and host registration are not journaled; callers validate the complete plan
+ * Restores prior snapshots, lock and ownership when `action` throws or reports failure.
+ * Native output bytes and host registration are not journaled; callers validate the complete plan
  * before entering this checkpoint. This is recovery within one process, not crash recovery.
  */
 export async function withInstallerRollback(
   root: ScopeRoot,
   action: () => Promise<boolean>,
+  plan: ApplicablePlan,
 ): Promise<void> {
   await mkdir(root.agentsDir, { recursive: true });
   const backupDir = await mkdtemp(path.join(root.agentsDir, ".acf-add-rollback-"));
   const checkpoints: Array<{ destination: string; backup: string; existed: boolean }> = [];
+  const ownershipPaths = [
+    ...new Set([
+      ...plan.diffs.map((item) => item.installRoot),
+      ...plan.staleEntries.map((item) => item.installRoot),
+      ...plan.claude.map((item) => item.installRoot),
+    ]),
+  ].map(sidecarPath);
   let started = false;
   let succeeded = false;
   try {
     for (const [name, destination] of [
       ["capabilities", root.capabilitiesDir],
       ["lock", root.lockPath],
+      ...ownershipPaths.map((destination, index) => [`ownership-${index}`, destination] as const),
     ] as const) {
       const backup = path.join(backupDir, name);
       let existed = true;

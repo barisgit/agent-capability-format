@@ -2965,6 +2965,8 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   otherwise planning MUST report `acf.apply.unowned`, mark the path as a conflict
   rather than an update, and write nothing for that capability. Recovery is to
   move or delete the path, or restore the missing ownership record from backup.
+  If a failed add rolls back its declaration and snapshots, it MUST also revert
+  ownership it recorded, so previously unowned adopted files remain unowned.
   Shared native configuration retains region-level ownership.
   Ownership is either whole-file or
   a structural pointer (JSON pointer, YAML pointer, TOML pointer, or a

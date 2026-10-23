@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, readdir } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { cleanup, fetchProject, makeScope, readText, runCaplet, writeText } from "../helpers";
 
@@ -30,6 +30,45 @@ test("add names the real conflicting snapshot path, not its disposable preview",
       }),
     );
   } finally {
+    await cleanup(scope);
+  }
+});
+
+test("failed add relinquishes adopted files before a later apply", async () => {
+  const scope = await makeScope();
+  const native = path.join(scope.cwd, ".codex");
+  try {
+    await writeText(path.join(scope.agentsDir, "capabilities.yml"), "acf: 1\ncapabilities: []\n");
+    const source = path.join(scope.sourceRoot, "new");
+    await writeText(path.join(source, "acf.yml"), "acf: 1\nname: new\nversion: 1.0.0\n");
+    await writeText(
+      path.join(source, "skills", "demo", "SKILL.md"),
+      "---\nname: demo\ndescription: Demo\n---\nDemo.\n",
+    );
+    await writeText(
+      path.join(source, "agents", "helper.md"),
+      "---\nname: helper\ndescription: Helper\n---\nHelp.\n",
+    );
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "codex", "--json"];
+    expect((await runCaplet(scope, ["add", source, ...args])).exitCode).toBe(0);
+    const adopted = path.join(scope.agentsDir, "skills", "demo", "SKILL.md");
+    const bytes = await readText(adopted);
+    expect((await runCaplet(scope, ["remove", "new", ...args])).exitCode).toBe(0);
+    await writeText(adopted, bytes);
+    const sidecar = path.join(scope.agentsDir, ".acf-managed.json");
+    const ownership = await readText(sidecar);
+    await rm(native, { recursive: true, force: true });
+    await mkdir(native);
+    await chmod(native, 0o555);
+    const failed = await runCaplet(scope, ["add", source, ...args]);
+    expect(failed.exitCode).toBe(1);
+    expect(failed.stderr).toContain("EACCES");
+    expect(await readText(sidecar)).toBe(ownership);
+    await chmod(native, 0o755);
+    await runCaplet(scope, ["apply", ...args]);
+    expect(await readText(adopted)).toBe(bytes);
+  } finally {
+    await chmod(native, 0o755).catch(() => {});
     await cleanup(scope);
   }
 });

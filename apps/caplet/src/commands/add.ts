@@ -40,6 +40,7 @@ import { buildPlanView, planToJson } from "../internal/plan-view.js";
 import { inferScope, resolveScopeRoots } from "../internal/scopes.js";
 import { chooseSourceCapabilities } from "../internal/source-selection.js";
 import { specToCittyArgs } from "../internal/spec.js";
+import type { EmitPlan } from "../internal/workflow.js";
 
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },
@@ -144,21 +145,26 @@ async function applyAddedSource(
   const prefetchedSources = new Map([
     [inspection.prefetched.fetched.sourceId, inspection.prefetched],
   ]);
-  if (!(await validateAddedSource(scopedArgs, prefetchedSources, added, out))) return;
+  const validatedPlan = await validateAddedSource(scopedArgs, prefetchedSources, added, out);
+  if (validatedPlan === null) return;
   const installed = await installedExecutables(scopedArgs);
-  await withInstallerRollback(root, async () => {
-    const fetched = await fetchScopes(scopedArgs, "auto", undefined, { prefetchedSources });
-    await planAndApply({
-      command: "add",
-      args: scopedArgs,
-      diagnostics: fetched.diagnostics,
-      installed,
-      payload: { added },
-    });
-    const succeeded = Number(process.exitCode ?? 0) === 0;
-    if (succeeded && !json) printAdded(out, entry.source.kind, added);
-    return succeeded;
-  });
+  await withInstallerRollback(
+    root,
+    async () => {
+      const fetched = await fetchScopes(scopedArgs, "auto", undefined, { prefetchedSources });
+      await planAndApply({
+        command: "add",
+        args: scopedArgs,
+        diagnostics: fetched.diagnostics,
+        installed,
+        payload: { added },
+      });
+      const succeeded = Number(process.exitCode ?? 0) === 0;
+      if (succeeded && !json) printAdded(out, entry.source.kind, added);
+      return succeeded;
+    },
+    validatedPlan,
+  );
 }
 
 /** Rejects resolution, facet and destination conflicts against disposable snapshots before commit. */
@@ -167,7 +173,7 @@ async function validateAddedSource(
   prefetchedSources: ReadonlyMap<string, PrefetchedSource>,
   added: Added,
   out: Reporter,
-): Promise<boolean> {
+): Promise<EmitPlan | null> {
   const fetched = await fetchScopes(args, "auto", undefined, {
     updateLock: false,
     prefetchedSources,
@@ -190,7 +196,7 @@ async function validateAddedSource(
     const diagnostics = [...fetched.diagnostics, ...plan.diagnostics];
     await outsideRootFailures(plan, diagnostics);
     const code = exitCodeForDiagnostics(diagnostics, args);
-    if (code === 0) return true;
+    if (code === 0) return plan;
     process.exitCode = code;
     const view = buildPlanView(plan.diffs);
     if (readJson(args))
@@ -206,7 +212,7 @@ async function validateAddedSource(
       out.compatibility(plan.outcomes, plan.targets);
       if (plan.diffs.some((item) => item.conflict === true)) out.plan(view);
     }
-    return false;
+    return null;
   } finally {
     await Promise.all(fetched.results.map((result) => result.preview?.dispose()));
   }
