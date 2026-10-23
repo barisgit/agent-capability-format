@@ -2459,8 +2459,11 @@ acf.source.format-not-found                  # format: names a format the source
 acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
 acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
 acf.source.component-invalid                 # invalid foreign or bare imported skill, or foreign server (incl. a native value its host rejects), excluded (warn)
+acf.source.path-escape                       # selected path resolves outside its source root (error)
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
+acf.lock.invalid                             # malformed lock JSON or schema (error)
+acf.lock.unreadable                          # lock cannot be read, including a directory at its path (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
 acf.lock.snapshot-missing                    # locked snapshot absent, unreadable or unusable (error)
 

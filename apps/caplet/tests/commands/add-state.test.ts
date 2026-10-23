@@ -65,7 +65,7 @@ test("failed add relinquishes adopted files before a later apply", async () => {
     expect(failed.stderr).toContain("EACCES");
     expect(await readText(sidecar)).toBe(ownership);
     await chmod(native, 0o755);
-    await runCaplet(scope, ["apply", ...args]);
+    expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
     expect(await readText(adopted)).toBe(bytes);
   } finally {
     await chmod(native, 0o755).catch(() => {});
