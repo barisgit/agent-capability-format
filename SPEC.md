@@ -2785,7 +2785,10 @@ reports `manifest` and `created`; `completion` reports `shell` and `script`.
 present: it exits 2 for invalid input, including lock errors, or 3 for stale
 locks under `--frozen`. Stale emitted outputs exit 1. Preserved edited stale
 artifacts that need manual cleanup keep exit 0 in the absence of errors, but
-MUST be reported as needing cleanup rather than clean.
+MUST be reported as needing cleanup rather than clean. Malformed lock JSON or
+schema reports `acf.lock.invalid`; an unreadable lock (including a directory at
+its path) reports `acf.lock.unreadable`. Both name the lock path and exit 2,
+including `check --frozen`; neither is lock staleness or an internal error.
 
 When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
 caplet MUST quietly drop further output to that stream, including for `--json`,

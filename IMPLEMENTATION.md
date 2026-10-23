@@ -2021,7 +2021,11 @@ Drift handling:
   written, and only missing snapshots are restored from their lock entries.
   Every fetch a frozen resolution makes is such a restore at the locked `resolvedSha`.
   `caplet check` never resolves lock drift: it exits 2 on lock errors, or 3
-  with `--frozen` on any non-info lock diagnostic.
+  with `--frozen` on any non-info lock drift diagnostic. Malformed JSON or schema
+  throws a core `LockfileError` carrying `acf.lock.invalid`; I/O failures other
+  than absence carry `acf.lock.unreadable`. CLI commands report these with the
+  lock path and exit 2 (also `check --frozen`, with result `invalid`), not an
+  internal error.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and

@@ -72,16 +72,34 @@ type MutableLockEntry = { [K in keyof LockEntry]?: LockEntry[K] };
 
 const V1_HASH = /^sha256-[a-f0-9]{64}$/;
 
-/** Reads and parses a lockfile; `null` when it does not exist. Throws on malformed content. */
+/** A lockfile input failure with the diagnostic callers should present instead of a stack. */
+export class LockfileError extends Error {
+  readonly diagnostic: Diagnostic;
+
+  constructor(lockPath: string, code: "acf.lock.invalid" | "acf.lock.unreadable", cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `${code === "acf.lock.invalid" ? "invalid" : "unreadable"} capabilities.lock at ${lockPath}: ${detail}`,
+      { cause },
+    );
+    this.diagnostic = { severity: "error", code, path: lockPath, message: this.message };
+  }
+}
+
+/** Reads a lockfile; null if absent, or a LockfileError for unreadable or malformed input. */
 export async function readLockfile(lockPath: string): Promise<CapabilitiesLock | null> {
   let raw: string;
   try {
     raw = await readFile(lockPath, "utf8");
   } catch (error) {
     if (isErrno(error, "ENOENT")) return null;
-    throw error;
+    throw new LockfileError(lockPath, "acf.lock.unreadable", error);
   }
-  return parseLock(JSON.parse(raw) as unknown, lockPath);
+  try {
+    return parseLock(JSON.parse(raw) as unknown, lockPath);
+  } catch (error) {
+    throw new LockfileError(lockPath, "acf.lock.invalid", error);
+  }
 }
 
 /** Atomically replaces the canonical lock via a temporary file on the same filesystem. */

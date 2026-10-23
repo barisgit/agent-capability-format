@@ -97,8 +97,8 @@ export async function resolveScopeCapabilities(
 ): Promise<{ capabilities: AcfCapability[]; diagnostics: Diagnostic[] }> {
   const diagnostics: Diagnostic[] = [];
   const capabilities: AcfCapability[] = [];
-  if (!(await exists(root.capabilitiesDir))) return { capabilities, diagnostics };
   const lock = options.lock === undefined ? await readLockfile(root.lockPath) : options.lock;
+  if (!(await exists(root.capabilitiesDir))) return { capabilities, diagnostics };
   // A lock entry mirrors its capabilities.yml include/exclude, so selection follows the lock.
   const select = (capability: AcfCapability, entry: LockEntry | undefined): AcfCapability => {
     if (entry === undefined) return capability;
