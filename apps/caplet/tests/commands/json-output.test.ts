@@ -59,6 +59,23 @@ test("completion --json wraps scripts and unsupported-shell errors", async () =>
   }
 });
 
+test("completion rejects Object.prototype names as unsupported shells", async () => {
+  const scope = await makeScope();
+  try {
+    for (const shell of ["toString", "__proto__"]) {
+      const result = await runCaplet(scope, ["completion", shell, "--json"]);
+      expect(result.exitCode).toBe(2);
+      expect(parseEnvelope(result.stdout)).toMatchObject({
+        command: "completion",
+        ok: false,
+        diagnostics: [expect.objectContaining({ code: "acf.cli.usage" })],
+      });
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("caplet apply --dry-run --json prints a single JSON envelope on stdout", async () => {
   const scope = await makeScope();
   try {

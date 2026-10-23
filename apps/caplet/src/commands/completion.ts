@@ -56,7 +56,11 @@ const FISH = [
   "",
 ].join("\n");
 
-const SCRIPTS: Record<string, string> = { bash: BASH, zsh: ZSH, fish: FISH };
+const SCRIPTS = new Map([
+  ["bash", BASH],
+  ["zsh", ZSH],
+  ["fish", FISH],
+]);
 
 export const completionCommand = defineCommand({
   meta: { name: "completion", description: "print shell completions (bash, zsh, fish)" },
@@ -64,7 +68,7 @@ export const completionCommand = defineCommand({
   async run(context) {
     await runCommandSafely("completion", context.args, async () => {
       const shell = String(context.args.shell);
-      const script = SCRIPTS[shell];
+      const script = SCRIPTS.get(shell);
       if (script === undefined)
         throw validationError(`unsupported shell: ${shell} (expected bash, zsh, or fish)`);
       if (readJson(context.args)) printJson("completion", true, [], { shell, script });
