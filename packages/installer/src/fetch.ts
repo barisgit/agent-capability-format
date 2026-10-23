@@ -138,10 +138,7 @@ async function resolveEntryPath(root: string, entryPath: string | undefined): Pr
   if (entryPath === undefined) return root;
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, entryPath);
-  const relative = path.relative(resolvedRoot, resolved);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
-  }
+  assertSelectedPathInside(resolvedRoot, resolved, entryPath);
   // Lexical containment alone does not constrain a selected symlink's destination.
   let realRoot: string;
   let realSelected: string;
@@ -155,14 +152,7 @@ async function resolveEntryPath(root: string, entryPath: string | undefined): Pr
       resolved,
     );
   }
-  const realRelative = path.relative(realRoot, realSelected);
-  if (
-    realRelative === ".." ||
-    realRelative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(realRelative)
-  ) {
-    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
-  }
+  assertSelectedPathInside(realRoot, realSelected, entryPath);
   return realSelected;
 }
 
@@ -178,4 +168,12 @@ async function retry(retries: number, fn: () => Promise<void>): Promise<void> {
     }
   }
   throw lastError;
+}
+
+/** Checks paths using this filesystem's separators, both before and after symlink resolution. */
+function assertSelectedPathInside(root: string, selected: string, entryPath: string): void {
+  const relative = path.relative(root, selected);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
+  }
 }

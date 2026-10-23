@@ -4,6 +4,7 @@ import {
   type Diagnostic,
   LockfileError,
   resolveScopeCapabilities,
+  type ScopeRoot,
 } from "@caplet/core";
 import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
@@ -15,6 +16,7 @@ import { exitCodeForDiagnostics, printDiagnostics, reporter } from "../internal/
 import { resolveScopeRoots } from "../internal/scopes.js";
 import { specToCittyArgs } from "../internal/spec.js";
 
+/** Validates selected scopes and reports lock or output staleness without mutation. */
 export const checkCommand = defineCommand({
   meta: {
     name: "check",
@@ -33,29 +35,8 @@ export const checkCommand = defineCommand({
 async function checkScopes(args: Record<string, unknown>): Promise<void> {
   const cwd = readCwd(args);
   process.chdir(cwd);
-  const diagnostics: Diagnostic[] = [];
-  const lockDiagnostics: Diagnostic[] = [];
   const scopeRoots = await resolveScopeRoots(readScope(args), cwd);
-  let capabilityCount = 0;
-  for (const scopeRoot of scopeRoots) {
-    const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
-    diagnostics.push(...manifest.diagnostics);
-    let lock: CapabilitiesLock | null;
-    try {
-      lock = await readLockfile(scopeRoot.lockPath);
-    } catch (error) {
-      if (!(error instanceof LockfileError)) throw error;
-      diagnostics.push(error.diagnostic);
-      continue;
-    }
-    lockDiagnostics.push(
-      ...detectLockDrift(manifest.value, lock, path.dirname(scopeRoot.manifestPath)),
-    );
-    const resolved = await resolveScopeCapabilities(scopeRoot);
-    diagnostics.push(...resolved.diagnostics);
-    capabilityCount += resolved.capabilities.length;
-    for (const capability of resolved.capabilities) diagnostics.push(...capability.diagnostics);
-  }
+  const { diagnostics, lockDiagnostics, capabilityCount } = await validateScopes(scopeRoots);
   const json = readJson(args);
   const out = reporter(args);
   let reported = [...diagnostics, ...lockDiagnostics];
@@ -122,4 +103,35 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
       ["Scopes", scopeRoots.map((scopeRoot) => scopeRoot.scope).join(", ")],
     ]);
   }
+}
+
+/** Collects input diagnostics before emission planning; an invalid lock skips only its scope. */
+async function validateScopes(scopeRoots: ScopeRoot[]): Promise<{
+  diagnostics: Diagnostic[];
+  lockDiagnostics: Diagnostic[];
+  capabilityCount: number;
+}> {
+  const diagnostics: Diagnostic[] = [];
+  const lockDiagnostics: Diagnostic[] = [];
+  let capabilityCount = 0;
+  for (const scopeRoot of scopeRoots) {
+    const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
+    diagnostics.push(...manifest.diagnostics);
+    let lock: CapabilitiesLock | null;
+    try {
+      lock = await readLockfile(scopeRoot.lockPath);
+    } catch (error) {
+      if (!(error instanceof LockfileError)) throw error;
+      diagnostics.push(error.diagnostic);
+      continue;
+    }
+    lockDiagnostics.push(
+      ...detectLockDrift(manifest.value, lock, path.dirname(scopeRoot.manifestPath)),
+    );
+    const resolved = await resolveScopeCapabilities(scopeRoot);
+    diagnostics.push(...resolved.diagnostics);
+    capabilityCount += resolved.capabilities.length;
+    for (const capability of resolved.capabilities) diagnostics.push(...capability.diagnostics);
+  }
+  return { diagnostics, lockDiagnostics, capabilityCount };
 }

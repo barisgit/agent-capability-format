@@ -86,7 +86,7 @@ export class LockfileError extends Error {
   }
 }
 
-/** Reads a lockfile; null if absent, or a LockfileError for unreadable or malformed input. */
+/** Reads a lockfile, returning null if absent; throws LockfileError for unreadable or malformed input. */
 export async function readLockfile(lockPath: string): Promise<CapabilitiesLock | null> {
   let raw: string;
   try {

@@ -15,23 +15,13 @@ async function writeGamma(scope: { sourceRoot: string }): Promise<string> {
   return root;
 }
 
-test("removed command names and flags are unknown usage errors", async () => {
+test("unsupported mode flags are unknown usage errors", async () => {
   const scope = await makeScope();
   try {
-    const cases = [
-      ...["inspect", "diff", "emit", "fetch"].map((name) => ({
-        args: [name],
-        error: `unknown command: ${name}`,
-      })),
-      ...["--fail-on-lossy", "--mode", "--mode=force"].map((flag) => ({
-        args: ["apply", flag],
-        error: `unknown flag: ${flag.split("=")[0]}`,
-      })),
-      ...["--ref", "--rename"].map((flag) => ({
-        args: ["add", "github:owner/repo", flag, "main"],
-        error: `unknown flag: ${flag}`,
-      })),
-    ];
+    const cases = ["--mode", "--mode=force"].map((flag) => ({
+      args: ["apply", flag],
+      error: `unknown flag: ${flag.split("=")[0]}`,
+    }));
     for (const entry of cases) {
       const result = await runCaplet(scope, [...entry.args, "--cwd", scope.cwd]);
       expect(result.exitCode).toBe(2);
@@ -53,6 +43,7 @@ test("removed syntax names its replacement in human and JSON usage errors", asyn
       [["emit"], "caplet apply"],
       [["fetch"], "caplet update --no-apply"],
       [["add", "github:owner/repo", "--ref=main"], "--pin"],
+      [["add", "github:owner/repo", "--ref", "main"], "--pin"],
       [["add", "github:owner/repo", "--rename", "new"], "--as"],
       [["apply", "--fail-on-lossy"], "--strict"],
     ] as const) {
@@ -60,8 +51,13 @@ test("removed syntax names its replacement in human and JSON usage errors", asyn
         const result = await runCaplet(scope, [...args, ...(json ? ["--json"] : [])]);
         expect(result.exitCode).toBe(2);
         const message = json ? JSON.parse(result.stdout).diagnostics[0].message : result.stderr;
+        expect(message).toContain(
+          args[0] === "add" || args[0] === "apply" ? "unknown flag:" : "unknown command:",
+        );
         expect(message).toContain(`use ${replacement} instead`);
         expect(message).not.toContain("--yes");
+        expect(message).not.toContain("deprecated");
+        if (!json) expect(result.stdout).toBe("");
       }
     }
   } finally {

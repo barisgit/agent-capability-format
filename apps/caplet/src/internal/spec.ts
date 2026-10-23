@@ -270,14 +270,17 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
 ];
 
+/** Looks up a canonical command; aliases are rewritten before this lookup. */
 export function commandSpec(name: string): CommandSpec | undefined {
   return COMMAND_SPECS.find((spec) => spec.name === name);
 }
 
+/** Canonical command names in help order, excluding aliases. */
 export function commandNames(): string[] {
   return COMMAND_SPECS.map((spec) => spec.name);
 }
 
+/** Builds citty arguments from the same command definition used by help and completions. */
 export function specToCittyArgs(name: string): Record<string, unknown> {
   const spec = commandSpec(name);
   if (spec === undefined) throw new Error(`no command spec: ${name}`);
@@ -361,6 +364,23 @@ export function unknownFlagError(command: string | undefined, argv: string[]): s
     ...(spec?.target === true ? [TARGET_FLAG] : []),
     ...(spec?.flags ?? []),
   ];
+  const { known, booleanShorts } = flagTokens(flags);
+  for (const token of argv) {
+    if (token === "--") break;
+    if (!token.startsWith("-") || token === "-") continue;
+    const name = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+    if (known.has(name)) continue;
+    if (isBooleanBundle(name, booleanShorts)) continue;
+    return unknownFlagMessage(name, known);
+  }
+  return undefined;
+}
+
+/** Accepted spellings and boolean aliases for validating unknown tokens before citty parses them. */
+function flagTokens(flags: readonly FlagSpec[]): {
+  known: Set<string>;
+  booleanShorts: Set<string>;
+} {
   const known = new Set<string>(["--help", "--version"]);
   const booleanShorts = new Set<string>(["h", "V"]);
   for (const flag of flags) {
@@ -373,26 +393,30 @@ export function unknownFlagError(command: string | undefined, argv: string[]): s
   }
   known.add("-h");
   known.add("-V");
-  for (const token of argv) {
-    if (token === "--") break;
-    if (!token.startsWith("-") || token === "-") continue;
-    const name = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
-    if (known.has(name)) continue;
-    if (!name.startsWith("--") && name.length > 2) {
-      // bundled shorts like -nv: accept only when every letter is a known boolean short
-      const letters = name.slice(1).split("");
-      if (letters.every((letter) => booleanShorts.has(letter))) continue;
-    }
-    const replacements: Readonly<Record<string, string>> = {
-      "--ref": "--pin",
-      "--rename": "--as",
-      "--fail-on-lossy": "--strict",
-    };
-    const replacement = replacements[name];
-    if (replacement !== undefined) return `unknown flag: ${name} — use ${replacement} instead`;
-    const suggestion = closest(name, [...known]);
-    const hint = suggestion === undefined ? "" : ` — did you mean ${suggestion}?`;
-    return `unknown flag: ${name}${hint}`;
-  }
-  return undefined;
+  return { known, booleanShorts };
+}
+
+/** Bundled shorts accept only known boolean flags, never flags that consume a value. */
+function isBooleanBundle(name: string, booleanShorts: ReadonlySet<string>): boolean {
+  return (
+    !name.startsWith("--") &&
+    name.length > 2 &&
+    name
+      .slice(1)
+      .split("")
+      .every((letter) => booleanShorts.has(letter))
+  );
+}
+
+function unknownFlagMessage(name: string, known: ReadonlySet<string>): string {
+  const replacements: Readonly<Record<string, string>> = {
+    "--ref": "--pin",
+    "--rename": "--as",
+    "--fail-on-lossy": "--strict",
+  };
+  const replacement = replacements[name];
+  if (replacement !== undefined) return `unknown flag: ${name} — use ${replacement} instead`;
+  const suggestion = closest(name, [...known]);
+  const hint = suggestion === undefined ? "" : ` — did you mean ${suggestion}?`;
+  return `unknown flag: ${name}${hint}`;
 }

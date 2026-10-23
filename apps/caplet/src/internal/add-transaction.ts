@@ -88,19 +88,7 @@ async function restoreCheckpoints(checkpoints: Checkpoint[], backupDir: string):
   const failures: unknown[] = [];
   for (const checkpoint of checkpoints) {
     try {
-      if (checkpoint.ownership) {
-        const before = checkpoint.existed ? await readFile(checkpoint.backup) : null;
-        const current = await readBytesIfExists(checkpoint.destination);
-        // A failed write may leave an unchanged sidecar in an unwritable root.
-        if (before === null ? current === null : current !== null && before.equals(current))
-          continue;
-        if (checkpoint.existed) {
-          await restoreOwnership(checkpoint);
-          continue;
-        }
-      }
-      await rm(checkpoint.destination, { recursive: true, force: true });
-      if (checkpoint.existed) await rename(checkpoint.backup, checkpoint.destination);
+      await restoreCheckpoint(checkpoint);
     } catch (error) {
       // A broken root must not prevent other roots from relinquishing adoptions.
       failures.push(error);
@@ -112,4 +100,20 @@ async function restoreCheckpoints(checkpoints: Checkpoint[], backupDir: string):
       `installer rollback failed; recover backups from ${backupDir}`,
     );
   }
+}
+
+/** Skips unchanged sidecars and otherwise restores one destination without affecting later roots. */
+async function restoreCheckpoint(checkpoint: Checkpoint): Promise<void> {
+  if (checkpoint.ownership) {
+    const before = checkpoint.existed ? await readFile(checkpoint.backup) : null;
+    const current = await readBytesIfExists(checkpoint.destination);
+    // A failed write may leave an unchanged sidecar in an unwritable root.
+    if (before === null ? current === null : current !== null && before.equals(current)) return;
+    if (checkpoint.existed) {
+      await restoreOwnership(checkpoint);
+      return;
+    }
+  }
+  await rm(checkpoint.destination, { recursive: true, force: true });
+  if (checkpoint.existed) await rename(checkpoint.backup, checkpoint.destination);
 }

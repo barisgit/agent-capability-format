@@ -42,6 +42,7 @@ import { chooseSourceCapabilities } from "../internal/source-selection.js";
 import { specToCittyArgs } from "../internal/spec.js";
 import type { EmitPlan } from "../internal/workflow.js";
 
+/** Adds one source to the inferred scope and optionally resolves and applies its selection. */
 export const addCommand = defineCommand({
   meta: { name: "add", description: "add capabilities from a source and apply them" },
   args: specToCittyArgs("add") as ArgsDef,
@@ -83,17 +84,7 @@ async function addSource(args: Record<string, unknown>): Promise<void> {
     reportInspectionFailure(args, out, inventory.diagnostics);
     return;
   }
-  if (parsedSource.selector !== undefined || selected.length < inventory.candidates.length) {
-    const names = new Set(selected);
-    entry.capabilities = inventory.candidates
-      .filter((candidate) => names.has(candidate.name))
-      .map((candidate) => candidate.selector);
-  }
-  if (typeof entry.rename === "string" && selected.length !== 1) {
-    throw validationError(
-      "--as requires exactly one capability; select one capability or use a rename mapping in capabilities.yml",
-    );
-  }
+  selectManifestCapabilities(entry, inventory, selected, parsedSource.selector);
   const previous = await readFile(root.manifestPath).catch((error: unknown) => {
     if (isErrno(error, "ENOENT")) return null;
     throw error;
@@ -317,4 +308,24 @@ async function inspectForSelection(
 function selectionSummary(selected: readonly string[]): string {
   if (selected.length <= 3) return selected.join(", ");
   return `${selected.slice(0, 3).join(", ")} +${selected.length - 3} more`;
+}
+
+/** Narrows the in-memory entry and refuses ambiguous scalar renames before writing the manifest. */
+function selectManifestCapabilities(
+  entry: CapabilityEntry,
+  inventory: SelectionInspection["inventory"],
+  selected: string[],
+  requested: string | undefined,
+): void {
+  if (requested !== undefined || selected.length < inventory.candidates.length) {
+    const names = new Set(selected);
+    entry.capabilities = inventory.candidates
+      .filter((candidate) => names.has(candidate.name))
+      .map((candidate) => candidate.selector);
+  }
+  if (typeof entry.rename === "string" && selected.length !== 1) {
+    throw validationError(
+      "--as requires exactly one capability; select one capability or use a rename mapping in capabilities.yml",
+    );
+  }
 }

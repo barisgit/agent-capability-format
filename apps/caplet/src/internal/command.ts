@@ -14,8 +14,8 @@ export const INTERNAL_ERROR_CODE = "acf.cli.internal";
 export type CommandError = Error & { exitCode: 1 | 2 | 4; code?: string | undefined };
 
 /**
- * Runs a command body, turning a thrown {@link CommandError} into the command's failure output
- * ({@link reportCommandFailure}) and exit code. Other errors propagate.
+ * Runs a command body, reporting a thrown {@link CommandError} with its exit code or a
+ * {@link LockfileError} with its path-specific diagnostic and exit 2. Other errors propagate.
  */
 export async function runCommandSafely(
   command: string,
