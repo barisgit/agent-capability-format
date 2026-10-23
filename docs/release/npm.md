@@ -65,9 +65,12 @@ Configure a trusted publisher on **each** of the six npm packages:
 | Environment | `npm-production` |
 | Allowed actions | `npm publish` |
 
-The GitHub environment already exists. Keep its protections and publisher
-records aligned with the workflow. No `NPM_TOKEN` belongs in repository secrets
-or workflow configuration.
+The GitHub environment already exists, but a read-only setup check found no
+protection rules or deployment-branch policy. Environment naming alone does not
+provide protection. The integrator must choose and configure the intended
+branch/review restrictions separately; this change does not modify settings.
+Keep publisher records aligned with the workflow. No `NPM_TOKEN` belongs in
+repository secrets or workflow configuration.
 
 ## Bootstrap: first publication and publisher setup
 

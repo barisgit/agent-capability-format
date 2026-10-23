@@ -136,7 +136,9 @@ The release workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`;
 
 **Remaining**: manually publish the first version, configure npm trusted publishing
 for each package, then verify the public install and add journey on clean macOS
-and Linux machines.
+and Linux machines. A read-only check found no protection rules or deployment
+branch policy on the existing `npm-production` GitHub environment; the integrator
+must choose/configure that policy separately (settings changes are outside this lane).
 
 **Implementation**:
 
