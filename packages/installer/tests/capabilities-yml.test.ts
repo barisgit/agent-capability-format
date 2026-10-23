@@ -3,6 +3,30 @@ import path from "node:path";
 import { readCapabilitiesYml } from "../src";
 import { cleanup, tempDir, writeText } from "./helpers";
 
+test("unknown only and except target ids are rejected with suggestions", async () => {
+  const dir = await tempDir("acf-installer-target-typo-");
+  try {
+    const file = path.join(dir, "capabilities.yml");
+    for (const field of ["only", "except"]) {
+      await writeText(
+        file,
+        `acf: 1\ncapabilities:\n  - source: path:./one\n    ${field}: [cluade]\n`,
+      );
+      const result = await readCapabilitiesYml(file);
+      expect(result.value.capabilities).toEqual([]);
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          severity: "error",
+          code: "acf.target.unknown-id",
+          message: expect.stringContaining('did you mean "claude"?'),
+        }),
+      );
+    }
+  } finally {
+    await cleanup(dir);
+  }
+});
+
 test("valid capabilities.yml parses source shorthands", async () => {
   const dir = await tempDir("acf-installer-yml-");
   try {

@@ -18,6 +18,21 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await cleanup(dir);
 });
 
+test("entry selection reports unknown target ids instead of silently narrowing to nothing", async () => {
+  const cap = await nativeCapability();
+  for (const selection of [{ only: ["cluade"] }, { except: ["cluade"] }]) {
+    const result = applyEntrySelection(cap, selection);
+    expect(result.capability).toBe(cap);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        severity: "error",
+        code: "acf.target.unknown-id",
+        message: expect.stringContaining('did you mean "claude"?'),
+      }),
+    );
+  }
+});
+
 const skill = (name: string) => `---\nname: ${name}\ndescription: ${name}\n---\nBody.\n`;
 
 async function nativeCapability() {

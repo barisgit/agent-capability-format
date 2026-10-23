@@ -25,6 +25,10 @@ caplet                                        # status summary
 caplet check --frozen --strict                # CI: fail on stale or lossy output
 ```
 
+`check` exits 0 with no errors, 1 for stale outputs, 2 for errors (including
+missing lock entries), or 3 for stale locks with `--frozen`. Preserved edited
+artifacts needing manual cleanup keep exit 0, with a warning rather than a clean result.
+
 Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
 uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
 it. Still-selected identities come from the selection even if ownership records are lost.
@@ -45,6 +49,16 @@ support there. Exclude the hook or target to install the rest. Caplet never down
 restricting effects to `observe`. Foreign Claude-plugin hooks stay unchanged inside
 Claude plugins. Native writers remain in `claude-loose-hooks-repair` and the Codex
 hooks backlog item.
+
+Native manifests reject unknown top-level keys and invalid SemVer 2.0.0 versions.
+Unknown `only`/`except` target ids in `acf.yml` or `capabilities.yml` are errors,
+with did-you-mean hints for typos; non-core Markdown frontmatter stays permissive.
+
+Every command supports `--json`. `init` reports the manifest path and whether
+it was created; `completion` returns the shell script inside the JSON envelope.
+
+Local `path:` sources can name a capability, a collection's parent, or its
+`acf/` directory directly. Collection selectors are relative to `acf/`.
 
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 

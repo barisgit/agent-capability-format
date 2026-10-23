@@ -21,15 +21,7 @@ import type {
 import { isRecord, isSlug, isStringArray } from "../utils/guards.js";
 import { leavesBase } from "../utils/paths.js";
 import { assertNoProtoKey } from "../utils/proto-key.js";
-
-// SemVer 2.0.0, the regular expression published at semver.org.
-const SEMVER =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-
-/** True when `value` is a SemVer 2.0.0 version. */
-function isSemVer(value: string): boolean {
-  return SEMVER.test(value);
-}
+import { isSemVer } from "../utils/semver.js";
 
 /**
  * Why a foreign component's native keys for its own `target` make it invalid: the first key whose

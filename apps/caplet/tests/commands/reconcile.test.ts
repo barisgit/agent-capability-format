@@ -69,8 +69,8 @@ test("check flags orphaned managed files after the manifest narrows", async () =
       "--target",
       "claude",
     ]);
-    expect(stale.exitCode).toBe(1);
-    expect(stale.stdout + stale.stderr).toContain("stale");
+    expect(stale.exitCode).toBe(2);
+    expect(stale.stdout + stale.stderr).toContain("acf.lock.drift");
 
     const apply = await applyProject(scope);
     expect(apply.exitCode).toBe(0);

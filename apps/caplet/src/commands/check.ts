@@ -57,7 +57,8 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
       });
     } else {
       printDiagnostics(reported, args);
-      if (code === 0) out.done(message);
+      if (code === 0 && result === "manual-cleanup") out.warn(message);
+      else if (code === 0) out.done(message);
       else out.failure(message);
     }
     process.exitCode = code;
@@ -73,12 +74,10 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
   }
   const plan = await buildEmitPlan(args);
   // The plan repeats the validation and lock findings above and adds what emitting found,
-  // such as a component apply refuses. Lock staleness only fails with --frozen, judged above.
+  // such as a component apply refuses. Frozen lock staleness takes exit 3 above;
+  // otherwise lock errors are invalid input just like any other error diagnostic.
   reported = plan.diagnostics;
-  const planInvalid = exitCodeForDiagnostics(
-    reported.filter((d) => !d.code.startsWith("acf.lock.")),
-    args,
-  );
+  const planInvalid = exitCodeForDiagnostics(reported, args);
   if (planInvalid !== 0) {
     finish(2, "invalid", 0, "Validation failed");
     return;
@@ -93,7 +92,18 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
     );
     return;
   }
-  finish(0, "clean", 0, "Validation passed");
+  const residue = reported.some(
+    (diagnostic) =>
+      diagnostic.code === "acf.apply.drift" || diagnostic.code === "acf.migration.drifted",
+  );
+  finish(
+    0,
+    residue ? "manual-cleanup" : "clean",
+    0,
+    residue
+      ? "No pending output changes; manual cleanup remains (see drift warnings)"
+      : "Validation passed",
+  );
   if (!json) {
     out.details([
       ["Capabilities", capabilityCount],

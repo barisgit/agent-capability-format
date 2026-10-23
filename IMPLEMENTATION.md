@@ -370,8 +370,6 @@ export type Manifest = {
   only?: TargetId[]
   except?: TargetId[]
   targets?: TargetExtensions
-  // For forward compatibility:
-  unknown?: Record<string, unknown>
 }
 
 export type PackageAuthor = { name: string; email?: string; url?: string }
@@ -380,8 +378,11 @@ export type SemVer = string
 export type TargetExtensions = Partial<Record<TargetId, unknown>>
 ```
 
-`unknown` is internal: validation captures unrecognized top-level keys here
-and emits informational diagnostics for them. Production builds may drop it.
+The native manifest schema rejects unknown top-level keys with
+`acf.manifest.invalid-field` errors naming the keys. Only Markdown frontmatter
+keeps permissive unknown-field diagnostics. Native versions and foreign package
+identity projection share the strict SemVer 2.0.0 predicate in `utils/semver.ts`;
+foreign non-SemVer versions still use the documented unversioned fallback.
 
 ### 3.3 Markdown-backed facets
 
@@ -1320,6 +1321,11 @@ const hookExtension = z
   })
   .strict()
 ```
+
+Unknown `only`/`except` target ids are errors in native capabilities and
+`capabilities.yml` entries, validated against the target registry before entry
+selection narrows applicability. Near matches include a did-you-mean hint using
+the same edit-distance helper as unknown `capabilities.yml` keys.
 
 Unknown target ids or unknown keys under a known target id are diagnostics
 (§11), not silent passes.
@@ -2285,9 +2291,13 @@ userinfo (other than an SSH user name) or a credential-looking query or fragment
 is rejected with `acf.source.credential-in-url` when added and when resolved, and the
 message masks the credential (`packages/core/src/credentials/`).
 
-After fetch, the shared source inventory discovers valid capability candidates
-and assigns each a selector: a POSIX path relative to `<fetched-root>/acf/` for
-manifested collections, or the discovered name (before `rename`) for direct
+After fetch, the shared source inventory discovers capability candidates and
+includes native reader errors, so invalid ACF sources fail even on
+`add --no-apply` before the manifest is changed. Warnings are reported when the
+resolved snapshots are read, not repeated from inventory. It assigns each a
+selector: a POSIX path relative to the collection directory
+for manifested collections (`<fetched-root>/acf/`, or `<fetched-root>` when it
+is itself `acf/`), or the discovered name (before `rename`) for direct
 manifested capabilities, synthesized skills, and foreign packages. `rename`
 is applied once, when the resolver names the staged snapshot. When `entry.capabilities` is present the
 resolver matches every exact/glob selector against those values, requires every
@@ -2401,7 +2411,8 @@ Drift handling:
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
   Every fetch a frozen resolution makes is such a restore at the locked `resolvedSha`.
-  `caplet check --frozen` exits 3 on any non-info lock diagnostic.
+  `caplet check` never resolves lock drift: it exits 2 on lock errors, or 3
+  with `--frozen` on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and
@@ -2456,8 +2467,9 @@ is not a slug fails with `acf.manifest.invalid-name`, whose
 
 `discoverRepository` in `packages/core/src/resolver/` finds the capabilities of
 an ACF repository: the root itself when it has `acf.yml` or `acf.yaml`;
-otherwise every outermost directory with one under `acf/`, skipping dot
-entries, sorted. Finding neither yields no roots and an
+otherwise every outermost directory with one under `acf/` (or the root itself
+when named `acf/`), skipping dot entries, sorted. Format detection, discovery
+and installer selector paths share `collectionRoot` in core's `utils/paths.ts`. Finding neither yields no roots and an
 `acf.resolve.no-capabilities` info diagnostic. Bare `skills/` synthesis
 happens earlier, in the installer's `inspectSource`.
 
@@ -3284,11 +3296,18 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   behavior, else `yes`.
 - `caplet check [--target …] [--frozen]` — validate without writing. Exits
   1 when emitted outputs are stale, 2 on validation errors or an `error`
-  the plan reports (such as a component apply refuses), and 3 with
-  `--frozen` when the lockfile is stale.
+  the plan reports (including missing or stale lock entries), and 3 with
+  `--frozen` when the lockfile is stale. With no pending writes, edited stale
+  artifacts left for manual cleanup keep exit 0 but report `manual-cleanup`
+  instead of `clean` in JSON and a warning summary in human output.
 - `caplet doctor` — checks git availability, `.agents/` readability, the
   target registry, and lockfiles; each check reports pass/warn/fail.
-- `caplet completion <bash|zsh|fish>` — print shell completions.
+- `caplet completion <bash|zsh|fish>` — print shell completions, or an envelope
+  containing `shell` and `script` with `--json`. Unsupported shells use the
+  standard usage-error diagnostic and envelope.
+
+`caplet init --json` uses the same envelope as other commands, with `manifest`
+(the absolute manifest path) and `created` (false on repeated initialization).
 
 For a preview of what `apply` would change on disk, use
 `caplet apply --dry-run`.

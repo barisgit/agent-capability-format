@@ -3,6 +3,7 @@ import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilityEntry,
+  collectionRoot,
   type Diagnostic,
   type ForeignFormat,
   isErrno,
@@ -107,9 +108,9 @@ async function foreignInventory(
 /** An ACF source: its root capability or `acf/` collection, selected by collection path. */
 async function acfInventory(root: string): Promise<SourceInventory> {
   const repository = await readRepositoryCapabilities(root);
-  const collectionRoot = path.join(root, "acf");
+  const collection = collectionRoot(root);
   const candidates = repository.capabilities.map((capability): SourceCapabilityCandidate => {
-    const relative = path.relative(collectionRoot, capability.root).replaceAll(path.sep, "/");
+    const relative = path.relative(collection, capability.root).replaceAll(path.sep, "/");
     const inCollection = relative.length > 0 && relative !== ".." && !relative.startsWith("../");
     return {
       name: capability.manifest.name,
@@ -120,7 +121,18 @@ async function acfInventory(root: string): Promise<SourceInventory> {
       format: "acf",
     };
   });
-  return { candidates, diagnostics: repository.diagnostics, synthesized: false };
+  return {
+    candidates,
+    diagnostics: [
+      ...repository.diagnostics,
+      // Resolved snapshots report warnings later; retain only errors here so invalid
+      // sources also block add --no-apply without duplicating non-blocking findings.
+      ...repository.capabilities.flatMap((capability) =>
+        capability.diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+      ),
+    ],
+    synthesized: false,
+  };
 }
 
 /**

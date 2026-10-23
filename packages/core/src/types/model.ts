@@ -55,7 +55,6 @@ export type Manifest = {
   only?: TargetId[] | undefined;
   except?: TargetId[] | undefined;
   targets?: TargetExtensions | undefined;
-  unknown?: Record<string, unknown> | undefined;
 };
 
 export type Frontmatter<T extends Record<string, unknown> = Record<string, unknown>> = T & {

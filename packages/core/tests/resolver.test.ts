@@ -38,6 +38,18 @@ test("resolver discovers multi acf directory at arbitrary depth", async () => {
   }
 });
 
+test("repository discovery accepts the acf collection directory itself", async () => {
+  const dir = await tempDir("acf-resolver-collection-");
+  try {
+    const collection = path.join(dir, "acf");
+    const root = path.join(collection, "nested", "one");
+    await writeText(path.join(root, "acf.yml"), "acf: 1\nname: one\nversion: 1.0.0\n");
+    expect((await discoverRepository(collection)).roots).toEqual([root]);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
 test("core repository reading does not mutate bare skill sources", async () => {
   const dir = await tempDir("acf-resolver-bare-");
   try {

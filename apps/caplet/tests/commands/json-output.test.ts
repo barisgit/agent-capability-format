@@ -8,6 +8,74 @@ function parseEnvelope(stdout: string): Record<string, unknown> {
   return JSON.parse(stdout) as Record<string, unknown>;
 }
 
+test("init --json reports creation and repeated initialization in the standard envelope", async () => {
+  const scope = await makeScope();
+  try {
+    const cwd = path.join(scope.dir, "new-project");
+    await mkdir(cwd);
+    for (const created of [true, false]) {
+      const result = await runCaplet(scope, ["init", "--json", "--cwd", cwd]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(parseEnvelope(result.stdout)).toEqual({
+        caplet: packageJson.version,
+        command: "init",
+        ok: true,
+        diagnostics: [],
+        created,
+        manifest: path.join(cwd, ".agents", "capabilities.yml"),
+      });
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("completion --json wraps scripts and unsupported-shell errors", async () => {
+  const scope = await makeScope();
+  try {
+    for (const shell of ["bash", "zsh", "fish"]) {
+      const result = await runCaplet(scope, ["completion", shell, "--json"]);
+      expect(result.exitCode).toBe(0);
+      expect(parseEnvelope(result.stdout)).toMatchObject({
+        caplet: packageJson.version,
+        command: "completion",
+        ok: true,
+        diagnostics: [],
+        shell,
+      });
+      const plain = await runCaplet(scope, ["completion", shell]);
+      expect(parseEnvelope(result.stdout).script).toBe(plain.stdout);
+    }
+    const invalid = await runCaplet(scope, ["completion", "unknown", "--json"]);
+    expect(invalid.exitCode).toBe(2);
+    expect(parseEnvelope(invalid.stdout)).toMatchObject({
+      command: "completion",
+      ok: false,
+      diagnostics: [expect.objectContaining({ severity: "error", code: "acf.cli.usage" })],
+    });
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("completion rejects Object.prototype names as unsupported shells", async () => {
+  const scope = await makeScope();
+  try {
+    for (const shell of ["toString", "__proto__"]) {
+      const result = await runCaplet(scope, ["completion", shell, "--json"]);
+      expect(result.exitCode).toBe(2);
+      expect(parseEnvelope(result.stdout)).toMatchObject({
+        command: "completion",
+        ok: false,
+        diagnostics: [expect.objectContaining({ code: "acf.cli.usage" })],
+      });
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("caplet apply --dry-run --json prints a single JSON envelope on stdout", async () => {
   const scope = await makeScope();
   try {

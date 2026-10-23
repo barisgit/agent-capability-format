@@ -132,6 +132,13 @@ A multi-capability repository uses `acf/<capability-path>/acf.yml`.
 a scalar selects one, a list selects several, and omission selects all. `*`
 stays within one segment, `?` matches one character, and a `**` segment is
 recursive. Use `path` first when the collection lives in a monorepo subtree.
+Pointing directly at its `acf/` directory also works; selectors remain relative
+to that directory.
+
+Native `acf.yml` rejects unknown top-level keys and requires strict SemVer 2.0.0
+versions. Unknown `only`/`except` target ids in manifests or source entries are
+errors, with suggestions for nearby registry ids. Markdown frontmatter remains
+permissive for non-core fields.
 
 Sources are `github:owner/repo`, `git:<url>`, or `path:<location>`. The
 resolver writes one copy into `capabilities/<name>/`. Per-host fan-out
@@ -227,6 +234,13 @@ and `show` derives each capability's support from that scope's results.
 Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
+`check` exits 0 with no errors, 1 for stale outputs, 2 for invalid input
+(including lock errors), or 3 for a stale lock under `--frozen`. Edited stale
+artifacts preserved for manual cleanup keep exit 0 but are not reported as clean.
+
+Every command accepts `--json` and writes one envelope with `caplet`, `command`,
+`ok` and `diagnostics`. `init` adds `manifest` and `created`; `completion`
+adds `shell` and `script` instead of printing raw shell code.
 
 Piping output to an early-closing reader (for example, `caplet check | head -1`)
 quietly drops further writes to that stream on `EPIPE`, for text and `--json`

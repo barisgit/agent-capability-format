@@ -302,7 +302,10 @@ The manifest is a YAML mapping with the following fields:
 Implementations MUST reject manifests that contain top-level fields not
 listed above unless those fields are defined as forward-compatible
 extensions in a later spec version, in which case they MUST emit an
-`info` diagnostic.
+`info` diagnostic. Rejection MUST include an error naming each unrecognized key;
+this is distinct from permissive unknown-key handling in Markdown frontmatter.
+Native `version` values MUST conform to SemVer 2.0.0 without coercion (including
+its prohibition on leading zeroes in numeric version and prerelease identifiers).
 
 #### 4.2.1 Authors
 
@@ -480,7 +483,9 @@ not the family set.
 
 If `only` or `except` lists a target id not present in the target
 registry, implementations MUST emit an `error` diagnostic and ignore the
-unknown id when computing applicability for known targets.
+unknown id when computing applicability for known targets. This validation
+also applies to `capabilities.yml` entry-level `only` and `except`. Implementations
+SHOULD suggest a registry id when a near match exists.
 
 ## 7. Target extension data (`targets.<target>`)
 
@@ -2646,7 +2651,8 @@ Resolver behavior:
 A source entry MAY declare `capabilities` as one selector string or a non-empty
 list. Scalar syntax normalizes to a one-item list. Omission selects every
 discovered capability. Manifested collections match selectors against normalized
-POSIX paths relative to the selected source root's `acf/` directory. A direct
+POSIX paths relative to the selected source root's `acf/` directory (or the
+selected directory itself when it is `acf/`). A direct
 manifested capability, a synthesized skill, and an Agent Plugins or Claude
 plugin package use their discovered name (the manifest or skill name, before
 `rename`) as the selector; `rename` then applies once to the selected
@@ -2756,6 +2762,16 @@ This section is informative. The reference CLI (`caplet`) provides:
 | `caplet check`      | Validate capabilities and `capabilities.yml` and detect stale outputs without writing.    |
 | `caplet doctor`     | Check git, `.agents/` access, target registry, and lockfiles.                             |
 | `caplet completion` | Print shell completions.                                                                  |
+
+Every command's `--json` output MUST use the standard envelope (`caplet`,
+`command`, `ok`, `diagnostics`), including `init` and `completion`. `init`
+reports `manifest` and `created`; `completion` reports `shell` and `script`.
+
+`caplet check` MUST NOT report clean or exit 0 when an error diagnostic is
+present: it exits 2 for invalid input, including lock errors, or 3 for stale
+locks under `--frozen`. Stale emitted outputs exit 1. Preserved edited stale
+artifacts that need manual cleanup keep exit 0 in the absence of errors, but
+MUST be reported as needing cleanup rather than clean.
 
 When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
 caplet MUST quietly drop further output to that stream, including for `--json`,

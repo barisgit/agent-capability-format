@@ -49,7 +49,7 @@ async function exists(file: string): Promise<boolean> {
 const claudePlugin = {
   ".claude-plugin/plugin.json": JSON.stringify({ name: "review-kit", version: "1.0.0" }),
   "skills/review/SKILL.md": skill("review"),
-  "agents/reviewer.md": "---\nname: reviewer\n---\n",
+  "agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews changes\n---\n",
 };
 
 const polyglot = {

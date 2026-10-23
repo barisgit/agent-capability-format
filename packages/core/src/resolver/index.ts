@@ -20,6 +20,7 @@ import type {
   ScopeRoot,
 } from "../types/index.js";
 import { exists } from "../utils/fs.js";
+import { collectionRoot } from "../utils/paths.js";
 import { applyEntrySelection } from "./selection.js";
 
 export { resolveFacetCollisions } from "./facet-collisions.js";
@@ -40,13 +41,14 @@ export type RepositoryDiscovery = { roots: string[]; diagnostics: Diagnostic[] }
 
 /**
  * Finds the capabilities of a repository: the root itself when it has `acf.yml` or `acf.yaml`;
- * otherwise every outermost directory with one under `acf/`, skipping dot entries. Finding
+ * otherwise every outermost directory with one under `acf/` (or root when it is `acf/`),
+ * skipping dot entries. Finding
  * neither yields no roots and an `acf.resolve.no-capabilities` info diagnostic.
  */
 export async function discoverRepository(repoRoot: string): Promise<RepositoryDiscovery> {
   const root = path.resolve(repoRoot);
   if (await hasManifest(root)) return { roots: [root], diagnostics: [] };
-  const acfDir = path.join(root, "acf");
+  const acfDir = collectionRoot(root);
   if (await exists(acfDir)) {
     const roots = await findManifestDirs(acfDir);
     return { roots: roots.sort(), diagnostics: [] };

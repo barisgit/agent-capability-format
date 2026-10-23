@@ -1,7 +1,7 @@
 import path from "node:path";
 import { type CanonicalTriggerName, isProvisionalOperation } from "@caplet/runtime-taxonomy";
 import { z } from "zod";
-import { applicableTargets } from "../applicability/index.js";
+import { applicableTargets, validateApplicabilityDecl } from "../applicability/index.js";
 import { makeDiagnostic } from "../diagnostics/index.js";
 import { AGENT_PLUGINS_DIALECT } from "../extras/index.js";
 import { isTargetId, targetMap } from "../targets/index.js";
@@ -158,18 +158,11 @@ function validateOnlyExceptTargets(cap: AcfCapability): void {
     decls.push({ ...server, path: cap.mcp?.path, family: "mcp" });
   }
   for (const decl of decls) {
-    for (const id of [...(decl.only ?? []), ...(decl.except ?? [])]) {
-      if (!isTargetId(id)) {
-        cap.diagnostics.push({
-          severity: "error",
-          code: "acf.target.unknown-id",
-          message: `unknown target id: ${id}`,
-          path: decl.path,
-          family: decl.family,
-          targetId: id,
-        });
-      }
-    }
+    const diagnostics: Diagnostic[] = [];
+    validateApplicabilityDecl(decl, diagnostics, decl.path);
+    cap.diagnostics.push(
+      ...diagnostics.map((diagnostic) => ({ ...diagnostic, family: decl.family })),
+    );
   }
 }
 
