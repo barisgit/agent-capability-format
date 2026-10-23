@@ -1,48 +1,33 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import type {
-  CanonicalHookType,
-  CanonicalTriggerName,
   FamilySupportFamily,
   TargetAdapter,
   TargetDefinition,
   TargetId,
 } from "../types/index.js";
+import { canonicalHookTypes, canonicalTriggerNames } from "../types/model.js";
 import { isSlug } from "../utils/guards.js";
 import { commonTargetExtensionSchemas } from "./extensions.js";
 
 const HOME = homedir();
-const hookKeys: readonly CanonicalHookType[] = [
-  "session_start",
-  "user_prompt_submit",
-  "pre_tool",
-  "permission_request",
-  "post_tool",
-  "stop",
-  "pre_compact",
-];
-const triggerKeys: readonly CanonicalTriggerName[] = [
-  "assistant_output",
-  "operation_input",
-  "operation_result",
-  "file_context",
-];
-
+/** Validate a target's identity and require mappings for every canonical hook and trigger. */
 export function defineTarget<const Id extends string>(
   target: TargetDefinition<Id>,
 ): TargetDefinition<Id> {
   if (!isSlug(target.id)) throw new Error(`invalid target id: ${target.id}`);
-  for (const key of hookKeys) {
+  for (const key of canonicalHookTypes) {
     if (!(key in target.mappings.hookEvents))
       throw new Error(`missing hook mapping ${target.id}.${key}`);
   }
-  for (const key of triggerKeys) {
+  for (const key of canonicalTriggerNames) {
     if (!(key in target.mappings.instructionTriggers))
       throw new Error(`missing trigger mapping ${target.id}.${key}`);
   }
   return target;
 }
 
+/** Reject duplicate identities while preserving the definitions' literal types and order. */
 export function defineTargets<const T extends readonly TargetDefinition<string>[]>(defs: T): T {
   const seen = new Set<string>();
   for (const def of defs) {
@@ -258,10 +243,12 @@ export const familySupportFamilies: readonly FamilySupportFamily[] = [
   "hook",
 ];
 
+/** Whether a value identifies a target registered in this process. */
 export function isTargetId(value: unknown): value is TargetId {
   return typeof value === "string" && targetIds.includes(value);
 }
 
+/** Attach an emitter to an existing target; unknown identities are configuration errors. */
 export function registerAdapter<Id extends TargetId>(id: Id, adapter: TargetAdapter<Id>): void {
   const target = targetMap[id];
   if (target === undefined) throw new Error(`unknown target id: ${id}`);

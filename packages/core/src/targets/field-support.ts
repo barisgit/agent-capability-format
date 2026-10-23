@@ -284,7 +284,6 @@ const CLAUDE_CWD_EVIDENCE: CellEvidence = {
   source: `${RESEARCH}/tools/claude-code.md#Runtime verification (claude 2.1.97, 2026-10-08)`,
   hostVersion: "claude 2.1.97",
 };
-/** The `cwd` refusal on both Claude carriers, each proven by its own negative fixture. */
 /** The opt-in real-host test: caplet's plugin ran its stdio server from Claude's install copy. */
 const CLAUDE_END_TO_END_EVIDENCE: CellEvidence = {
   level: "verified",
@@ -292,6 +291,7 @@ const CLAUDE_END_TO_END_EVIDENCE: CellEvidence = {
   hostVersion: "claude 2.1.97",
 };
 
+/** The `cwd` refusal on both Claude carriers, each proven by its own negative fixture. */
 const claudeCwdRefusal: Pick<Row, "claudePlugin" | "claudeLoose"> = {
   claudePlugin: {
     kind: "refused",
@@ -324,7 +324,6 @@ function placeholderRow(
   });
 }
 
-/** Placeholder rows for `cwd`: Claude refuses `cwd` itself, so the placeholder is refused too. */
 /**
  * Cursor documents `cwd` only for plugin MCP servers; its behavior for the loose
  * `.cursor/mcp.json` that caplet writes is unknown, so the functional field is refused
@@ -335,6 +334,7 @@ const cursorCwdRefusal: SupportCell = refused(
   SRC.cursorMcp,
 );
 
+/** Placeholder rows for `cwd`: Claude refuses `cwd` itself, so the placeholder is refused too. */
 function cwdPlaceholderRow(id: string, loose: (source: string) => SupportCell): FieldSupport {
   return field("mcp", id, "functional", {
     ...claudeCwdRefusal,

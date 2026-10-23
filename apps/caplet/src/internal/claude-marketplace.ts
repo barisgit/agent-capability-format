@@ -21,7 +21,7 @@ import {
   sidecarPath,
   writeSidecar,
 } from "../apply/sidecar.js";
-import type { DesiredClaudePlugin } from "../hosts/claude/plan.js";
+import type { DesiredClaudePlugin, DesiredClaudeScope } from "../hosts/claude/plan.js";
 import {
   type ClaudeScopeTarget,
   claudeMarketplaceName,
@@ -64,7 +64,7 @@ export type ClaudeRootPlan = {
    * whether the sidecar remembers their earlier plugin. Other left-over plugins were deselected
    * or removed.
    */
-  retained: { name: string; output: "loose" | "empty"; declaresConfig: boolean }[];
+  retained: NonNullable<DesiredClaudeScope["retained"]>;
 };
 
 /** `<install-root>/.acf/marketplace/.claude-plugin/marketplace.json`. */
@@ -95,22 +95,13 @@ export async function planClaudeMarketplaces(input: {
   const diffs: EmittedDiff[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const { scopeRoot, installRoot } of input.roots) {
-    const file = marketplaceFile(installRoot);
     const sidecar = await readSidecar(sidecarPath(installRoot));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
     const generated = sidecarPlugins(sidecar.managed);
     const { listed, kept } = await listedPlugins(scopeRoot, installRoot, input);
     const keptNames = kept.map((item) => item.capability);
     const leftover = generated.filter((name) => !listed.has(name) && !keptNames.includes(name));
-    // Selection, not ownership history, identifies plugins whose data must be retained.
-    const retained: ClaudeRootPlan["retained"] = [];
-    for (const selected of input.pluginless ?? []) {
-      if (selected.scope !== scopeRoot.scope) continue;
-      const declaresConfig = await declaresUserConfig(
-        pluginPackageDir(installRoot, selected.capability),
-      );
-      retained.push({ name: selected.capability, output: selected.output, declaresConfig });
-    }
+    const retained = await retainedPlugins(scopeRoot, installRoot, input.pluginless ?? []);
     const unused =
       listed.size === 0 && kept.length === 0 && leftover.length === 0 && retained.length === 0;
     if (unused && !owned && sidecar.marketplace === undefined) continue;
@@ -125,20 +116,8 @@ export async function planClaudeMarketplaces(input: {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([plugin, version]) => ({ name: plugin, version }));
     const marketplaceDir = pluginMarketplaceDir(installRoot);
-    for (const item of kept) {
-      if (item.manifestReadable) {
-        if (item.reason === "held") {
-          diagnostics.push(pluginKeptDiagnostic(item, `${item.capability}@${name}`));
-        }
-        continue;
-      }
-      const manifest = path.join(
-        pluginPackageDir(installRoot, item.capability),
-        CLAUDE_PLUGIN_MANIFEST,
-      );
-      diagnostics.push(manifestUnreadableDiagnostic(item, name, manifest));
-    }
-    roots.push({
+    diagnostics.push(...keptPluginDiagnostics(kept, installRoot, name));
+    const root: ClaudeRootPlan = {
       scopeRoot,
       installRoot,
       target,
@@ -149,32 +128,78 @@ export async function planClaudeMarketplaces(input: {
       kept: keptNames,
       leftover,
       retained,
-    });
-    // Retention guards observed host installs even without history, but a refusal alone must
-    // not create a new marketplace or claim an unowned one.
-    if (plugins.length === 0 && !owned && sidecar.marketplace === undefined) continue;
-    const listing = [...plugins, ...keptNames.map((plugin) => ({ name: plugin }))].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    const after = listing.length === 0 ? null : renderMarketplace(name, listing);
-    if (after === null && !owned) continue;
-    diffs.push({
-      scopeRoot,
-      targetId: "claude",
-      destination: "native",
-      installRoot,
-      capabilityName: ACF_SYSTEM_OWNER,
-      carrier: "plugin",
-      diff: {
-        path: file,
-        before: await readTextIfExists(file),
-        after,
-        owns: [{ kind: "file" }],
-        artifactRoot: marketplaceDir,
-      },
-    });
+    };
+    roots.push(root);
+    const diff = await marketplaceDiff(root, owned, sidecar.marketplace !== undefined);
+    if (diff !== undefined) diffs.push(diff);
   }
   return { roots, diffs, diagnostics };
+}
+
+/** Selection, not ownership history, identifies plugins whose data must be retained. */
+async function retainedPlugins(
+  scopeRoot: ScopeRoot,
+  installRoot: string,
+  pluginless: readonly PluginlessClaudeCapability[],
+): Promise<ClaudeRootPlan["retained"]> {
+  const retained = [];
+  for (const selected of pluginless) {
+    if (selected.scope !== scopeRoot.scope) continue;
+    const declaresConfig = await declaresUserConfig(
+      pluginPackageDir(installRoot, selected.capability),
+    );
+    retained.push({ name: selected.capability, output: selected.output, declaresConfig });
+  }
+  return retained;
+}
+
+function keptPluginDiagnostics(
+  kept: readonly KeptPlugin[],
+  installRoot: string,
+  marketplace: string,
+): Diagnostic[] {
+  return kept.flatMap((item) => {
+    if (item.manifestReadable) {
+      return item.reason === "held"
+        ? [pluginKeptDiagnostic(item, `${item.capability}@${marketplace}`)]
+        : [];
+    }
+    const manifest = path.join(
+      pluginPackageDir(installRoot, item.capability),
+      CLAUDE_PLUGIN_MANIFEST,
+    );
+    return [manifestUnreadableDiagnostic(item, marketplace, manifest)];
+  });
+}
+
+/** Retention alone must not create a marketplace or claim an unowned one. */
+async function marketplaceDiff(
+  root: ClaudeRootPlan,
+  owned: boolean,
+  previouslyRecorded: boolean,
+): Promise<EmittedDiff | undefined> {
+  if (root.plugins.length === 0 && !owned && !previouslyRecorded) return undefined;
+  const listing = [...root.plugins, ...root.kept.map((name) => ({ name }))].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const after = listing.length === 0 ? null : renderMarketplace(root.record.name, listing);
+  if (after === null && !owned) return undefined;
+  const file = marketplaceFile(root.installRoot);
+  return {
+    scopeRoot: root.scopeRoot,
+    targetId: "claude",
+    destination: "native",
+    installRoot: root.installRoot,
+    capabilityName: ACF_SYSTEM_OWNER,
+    carrier: "plugin",
+    diff: {
+      path: file,
+      before: await readTextIfExists(file),
+      after,
+      owns: [{ kind: "file" }],
+      artifactRoot: root.marketplaceDir,
+    },
+  };
 }
 
 /**
@@ -317,14 +342,8 @@ function ownsMarketplaceFile(
  * user configuration Claude saves too. A manifest that cannot be read counts as declaring it.
  */
 async function declaresUserConfig(dir: string): Promise<boolean> {
-  const text = await readTextIfExists(path.join(dir, CLAUDE_PLUGIN_MANIFEST));
-  let manifest: unknown;
-  try {
-    manifest = text === null ? undefined : JSON.parse(text);
-  } catch {
-    return true;
-  }
-  if (!isRecord(manifest)) return true;
+  const manifest = await readPluginManifest(dir);
+  if (manifest === undefined) return true;
   const configured = (value: unknown) => isRecord(value) && Object.keys(value).length > 0;
   const channels = Array.isArray(manifest.channels) ? manifest.channels : [];
   const bundles = [manifest.mcpServers]
@@ -339,12 +358,17 @@ async function declaresUserConfig(dir: string): Promise<boolean> {
 
 /** The `version` an existing generated plugin declares, or undefined when there is none. */
 async function installedPluginVersion(dir: string): Promise<string | undefined> {
+  const manifest = await readPluginManifest(dir);
+  return typeof manifest?.version === "string" ? manifest.version : undefined;
+}
+
+/** Missing or malformed manifests have no known fields; filesystem errors still propagate. */
+async function readPluginManifest(dir: string): Promise<Record<string, unknown> | undefined> {
   const text = await readTextIfExists(path.join(dir, CLAUDE_PLUGIN_MANIFEST));
   if (text === null) return undefined;
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) return undefined;
-    return typeof parsed.version === "string" ? parsed.version : undefined;
+    const manifest: unknown = JSON.parse(text);
+    return isRecord(manifest) ? manifest : undefined;
   } catch {
     return undefined;
   }

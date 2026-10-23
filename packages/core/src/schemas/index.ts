@@ -9,16 +9,21 @@ export const slugSchema = z.string().regex(SLUG_PATTERN);
 export const targetIdSchema = slugSchema;
 export const targetsSchema = z.record(z.string(), z.unknown());
 
+function refineOnlyExcept(
+  value: { only?: string[] | undefined; except?: string[] | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.only !== undefined && value.except !== undefined) {
+    ctx.addIssue({ code: "custom", message: "only and except are mutually exclusive", path: [] });
+  }
+}
+
 export const onlyExceptSchema = z
   .object({
     only: z.array(targetIdSchema).optional(),
     except: z.array(targetIdSchema).optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.only !== undefined && value.except !== undefined) {
-      ctx.addIssue({ code: "custom", message: "only and except are mutually exclusive", path: [] });
-    }
-  });
+  .superRefine(refineOnlyExcept);
 
 const withOnlyExcept = <S extends z.ZodRawShape>(shape: S) => z.object(shape).and(onlyExceptSchema);
 
@@ -296,17 +301,7 @@ const capabilitiesDefaultsSchema = z.strictObject({ fetch: fetchDefaultsSchema.o
 
 export const capabilitiesYmlSchema = z.strictObject({
   acf: z.literal(1),
-  capabilities: z.array(
-    capabilityEntrySchema.superRefine((value, ctx) => {
-      if (value.only !== undefined && value.except !== undefined) {
-        ctx.addIssue({
-          code: "custom",
-          message: "only and except are mutually exclusive",
-          path: [],
-        });
-      }
-    }),
-  ),
+  capabilities: z.array(capabilityEntrySchema.superRefine(refineOnlyExcept)),
   defaults: capabilitiesDefaultsSchema.optional(),
 });
 
