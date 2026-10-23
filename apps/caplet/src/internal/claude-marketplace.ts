@@ -64,7 +64,7 @@ export type ClaudeRootPlan = {
    * whether the sidecar remembers their earlier plugin. Other left-over plugins were deselected
    * or removed.
    */
-  retained: NonNullable<DesiredClaudeScope["retained"]>;
+  retained: Array<NonNullable<DesiredClaudeScope["retained"]>[number]>;
 };
 
 /** `<install-root>/.acf/marketplace/.claude-plugin/marketplace.json`. */
@@ -284,8 +284,8 @@ async function listedPlugins(
   const kept: KeptPlugin[] = [];
   for (const item of candidates) {
     if (item.scope !== scopeRoot.scope || listed.has(item.capability)) continue;
-    const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
-    kept.push({ ...item, manifestReadable: version !== undefined });
+    const manifest = await readPluginManifest(pluginPackageDir(installRoot, item.capability));
+    kept.push({ ...item, manifestReadable: typeof manifest?.version === "string" });
   }
   return { listed, kept };
 }
@@ -354,12 +354,6 @@ async function declaresUserConfig(dir: string): Promise<boolean> {
     channels.some((channel) => isRecord(channel) && configured(channel.userConfig)) ||
     bundles
   );
-}
-
-/** The `version` an existing generated plugin declares, or undefined when there is none. */
-async function installedPluginVersion(dir: string): Promise<string | undefined> {
-  const manifest = await readPluginManifest(dir);
-  return typeof manifest?.version === "string" ? manifest.version : undefined;
 }
 
 /** Missing or malformed manifests have no known fields; filesystem errors still propagate. */

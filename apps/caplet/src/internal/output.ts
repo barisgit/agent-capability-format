@@ -3,7 +3,7 @@ import { colors } from "consola/utils";
 import { type ExitCode, readQuiet, readStrict, readVerbose } from "./args.js";
 import { renderCompatibility } from "./compatibility.js";
 import { renderExecutableChanges } from "./executables.js";
-import type { PlanView } from "./plan-view.js";
+import type { PlanAction, PlanView } from "./plan-view.js";
 import { columns, glyphs } from "./render.js";
 import type { ScopedComponentOutcome } from "./workflow.js";
 
@@ -283,7 +283,7 @@ export function renderPlan(view: PlanView, options: { quiet: boolean }): string[
   return lines;
 }
 
-function actionSymbol(action: "create" | "update" | "delete" | "conflict"): string {
+function actionSymbol(action: PlanAction): string {
   if (action === "conflict") return colors.red("conflict");
   if (action === "create") return colors.green("+");
   if (action === "update") return colors.yellow("~");
