@@ -73,6 +73,46 @@ test("failed add relinquishes adopted files before a later apply", async () => {
   }
 });
 
+test("rollback skips an unchanged read-only sidecar and restores later roots", async () => {
+  const scope = await makeScope();
+  const cursor = path.join(scope.cwd, ".cursor");
+  try {
+    await writeText(path.join(scope.agentsDir, "capabilities.yml"), "acf: 1\ncapabilities: []\n");
+    const source = path.join(scope.sourceRoot, "new");
+    await writeText(path.join(source, "acf.yml"), "acf: 1\nname: new\nversion: 1.0.0\n");
+    await writeText(
+      path.join(source, "agents", "helper.md"),
+      "---\nname: helper\ndescription: Helper\nonly: [codex]\n---\nHelp.\n",
+    );
+    await writeText(
+      path.join(source, "instructions", "always.md"),
+      "---\nname: always\ndescription: Always\nactivation:\n  when:\n    file_context:\n      paths: ['**/*.ts']\nonly: [cursor]\n---\nHelp.\n",
+    );
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "cursor,codex", "--json"];
+    expect((await runCaplet(scope, ["add", source, ...args])).exitCode).toBe(0);
+    const adopted = path.join(scope.cwd, ".codex", "agents", "helper.md");
+    const bytes = await readText(adopted);
+    expect((await runCaplet(scope, ["remove", "new", ...args])).exitCode).toBe(0);
+    await writeText(adopted, bytes);
+    const sidecars = [cursor, path.join(scope.cwd, ".codex")].map((root) =>
+      path.join(root, ".acf-managed.json"),
+    );
+    const before = await Promise.all(sidecars.map(readText));
+    await chmod(cursor, 0o555);
+    const failed = await runCaplet(scope, ["add", source, ...args]);
+    expect(failed.exitCode).toBe(1);
+    expect(failed.stderr).toContain("EACCES");
+    expect(failed.stderr).not.toContain("rollback failed");
+    expect(await Promise.all(sidecars.map(readText))).toEqual(before);
+    await chmod(cursor, 0o755);
+    expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
+    expect(await readText(adopted)).toBe(bytes);
+  } finally {
+    await chmod(cursor, 0o755).catch(() => {});
+    await cleanup(scope);
+  }
+});
+
 for (const failure of ["facet collision", "unowned output", "late write failure"] as const) {
   test(`failed add restores manifest, lock and snapshots (${failure})`, async () => {
     const scope = await makeScope();

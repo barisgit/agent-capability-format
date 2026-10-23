@@ -1,9 +1,12 @@
 /** Recoverable installer-state checkpoint for the self-applying `add` command. */
-import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { isErrno, type ScopeRoot } from "@caplet/core";
 import { sidecarPath } from "../apply/sidecar.js";
+import { readBytesIfExists } from "./fs.js";
 import type { ApplicablePlan } from "./workflow.js";
+
+type Checkpoint = { destination: string; backup: string; existed: boolean; ownership: boolean };
 
 /**
  * Restores prior snapshots, lock and ownership when `action` throws or reports failure.
@@ -17,7 +20,7 @@ export async function withInstallerRollback(
 ): Promise<void> {
   await mkdir(root.agentsDir, { recursive: true });
   const backupDir = await mkdtemp(path.join(root.agentsDir, ".acf-add-rollback-"));
-  const checkpoints: Array<{ destination: string; backup: string; existed: boolean }> = [];
+  const checkpoints: Checkpoint[] = [];
   const ownershipPaths = [
     ...new Set([
       ...plan.diffs.map((item) => item.installRoot),
@@ -35,13 +38,18 @@ export async function withInstallerRollback(
     ] as const) {
       const backup = path.join(backupDir, name);
       let existed = true;
+      const ownership = ownershipPaths.includes(destination);
       try {
-        await cp(destination, backup, { recursive: true, preserveTimestamps: true });
+        await cp(destination, backup, {
+          recursive: true,
+          preserveTimestamps: true,
+          dereference: ownership,
+        });
       } catch (error) {
         if (!isErrno(error, "ENOENT")) throw error;
         existed = false;
       }
-      checkpoints.push({ destination, backup, existed });
+      checkpoints.push({ destination, backup, existed, ownership });
     }
     started = true;
     succeeded = await action();
@@ -52,18 +60,28 @@ export async function withInstallerRollback(
 }
 
 /** Leaves backups intact when recovery itself fails, naming them in the propagated error. */
-async function restoreCheckpoints(
-  checkpoints: Array<{ destination: string; backup: string; existed: boolean }>,
-  backupDir: string,
-): Promise<void> {
-  try {
-    for (const checkpoint of checkpoints) {
+async function restoreCheckpoints(checkpoints: Checkpoint[], backupDir: string): Promise<void> {
+  const failures: unknown[] = [];
+  for (const checkpoint of checkpoints) {
+    try {
+      if (checkpoint.ownership) {
+        const before = checkpoint.existed ? await readFile(checkpoint.backup) : null;
+        const current = await readBytesIfExists(checkpoint.destination);
+        // A failed write may leave an unchanged sidecar in an unwritable root.
+        if (before === null ? current === null : current !== null && before.equals(current))
+          continue;
+      }
       await rm(checkpoint.destination, { recursive: true, force: true });
       if (checkpoint.existed) await rename(checkpoint.backup, checkpoint.destination);
+    } catch (error) {
+      // A broken root must not prevent other roots from relinquishing adoptions.
+      failures.push(error);
     }
-  } catch (error) {
-    throw new Error(`installer rollback failed; recover backups from ${backupDir}`, {
-      cause: error,
-    });
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      `installer rollback failed; recover backups from ${backupDir}`,
+    );
   }
 }
