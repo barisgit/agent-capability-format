@@ -524,6 +524,7 @@ function duplicateScopeDiagnostics(
 
 /** Whether the plan leaves `plugin` installed at its scope and the user has not disabled it. */
 function keptEnabled(plugin: PlannedClaudePlugin): boolean {
+  if (plugin.action === "kept") return plugin.observed?.enabled === true;
   const installs = plugin.action === "install" || plugin.action === "update";
   return (installs || plugin.action === "unchanged") && plugin.observed?.enabled !== false;
 }

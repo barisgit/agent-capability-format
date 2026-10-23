@@ -22,8 +22,8 @@ export type DesiredClaudeScope = {
    */
   recorded?: boolean | undefined;
   /**
-   * Plugins of still-selected capabilities that stay exactly as installed although caplet cannot
-   * list them with a version (`ClaudeRootPlan.kept`). No command touches them, and the
+   * Plugins of still-selected held or refused capabilities that stay exactly as installed
+   * (`ClaudeRootPlan.kept`), regardless of their generated version. No command touches them, and the
    * marketplace is not removed while there is one, since `marketplace remove` uninstalls them.
    */
   kept?: readonly string[] | undefined;
@@ -33,7 +33,8 @@ export type DesiredClaudeScope = {
    */
   leftover?: string[] | undefined;
   /**
-   * Left-over plugins whose capability the scope still selects for Claude, now without a plugin:
+   * Capabilities the scope still selects for Claude, now without a plugin, even when the sidecar
+   * no longer records their earlier plugin:
    * `output` `loose` when it writes loose Claude files instead (a carrier change), `empty` when
    * nothing of it reaches Claude. Their uninstall keeps what Claude saved for them
    * (`--keep-data`). `declaresConfig`: the plugin's manifest declares configuration Claude

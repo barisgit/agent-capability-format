@@ -2981,13 +2981,18 @@ installed and the warning `acf.claude.uninstall-held` gives the command to
 run by hand, `claude plugin uninstall <id> --scope <scope> --keep-data`.
 Until then Claude loads the capability twice, from the plugin and the loose
 files (or keeps loading the installed plugin when nothing of it is left).
+Still-selected identities come from the scope's selection, not its ownership
+sidecar. Missing ownership records never authorize a data-deleting uninstall;
+when the generated manifest cannot rule out saved configuration, keep the plugin.
 A capability whose reader left out an invalid component
 (`acf.source.component-invalid`) and of which nothing else reaches Claude
 keeps its installed plugin and files as they are, with the warning
 `acf.claude.plugin-kept`: an invalid value is no deselection. Caplet never
 uninstalls the plugin of such a capability, or of one a refusal blocks on
-Claude, and never removes its marketplace, also when it cannot read the
-plugin's version from the generated manifest (missing, unreadable, or
+Claude, never installs or updates it (even if the generated version differs
+from Claude's copy or Claude has no copy), and never removes its marketplace,
+also when it cannot read the plugin's version from the generated manifest
+(missing, unreadable, or
 without `version`); it then warns with `acf.claude.manifest-unreadable`.
 
 The Claude plugin carrier holds skills, MCP servers, Claude native
