@@ -22,8 +22,8 @@ export type DesiredClaudeScope = {
    */
   recorded?: boolean | undefined;
   /**
-   * Plugins of still-selected capabilities that stay exactly as installed although caplet cannot
-   * list them with a version (`ClaudeRootPlan.kept`). No command touches them, and the
+   * Plugins of still-selected held or refused capabilities that stay exactly as installed
+   * (`ClaudeRootPlan.kept`), regardless of their generated version. No command touches them, and the
    * marketplace is not removed while there is one, since `marketplace remove` uninstalls them.
    */
   kept?: readonly string[] | undefined;

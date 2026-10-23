@@ -2989,8 +2989,10 @@ A capability whose reader left out an invalid component
 keeps its installed plugin and files as they are, with the warning
 `acf.claude.plugin-kept`: an invalid value is no deselection. Caplet never
 uninstalls the plugin of such a capability, or of one a refusal blocks on
-Claude, and never removes its marketplace, also when it cannot read the
-plugin's version from the generated manifest (missing, unreadable, or
+Claude, never installs or updates it (even if the generated version differs
+from Claude's copy or Claude has no copy), and never removes its marketplace,
+also when it cannot read the plugin's version from the generated manifest
+(missing, unreadable, or
 without `version`); it then warns with `acf.claude.manifest-unreadable`.
 
 The Claude plugin carrier holds skills, MCP servers, Claude native

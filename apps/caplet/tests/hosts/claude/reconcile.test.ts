@@ -259,6 +259,34 @@ describe("reconcileClaudeHost with the fake Claude CLI", () => {
       expect(codes(report)).toEqual([["acf.claude.duplicate-scope", "warn"]]);
     });
 
+    for (const enabled of [true, false]) {
+      test(`a kept project plugin warns about the user copy only when enabled (${enabled})`, async () => {
+        const project = projectScope([]);
+        const fake = userFake([
+          {
+            fixture: "list-json-project-and-local",
+            replace: {
+              "probe@acf-project-spike": "probe@acf-user",
+              '"scope": "project"': '"scope": "user"',
+              "acf-project-spike": claudeMarketplaceName(project.target),
+              local1: "probe",
+              "<PROJECT>": projectRoot(),
+              '"scope": "local",\n    "enabled": true': `"scope": "local",\n    "enabled": ${enabled}`,
+            },
+          },
+          "marketplace-list-json",
+        ]);
+        const report = await reconcileClaudeHost(host(fake.cli), [{ ...project, kept: ["probe"] }]);
+        expect(commandLines(fake.calls)).toEqual([
+          "claude plugin list --json",
+          "claude plugin marketplace list --json",
+        ]);
+        expect(report.diagnostics.some((item) => item.code === "acf.claude.duplicate-scope")).toBe(
+          enabled,
+        );
+      });
+    }
+
     test("no warning when the user disabled the user plugin", async () => {
       const fake = userFake(["list-json-disabled", "marketplace-list-json"]);
       const report = await previewClaudeHost(host(fake.cli), [projectScope(probe)]);

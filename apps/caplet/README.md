@@ -31,7 +31,8 @@ it. Still-selected identities come from the selection even if ownership records 
 When a still-selected capability no longer needs its plugin but Claude would delete saved
 options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`). Claude keeps loading it
 until you run `claude plugin uninstall <id> --scope <scope> --keep-data`, so a capability that
-moved to loose files loads twice meanwhile.
+moved to loose files loads twice meanwhile. Held or refused plugins stay exactly as installed:
+caplet neither installs a missing host copy nor updates a differing version.
 
 An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
 left out for every target with the warning `acf.source.component-invalid`.

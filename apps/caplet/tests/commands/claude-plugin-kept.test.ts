@@ -116,7 +116,6 @@ test("apply keeps the installed plugin of an imported skill its reader now leave
   const host = await claudeScenarioShim(scope, "user", "fast", [
     atVersion("list-json-installed", version),
     "marketplace-list-json",
-    "marketplace-add-already-known",
   ]);
   const result = await runCaplet(scope, [...args, "--json"], host.env);
   const json = JSON.parse(result.stdout) as { diagnostics: Diagnostic[] };
@@ -125,7 +124,6 @@ test("apply keeps the installed plugin of an imported skill its reader now leave
   expect(await host.calls()).toEqual([
     "claude plugin list --json",
     "claude plugin marketplace list --json",
-    `claude plugin marketplace add ${claudeMarketplaceDir(scope, "user")} --scope user`,
   ]);
   expect(json.diagnostics.map((d) => [d.severity, d.code])).toEqual([
     ["warn", "acf.source.component-invalid"],
@@ -137,6 +135,28 @@ test("apply keeps the installed plugin of an imported skill its reader now leave
   expect(kept?.message).toContain("`caplet remove fast --scope user`");
   expect(existsSync(installed)).toBe(true);
 });
+
+for (const kind of ["held", "refused"] as const) {
+  for (const installed of [false, true]) {
+    test(`apply leaves a ${kind} plugin exactly as installed with a readable manifest (installed: ${installed})`, async () => {
+      const { scope, args } = await (kind === "held" ? heldFast() : refusedFilesKit());
+      const name = kind === "held" ? "fast" : "files-kit";
+      const host = await claudeScenarioShim(scope, "user", name, [
+        installed ? atVersion("list-json-installed", "0.0.1+acf.old") : "list-json-empty",
+        "marketplace-list-json",
+        "marketplace-add-already-known",
+      ]);
+      const result = await runCaplet(scope, [...args, "--json"], host.env);
+
+      expect(result.exitCode).toBe(kind === "refused" ? 2 : 0);
+      expect(await host.calls()).toEqual([
+        "claude plugin list --json",
+        "claude plugin marketplace list --json",
+      ]);
+      expect(await host.unexpected()).toEqual([]);
+    });
+  }
+}
 
 for (const [state, damage] of unreadable) {
   test(`apply keeps a held plugin and its marketplace when its generated manifest is ${state}`, async () => {

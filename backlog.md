@@ -228,9 +228,10 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Correctness
 
+- **Claude retention manifest I/O errors abort planning.** `apps/caplet/src/internal/claude-marketplace.ts` `installedPluginVersion` and `declaresUserConfig` call `readTextIfExists` outside their JSON parse catches. That helper handles only `ENOENT`, so filesystem errors such as `EACCES` or `EISDIR` abort apply instead of conservatively retaining a selected plugin. Separate from the lost-sidecar and refused-update fixes; needs an I/O-failure regression and a bounded unreadable-manifest policy.
+
 - **The opt-in real-host test guards only `<real home>/.claude`.** `apps/caplet/tests/hosts/claude/real-host.test.ts`: a user whose real Claude config lives under their own `CLAUDE_CONFIG_DIR` is not covered, because `scripts/test-home.ts` overwrites that variable. Pass the original value through like `CAPLET_REAL_HOME`.
 - **Local Bun 1.4.2 vs `packageManager: bun@1.3.12`** in the root `package.json`; the home-isolation behaviour (`os.homedir()` fixed at start) was confirmed on 1.4.2 only.
-- **A held or refused plugin with a readable version is still reinstalled or updated** when Claude's copy is missing or differs (`claude-marketplace.ts` `listedPlugins`). Arguably it should stay exactly as installed.
 - **Same-name Claude plugin components in different folders share one outcome row.** `packages/core/src/targets/plugin-layout.ts` `perFileComponentName`: agents, commands and output styles keep Claude's basename name, so `agents/a/x.md` and `agents/b/x.md` are both `x` in outcome rows (workflows and `bin` entries are path-named since e3f971b). Also `targets.claude.native.workflows: .` resolves to `native/claude/.` and matches no snapshot file (`emit/plugin-executables.ts`, `emit/snapshot.ts` `layeredPath`).
 - **Caplet files in a source tree can reach a Claude plugin.** `packages/adapters/src/claude/plugin.ts`: plugin copies exclude `acf.yml` and `.acf-import.json` but not a sidecar `.acf-managed.json` or `ACF-MANAGED.md` that a source tree happens to contain (the unchanged-plugin copy in particular). Suspected fix: one caplet-owned file list in core used by every plugin copy.
 
