@@ -2557,7 +2557,9 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   `capabilities.yml` no longer declares is a disagreement too. A selected locked
   snapshot that is absent or not a directory MUST produce the error
   `acf.lock.snapshot-missing`; existing output and ownership MUST remain intact.
-  An unusable present snapshot MUST likewise fail before emission.
+  An unusable present snapshot (including an empty directory, unreadable or missing
+  manifest, or synthesized skill snapshot without its skills) MUST likewise fail
+  before emission, even when a legacy lock omits per-capability integrity records.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
   diagnostic is present. Every fetch it makes MUST be a restore from the recorded `resolvedSha` (§19.4), so it
   never installs content the lock does not describe.

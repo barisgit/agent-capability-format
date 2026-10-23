@@ -1,7 +1,67 @@
 import { expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { cleanup, makeScope, readText, runCaplet } from "../helpers";
+import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+
+for (const legacy of [true, false]) {
+  for (const damage of ["empty", "unreadable manifest", "missing skills"] as const) {
+    test(`offline apply preserves outputs for ${legacy ? "legacy" : "current"} locks with ${damage}`, async () => {
+      const scope = await makeScope();
+      try {
+        if (damage === "missing skills") {
+          await writeText(
+            path.join(scope.sourceRoot, "bare", "SKILL.md"),
+            "---\nname: bare\ndescription: Bare skill\n---\nUse it.\n",
+          );
+          await writeText(
+            path.join(scope.agentsDir, "capabilities.yml"),
+            `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, "bare")}\n`,
+          );
+        }
+        const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude", "--json"];
+        expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
+        const sidecar = path.join(scope.cwd, ".claude", ".acf-managed.json");
+        const ownership = await readText(sidecar);
+        const managed = (JSON.parse(ownership) as { managed: Array<{ path: string }> }).managed;
+        const outputs = await Promise.all(
+          managed.map(async (item) => {
+            const file = path.join(scope.cwd, ".claude", item.path);
+            return { file, text: await readText(file) };
+          }),
+        );
+        const lockPath = path.join(scope.agentsDir, "capabilities.lock");
+        if (legacy) {
+          const lock = JSON.parse(await readText(lockPath)) as {
+            entries: Array<{ resolvedCapabilities?: unknown }>;
+          };
+          for (const entry of lock.entries) delete entry.resolvedCapabilities;
+          await writeText(lockPath, JSON.stringify(lock));
+        }
+        const lockBefore = await readText(lockPath);
+        const snapshot = path.join(
+          scope.agentsDir,
+          "capabilities",
+          damage === "missing skills" ? "bare" : "beta-cap",
+        );
+        if (damage === "empty") {
+          await rm(snapshot, { recursive: true });
+          await mkdir(snapshot);
+        } else if (damage === "unreadable manifest") {
+          await rm(path.join(snapshot, "acf.yml"));
+          await mkdir(path.join(snapshot, "acf.yml"));
+        } else await rm(path.join(snapshot, "skills"), { recursive: true });
+        const result = await runCaplet(scope, ["apply", "--offline", ...args]);
+        expect(result.exitCode).toBe(2);
+        expect(result.stdout).toContain("acf.lock.snapshot-missing");
+        expect(await readText(sidecar)).toBe(ownership);
+        expect(await readText(lockPath)).toBe(lockBefore);
+        for (const output of outputs) expect(await readText(output.file)).toBe(output.text);
+      } finally {
+        await cleanup(scope);
+      }
+    });
+  }
+}
 
 test("offline apply preserves output and ownership when a locked snapshot is missing", async () => {
   const scope = await makeScope();

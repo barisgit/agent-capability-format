@@ -2453,7 +2453,7 @@ acf.source.component-invalid                 # invalid foreign or bare imported 
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
-acf.lock.snapshot-missing                    # locked snapshot absent or not a directory offline (error)
+acf.lock.snapshot-missing                    # locked snapshot absent, unreadable or unusable (error)
 
 # Selection
 acf.selection.unmatched                      # selector matches nothing (warn)
@@ -2895,8 +2895,11 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
 - `-n/--dry-run` prints the change plan without writing files or the
   lockfile. `--offline` never fetches and uses the lockfile as-is; absent or
   non-directory locked snapshots report `acf.lock.snapshot-missing` and block
-  writes, preserving output and ownership. Unusable present snapshots also fail
-  validation before emission. `--frozen`
+  writes, preserving output and ownership. Empty or unreadable snapshots, missing
+  manifests, and synthesized snapshots without skills also report this error before
+  emission, including legacy locks without `resolvedCapabilities`. Present damaged
+  snapshots are never silently restored: delete them before requesting a restore.
+  `--frozen`
   exits 3 without fetching or writing when the lockfile is stale. A plan
   that deletes files asks for confirmation on a TTY unless `--yes` or
   `--json` is set. Removing a capability's regions from a shared file (a

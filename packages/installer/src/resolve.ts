@@ -11,7 +11,7 @@ import {
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
 import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
-import type { SourceInventory } from "./inventory.js";
+import { inspectSource, type SourceInventory } from "./inventory.js";
 import {
   type CapabilitiesLock,
   cacheKeyFor,
@@ -278,15 +278,13 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
   }
   if (!(await fetchNeeded(context, paired))) {
     const missing =
-      context.opts.mode === "never" && locked !== undefined
-        ? await missingSnapshots(locked, capabilitiesDir)
-        : new Set<string>();
+      locked !== undefined ? await unusableSnapshots(locked, capabilitiesDir) : new Set<string>();
     const diagnostics: Diagnostic[] = [...missing].map((name) => ({
       severity: "error",
       code: "acf.lock.snapshot-missing",
       capability: { name },
       path: capabilityPath(capabilitiesDir, name),
-      message: `capability ${name}: locked snapshot is missing or is not a directory; run apply without --offline to restore it; existing outputs are preserved`,
+      message: `capability ${name}: locked snapshot is missing, unreadable or unusable; delete an unusable snapshot and run apply without --offline to restore it; existing outputs are preserved`,
     }));
     return {
       records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),
@@ -521,6 +519,41 @@ async function missingSnapshots(
     }
   }
   return missing;
+}
+
+/**
+ * Present snapshots must still load, even when a legacy lock has no per-capability digest.
+ * Do not treat an empty discovery as an intentional removal and sweep its generated outputs.
+ * This is separate from restore eligibility: never silently overwrite a damaged present tree.
+ */
+async function unusableSnapshots(entry: LockEntry, capabilitiesDir: string): Promise<Set<string>> {
+  const unusable = await missingSnapshots(entry, capabilitiesDir);
+  for (const name of entry.capabilityNames) {
+    if (unusable.has(name)) continue;
+    const record = entry.resolvedCapabilities?.find((item) => item.name === name);
+    const format = record?.format ?? entry.format ?? (entry.synthesized ? "skills" : "acf");
+    const formats = format === "skills" ? (["acf", "skills"] as const) : [format];
+    try {
+      for (const snapshotFormat of formats) {
+        const inventory = await inspectSource(capabilityPath(capabilitiesDir, name), {
+          format: snapshotFormat,
+          rename: name,
+          revision: entry.resolvedSha,
+        });
+        if (
+          inventory.candidates.length === 0 ||
+          inventory.diagnostics.some((item) => item.severity === "error")
+        ) {
+          unusable.add(name);
+          break;
+        }
+      }
+    } catch {
+      // Filesystem failures mean the locked capability cannot safely drive emission.
+      unusable.add(name);
+    }
+  }
+  return unusable;
 }
 
 /**
