@@ -32,6 +32,7 @@ import { readCwd, readScope } from "./args.js";
 import { gateClaudeChanges } from "./claude-gates.js";
 import { planClaudeMarketplaces } from "./claude-marketplace.js";
 import { type ClaudeRetention, planClaudeRetention } from "./claude-retention.js";
+import { emissionSources } from "./emission-sources.js";
 import { diskReadOnlyFs } from "./fs.js";
 import { addManagementNotices } from "./managed-notices.js";
 import { withholdConflictingMcpServers } from "./mcp-conflicts.js";
@@ -72,7 +73,13 @@ export async function buildEmitPlan(
   const config = configResult.config;
   const scopes = await resolveScopeRoots(readScope(args), cwd, configResult.diagnostics);
   const targets = targetSelection(args, config);
-  const context: PlanContext = { cwd, config, targets, fs: diskReadOnlyFs() };
+  const context: PlanContext = {
+    cwd,
+    config,
+    targets,
+    fs: diskReadOnlyFs(),
+    capabilitiesDirs: opts?.capabilitiesDirs,
+  };
   const state: PlanState = {
     diagnostics: [...configResult.diagnostics],
     desiredDiffs: [],
@@ -214,6 +221,8 @@ type PlanContext = {
   config: CapletConfig;
   targets: readonly TargetId[];
   fs: ReadOnlyFs;
+  /** Disposable source locations, used only at the adapter emission seam. */
+  capabilitiesDirs?: ReadonlyMap<string, string> | undefined;
 };
 
 /** What planning collects across scopes before the sweep and the notices settle the plan. */
@@ -362,8 +371,14 @@ function memoizedEmitter(
     const key = [targetId, capability.manifest.name, ...blockedSkillReaders].join("\0");
     let emission = emissions.get(key);
     if (emission === undefined) {
-      emission = emitCapability(adapter, context.fs, {
+      const sources = emissionSources(
         capability,
+        context.fs,
+        context.capabilitiesDirs?.get(scopeRoot.scope),
+        scopeRoot.capabilitiesDir,
+      );
+      emission = emitCapability(adapter, sources.fs, {
+        capability: sources.capability,
         scope: scopeRoot.scope,
         installRoot,
         options: emitOptionsForTarget(

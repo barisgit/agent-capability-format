@@ -115,12 +115,19 @@ test("offline apply preserves output and ownership when a locked snapshot is mis
 test("a frozen dry run plans a missing snapshot restore without changing installed state", async () => {
   const scope = await makeScope();
   try {
+    await writeText(
+      path.join(scope.sourceRoot, "beta", "mcp", "mcp.yml"),
+      `servers:\n  - name: beta-server\n    transport: stdio\n    command: node\n    args: ["${"$"}{ACF_CAPABILITY_DIR}/server.js"]\n`,
+    );
     const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude", "--json"];
     expect((await runCaplet(scope, ["apply", ...args])).exitCode).toBe(0);
     const lock = path.join(scope.agentsDir, "capabilities.lock");
     const sidecar = path.join(scope.cwd, ".claude", ".acf-managed.json");
     const before = { lock: await readText(lock), sidecar: await readText(sidecar) };
     const snapshot = path.join(scope.agentsDir, "capabilities", "beta-cap");
+    const unchanged = await runCaplet(scope, ["apply", "--frozen", "--dry-run", ...args]);
+    expect(unchanged.exitCode).toBe(0);
+    expect(JSON.parse(unchanged.stdout).plan.fileCount).toBe(0);
     await rm(snapshot, { recursive: true });
     const preview = await runCaplet(scope, ["apply", "--frozen", "--dry-run", ...args]);
     expect(preview.exitCode).toBe(0);

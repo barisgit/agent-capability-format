@@ -2898,7 +2898,11 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
 - `-n/--dry-run` prints the change plan without writing installed snapshots,
   native files or the lockfile. It resolves into disposable snapshots, including
   any locked restore a real `--frozen` apply would perform, so its emission plan
-  reflects the restored content rather than proposing deletions. `--offline` never fetches and uses the lockfile as-is; absent or
+  reflects the restored content rather than proposing deletions. At the adapter
+  emission seam, `emission-sources.ts` presents final snapshot paths with filesystem
+  reads redirected to disposable storage; MCP placeholders and relative working
+  directories therefore resolve exactly as in a real apply. Executable inventories
+  continue reading the physical snapshot. `--offline` never fetches and uses the lockfile as-is; absent or
   non-directory locked snapshots report `acf.lock.snapshot-missing` and block
   writes, preserving output and ownership. Empty or unreadable snapshots, missing
   root manifests (even when nested examples have manifests), and synthesized
