@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type CapabilityEntry,
   CREDENTIAL_IN_URL,
+  isErrno,
   type SourceSpec,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
@@ -101,10 +102,19 @@ async function fetchGitCapability(
   };
 }
 
-/** Invalid input selecting a path outside its declared source boundary. */
+/** Invalid selected source path: absent, not traversable, or outside its source boundary. */
 export class SourcePathError extends Error {
-  readonly code = "acf.source.path-escape";
   readonly exitCode = 2;
+
+  constructor(
+    message: string,
+    readonly code:
+      | "acf.source.path-escape"
+      | "acf.resolve.no-capabilities" = "acf.source.path-escape",
+    readonly path?: string,
+  ) {
+    super(message);
+  }
 }
 
 function gitUrl(source: Extract<SourceSpec, { kind: "github" | "git" }>): string {
@@ -133,8 +143,18 @@ async function resolveEntryPath(root: string, entryPath: string | undefined): Pr
     throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
   }
   // Lexical containment alone does not constrain a selected symlink's destination.
-  const realRoot = await realpath(resolvedRoot);
-  const realSelected = await realpath(resolved);
+  let realRoot: string;
+  let realSelected: string;
+  try {
+    [realRoot, realSelected] = await Promise.all([realpath(resolvedRoot), realpath(resolved)]);
+  } catch (error) {
+    if (!isErrno(error, "ENOENT") && !isErrno(error, "ENOTDIR")) throw error;
+    throw new SourcePathError(
+      `no capabilities at selected source path ${resolved}: path is missing or not a directory`,
+      "acf.resolve.no-capabilities",
+      resolved,
+    );
+  }
   const realRelative = path.relative(realRoot, realSelected);
   if (
     realRelative === ".." ||

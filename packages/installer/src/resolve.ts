@@ -309,7 +309,9 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
     return {
       records: [],
       lockEntry: locked,
-      diagnostics: [{ severity: "error", code: error.code, message: error.message }],
+      diagnostics: [
+        { severity: "error", code: error.code, message: error.message, path: error.path },
+      ],
       fetched: false,
       failed: true,
     };
