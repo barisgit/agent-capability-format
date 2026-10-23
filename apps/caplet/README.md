@@ -25,18 +25,38 @@ caplet                                        # status summary
 caplet check --frozen --strict                # CI: fail on stale or lossy output
 ```
 
+`caplet --help` lists every command; `caplet <command> --help` shows its flags.
+
+Every command supports `--json`. `init` reports the manifest path and whether
+it was created; `completion` returns the shell script inside the JSON envelope.
+
+### Validation and CI
+
 `check` exits 0 with no errors, 1 for stale outputs, 2 for errors (including
 missing lock entries), or 3 for stale locks with `--frozen`. Preserved edited
 artifacts needing manual cleanup keep exit 0, with a warning rather than a clean result.
 
-Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
+Native manifests reject unknown top-level keys and invalid SemVer 2.0.0 versions.
+Unknown `only`/`except` target ids in `acf.yml` or `capabilities.yml` are errors,
+with did-you-mean hints for typos; non-core Markdown frontmatter stays permissive.
+
+### Claude plugins
+
+Claude defaults to plugins for skills, MCP servers, and Claude-native content.
+ACF capabilities with agents, commands, hooks, or instructions stay loose as a whole.
+Set `targets.claude.carrier: loose` in `caplet.yml` to use loose files instead.
+
+Deselecting a capability or `caplet remove`
 uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
 it. Still-selected identities come from the selection even if ownership records are lost.
 When a still-selected capability no longer needs its plugin but Claude would delete saved
 options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`). Claude keeps loading it
 until you run `claude plugin uninstall <id> --scope <scope> --keep-data`, so a capability that
-moved to loose files loads twice meanwhile. Held or refused plugins stay exactly as installed:
+moved to loose files loads twice meanwhile. A capability whose only Claude content was
+left out as invalid, or which a refusal blocks on Claude, keeps its plugin exactly as installed:
 caplet neither installs a missing host copy nor updates a differing version.
+
+### Supported content
 
 An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
 left out for every target with the warning `acf.source.component-invalid`.
@@ -50,12 +70,7 @@ restricting effects to `observe`. Foreign Claude-plugin hooks stay unchanged ins
 Claude plugins. Native writers remain in `claude-loose-hooks-repair` and the Codex
 hooks backlog item.
 
-Native manifests reject unknown top-level keys and invalid SemVer 2.0.0 versions.
-Unknown `only`/`except` target ids in `acf.yml` or `capabilities.yml` are errors,
-with did-you-mean hints for typos; non-core Markdown frontmatter stays permissive.
-
-Every command supports `--json`. `init` reports the manifest path and whether
-it was created; `completion` returns the shell script inside the JSON envelope.
+### Sources and safe mutation
 
 Local `path:` sources can name a capability, a collection's parent, or its
 `acf/` directory directly. Collection selectors are relative to `acf/`.
@@ -69,8 +84,6 @@ delete. Restore a lost sidecar or lock from backup to recover its ownership.
 
 `apply --offline` never fetches. A missing or unusable locked snapshot fails without
 removing its output or ownership; run `apply` online to restore a missing snapshot.
-
-`caplet --help` lists every command; `caplet <command> --help` shows its flags.
 
 ## License
 

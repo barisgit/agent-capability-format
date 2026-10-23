@@ -1139,13 +1139,6 @@ Implementations MUST count turns this way. Hosts that cannot distinguish
 these categories MUST count any of (1)-(3) as a single increment and
 emit `acf.runtime.turn-granularity` at severity `lossy` once per session.
 
-A turn is one of:
-
-- a user message,
-- an assistant output,
-- an operation turn (a single operation or a single batch of parallel
-  operations).
-
 ### 12.12 Trigger combinations
 
 An instruction MAY declare multiple trigger names under `activation.when`.
@@ -2039,9 +2032,7 @@ Implementations MUST follow this namespace convention:
 | `acf.assets.*`                       | Asset reference resolution.                      |
 | `acf.resolve.*`                      | Resolver / `capabilities.yml` validation.        |
 | `acf.capabilities-yml.*`             | Resolver source spec validation.                 |
-| `acf.lock.snapshot-missing`          | Locked snapshot absent or unusable offline (error); preserve outputs and restore online. |
 | `acf.lock.*`                         | Lockfile validation.                             |
-| `acf.apply.unowned`                  | Unowned output or capability directory conflicts with desired content (error); move or delete the named path. |
 | `acf.emit.*`                         | Emission orchestrator and diff application.      |
 | `acf.adapter.*`                      | Adapter-specific degradation diagnostics.        |
 | `acf.cli.*`                          | CLI-host reported diagnostics.                   |
@@ -2059,10 +2050,10 @@ Implementations MUST follow this namespace convention:
 
 Cross-capability naming diagnostics and recovery are defined in §17.5–§17.6.
 
-The authoritative code list (with severity, phase, trigger, source.path,
-and recovery columns) is maintained in `IMPLEMENTATION.md` §11.2 as the
-reader conformance matrix. Implementations MUST emit codes from that
-matrix; they MAY emit additional, more specific codes under these
+The authoritative code catalog is maintained in `IMPLEMENTATION.md` §11.2.
+Severity and recovery rules accompany the requirements in this specification.
+Implementations MUST emit codes from that catalog; they MAY emit additional,
+more specific codes under these
 namespaces; they MUST NOT collapse listed codes into broader ones.
 
 ### 14.7 Visible management notices

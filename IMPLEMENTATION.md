@@ -32,7 +32,7 @@ agent-capability-format/
     adapters/             # per-target emit functions + shared file utilities
     installer/            # git + network fetch (capabilities.yml resolution, lockfile writes)
     sdk/                  # convenience helpers for direct consumers; re-exports core + adapters + installer
-    runtime-taxonomy/     # reserved; may move to a sibling repo later
+    runtime-taxonomy/     # v1 identifiers; broader taxonomy may move to a sibling repo
   openspec/               # change proposals and capability specs
     changes/
     specs/
@@ -54,9 +54,8 @@ splits:
   for the convenience API (`getSkills`, `getFacets`, auto-fetch).
 
 Turborepo convention: `apps/` for runnable end-user binaries, `packages/` for
-libraries. `runtime-taxonomy/` is a stub placeholder; if the taxonomy
-graduates to its own repo (likely), this package either re-exports it or is
-removed.
+libraries. `runtime-taxonomy/` holds v1 identifiers; if the broader taxonomy
+graduates to its own repo, this package can re-export it.
 
 This repo uses **OpenSpec** (`openspec/`) for change proposals and capability
 specs instead of ADRs. Hard decisions live in OpenSpec change artifacts;
@@ -174,19 +173,19 @@ import. Strict tools (CI linter, browser validator) import `@caplet/core` only.
 
 ### packages/runtime-taxonomy
 
-Reserved. The runtime taxonomy / registry intentionally lives outside the
+The broader runtime taxonomy / registry is deferred outside the
 normative specification (`SPEC.md` §14.5, §24). The provisional operation set
-(`SPEC.md` §24) is part of `acf: 1` and lives in `@caplet/core` as a frozen
-constant, not in this package. When this package becomes real, it owns:
+(`SPEC.md` §24), canonical hook types, and canonical trigger names are
+implemented here and re-exported by `@caplet/core`. A future expanded taxonomy owns:
 
 - canonical operation identifiers (full list, semantics, target mappings),
 - canonical event identifiers,
 - permission and message-surface vocabularies,
 - per-target mappings beyond what the adapter registry needs.
 
-Until then, ACF references operation/event/permission identifiers as opaque
-slug strings validated only for shape against the `SPEC.md` §24 set; adapters
-validate semantic mapping into their host.
+Current operation validation uses the `SPEC.md` §24 set; adapters validate
+semantic mapping into their host. Broader permission and message-surface
+vocabularies remain deferred.
 
 ## 2. Tooling assumptions
 
@@ -767,8 +766,8 @@ per-target extension schemas. It uses the definition-first pattern.
 export type SupportLevel = "full" | "partial" | "none"
 
 export type InstallPaths = {
-  // Each value MUST be either an absolute path string (with `~` expanded by
-  // the adapter consumer) or `null` if the target does not support that scope.
+  // Absolute for user paths, relative to the selected project for project paths;
+  // null when the target does not support that scope.
   user: string | null
   project: string | null
 }
@@ -811,12 +810,12 @@ export type TargetDefinition<Id extends string> = {
     mcp?: Schema
   }
 
-  adapter: TargetAdapter<Id>
+  adapter?: TargetAdapter<Id>          // attached later by registerAdapter
 }
 ```
 
-`Schema` is whatever validator library is chosen (Zod / Valibot / TypeBox). The
-registry treats it opaquely; the validation layer (§5.3) calls into it.
+`Schema` is `ZodType<unknown>` in the implementation. The validation layer
+(§5.3) calls the registry's per-family schemas.
 
 ### 4.2 Adapter contract
 
@@ -1061,235 +1060,14 @@ Generated Claude plugin packages get no notice files: the package digest and
 version must depend only on package content (SPEC §14.7). The install-root
 inventory lists plugin directories and the marketplace instead.
 
-### 4.3 Registry sketch
+### 4.3 Built-in definitions
 
-```ts
-import { homedir } from "node:os"
-
-const HOME = homedir()
-
-export const targets = defineTargets([
-  defineTarget({
-    id: "claude",
-    displayName: "Claude Code",
-
-    support: {
-      agent: "full",
-      command: "full",
-      instruction: "partial",
-      hook: "none",
-    },
-
-    installPaths: {
-      user:    `${HOME}/.claude`,
-      project: `./.claude`,
-    },
-
-    skillInstallPaths: {
-      user:    `${HOME}/.claude/skills`,
-      project: `./.claude/skills`,
-    },
-
-    mappings: {
-      hookEvents: {
-        session_start:      ["SessionStart"],
-        user_prompt_submit: ["UserPromptSubmit"],
-        pre_tool:           ["PreToolUse"],
-        permission_request: ["PreToolUse"],   // approximated via PreToolUse + decision
-        post_tool:          ["PostToolUse"],
-        stop:               ["Stop"],
-        pre_compact:        ["PreCompact"],
-      },
-      instructionTriggers: {
-        assistant_output: "none",
-        operation_input:  "none",
-        operation_result: "none",
-        file_context:     "partial",          // via path-globbed CLAUDE.md
-      },
-      mcpInstallPath: {
-        user:    `${HOME}/.claude/mcp.json`,
-        project: `./.mcp.json`,
-      },
-    },
-
-    extensions: commonTargetExtensionSchemas,
-
-    adapter: claudeAdapter,
-  }),
-
-  defineTarget({
-    id: "codex",
-    displayName: "Codex",
-
-    support: {
-      agent: "full",
-      command: "partial",
-      instruction: "none",
-      hook: "none",
-    },
-
-    installPaths: {
-      user:    `${HOME}/.codex`,
-      project: null,                         // Codex has no per-project scope today
-    },
-
-    skillInstallPaths: {
-      user:    `${HOME}/.codex/skills`,
-      project: `./.codex/skills`,
-    },
-
-    mappings: {
-      hookEvents: {
-        session_start:      ["SessionStart"],
-        user_prompt_submit: ["UserPromptSubmit"],
-        pre_tool:           ["PreToolUse"],
-        permission_request: ["PermissionRequest"],
-        post_tool:          ["PostToolUse"],
-        stop:               ["Stop"],
-        pre_compact:        [],              // unsupported
-      },
-      instructionTriggers: {
-        assistant_output: "none",
-        operation_input:  "none",
-        operation_result: "none",
-        file_context:     "none",
-      },
-      mcpInstallPath: {
-        user:    `${HOME}/.codex/config.toml`,
-        project: `./.codex/config.toml`,
-      },
-    },
-
-    extensions: commonTargetExtensionSchemas,
-
-    adapter: codexAdapter,
-  }),
-
-  defineTarget({
-    id: "opencode",
-    displayName: "OpenCode",
-    support: {
-      agent: "full",
-      command: "partial",
-      instruction: "partial",
-      hook: "none",
-    },
-    installPaths: {
-      user:    `${HOME}/.config/opencode`,
-      project: `./.opencode`,
-    },
-    skillInstallPaths: {
-      user:    `${HOME}/.config/opencode/skills`,
-      project: `./.opencode/skills`,
-    },
-    mappings: {
-      hookEvents: {
-        session_start:      ["session.start"],
-        user_prompt_submit: ["message.user"],
-        pre_tool:           ["tool.execute.before"],
-        permission_request: ["permission.asked"],
-        post_tool:          ["tool.execute.after"],
-        stop:               ["session.stop"],
-        pre_compact:        ["session.compact.before"],
-      },
-      instructionTriggers: {
-        assistant_output: "none",
-        operation_input:  "partial",          // via plugin event filters
-        operation_result: "partial",
-        file_context:     "partial",
-      },
-      mcpInstallPath: {
-        user:    `${HOME}/.config/opencode/opencode.json`,
-        project: `./opencode.json`,
-      },
-    },
-    extensions: commonTargetExtensionSchemas,
-    adapter: opencodeAdapter,
-  }),
-
-  defineTarget({
-    id: "cursor",
-    displayName: "Cursor",
-    support: {
-      agent: "partial",
-      command: "partial",
-      instruction: "partial",
-      hook: "none",
-    },
-    installPaths: {
-      user:    `${HOME}/.cursor`,
-      project: `./.cursor`,
-    },
-    // No skillInstallPaths: Cursor receives skills via the shared root only.
-    discoversCanonicalSkills: true,
-    mappings: {
-      hookEvents: {
-        session_start:      [],
-        user_prompt_submit: [],
-        pre_tool:           [],
-        permission_request: [],
-        post_tool:          [],
-        stop:               [],
-        pre_compact:        [],
-      },
-      instructionTriggers: {
-        assistant_output: "none",
-        operation_input:  "none",
-        operation_result: "none",
-        file_context:     "partial",         // via .cursor/rules with globs
-      },
-      mcpInstallPath: {
-        user:    `${HOME}/.cursor/mcp.json`,
-        project: `./.cursor/mcp.json`,
-      },
-    },
-    extensions: commonTargetExtensionSchemas,
-    adapter: cursorAdapter,
-  }),
-
-  defineTarget({
-    id: "pi",
-    displayName: "Pi",
-    support: {
-      agent: "full",
-      command: "full",
-      instruction: "full",
-      hook: "none",
-    },
-    installPaths: {
-      user:    `${HOME}/.pi/agent`,
-      project: `./.pi`,
-    },
-    skillInstallPaths: {
-      user:    `${HOME}/.pi/agent/skills`,
-      project: `./.pi/skills`,
-    },
-    mappings: {
-      hookEvents: {
-        session_start:      ["session_start"],
-        user_prompt_submit: ["user_prompt_submit"],
-        pre_tool:           ["pre_tool"],
-        permission_request: ["permission_request"],
-        post_tool:          ["post_tool"],
-        stop:               ["stop"],
-        pre_compact:        ["pre_compact"],
-      },
-      instructionTriggers: {
-        assistant_output: "full",            // TTSR
-        operation_input:  "full",
-        operation_result: "full",
-        file_context:     "full",
-      },
-      mcpInstallPath: {
-        user:    `${HOME}/.pi/agent/mcp.json`,
-        project: `./.pi/mcp.json`,
-      },
-    },
-    extensions: commonTargetExtensionSchemas,
-    adapter: piAdapter,
-  }),
-] as const)
-```
+The executable definitions in
+[targets/registry.ts](packages/core/src/targets/registry.ts) own the five
+built-in targets: Claude, Codex, Cursor, OpenCode, and Pi. Consult that
+table for current mappings, scope paths, and family support rather than
+copying a registry sketch. Field/carrier support is separate (§4.6):
+legacy hook event mappings do not imply a working hook writer.
 
 ### 4.4 Derived outputs
 
@@ -1306,14 +1084,11 @@ export function isTargetId(value: unknown): value is TargetId {
 }
 ```
 
-`defineTargets` validates the array at module load:
-
-- duplicate ids are a fatal error,
-- ids must match the slug regex,
-- support entries reference known facet families,
-- every `mappings.hookEvents` key MUST be a `CanonicalHookType`,
-- every `mappings.instructionTriggers` key MUST be a known trigger,
-- `installPaths.user` / `installPaths.project` are either absolute path or `null`.
+At module load, `defineTarget` checks slug identities and requires a mapping
+for every canonical hook type and trigger name, using the taxonomy's arrays.
+`defineTargets` rejects duplicate identities. TypeScript checks family and
+mapping key types; output-path containment is checked by the CLI before writing
+(§4.2.2), not by these registry constructors.
 
 ### 4.5 Extension schemas
 
@@ -1539,11 +1314,20 @@ Caplet plans, gates, and reports the carrier in `apps/caplet/src/internal/`:
 
 | Module | Role |
 | --- | --- |
-| `claude-marketplace.ts` | `planClaudeMarketplaces` returns a `ClaudeRootPlan` per Claude install root with desired plugins, selected retention candidates, or earlier sidecar marketplace/plugin records, plus the diff of `marketplaceFile(installRoot)`, `<claude-install-root>/.acf/marketplace/.claude-plugin/marketplace.json`, owned by `acf-system` with `carrier: plugin`. `leftover` names plugins the sidecar still owns but the plan dropped. `retained` comes directly from selected `pluginless` capabilities (`loose` or `empty` output, recorded by `claude-retention.ts`), independently of sidecar history, with whether the generated manifest declares configuration; an unreadable manifest conservatively counts as declaring it. The catalog lists `{name, source: "./plugins/<capability>"}` for desired plugins and all selected held or refused capabilities. Held and refused plugins are always `kept`, never desired installs or updates, even with readable generated versions or missing host copies. Kept identities alone never create or claim an unowned marketplace file: retention guards host state without creating output for a first-time refusal. Reading their generated version only chooses the diagnostic: `acf.claude.plugin-kept` for a readable held plugin, `acf.claude.manifest-unreadable` for any unreadable held or refused plugin. `planClaudeScope` never touches them or removes their marketplace. `recordClaudeMarketplaces` keeps the sidecar's `marketplace` record in line with ownership of that file; `recorded` tells the host planner the record exists. |
+| `claude-marketplace.ts` | `planClaudeMarketplaces` returns per-root desired, kept, leftover, and retained plugin identities plus the `acf-system`-owned marketplace diff. It separates catalog rendering, retention classification, and diagnostics. `recordClaudeMarketplaces` synchronizes the sidecar marketplace record with file ownership. |
 | `claude-retention.ts` | `planClaudeRetention`, called by `buildEmitPlan` for each Claude emission without a plugin, records the capability as `held` (its reader left out an invalid component and nothing else reaches Claude; its earlier plugin and sidecar entries stay as they are) or `pluginless` (`loose` or `empty` output; its earlier plugin is retired keeping Claude's data). |
 | `claude-gates.ts` | `claudeGate` marks a planned change that waits on the host: `registered` (retiring loose Claude files of a capability that is now a plugin), `uninstalled` (deleting a removed plugin's files), `retired` (deleting `marketplace.json`). `gateClaudeChanges` attaches those gates to a plan's changes and splits off the migration, for both apply and remove plans. `gateOpen` decides from the host report; `registered` opens on `registered` or `disabled by user`. `gatedChange` applies an open change, and in place of a closed `retired` deletion whose marketplace stays registered writes an empty catalog; `previewedDiffs` makes the same substitution for `status` and dry runs from the host preview. |
 | `claude-host-flow.ts` | `reconcileClaude` and `previewClaude` call the host port and add each plugin's file state (`current`, `drifted`, `missing`) from its `carrier: plugin` sidecar entries; `claudeLines` renders the host block. |
 | `claude-migration.ts` | `planClaudeMigration` turns gated retirements of drifted loose artifacts into releases (reported by `driftedWarning` as `acf.migration.drifted`) and each retired skill into a `/<skill> -> /<capability>:<skill>` rename. Renames are not recorded: retirement happens once, so the apply that performs it is the only one that announces them. |
+
+Marketplace retention follows SPEC §22.8.1. Selected `pluginless`
+capabilities supply `retained` identities independently of sidecar history;
+a missing or malformed generated manifest conservatively declares configuration.
+Held and refused identities are `kept`, never desired installs or updates.
+Reading their version chooses diagnostics only: a readable held plugin gets
+`acf.claude.plugin-kept`, an unreadable held or refused plugin gets
+`acf.claude.manifest-unreadable`. Kept identities alone do not create or
+claim a marketplace file.
 
 `applyEmitPlan` (`apply-plan.ts`) runs in this order: write every change without a
 gate (plugin files, `marketplace.json`, loose files); reconcile each Claude
@@ -1641,224 +1425,25 @@ Each `read*` function:
 4. validates the parsed value with the canonical schema,
 5. records diagnostics inline.
 
-### 5.2 Canonical schemas (selected)
+### 5.2 Canonical schemas
 
-```ts
-import { z } from "zod"
+[schemas/index.ts](packages/core/src/schemas/index.ts) owns the Zod schemas
+used by the reader and manifest parsers:
 
-const slugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
-
-const onlyExceptSchema = z.object({
-  only: z.array(slugSchema).optional(),
-  except: z.array(slugSchema).optional(),
-}).superRefine((v, ctx) => {
-  if (v.only && v.except) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "only and except are mutually exclusive",
-      path: [],
-    })
-  }
-})
-
-export const manifestSchema = z
-  .object({
-    acf: z.literal(1),
-    name: slugSchema,
-    version: z.string(),
-    description: z.string().optional(),
-    // A structured { name, email?, url? } author, or a legacy string kept verbatim.
-    authors: z.array(z.union([z.string(), authorObjectSchema])).optional(),
-    license: z.string().optional(),
-    homepage: z.string().url().optional(),
-    repository: z.string().optional(),
-    keywords: z.array(z.string()).optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-export const skillFrontmatterSchema = z
-  .object({
-    name: slugSchema,
-    description: z.string().min(1),
-    invocation: z
-      .object({
-        user: z.boolean().optional(),
-        model: z.boolean().optional(),
-      })
-      .optional(),
-    license: z.string().optional(),
-    compatibility: z.string().max(500).optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
-    "argument-hint": z.string().optional(),
-    "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
-    assets: z.array(z.string()).optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-export const agentFrontmatterSchema = z
-  .object({
-    name: slugSchema,
-    description: z.string().min(1),
-    mode: z.enum(["primary", "subagent", "all"]).optional(),
-    model: z.literal("inherit").optional(),
-    assets: z.array(z.string()).optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-export const commandFrontmatterSchema = z
-  .object({
-    name: slugSchema,
-    description: z.string().min(1),
-    arguments: z.array(slugSchema).optional(),
-    agent: z.string().optional(),
-    assets: z.array(z.string()).optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-const triggerCommonSchema = z.object({
-  scope: z
-    .array(
-      z.object({
-        operation: z.string().optional(),
-        paths: z.array(z.string()).optional(),
-      }),
-    )
-    .optional(),
-  interrupt: z.enum(["never", "always"]).optional(),
-  repeat: z.enum(["once", "always"]).optional(),
-  debounce: z.number().int().positive().optional(),
-})
-
-const regexTriggerSchema = triggerCommonSchema.extend({
-  conditions: z.array(z.string()).min(1),
-})
-
-const fileContextTriggerSchema = triggerCommonSchema.extend({
-  paths: z.array(z.string()).min(1),
-})
-
-export const instructionFrontmatterSchema = z
-  .object({
-    name: slugSchema,
-    description: z.string().min(1),
-    activation: z.union([
-      z.literal("always"),
-      z.object({
-        when: z
-          .object({
-            assistant_output: regexTriggerSchema.optional(),
-            operation_input: regexTriggerSchema.optional(),
-            operation_result: regexTriggerSchema.optional(),
-            file_context: fileContextTriggerSchema.optional(),
-          })
-          .refine((w) => Object.keys(w).length > 0, {
-            message: "activation.when must declare at least one trigger",
-          }),
-      }),
-    ]),
-    assets: z.array(z.string()).optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-const hookRunSchema = z.union([
-  z.object({
-    command: z.string().min(1),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string(), z.string()).optional(),
-  }),
-  z.object({
-    command: z.string().min(1),
-    shell: z.enum(["bash", "powershell"]),
-    env: z.record(z.string(), z.string()).optional(),
-  }),
-])
-
-const hookMatchSchema = z.object({
-  operation: z.string().optional(),
-  paths: z.array(z.string()).optional(),
-  conditions: z.array(z.string()).optional(),
-})
-
-export const hookEntrySchema = z
-  .object({
-    name: slugSchema,
-    description: z.string().optional(),
-    only: z.array(slugSchema).optional(),
-    except: z.array(slugSchema).optional(),
-    match: hookMatchSchema.optional(),
-    run: hookRunSchema,
-    effect: z.enum([
-      "observe",
-      "block",
-      "add_context",
-      "continue",
-      "block_result",
-      "decide",
-    ]),
-    timeout: z.number().int().positive().optional(),
-    targets: z.record(z.string(), z.unknown()).optional(),
-  })
-  .and(onlyExceptSchema)
-
-export const hookFileSchema = z.object({
-  session_start: z.array(hookEntrySchema).optional(),
-  user_prompt_submit: z.array(hookEntrySchema).optional(),
-  pre_tool: z.array(hookEntrySchema).optional(),
-  permission_request: z.array(hookEntrySchema).optional(),
-  post_tool: z.array(hookEntrySchema).optional(),
-  stop: z.array(hookEntrySchema).optional(),
-  pre_compact: z.array(hookEntrySchema).optional(),
-  targets: z
-    .record(z.string(), z.strictObject({ hooks: z.record(z.string(), z.array(hookEntrySchema)).optional() }))
-    .optional(),
-})
-
-const mcpServerBaseSchema = z.object({
-  name: slugSchema,
-  description: z.string().optional(),
-  only: z.array(slugSchema).optional(),
-  except: z.array(slugSchema).optional(),
-  targets: z.record(z.string(), z.unknown()).optional(),
-})
-
-const mcpStdioSchema = mcpServerBaseSchema.extend({
-  transport: z.literal("stdio"),
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  cwd: z.string().min(1).optional(),
-})
-
-const mcpHttpSchema = mcpServerBaseSchema.extend({
-  transport: z.enum(["http", "sse"]),
-  url: z.string().url(),
-  headers: z.record(z.string(), z.string()).optional(),
-})
-
-export const mcpServerSchema = z.union([mcpStdioSchema, mcpHttpSchema])
-
-export const mcpFileSchema = z.object({
-  servers: z.array(mcpServerSchema),
-  targets: z
-    .record(z.string(), z.strictObject({ servers: z.array(mcpServerSchema).optional() }))
-    .optional(),
-})
-```
+- `manifestSchema` is strict: unknown top-level keys fail, and `version`
+  uses the shared SemVer 2.0.0 predicate.
+- Markdown frontmatter schemas preserve the reader's permissive treatment
+  of non-core fields while validating core values.
+- `onlyExceptSchema` and source-entry validation share the same
+  mutual-exclusion refinement. Registry validation of target identities
+  happens separately, before selection.
+- `hookEntrySchema` validates handler shape; `hookFileSchema` also accepts
+  family-level native events. Cross-field semantics are checked in §5.3.
+- `mcpServerSchema` validates transport-specific fields;
+  `mcpFileSchema` also accepts target-specific servers.
+- `capabilitiesYmlSchema` rejects unknown keys at every declared mapping
+  level. `capabilitiesYmlKnownKeys` derives suggestion candidates from
+  those schemas rather than maintaining another key list.
 
 ### 5.3 Cross-field validation
 
@@ -2139,9 +1724,9 @@ id, are reported and left out.
 
 ## 7. Resolver (capabilities.yml, sources, lockfile)
 
-The resolver translates a scope (`user` / `project`) into a list of
-`AcfCapability` instances on disk. It is the only component that talks to
-the network.
+Core resolves installed capabilities locally. The installer reconciles
+`capabilities.yml`, source snapshots, and the lockfile; only the installer
+fetches from the network (§1).
 
 ### 7.1 Two-scope discovery
 
@@ -2192,7 +1777,7 @@ export type CapabilitiesYml = {
 
 export type CapabilityEntry = {
   source: SourceSpec
-  ref?: string                          // tag, branch, or commit; default = default branch HEAD
+  ref?: string                          // required for github/git: tag, branch, or commit
   path?: string                         // subpath establishing the selected source root
   format?: SourceFormat                 // overrides detection (§7.7)
   capabilities?: string[]               // normalized exact/glob paths under <source>/acf/
@@ -2229,6 +1814,7 @@ the removed component or the old name, which is
 YAML form (canonical):
 
 ```yaml
+acf: 1
 capabilities:
   - source: github:vercel-labs/agent-skills
     ref: v1.5.6
@@ -2238,6 +1824,7 @@ capabilities:
     ref: main
     capabilities: [team-defaults, hardware/*]
   - source: github:acme/review-plugin   # a Claude plugin
+    ref: main
     format: claude-plugin
     exclude:
       hooks: [format-on-save]
@@ -2318,6 +1905,15 @@ the next lock are removed. Replacements and removals are held as same-filesystem
 backups until the lock is committed. The lock is written to a temporary file and
 renamed atomically; a failed commit restores replaced, removed and newly installed
 snapshots before propagating the error.
+
+Two recovery lifetimes are intentional. The installer's
+`snapshot-transaction.ts` holds renamed destinations only until the lock
+commit. The CLI's `internal/add-transaction.ts` copies the prior snapshots
+and lock so it can also recover after resolution succeeded but emission or
+host reconciliation failed. Manifest restoration surrounds that applying-add
+flow in `commands/add.ts`; `add --no-apply` does not checkpoint installer
+state. Planning and apply likewise repeat ownership validation at separate
+mutation boundaries to detect intervening filesystem changes.
 
 If neither a root `acf.yml` nor an `acf/` collection exists, source inventory
 falls back to bare-skill discovery using SPEC §20.3 precedence. Each discovered
@@ -2460,8 +2056,10 @@ only; emission's cross-target ordering is described in §12.
   omission selects all. `path` first establishes a different source root.
 - **Agent Plugins 1.0 package**: root `plugin.json` with the 1.0 `$schema`.
 - **Claude plugin**: `.claude-plugin/plugin.json`.
-- **Legacy bare `skills/` at root**: synthesizes a minimal manifest at fetch
-  time when `acf.yml` is absent and `skills/` is present.
+- **Bare skills**: when no manifested layout exists, the first matching
+  layout is a root `SKILL.md`, immediate `skills/<name>/SKILL.md` children,
+  or immediate `<name>/SKILL.md` children (SPEC §20.3). Each becomes a
+  synthesized capability staged outside the source.
 
 Detection takes the first match in that order (SPEC §20.6) and reports the
 choice as `acf.source.format-selected` (info) when several manifests are
@@ -2736,8 +2334,8 @@ export type Diagnostic = {
 ### 11.2 Code namespace
 
 Diagnostic codes follow `acf.<area>.<topic>[.<subtopic>]`. The set below is
-the normative starting set for `acf: 1`; conformance matrix in `SPEC.md`
-§14 lists severity/phase/trigger/source.path/recovery for each. Readers
+the starting code catalog for `acf: 1`; `SPEC.md` §14 defines severity
+behavior and namespace rules. Readers
 MUST emit at least the listed code with the listed severity when its
 trigger holds, MAY emit additional more-specific codes, and MUST NOT
 collapse listed codes into more generic ones.
@@ -2928,8 +2526,10 @@ Behavior is defined in `SPEC.md` §14.2. Implementation convention:
 - Target-extension schema failures produce `error` for unknown fields,
   `lossy` for portably valid fields the target cannot represent.
 - Unknown target ids in `only` / `except` produce `error`.
-- Loss of ordering, surface, or effect mapping produces `lossy`.
-- Unknown manifest top-level fields produce `info`.
+- Permitted loss of ordering or surface produces `lossy`; unsupported hook
+  effects are refused under §4.6, not weakened.
+- Unknown manifest top-level fields produce `error`; non-core Markdown
+  frontmatter fields produce `info`.
 - The caplet `--strict` flag
   makes `lossy` diagnostics fail the command (§14.4). The caplet config
   field `diagnostics.failOnLossy` is parsed but not currently consulted by
@@ -3064,16 +2664,16 @@ every adapter half-baked.
 
 Gating rule: an adapter milestone is **complete** only when
 
-1. emit produces correct native artifacts for all 6 facet families on a real
-   capability tree,
+1. emit produces correct native artifacts for supported facet families on a
+   real capability tree and refuses unsupported functional fields (§4.6),
 2. adapter-level fixture tests pass
    (`packages/adapters/tests/fixtures/<target>/` with input + expected
    output),
 3. caplet-level smoke test passes
    (`apps/caplet/tests/fixtures/commands/<target>-emit/` produces expected
    files),
-4. every degraded effect/event/trigger emits the listed lossy diagnostic
-   code,
+4. every unsupported field/event/trigger emits the refusal or lossy diagnostic
+   its support contract requires,
 5. gaps are documented in `backlog.md` and map to listed diagnostic codes
    (no silent omission).
 
@@ -3365,9 +2965,9 @@ error string.
 - `acf: 1` is the only accepted spec version in v1, and per the
   "final-ish" stance is intended to be long-lived. Additive evolution only
   within `acf: 1`; behavioral changes require `acf: 2`.
-- Unknown top-level manifest fields are recorded but do not fail validation
-  (info diagnostic). Unknown fields inside canonical facet frontmatter are
-  validated strictly to avoid silent typos.
+- Unknown top-level manifest fields fail validation. Non-core Markdown
+  frontmatter fields produce informational diagnostics; invalid core values
+  remain errors.
 - Unknown `source` schemes in `capabilities.yml` produce
   `acf.capabilities-yml.source.unknown-scheme` (error) and skip the entry.
 - Lockfile entries with `acf: <n>` greater than the implementation's version

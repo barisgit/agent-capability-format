@@ -129,18 +129,17 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 
 **Priority**: High (blocks all external adoption)
 **Estimate**: 2-3 days
-**Status**: In progress. Packaging is done: `@caplet/*` 0.1.0 tarballs build
-for Node ≥ 20, and CI plus a tag-driven release workflow exist. Remaining: create
-the `caplet` npm org, add the `NPM_TOKEN` secret, push the first tag, and check
-the acceptance below on clean machines.
+**Status**: Packaging and release automation implemented. The README records
+`@caplet/*` 0.1.0 as published; clean-machine acceptance below remains to be verified.
+The tag workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`.
 
-**Problem**: caplet is not on npm yet; nobody outside the repo can run it.
+**Remaining**: verify the public install and add journey on clean macOS and Linux machines.
 
 **Implementation**:
 
 - npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
 - The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
-- npm provenance stays off while the repository is private; enable `--provenance` in `release.yml` once it is public
+- Tag releases use npm trusted publishing with automatic provenance; first publication and per-package npm trust setup are documented in README.md.
 - README quickstart rewritten around the npx onramp
 
 **Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)
@@ -171,11 +170,13 @@ the acceptance below on clean machines.
 **Estimate**: ~0.5 day per target
 **Status**: Planned
 
-**Problem**: 5 targets (canonical, claude, codex, opencode, pi) vs ecosystem's 70+. Most are table entries: install root + layout conventions.
+**Problem**: Five host targets ship (`claude`, `codex`, `cursor`, `opencode`,
+`pi`); the shared canonical skill root is not a separate host.
 
-**Implementation**: add adapters for cursor (exists in packages/adapters — verify wiring), gemini-cli, github-copilot, cline, windsurf; adapter contract test already parameterized
+**Implementation**: evaluate adapters for gemini-cli, github-copilot, cline, and
+windsurf against their native semantics; the adapter contract test is already parameterized.
 
-**Acceptance**: `caplet apply -t cursor` emits; doctor lists new targets
+**Acceptance**: each added target emits conforming artifacts and appears in doctor.
 
 ### Spec C2: Implicit Assets for Skill Directories
 
@@ -222,13 +223,17 @@ Open work found while finishing `plugin-interop-foundation`. Each entry: path, s
 
 ### Quality gates
 
+- **Taxonomy package header describes the inverse dependency.** `packages/runtime-taxonomy/src/index.ts` says core owns the constants and this package re-exports them, but the declarations live here and core imports them. Its README also omits hook/trigger exports. Update those package-local docs; root documentation now reflects the actual ownership.
 - **Cognitive complexity rule is off.** `biome.json` does not enable `complexity/noExcessiveCognitiveComplexity` (max 15); 24 functions exceed it, worst `validateActivationConstraints` (34, `packages/core/src/reader/validation.ts`), `tomlDefinesTable` (31, `packages/adapters/src/common/toml.ts`), `buildPlanView` (30, `apps/caplet/src/internal/plan-view.ts`), `unknownFlagError` (29, `apps/caplet/src/internal/spec.ts`). Split them, then enable the rule.
 - **Two apply flows.** `apps/caplet/src/commands/apply.ts` plans and applies on its own while `add`/`update` go through `planAndApply` in `apps/caplet/src/internal/apply-flow.ts`; fixes to one flow miss the other.
-- **Locale-dependent order in emitted bytes.** `localeCompare` still orders written output: `packages/adapters/src/claude/plugin.ts` (MCP server order in `.mcp.json` and the plugin version digest), `packages/adapters/src/common/{mcp,hooks,emitter,skills,assets}.ts`, `apps/caplet/src/internal/claude-marketplace.ts` (`marketplace.json`), core reader/format sorts. Output can differ between machines; use `compareCodeUnits`.
+- **Locale-dependent order in emitted bytes.** `localeCompare` still orders written output: `packages/adapters/src/claude/plugin.ts` (MCP server order in `.mcp.json` and the plugin version digest), `packages/adapters/src/common/{mcp,emitter,skills,assets}.ts`, `apps/caplet/src/internal/claude-marketplace.ts` (`marketplace.json`), core reader/format sorts. Output can differ between machines; use `compareCodeUnits`.
 
 ### Correctness
 
-- **Claude retention manifest I/O errors abort planning.** `apps/caplet/src/internal/claude-marketplace.ts` `installedPluginVersion` and `declaresUserConfig` call `readTextIfExists` outside their JSON parse catches. That helper handles only `ENOENT`, so filesystem errors such as `EACCES` or `EISDIR` abort apply instead of conservatively retaining a selected plugin. Separate from the lost-sidecar and refused-update fixes; needs an I/O-failure regression and a bounded unreadable-manifest policy.
+- **Conflict counts are absent from human plan totals.** `apps/caplet/src/internal/output.ts` renders conflict rows, but its summary and totals table enumerate only create/update/delete while `plan-view.ts` also counts conflicts. A conflict-only plan has a misleading zero-change breakdown. Add a human-rendering regression and include conflict totals; deferred from the behavior-preserving refine pass.
+- **Notice collisions produce duplicate ownership errors.** `apps/caplet/src/internal/managed-notices.ts` diagnoses an unowned notice as `acf.emit.managed-notice-destination-collision`, then `emit-plan.ts` checks it again and adds `acf.apply.unowned`. Choose one diagnostic classification per path while retaining the conflict action and apply-time race check; this changes the diagnostic contract and is deferred from refinement.
+
+- **Claude retention manifest I/O errors abort planning.** `apps/caplet/src/internal/claude-marketplace.ts` `listedPlugins` and `declaresUserConfig` share `readPluginManifest`, which calls `readTextIfExists` outside its JSON parse catch. That helper handles only `ENOENT`, so filesystem errors such as `EACCES` or `EISDIR` abort apply instead of conservatively retaining a selected plugin. Separate from the lost-sidecar and refused-update fixes; needs an I/O-failure regression and a bounded unreadable-manifest policy.
 
 - **The opt-in real-host test guards only `<real home>/.claude`.** `apps/caplet/tests/hosts/claude/real-host.test.ts`: a user whose real Claude config lives under their own `CLAUDE_CONFIG_DIR` is not covered, because `scripts/test-home.ts` overwrites that variable. Pass the original value through like `CAPLET_REAL_HOME`.
 - **Local Bun 1.4.2 vs `packageManager: bun@1.3.12`** in the root `package.json`; the home-isolation behaviour (`os.homedir()` fixed at start) was confirmed on 1.4.2 only.

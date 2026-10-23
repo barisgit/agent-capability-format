@@ -41,19 +41,13 @@ caplet add github:owner/repo --pin main
 - **Instruction** — ambient guidance (other ecosystems often call this a
   "rule" or "ambient context").
 
-## Three YAML files, three different jobs
-
-ACF has three files whose names all start with `acf` or `capabilities`. Do not
-confuse them.
+## Capability files and directories
 
 | File                   | Where it lives                                                                  | What it does                                                                                  |
 | ---------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `acf.yml`              | Inside one capability directory, at its root.                                   | The **capability manifest**. Declares one capability's identity, version, and applicability.  |
 | `capabilities/`        | `~/.agents/capabilities/` (user) and `./.agents/capabilities/` (project).       | A **directory**, not a file. Every subdirectory containing `acf.yml` is autoloaded.           |
 | `capabilities.yml`     | `~/.agents/capabilities.yml` and/or `./.agents/capabilities.yml`. Optional.     | A **scope-level import list**. Declares what `caplet update` / `caplet apply` resolve into `capabilities/`. |
-
-Short version: `acf.yml` is *inside* one capability. `capabilities/` is the
-autoloaded directory. `capabilities.yml` is the import list that populates it.
 
 ## Capability layout
 
@@ -115,6 +109,7 @@ Each scope may have a `capabilities.yml` declaring remote and local sources
 to fetch into that scope's `capabilities/` directory:
 
 ```yaml
+acf: 1
 capabilities:
   - source: github:vercel-labs/agent-skills
     ref: v1.5.6
@@ -289,7 +284,7 @@ it (Codex, Cursor, OpenCode, Pi). Claude never reads it.
 
 ### Claude: plugin or loose files
 
-Claude receives each capability as a generated plugin by default.
+Claude defaults to generated plugins for the content they can carry.
 Caplet writes it under `<claude-root>/.acf/marketplace/` (`~/.claude/` for
 user scope, `./.claude/` for project scope) and registers it through the
 `claude` CLI. Skills are then invoked as `/<capability>:<skill>`; the apply
@@ -302,8 +297,8 @@ Only capabilities made of skills, MCP servers, Claude-native components, and
 `native/claude/` files fit in a plugin. An ACF capability that also selects
 agents, commands, hooks, or instructions for Claude stays loose as a whole
 (`acf.claude.legacy-carrier`). Set `targets.claude.carrier: loose` in
-`caplet.yml` to use loose files for everything; caplet then uninstalls its
-Claude plugins.
+`caplet.yml` to use loose files for everything; caplet then retires its
+Claude plugins subject to the data-preservation rules below.
 
 Deselecting a capability or `caplet remove` uninstalls its plugin and, like
 `claude plugin uninstall`, deletes what Claude saved for it: its data
@@ -345,8 +340,7 @@ plugin, enabled or disabled, and leaves any you edited in place with an
   hook events are classified, so a Claude plugin with hooks is refused on
   Codex, Cursor, OpenCode, and Pi. Exclude the hooks or the host to install
   the rest.
-- ACF hooks are refused on every target in 0.1.0 (see Hooks below).
-  Hooks inside foreign Claude plugins are copied unchanged.
+- [ACF hooks are refused on every target in 0.1.0](#hooks-in-one-paragraph).
 
 ## Project status
 
@@ -369,7 +363,7 @@ to npm in lockstep versions:
 | `packages/adapters` | `@caplet/adapters` | Per-target emit functions (claude, codex, cursor, opencode, pi). Shared file utilities live under `src/common/`. |
 | `packages/installer` | `@caplet/installer` | Git + network fetch of remote capability sources. Resolves `capabilities.yml`. Writes the lockfile. |
 | `packages/sdk` | `@caplet/sdk` | Re-exports core + adapters + installer plus convenience helpers for direct ACF consumers. |
-| `packages/runtime-taxonomy` | `@caplet/runtime-taxonomy` | Stub for the future sibling registry spec. |
+| `packages/runtime-taxonomy` | `@caplet/runtime-taxonomy` | Provisional operations, canonical hook types, and trigger names; broader taxonomy deferred. |
 
 `packages/golden` (`@caplet/golden`) is private and never published: it is the
 golden-tree test harness. A case lives at `tests/golden/<case>/` with `input/`
