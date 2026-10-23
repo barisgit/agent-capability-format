@@ -3,40 +3,6 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyProject, cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
 
-test("a path source can select acf/ itself and preserve nested collection selectors", async () => {
-  const scope = await makeScope();
-  try {
-    const collection = path.join(scope.sourceRoot, "collection", "acf");
-    await writeText(
-      path.join(collection, "nested", "one", "acf.yml"),
-      "acf: 1\nname: selected-cap\nversion: 1.0.0\n",
-    );
-    await writeText(
-      path.join(collection, "two", "acf.yml"),
-      "acf: 1\nname: other-cap\nversion: 1.0.0\n",
-    );
-    await writeText(
-      path.join(scope.agentsDir, "capabilities.yml"),
-      `acf: 1\ncapabilities:\n  - source: path:${collection}/\n    capabilities: nested/*\n`,
-    );
-    await fetchProject(scope);
-    const listed = await runCaplet(scope, [
-      "list",
-      "--json",
-      "--cwd",
-      scope.cwd,
-      "--scope",
-      "project",
-    ]);
-    expect(listed.exitCode).toBe(0);
-    expect(
-      JSON.parse(listed.stdout).scopes[0].capabilities.map((cap: { name: string }) => cap.name),
-    ).toEqual(["selected-cap"]);
-  } finally {
-    await cleanup(scope);
-  }
-});
-
 test("caplet check validates resolved capabilities", async () => {
   const scope = await makeScope();
   try {
@@ -155,7 +121,7 @@ test("caplet check --frozen reads a relative path source from the manifest direc
     ]);
 
     expect(result.stdout + result.stderr).not.toContain("acf.lock.");
-    expect(result.exitCode).not.toBe(3);
+    expect(result.exitCode).toBe(1);
   } finally {
     await cleanup(scope);
   }

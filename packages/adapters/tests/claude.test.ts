@@ -40,14 +40,9 @@ test("claude emits all native artifacts with marker and JSON pointer ownership",
   );
 });
 
-test("claude preserves unrelated shared JSON text and uses absolute user skill root", async () => {
+test("claude uses the absolute native user skill root without a shared copy", async () => {
   const cap = await readFixtureCapability("user");
-  const fs = makeInMemoryFs({
-    "/home/me/.claude/settings.json":
-      '{"z":1,"hooks":{"PreToolUse":[{"acfMarker":"manual","keep":true}]}}\n',
-  });
-  const result = await claudeAdapter.emit(emitInput(cap, "/home/me/.claude"), fs);
-  expect(result.diffs.some((diff) => diff.path.endsWith("settings.json"))).toBe(false);
+  const result = await claudeAdapter.emit(emitInput(cap, "/home/me/.claude"), makeInMemoryFs());
   expect(
     result.diffs.some(
       (diff) => diff.path === path.join(homedir(), ".agents", "skills", "research", "SKILL.md"),

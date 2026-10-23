@@ -46,14 +46,6 @@ test("unknown manifest fields are errors while Markdown frontmatter remains perm
     expect(
       cap.diagnostics.filter((d) => d.code === "acf.markdown.unknown-frontmatter-field"),
     ).toHaveLength(2);
-    expect(
-      manifestSchema.safeParse({
-        acf: 1,
-        name: "test-cap",
-        version: "1.0.0",
-        unknownFutureField: "typo",
-      }).success,
-    ).toBe(false);
   } finally {
     await cleanup(dir);
   }

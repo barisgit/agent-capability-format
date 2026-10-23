@@ -34,7 +34,7 @@ test("sidecar round-trips and detects drift", async () => {
   }
 });
 
-test("applying a whole-file delete refuses to recursively delete a managed directory", async () => {
+test("applying a whole-file delete refuses to recursively delete an unowned directory", async () => {
   const scope = await makeScope();
   try {
     const installRoot = path.join(scope.cwd, ".claude");

@@ -60,6 +60,16 @@ test("check flags orphaned managed files after the manifest narrows", async () =
     expect(first.exitCode).toBe(0);
 
     await narrowToAlpha(scope);
+    // Refresh installer state without applying, leaving beta's managed output orphaned.
+    const refreshed = await runCaplet(scope, [
+      "update",
+      "--no-apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
+    expect(refreshed.exitCode).toBe(0);
     const stale = await runCaplet(scope, [
       "check",
       "--cwd",
@@ -69,8 +79,12 @@ test("check flags orphaned managed files after the manifest narrows", async () =
       "--target",
       "claude",
     ]);
-    expect(stale.exitCode).toBe(2);
-    expect(stale.stdout + stale.stderr).toContain("acf.lock.drift");
+    expect(stale.exitCode).toBe(1);
+    expect(stale.stdout + stale.stderr).not.toContain("acf.lock.drift");
+    expect(stale.stderr).toContain("Outputs are stale");
+    expect(
+      await Bun.file(path.join(scope.cwd, ".claude", "agents", "beta-helper.md")).exists(),
+    ).toBe(true);
 
     const apply = await applyProject(scope);
     expect(apply.exitCode).toBe(0);
@@ -145,7 +159,6 @@ test("byte-identical ownership transfer updates the sidecar owner", async () => 
     ).toBe(true);
 
     // Move the identical skill from alpha to beta.
-    const { rm } = await import("node:fs/promises");
     await rm(path.join(scope.sourceRoot, "alpha", "skills", "shared-skill"), {
       recursive: true,
     });
