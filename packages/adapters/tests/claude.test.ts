@@ -30,15 +30,8 @@ test("claude emits all native artifacts with marker and JSON pointer ownership",
   expect(byPath(result.diffs, ".claude/.acf/instructions/test-cap/triggered.md").after).toContain(
     "operation_result",
   );
-  expect(byPath(result.diffs, ".claude/hooks/test-cap__pre_tool__guard.sh").owns).toEqual([
-    { kind: "file" },
-  ]);
-  const settingsDiff = byPath(result.diffs, ".claude/settings.json");
-  expect(settingsDiff.owns.every((own) => own.kind === "json-pointer")).toBe(true);
-  const hooks = parseJsonDiff(settingsDiff).hooks as Record<string, unknown[]>;
-  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:pre_tool:guard");
-  expect(JSON.stringify(hooks.PreToolUse)).toContain("acf:test-cap:permission_request:ask");
-  expect(JSON.stringify(hooks.SessionStart)).toContain("acf:test-cap:session_start:init");
+  expect(codes(result)).toContain("acf.support.refused");
+  expect(result.diffs.some((diff) => diff.path.endsWith("settings.json"))).toBe(false);
   const mcpDiff = byPath(result.diffs, ".mcp.json");
   expect(mcpDiff.owns).toContainEqual({ kind: "json-pointer", pointer: "/mcpServers/fs" });
   expect(mcpDiff.owns).toContainEqual({ kind: "json-pointer", pointer: "/mcpServers/docs" });
@@ -54,9 +47,7 @@ test("claude preserves unrelated shared JSON text and uses absolute user skill r
       '{"z":1,"hooks":{"PreToolUse":[{"acfMarker":"manual","keep":true}]}}\n',
   });
   const result = await claudeAdapter.emit(emitInput(cap, "/home/me/.claude"), fs);
-  const settings = byPath(result.diffs, "/home/me/.claude/settings.json");
-  expect(settings.after).toContain('{"z":1,"hooks"');
-  expect(settings.after).toContain('{"acfMarker":"manual","keep":true}');
+  expect(result.diffs.some((diff) => diff.path.endsWith("settings.json"))).toBe(false);
   expect(
     result.diffs.some(
       (diff) => diff.path === path.join(homedir(), ".agents", "skills", "research", "SKILL.md"),

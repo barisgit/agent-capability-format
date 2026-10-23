@@ -20,7 +20,7 @@ if (target === undefined) throw new Error("missing target definition for claude"
 /**
  * Claude writes each capability as a plugin by default and as loose files under `.claude/` on
  * `carrier: loose`. A native ACF capability with agents, commands, hooks or instructions stays
- * whole on loose files, which carry them today.
+ * whole on the loose path; ACF hooks are refused there until native writers exist.
  */
 export const claudeAdapter: TargetAdapter<"claude"> = {
   id: "claude",

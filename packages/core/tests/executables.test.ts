@@ -6,6 +6,7 @@ import {
   executableChanges,
   executableComponents,
   readAgentPluginsPackage,
+  targetIds,
 } from "../src";
 import {
   capability,
@@ -55,27 +56,24 @@ describe("executableComponents", () => {
     expect(codex.map((item) => `${item.kind} ${item.name}`)).toEqual(["file tools/setup.sh"]);
   });
 
-  test("lists hooks only for targets that run hooks", async () => {
+  test("does not advertise refused ACF hooks as executables on any target", async () => {
     const cap = await capability({
       "acf.yml": baseManifest,
       "hooks/hooks.yml":
         "session_start:\n  - name: greet\n    run:\n      command: ./greet.sh\n      args: ['--hello']\n    effect: observe\n",
     });
-    const claude = await executableComponents(cap, "claude");
-    expect(claude.map(({ kind, name, detail }) => ({ kind, name, detail }))).toEqual([
-      { kind: "hook", name: "session_start/greet", detail: "./greet.sh --hello" },
-    ]);
-    expect(await executableComponents(cap, "cursor")).toEqual([]);
+    for (const target of targetIds) {
+      expect(await executableComponents(cap, target)).toEqual([]);
+    }
   });
 
-  test("lists a family-level native hook only for the target it applies to", async () => {
+  test("does not advertise refused ACF records naming native events as executables", async () => {
     const cap = await capability({
       "acf.yml": baseManifest,
       "hooks/hooks.yml":
         "targets:\n  claude:\n    hooks:\n      InstructionsLoaded:\n        - name: extra\n          run:\n            command: ./extra.sh\n          effect: observe\n        - name: skipped\n          except: [claude]\n          run:\n            command: ./skipped.sh\n          effect: observe\n",
     });
-    const claude = await executableComponents(cap, "claude");
-    expect(claude.map((item) => item.name)).toEqual(["InstructionsLoaded/extra"]);
+    expect(await executableComponents(cap, "claude")).toEqual([]);
     expect(await executableComponents(cap, "codex")).toEqual([]);
   });
 

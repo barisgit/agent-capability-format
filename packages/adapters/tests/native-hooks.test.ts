@@ -1,23 +1,13 @@
 import { expect, test } from "bun:test";
-import path from "node:path";
 import {
   type AcfCapability,
   applyApplicability,
   capabilityCarrier,
   readCapability,
-  type TargetAdapter,
 } from "@caplet/core";
-import { claudeAdapter, codexAdapter, cursorAdapter, opencodeAdapter, piAdapter } from "../src";
-import { emitModel, fileText, withCode } from "./util/model";
+import { adapters } from "../src";
+import { emitModel } from "./util/model";
 import { withTempPackage } from "./util/temp-package";
-
-const writers: Record<string, { adapter: TargetAdapter; root: string }> = {
-  claude: { adapter: claudeAdapter, root: "/project/.claude" },
-  codex: { adapter: codexAdapter, root: "/project/.codex" },
-  cursor: { adapter: cursorAdapter, root: "/project/.cursor" },
-  opencode: { adapter: opencodeAdapter, root: "/project/.opencode" },
-  pi: { adapter: piAdapter, root: "/project/.pi" },
-};
 
 async function readHooksCapability(hooksYml: string): Promise<AcfCapability> {
   const files = { "acf.yml": "acf: 1\nname: demo\nversion: 1.0.0\n", "hooks/hooks.yml": hooksYml };
@@ -28,191 +18,45 @@ async function readHooksCapability(hooksYml: string): Promise<AcfCapability> {
   return capability;
 }
 
-/**
- * The `acf:<capability>:<type or native:event>:<hook>` markers each native event of the target's
- * settings file holds.
- */
-async function emittedHooks(
-  capability: AcfCapability,
-  target: string,
-): Promise<{ markers: Record<string, string[]>; diagnostics: string[] }> {
-  const writer = writers[target];
-  const applicable = applyApplicability(capability, target);
-  if (writer === undefined || applicable === null) throw new Error(`no writer for ${target}`);
-  // As caplet's workflow does, the writer receives what applies to its target.
-  const result = await emitModel(writer.adapter, applicable, writer.root);
-  const settings = fileText(result, `${writer.root}/settings.json`);
-  const hooks =
-    settings === undefined
-      ? {}
-      : (JSON.parse(settings) as { hooks: Record<string, Array<{ acfMarker: string }>> }).hooks;
-  const markers = Object.fromEntries(
-    Object.entries(hooks).map(([event, entries]) => [
-      event,
-      entries.map((entry) => entry.acfMarker),
-    ]),
-  );
-  return {
-    markers,
-    diagnostics: withCode(result, "acf.adapter.facet-unsupported").map((d) => d.code),
-  };
+for (const [target, adapter] of Object.entries(adapters)) {
+  for (const effect of ["observe", "block", "decide"] as const) {
+    test(`${target} refuses canonical ${effect} hooks rather than writing inert or weaker handlers`, async () => {
+      const capability = await readHooksCapability(
+        `${effect === "decide" ? "permission_request" : "pre_tool"}:\n  - name: guard\n    effect: ${effect}\n    match:\n      operation: shell\n    run:\n      command: ./guard.sh\n`,
+      );
+      const result = await emitModel(adapter, capability, `/project/.${target}`);
+      expect(result.diffs).toEqual([]);
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          severity: "error",
+          code: "acf.support.refused",
+          targetId: target,
+          family: "hook",
+          data: expect.objectContaining({
+            component: "guard",
+            source: "hook.run",
+            outcome: "blocked",
+            consequence: expect.stringContaining("not installed"),
+            recovery: expect.stringContaining("exclude"),
+          }),
+        }),
+      );
+      expect(result.diagnostics.some((d) => d.message.includes("emitted as observe"))).toBe(false);
+    });
+  }
+
+  test(`${target} also refuses ACF records naming native events, only on their target`, async () => {
+    const capability = await readHooksCapability(
+      `targets:\n  ${target}:\n    hooks:\n      NativeEvent:\n        - name: native-handler\n          effect: observe\n          run:\n            command: ./handler.sh\n`,
+    );
+    const applicable = applyApplicability(capability, target);
+    if (applicable === null) throw new Error(`demo does not apply to ${target}`);
+    const result = await emitModel(adapter, applicable, `/project/.${target}`);
+    expect(result.diffs).toEqual([]);
+    expect(result.diagnostics.filter((d) => d.code === "acf.support.refused")).toHaveLength(1);
+    if (target === "claude") expect(capabilityCarrier(applicable, target)).toBe("loose");
+    for (const other of Object.keys(adapters).filter((id) => id !== target)) {
+      expect(applyApplicability(capability, other)?.hooks?.native).toBeUndefined();
+    }
+  });
 }
-
-const run = (command: string) => `          run:\n            command: ${command}\n`;
-
-test("family-level native hooks reach the hook writer of their own target only", async () => {
-  const capability = await readHooksCapability(
-    [
-      "session_start:",
-      "  - name: greet",
-      "    run:",
-      "      command: ./greet.sh",
-      "    effect: observe",
-      "targets:",
-      "  claude:",
-      "    hooks:",
-      "      InstructionsLoaded:",
-      "        - name: claude-extra",
-      `${run("./claude.sh")}          effect: add_context`,
-      "        - name: not-for-claude",
-      "          except: [claude]",
-      `${run("./never.sh")}          effect: observe`,
-      "  codex:",
-      "    hooks:",
-      "      PreToolUse:",
-      "        - name: codex-guard",
-      `${run("./guard.sh")}          effect: observe`,
-      "",
-    ].join("\n"),
-  );
-  expect((await emittedHooks(capability, "claude")).markers).toEqual({
-    InstructionsLoaded: ["acf:demo:native:InstructionsLoaded:claude-extra"],
-    SessionStart: ["acf:demo:session_start:greet"],
-  });
-  expect((await emittedHooks(capability, "codex")).markers).toEqual({
-    PreToolUse: ["acf:demo:native:PreToolUse:codex-guard"],
-    SessionStart: ["acf:demo:session_start:greet"],
-  });
-  expect((await emittedHooks(capability, "opencode")).markers).toEqual({
-    "session.start": ["acf:demo:session_start:greet"],
-  });
-  expect((await emittedHooks(capability, "pi")).markers).toEqual({
-    session_start: ["acf:demo:session_start:greet"],
-  });
-});
-
-test("native hooks alone keep a capability on loose Claude files, where they are written", async () => {
-  const capability = await readHooksCapability(
-    [
-      "targets:",
-      "  claude:",
-      "    hooks:",
-      "      InstructionsLoaded:",
-      "        - name: claude-extra",
-      `${run("./claude.sh")}          effect: add_context`,
-      "",
-    ].join("\n"),
-  );
-  const claude = applyApplicability(capability, "claude");
-  if (claude === null) throw new Error("demo does not apply to claude");
-  expect(capabilityCarrier(claude, "claude")).toBe("loose");
-  expect((await emittedHooks(capability, "claude")).markers).toEqual({
-    InstructionsLoaded: ["acf:demo:native:InstructionsLoaded:claude-extra"],
-  });
-  // Other targets receive nothing from a block that names Claude.
-  const codex = applyApplicability(capability, "codex");
-  expect(codex?.hooks?.native).toBeUndefined();
-});
-
-test("a target without hooks reports native hooks for it as unsupported", async () => {
-  const capability = await readHooksCapability(
-    [
-      "targets:",
-      "  cursor:",
-      "    hooks:",
-      "      afterFileEdit:",
-      "        - name: cursor-edit",
-      `${run("./edit.sh")}          effect: observe`,
-      "",
-    ].join("\n"),
-  );
-  const cursor = await emittedHooks(capability, "cursor");
-  expect(cursor.markers).toEqual({});
-  expect(cursor.diagnostics).toEqual(["acf.adapter.facet-unsupported"]);
-  expect((await emittedHooks(capability, "claude")).diagnostics).toEqual([]);
-});
-
-test("hooks sharing a name across hook types and native events keep their own script and entry", async () => {
-  const capability = await readHooksCapability(
-    [
-      "session_start:",
-      "  - name: greet",
-      "    run:",
-      "      command: ./start.sh",
-      "    effect: observe",
-      "stop:",
-      "  - name: greet",
-      "    run:",
-      "      command: ./stop.sh",
-      "    effect: observe",
-      "targets:",
-      "  codex:",
-      "    hooks:",
-      "      SessionStart:",
-      "        - name: greet",
-      `${run("./native.sh")}          effect: observe`,
-      "",
-    ].join("\n"),
-  );
-  const applicable = applyApplicability(capability, "codex");
-  if (applicable === null) throw new Error("demo does not apply to codex");
-  const result = await emitModel(codexAdapter, applicable, "/project/.codex");
-  const scripts = result.diffs
-    .filter((diff) => diff.path.startsWith("/project/.codex/hooks/"))
-    .map((diff) => [path.basename(diff.path), diff.after]);
-  expect(scripts).toEqual([
-    ["demo__native-SessionStart__greet", "#!/usr/bin/env sh\nexec './native.sh' \"$@\"\n"],
-    ["demo__session_start__greet", "#!/usr/bin/env sh\nexec './start.sh' \"$@\"\n"],
-    ["demo__stop__greet", "#!/usr/bin/env sh\nexec './stop.sh' \"$@\"\n"],
-  ]);
-  expect((await emittedHooks(capability, "codex")).markers).toEqual({
-    SessionStart: ["acf:demo:session_start:greet", "acf:demo:native:SessionStart:greet"],
-    Stop: ["acf:demo:stop:greet"],
-  });
-});
-
-test("a hook entry written under its earlier name-only marker is replaced in place", async () => {
-  const capability = await readHooksCapability(
-    [
-      "session_start:",
-      "  - name: greet",
-      "    run:",
-      "      command: ./greet.sh",
-      "    effect: observe",
-      "",
-    ].join("\n"),
-  );
-  const applicable = applyApplicability(capability, "codex");
-  if (applicable === null) throw new Error("demo does not apply to codex");
-  const before = JSON.stringify({
-    hooks: { SessionStart: [{ acfMarker: "acf:demo:greet" }, { acfMarker: "user" }] },
-  });
-  const result = await emitModel(
-    codexAdapter,
-    applicable,
-    "/project/.codex",
-    {},
-    {
-      "/project/.codex/settings.json": before,
-    },
-  );
-  const settings = result.diffs.find((diff) => diff.path === "/project/.codex/settings.json");
-  expect(settings?.owns).toEqual([{ kind: "json-pointer", pointer: "/hooks/SessionStart/0" }]);
-  const after = JSON.parse(String(settings?.after)) as {
-    hooks: { SessionStart: Array<{ acfMarker: string }> };
-  };
-  expect(after.hooks.SessionStart.map((entry) => entry.acfMarker)).toEqual([
-    "acf:demo:session_start:greet",
-    "user",
-  ]);
-});

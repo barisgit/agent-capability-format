@@ -94,7 +94,7 @@ test("caplet show reports no support on a target that carries none of the capabi
     await writeText(path.join(hooks, "acf.yml"), "acf: 1\nname: hooks-only\nversion: 1.0.0\n");
     await writeText(
       path.join(hooks, "hooks", "hooks.yml"),
-      'pre_tool:\n  - name: guard\n    effect: observe\n    run:\n      command: "echo guard"\n',
+      'pre_tool:\n  - name: guard\n    effect: observe\n    match:\n      operation: shell\n    run:\n      command: "echo guard"\n',
     );
     await writeText(
       path.join(scope.agentsDir, "capabilities.yml"),
@@ -112,12 +112,18 @@ test("caplet show reports no support on a target that carries none of the capabi
     const cursor = head?.indexOf("cursor") ?? -1;
     expect(cursor).toBeGreaterThan(0);
     expect(row?.[cursor]).toBe("no");
-    expect(row?.[head?.indexOf("claude") ?? -1]).toBe("yes");
+    expect(row?.[head?.indexOf("claude") ?? -1]).toBe("no");
 
     const json = JSON.parse((await runCaplet(scope, [...args, "--json"])).stdout) as {
       capabilities: Array<{ support: Record<string, string> }>;
     };
-    expect(json.capabilities[0]?.support).toMatchObject({ claude: "yes", cursor: "no" });
+    expect(json.capabilities[0]?.support).toEqual({
+      claude: "no",
+      codex: "no",
+      cursor: "no",
+      opencode: "no",
+      pi: "no",
+    });
   } finally {
     await cleanup(scope);
   }

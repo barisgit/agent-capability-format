@@ -785,8 +785,8 @@ export type TargetDefinition<Id extends string> = {
   id: Id
   displayName: string
 
-  // Family-level support for agents, commands, instructions and hooks only. Skills, MCP
-  // servers and package metadata are declared per field and carrier in
+  // Family-level support for agents, commands and instructions; the legacy hook flag is
+  // none in 0.1.0. Skills, MCP servers, hook runs and package metadata are per field/carrier in
   // targets/field-support.ts (fieldSupport, supportCell, targetCarriers), with native keys
   // classified in targets/native-keys.ts (nativeKeyInfo) and checked by
   // targets/self-check.ts (checkSupportRegistry).
@@ -1068,7 +1068,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "full",
       instruction: "partial",
-      hook: "full",
+      hook: "none",
     },
 
     installPaths: {
@@ -1116,7 +1116,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "partial",
       instruction: "none",
-      hook: "full",
+      hook: "none",
     },
 
     installPaths: {
@@ -1163,7 +1163,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "partial",
       instruction: "partial",
-      hook: "partial",
+      hook: "none",
     },
     installPaths: {
       user:    `${HOME}/.config/opencode`,
@@ -1245,7 +1245,7 @@ export const targets = defineTargets([
       agent: "full",
       command: "full",
       instruction: "full",
-      hook: "full",
+      hook: "none",
     },
     installPaths: {
       user:    `${HOME}/.pi/agent`,
@@ -1326,21 +1326,33 @@ Unknown target ids or unknown keys under a known target id are diagnostics
 
 ### 4.6 Field-level support registry
 
-Skills, MCP servers, and package metadata are declared per field, target, and
-carrier, not per family. The tables live in `packages/core/src/targets/`:
+Skills, MCP servers, ACF hook runs, and package metadata are declared per
+field, target, and carrier, not per family. The tables live in `packages/core/src/targets/`:
 
 | Module | Exports | Role |
 | --- | --- | --- |
 | `field-support.ts` | `fieldSupport`, `findFieldSupport`, `supportCell(field, target, carrier)`, `targetCarriers`, `carriersOf` | One `FieldSupport` per core field or value condition (`skill.invocation.model=false`, `mcp.cwd=${ACF_DATA_DIR}`) with its safety class and one `SupportCell` per target and carrier. `supportCell` throws for an unknown field or a carrier the target lacks: both are writer bugs. Claude offers `plugin` (default) and `loose`; every other target `loose` only. |
 | `native-keys.ts` | `nativeKeys`, `nativeKeyInfo`, `nativeKeyClass`, `nativeValueProblem`, `pendingCoreFields` | Known native keys per target and attachment point, with the native value schema of every key no core field generates (`acf.extras.native-value-invalid`) and of the generated invocation booleans (so a foreign reader rejects a non-boolean value instead of keeping it as an extra), class, `valueClasses` for values with a distinct effect (Codex and OpenCode MCP `enabled: false`, Pi MCP `exposeResources: false` and Claude `defaultEnabled: false` restrict), `generatedFrom` (an extra with that key is `acf.extras.conflict`), and `pending` (`acf.core.pending`). Unknown keys are `unclassified`. |
-| `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a skill or MCP field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field, or a datum a foreign reader preserves has no native authoring form. |
+| `self-check.ts` | `checkSupportRegistry` | Fails when a restricting or functional cell is degraded, a restricting refusal lacks a negative fixture, a non-package field lacks a cell for a built-in target and carrier, or a native key is unclassified, duplicated, or points at a missing field, or a datum a foreign reader preserves has no native authoring form. |
 | `support-diagnostics.ts` | `supportDiagnostic`, `translatedOutcome`, `componentOmitted`, `packageRefused`, `extraDropped`, `nativeTreeDropped`, `corePending`, `recoveryFor`, `exclusionRecovery` | The only way writers emit support diagnostics, so code, message, `data`, consequence, and recovery stay uniform. |
 | `remainder-support.ts` | `remainderTargets`, `remainderSupport` | Which targets can carry each foreign remainder kind; a restricting remainder refuses the package elsewhere, others are omitted as lossy. |
 | `package-values.ts` | `packageValueSchemas`, `packageValueProblem` | Validates `targets.<target>.package` values (`acf.extras.package-value-invalid`). |
 | `plugin-layout.ts` | `generatedPluginPaths`, `generatedPathCollision` | Paths the plugin writer generates, so `native/<target>/` files that collide fail with `acf.native.collision`. |
 
-Family-level `support` (§4.1) remains only for agents, commands,
-instructions, and hooks.
+Family-level `support` (§4.1) remains for agents, commands, and
+instructions. Its hook flag is `none` on every target for canonical ACF
+hooks; foreign plugin remainder has its own support path.
+
+| Field | Safety class | Claude plugin | Claude loose | Codex | Cursor | OpenCode | Pi |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `hook.run` | functional | refused | refused | refused | refused | refused | refused |
+
+The hook row includes ACF records under `targets.<target>.hooks`, not
+foreign plugin remainder. Evidence is per host in the registry: Claude
+and Codex require nested handlers (Codex in `hooks.json` or `config.toml`),
+Cursor requires native `hooks.json` handlers, OpenCode requires executable
+JS/TS plugins, and Pi requires JS/TS extension subscriptions. No native
+ACF hook writer exists in 0.1.0; event-name mappings do not establish support.
 
 `componentOutcomes` (`packages/core/src/emit/outcomes.ts`) turns a writer's
 diagnostics and reported outcomes into the compatibility report.
@@ -1392,6 +1404,14 @@ instructions), and `hooks.ts`. The Claude plugin writer is
   back to its native skill root; Cursor, which has none, reports
   `acf.support.component-omitted`. A target that does not discover the
   shared root (Claude) writes its native root.
+- **ACF hooks.** `refuseHooks` in `hooks.ts` emits the registry's
+  `hook.run` refusal for each applicable entry and writes no files. There
+  is no effect-to-`observe` fallback. The normal refusal flow blocks the
+  capability on that target and drives the same `blocked` outcomes and
+  `show` support (`no`). Existing output is retained, not migrated or
+  cleaned up by the refusal. Foreign Claude-plugin hooks bypass this gate
+  as native remainder and are preserved by the plugin writer. Native hook
+  delivery remains in `claude-loose-hooks-repair` and the Codex hooks backlog.
 - **MCP files.** `mcpPathFor` in `packages/adapters/src/common/mcp.ts` is
   the one place that maps target and scope to the MCP config file (SPEC
   §22.5). Codex entries live between `# acf:begin <name>` and
@@ -2761,7 +2781,7 @@ acf.target.extension.unknown-field
 
 # Adapter degradation (all `lossy`)
 acf.adapter.scope-unsupported                # target has no installPath for requested scope
-acf.adapter.effect-degraded                  # canonical effect maps to weaker native effect
+acf.adapter.effect-degraded                  # legacy report input; 0.1.0 hook writers refuse instead
 acf.adapter.hook-event-unsupported           # canonical hook event has no native equivalent
 acf.adapter.trigger-unsupported              # instruction trigger unsupported by target
 acf.adapter.facet-unsupported                # entire facet family unsupported by target
@@ -2963,10 +2983,11 @@ Adapters MUST:
 - never mutate the input capability,
 - never write to disk directly; return `FileDiff[]` only,
 - use the provided `ReadOnlyFs` port for any reads of existing native files,
-- diagnose every unrepresentable canonical field as `lossy` with a
-  registry-listed code (`acf.adapter.effect-degraded`,
-  `acf.adapter.hook-event-unsupported`, `acf.adapter.trigger-unsupported`,
-  `acf.adapter.facet-unsupported`),
+- diagnose every unrepresentable canonical field from its support cell:
+  restricting and functional gaps require `acf.support.refused` (`error`),
+  while only permitted degradations use registry-listed `lossy` diagnostics,
+- refuse unsupported hook effects; never replace a restricting or functional
+  effect with `observe`,
 - preserve hook order where the host allows it,
 - map canonical instruction triggers to native equivalents where supported,
   else emit `lossy`,

@@ -35,8 +35,14 @@ moved to loose files loads twice meanwhile.
 An imported skill with a host-native value that host rejects (for example `effort: extreme`) is
 left out for every target with the warning `acf.source.component-invalid`.
 
-Skills and MCP servers are the supported path in 0.1.x. Hooks are experimental: caplet
-does not yet write them in each tool's native format, so tools may ignore them.
+Skills and MCP servers are the supported path in 0.1.x. In 0.1.0, ACF hooks
+(including `targets.<target>.hooks` entries) are refused on every target with
+`acf.support.refused`, a blocked outcome, and recovery. Apply leaves that capability's
+existing output unchanged on the target and exits non-zero; `show` reports `no`
+support there. Exclude the hook or target to install the rest. Caplet never downgrades
+restricting effects to `observe`. Foreign Claude-plugin hooks stay unchanged inside
+Claude plugins. Native writers remain in `claude-loose-hooks-repair` and the Codex
+hooks backlog item.
 
 `caplet --help` lists every command; `caplet <command> --help` shows its flags.
 

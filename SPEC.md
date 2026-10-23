@@ -1501,9 +1501,10 @@ Effect meanings:
 - `decide` — may emit a host-native permission decision (allow / deny /
   ask); the exact decision payload is owned by the adapter.
 
-If a target cannot map an entry's effect to a native decision channel for
-that hook type, the adapter MUST emit a `lossy` diagnostic and SHOULD
-treat the entry as `observe` for emission purposes.
+If a target cannot honor an entry's effect through a native handler for
+that hook type, the adapter MUST refuse the hook with `acf.support.refused`
+(`error`), a blocked outcome, consequence, and recovery (§14.3, §22.6).
+It MUST NOT substitute `observe` for an unsupported effect.
 
 ### 13.8 Hook order
 
@@ -1898,8 +1899,8 @@ codes stable across versions.
 
 ### 14.3 Support table, refusal, and lossiness
 
-The target registry declares support for skills, MCP servers, and package
-metadata per core field or value condition, per target, and per carrier,
+The target registry declares support for skills, MCP servers, ACF hook runs,
+and package metadata per core field or value condition, per target, and per carrier,
 as one of:
 
 - **native** — with the native spelling, location, and any value-domain
@@ -1912,8 +1913,9 @@ Each cell cites its evidence as `documented` or `verified` (with the host
 version tested). A cell for a `restricting` or `functional` field whose host
 behavior is unknown is a refusal until evidence exists. Diagnostics and
 documentation tables are derived from the cells. Family-level support
-levels (`full`, `partial`, `none`) apply only to agents, commands,
-instructions, and hooks, which have no field table in `acf: 1`.
+levels (`full`, `partial`, `none`) apply to agents, commands, and
+instructions. The legacy hook family flag is `none` in caplet 0.1.0;
+the functional `hook.run` field table governs ACF hook refusals (§22.3).
 
 Every core field, distinct value condition, and known native key has one
 safety class; a native key value with a distinct effect, such as Codex MCP
@@ -1943,6 +1945,8 @@ every other capability and target, and exits non-zero. Recovery is
 component everywhere. A writer MUST NOT substitute a weaker artifact for a
 refused restriction: no description hint, no permission rule, no
 menu-visibility key, and no observing hook in place of a blocking one.
+Hook effects are subject to the same rule: an unsupported restricting or
+functional effect MUST be refused, never downgraded to `observe` (§22.6).
 
 **Component omission.** When a target has no carrier for a whole component
 type, such as a Claude plugin agent planned for Codex, the component is
@@ -2773,8 +2777,9 @@ target:
 - target id (slug);
 - carriers (§22.8) and the default carrier;
 - support cells per field, value condition, and carrier for skills, MCP
-  servers, and package metadata (§14.3), and a support level per family for
-  agents, commands, instructions, and hooks;
+  servers, ACF hook runs, and package metadata (§14.3), and a support level
+  per family for agents, commands, and instructions (the legacy hook flag
+  remains `none` while hook runs are refused);
 - the safety class of each core field and known native key;
 - per-family extension schema;
 - canonical-to-native mapping tables for hook events and instruction
@@ -2837,20 +2842,31 @@ skills in `acf: 1`; other facets remain per-target.
 
 ### 22.3 Hook event mapping
 
-Canonical hook types map to target-native events as follows
-(informative; the normative table lives in the target registry):
+An event-name mapping alone does not establish native hook support. A writer
+MUST produce a host-loadable handler and honor its declared matching and
+effect semantics, or refuse the functional `hook.run` field under §14.3.
+This also applies to ACF hook records under `targets.<target>.hooks`:
+naming a native event does not make an ACF `run` record a native handler.
 
-| ACF hook type         | Claude              | Codex              | OpenCode                   | Cursor              | Pi                  |
-| --------------------- | ------------------- | ------------------ | -------------------------- | ------------------- | ------------------- |
-| `session_start`       | `SessionStart`      | `SessionStart`     | `session.start`            | (none — lossy)      | `session_start`     |
-| `user_prompt_submit`  | `UserPromptSubmit`  | `UserPromptSubmit` | `prompt.before`            | (none — lossy)      | `prompt_submit`     |
-| `pre_tool`            | `PreToolUse`        | `PreToolUse`       | `tool.execute.before`      | (none — lossy)      | `tool_call_before`  |
-| `permission_request`  | (PreToolUse w/ ask) | `PermissionRequest`| `permission.asked`         | (none — lossy)      | (none — lossy)      |
-| `post_tool`           | `PostToolUse`       | `PostToolUse`      | `tool.execute.after`       | (none — lossy)      | `tool_call_after`   |
-| `stop`                | `Stop`              | `Stop`             | `agent.stop`               | (none — lossy)      | `stop`              |
-| `pre_compact`         | `PreCompact`        | (none — lossy)     | `session.compact.before`   | (none — lossy)      | `pre_compact`       |
+The caplet 0.1.0 field-support table is:
 
-Adapters MUST emit a `lossy` diagnostic for any "(none — lossy)" cell.
+| Field / carrier | Claude plugin | Claude loose | Codex | Cursor | OpenCode | Pi |
+| --- | --- | --- | --- | --- | --- | --- |
+| ACF `hook.run` (functional) | refused | refused | refused | refused | refused | refused |
+
+Claude and Codex need nested native handler groups; Codex loads `hooks.json`
+or `[hooks]` in `config.toml`, not `settings.json`. Cursor needs native
+`hooks.json` handlers. OpenCode needs JS/TS plugin functions and Pi needs
+JS/TS extension subscriptions. Caplet has no conforming canonical hook
+writer for these hosts yet. It emits `acf.support.refused` with a blocked
+outcome and recovery, and writes no hook files. A hook refusal blocks the
+capability on that target, so `caplet show` reports support as `no`.
+
+Foreign Claude-plugin hooks preserved as native remainder are not ACF
+`hook.run` records and remain unchanged inside Claude plugins. Native hook
+writer delivery is deferred to `claude-loose-hooks-repair` and the Codex
+hooks backlog item; the registry's legacy event mappings are not evidence
+of working support.
 
 ### 22.4 Instruction trigger support
 
@@ -2893,18 +2909,14 @@ the recovery `targets.claude.carrier: plugin`.
 
 ### 22.6 Effect mapping
 
-Per-target effect support is declared in the target registry. When a
-host cannot honor an effect, the adapter MUST emit a `lossy` diagnostic
-and degrade as follows:
-
-| Effect          | Degradation                                               |
-| --------------- | --------------------------------------------------------- |
-| `observe`       | Always supported.                                         |
-| `block`         | Degrade to `observe`; emit `lossy`.                       |
-| `add_context`   | Degrade to `observe`; emit `lossy`.                       |
-| `continue`      | Degrade to `observe`; emit `lossy`.                       |
-| `block_result`  | Degrade to `observe`; emit `lossy`.                       |
-| `decide`        | Degrade to `observe`; emit `lossy`.                       |
+Per-target effect support is declared in the target registry. A writer MUST
+honor the declared effect or refuse the hook with `acf.support.refused`
+(`error`), a blocked outcome, consequence, and recovery (§14.3). It MUST NOT
+downgrade `block`, `decide`, `block_result`, `continue`, or `add_context` to
+`observe`: losing a restriction or functional behavior is not an allowed
+degradation. Even `observe` requires a native, loadable handler; it is not
+implicitly supported on every target. Caplet 0.1.0 refuses all ACF hook
+runs as recorded in §22.3.
 
 ### 22.7 Adapter contract
 
@@ -2948,11 +2960,12 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   directories are still checked.
 - Adapters MUST preserve unowned content byte-for-byte in any file they
   patch. Reformatting outside owned regions is forbidden.
-- Adapters MUST emit the listed degradation diagnostics (`acf.adapter.*`,
-  `acf.lossy.*`) for every effect, hook event, instruction trigger, or
-  facet family they cannot fully honor, and MUST apply the support cells
-  of §14.3 to skills, MCP servers, and package metadata, refusing where a
-  cell refuses.
+- Adapters MUST diagnose every effect, hook event, instruction trigger,
+  or facet family they cannot fully honor. Restricting and functional gaps
+  require `acf.support.refused`; only permitted degradations use the listed
+  `lossy` diagnostics (`acf.adapter.*`, `acf.lossy.*`). Adapters MUST apply
+  the support cells of §14.3 to skills, MCP servers, ACF hook runs, and
+  package metadata, refusing where a cell refuses.
 
 ### 22.8 Carriers and the Claude plugin carrier
 

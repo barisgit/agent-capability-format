@@ -8,7 +8,7 @@ test("cursor emits MCP and file_context rule while diagnosing unsupported hooks"
   expect(got).toContain("acf.adapter.facet-unsupported");
   expect(
     result.diagnostics.some(
-      (diag) => diag.code === "acf.adapter.facet-unsupported" && diag.family === "hook",
+      (diag) => diag.code === "acf.support.refused" && diag.family === "hook",
     ),
   ).toBe(true);
   expect(

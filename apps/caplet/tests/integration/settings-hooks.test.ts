@@ -1,69 +1,45 @@
 import { expect, test } from "bun:test";
 import path from "node:path";
-import { applyProject, cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
+import { cleanup, makeScope, readText, runCaplet, writeText } from "../helpers";
 
-// Regression: a capability with a hook emits into the target settings.json via
-// JSON-pointer ownership. A pre-existing user-authored settings.json must keep
-// its own keys; only the ACF-owned /hooks/... region is touched. remove must
-// strip the ACF hook entry while leaving user keys intact.
-test("apply merges hooks into settings.json without clobbering user keys", async () => {
-  const scope = await makeScope();
-  try {
-    // Give the alpha source a real hook facet.
-    await writeText(
-      path.join(scope.sourceRoot, "alpha", "hooks", "hooks.yml"),
-      [
-        "pre_tool:",
-        "  - name: guard-bash",
-        "    effect: observe",
-        "    run:",
-        '      command: "echo guard"',
-        "    match:",
-        '      operation: "shell"',
-        "",
-      ].join("\n"),
-    );
-
-    // Pre-seed a user-authored project-scope settings.json.
-    const settingsPath = path.join(scope.cwd, ".claude", "settings.json");
-    await writeText(
-      settingsPath,
-      '{\n  "userKey": "KEEP-ME",\n  "permissions": { "allow": ["Bash(*)"] }\n}\n',
-    );
-
-    const apply = await applyProject(scope);
-    expect(apply.exitCode).toBe(0);
-
-    const merged = JSON.parse(await readText(settingsPath)) as {
-      userKey?: string;
-      permissions?: { allow?: string[] };
-      hooks?: Record<string, unknown[]>;
-    };
-    expect(merged.userKey).toBe("KEEP-ME");
-    expect(merged.permissions?.allow).toEqual(["Bash(*)"]);
-    expect(merged.hooks?.PreToolUse?.length).toBe(1);
-
-    const remove = await runCaplet(scope, [
-      "remove",
-      "alpha-cap",
-      "--cwd",
-      scope.cwd,
-      "--scope",
-      "project",
-      "--target",
-      "claude",
-    ]);
-    expect(remove.exitCode).toBe(0);
-
-    const after = JSON.parse(await readText(settingsPath)) as {
-      userKey?: string;
-      permissions?: { allow?: string[] };
-      hooks?: Record<string, unknown[]>;
-    };
-    expect(after.userKey).toBe("KEEP-ME");
-    expect(after.permissions?.allow).toEqual(["Bash(*)"]);
-    expect(after.hooks?.PreToolUse ?? []).toEqual([]);
-  } finally {
-    await cleanup(scope);
-  }
-});
+for (const effect of ["observe", "block"] as const) {
+  test(`apply refuses an unsupported ${effect} hook without changing host settings`, async () => {
+    const scope = await makeScope();
+    try {
+      await writeText(
+        path.join(scope.sourceRoot, "alpha", "hooks", "hooks.yml"),
+        `pre_tool:\n  - name: guard-bash\n    effect: ${effect}\n    run:\n      command: "echo guard"\n    match:\n      operation: "shell"\n`,
+      );
+      const settingsPath = path.join(scope.cwd, ".opencode", "settings.json");
+      const before = '{"userKey":"KEEP-ME"}\n';
+      await writeText(settingsPath, before);
+      const result = await runCaplet(scope, [
+        "apply",
+        "--cwd",
+        scope.cwd,
+        "--scope",
+        "project",
+        "--target",
+        "opencode",
+        "--json",
+      ]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('"acf.support.refused"');
+      const report = JSON.parse(result.stdout) as { outcomes: unknown[] };
+      expect(report.outcomes).toContainEqual(
+        expect.objectContaining({
+          capability: "alpha-cap",
+          target: "opencode",
+          family: "hook",
+          component: "guard-bash",
+          outcome: "blocked",
+          source: "hook.run",
+          recovery: expect.stringContaining("exclude"),
+        }),
+      );
+      expect(await readText(settingsPath)).toBe(before);
+    } finally {
+      await cleanup(scope);
+    }
+  });
+}

@@ -12,7 +12,7 @@ import {
 } from "./util/capability";
 import { makeInMemoryFs } from "./util/in-memory-fs";
 
-test("pi emits all six families without facet-unsupported and diagnoses partial triggers", async () => {
+test("pi refuses hooks, emits other families and diagnoses partial triggers", async () => {
   const result = await emitFixture(piAdapter, ".pi", {
     [path.join(fixtureRoot, "skills/review/checklist.md")]: "# Review checklist\n",
   });
@@ -47,12 +47,8 @@ test("pi emits all six families without facet-unsupported and diagnoses partial 
   expect(byPath(result.diffs, ".pi/.acf/instructions/test-cap/always.md").after).toContain(
     "Always prefer small",
   );
-  const hooks = (parseJsonDiff(byPath(result.diffs, ".pi/settings.json")).hooks ?? {}) as Record<
-    string,
-    unknown[]
-  >;
-  expect(JSON.stringify(hooks.tool_call_before)).toContain("acf:test-cap:pre_tool:guard");
-  expect(JSON.stringify(hooks.pre_compact)).toContain("acf:test-cap:pre_compact:compact");
+  expect(got).toContain("acf.support.refused");
+  expect(result.diffs.some((diff) => diff.path.endsWith("settings.json"))).toBe(false);
   expect(parseJsonDiff(byPath(result.diffs, ".pi/mcp.json")).mcpServers).toBeDefined();
 });
 

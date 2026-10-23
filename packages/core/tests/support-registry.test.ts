@@ -68,10 +68,11 @@ const PACKAGE_FIELDS = [
   "package.keywords",
 ];
 
-test("fieldSupport declares one entry per skill, MCP and package field or value condition", () => {
+test("fieldSupport declares one entry per skill, MCP, hook and package field or value condition", () => {
   expect(fieldSupport.map((entry) => entry.field)).toEqual([
     ...SKILL_FIELDS,
     ...MCP_FIELDS,
+    "hook.run",
     ...PACKAGE_FIELDS,
   ]);
 });
