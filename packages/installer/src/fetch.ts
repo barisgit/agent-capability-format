@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilityEntry,
@@ -46,7 +47,7 @@ export async function fetchCapability(
   const id = entrySourceId(normalized);
   switch (normalized.source.kind) {
     case "path": {
-      const root = resolveEntryPath(normalized.source.location, entry.path);
+      const root = await resolveEntryPath(normalized.source.location, entry.path);
       return { root, commit: null, sourceId: id };
     }
     case "github":
@@ -94,10 +95,16 @@ async function fetchGitCapability(
   });
   const commit = await revParseHead(destination);
   return {
-    root: resolveEntryPath(destination, entry.path),
+    root: await resolveEntryPath(destination, entry.path),
     commit,
     sourceId: id,
   };
+}
+
+/** Invalid input selecting a path outside its declared source boundary. */
+export class SourcePathError extends Error {
+  readonly code = "acf.source.path-escape";
+  readonly exitCode = 2;
 }
 
 function gitUrl(source: Extract<SourceSpec, { kind: "github" | "git" }>): string {
@@ -117,15 +124,26 @@ function githubAuthHeader(
   return `Authorization: Basic ${credential}`;
 }
 
-function resolveEntryPath(root: string, entryPath: string | undefined): string {
+async function resolveEntryPath(root: string, entryPath: string | undefined): Promise<string> {
   if (entryPath === undefined) return root;
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, entryPath);
   const relative = path.relative(resolvedRoot, resolved);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error(`capability path escapes source root: ${entryPath}`);
+    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
   }
-  return resolved;
+  // Lexical containment alone does not constrain a selected symlink's destination.
+  const realRoot = await realpath(resolvedRoot);
+  const realSelected = await realpath(resolved);
+  const realRelative = path.relative(realRoot, realSelected);
+  if (
+    realRelative === ".." ||
+    realRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(realRelative)
+  ) {
+    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
+  }
+  return realSelected;
 }
 
 async function retry(retries: number, fn: () => Promise<void>): Promise<void> {

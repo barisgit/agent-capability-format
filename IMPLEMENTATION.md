@@ -1758,6 +1758,8 @@ For each `ScopeRoot`, the resolver:
 4. for each entry in `capabilities.yml`, fetches the selected source root if
    missing, out of date, or its `ref`, `capabilities` selectors, `rename`, or
    `format` changed (a selection change never refetches),
+   The selected `path` is checked lexically and by realpath against the source
+   root; symlink escapes report `acf.source.path-escape` without installing.
 5. detects each package's format (§7.7), discovers capability roots, applies
    collection selectors, and materializes selected capabilities into
    `capabilitiesDir/` as unfiltered snapshots,

@@ -2295,6 +2295,9 @@ Snapshots, `capabilityHash`, and the payload digest therefore describe the
 unfiltered package, and changing a selection never refetches. Changing
 `ref`, `path`, `capabilities`, `rename`, or `format` re-resolves the entry.
 
+An entry's `path` MUST remain inside its source root after resolving symlinks.
+An escape is an error (`acf.source.path-escape`) and MUST NOT install snapshots.
+
 `caplet add --as` validates its slug before fetching or
 writing. A failed `add` MUST leave `capabilities.yml` unchanged, including
 when subsequent resolution or emission fails.

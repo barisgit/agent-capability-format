@@ -10,7 +10,12 @@ import {
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
-import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
+import {
+  type FetchedCapability,
+  type FetchOptions,
+  fetchCapability,
+  SourcePathError,
+} from "./fetch.js";
 import { inspectSource, type SourceInventory } from "./inventory.js";
 import {
   type CapabilitiesLock,
@@ -294,7 +299,18 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
       failed: diagnostics.length > 0,
     };
   }
-  return await fetchEntry(context, paired);
+  try {
+    return await fetchEntry(context, paired);
+  } catch (error) {
+    if (!(error instanceof SourcePathError)) throw error;
+    return {
+      records: [],
+      lockEntry: locked,
+      diagnostics: [{ severity: "error", code: error.code, message: error.message }],
+      fetched: false,
+      failed: true,
+    };
+  }
 }
 
 /**
