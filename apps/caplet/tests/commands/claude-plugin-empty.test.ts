@@ -5,6 +5,7 @@
  */
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { Diagnostic } from "@caplet/core";
 import { cleanup, makeScope, runCaplet, type TestScope, writeText } from "../helpers.js";
@@ -81,6 +82,26 @@ test("apply retires the plugin of a capability that no longer carries anything f
     ["info", "acf.claude.plugin-empty"],
   ]);
   expect(existsSync(pluginDir)).toBe(false);
+});
+
+test("apply keeps a still-selected plugin after its sidecar records are deleted", async () => {
+  const { scope, args, version, pluginDir } = await emptiedReview();
+  await rm(path.join(scope.home, ".claude", ".acf-managed.json"));
+  // Without a generated manifest, caplet cannot rule out options or secrets saved by Claude.
+  await rm(path.join(pluginDir, ".claude-plugin", "plugin.json"));
+  const host = await claudeScenarioShim(scope, "user", NAME, [
+    atVersion("list-json-installed", version),
+    "marketplace-list-json",
+  ]);
+  const result = await runCaplet(scope, [...args, "--json"], host.env);
+
+  expect(result.exitCode).toBe(0);
+  expect(await host.calls()).toEqual([
+    "claude plugin list --json",
+    "claude plugin marketplace list --json",
+  ]);
+  expect(await host.unexpected()).toEqual([]);
+  expect(existsSync(pluginDir)).toBe(true);
 });
 
 test("apply keeps the plugin of a capability that carries nothing when Claude saved options for it", async () => {

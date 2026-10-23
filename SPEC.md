@@ -2981,6 +2981,9 @@ installed and the warning `acf.claude.uninstall-held` gives the command to
 run by hand, `claude plugin uninstall <id> --scope <scope> --keep-data`.
 Until then Claude loads the capability twice, from the plugin and the loose
 files (or keeps loading the installed plugin when nothing of it is left).
+Still-selected identities come from the scope's selection, not its ownership
+sidecar. Missing ownership records never authorize a data-deleting uninstall;
+when the generated manifest cannot rule out saved configuration, keep the plugin.
 A capability whose reader left out an invalid component
 (`acf.source.component-invalid`) and of which nothing else reaches Claude
 keeps its installed plugin and files as they are, with the warning

@@ -287,7 +287,8 @@ Deselecting a capability or `caplet remove` uninstalls its plugin and, like
 `claude plugin uninstall`, deletes what Claude saved for it: its data
 directory and the options and secrets you entered. A capability that stays
 selected but no longer needs a plugin (it switched to loose files, or
-nothing of it is left for Claude) keeps that data. When Claude would still
+nothing of it is left for Claude) keeps that data, even if its ownership
+sidecar records were lost. When Claude would still
 delete saved options, caplet keeps the plugin installed and warns
 (`acf.claude.uninstall-held`); Claude keeps loading the plugin, so a
 capability now in loose files loads twice, until you run

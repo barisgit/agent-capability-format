@@ -27,7 +27,8 @@ caplet check --frozen --strict                # CI: fail on stale or lossy outpu
 
 Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
 uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
-it. When a still-selected capability no longer needs its plugin but Claude would delete saved
+it. Still-selected identities come from the selection even if ownership records are lost.
+When a still-selected capability no longer needs its plugin but Claude would delete saved
 options, caplet keeps the plugin and warns (`acf.claude.uninstall-held`). Claude keeps loading it
 until you run `claude plugin uninstall <id> --scope <scope> --keep-data`, so a capability that
 moved to loose files loads twice meanwhile.

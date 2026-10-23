@@ -39,8 +39,8 @@ import type {
 
 /**
  * The Claude marketplace of one install root as a plan sees it: every plugin it lists (an empty
- * list retires the marketplace). A root appears only when it lists a plugin or its sidecar shows
- * caplet maintained a marketplace or plugin there before.
+ * list retires the marketplace). A root appears when a selected capability may have an installed
+ * plugin or its sidecar shows caplet maintained a marketplace or plugin there before.
  */
 export type ClaudeRootPlan = {
   scopeRoot: ScopeRoot;
@@ -50,7 +50,7 @@ export type ClaudeRootPlan = {
   marketplaceDir: string;
   plugins: DesiredClaudePlugin[];
   /**
-   * Plugins whose generated files the sidecar records and which caplet keeps exactly as installed
+   * Selected plugins which caplet keeps exactly as installed
    * without knowing their version: the capability is still selected and blocked by a refusal or
    * `held`, but its generated manifest is missing or names no version. The marketplace keeps
    * listing them, and no command touches them or retires the marketplace
@@ -62,9 +62,9 @@ export type ClaudeRootPlan = {
   /** Whether the sidecar records this marketplace as caplet's. */
   recorded: boolean;
   /**
-   * The left-over plugins whose capability the scope still selects for Claude
-   * (`DesiredClaudeScope.retained`); every other left-over plugin's capability was deselected or
-   * removed.
+   * Selected capabilities now without a plugin (`DesiredClaudeScope.retained`), independent of
+   * whether the sidecar remembers their earlier plugin. Other left-over plugins were deselected
+   * or removed.
    */
   retained: { name: string; output: "loose" | "empty"; declaresConfig: boolean }[];
 };
@@ -82,8 +82,8 @@ export function marketplaceFile(installRoot: string): string {
  * `acf.claude.plugin-kept`, a `kept` one `acf.claude.manifest-unreadable`. `marketplace.json`
  * is owned by the reserved `acf-system` owner; it is deleted only when nothing is listed and the
  * sidecar shows caplet wrote it.
- * A left-over plugin whose capability is `pluginless` is retained; any other left-over plugin
- * belongs to a capability the user deselected or removed.
+ * Every `pluginless` capability is retained independently of sidecar history; any other
+ * left-over plugin belongs to a capability the user deselected or removed.
  */
 export async function planClaudeMarketplaces(input: {
   roots: ReadonlyArray<{ scopeRoot: ScopeRoot; installRoot: string }>;
@@ -100,10 +100,20 @@ export async function planClaudeMarketplaces(input: {
     const sidecar = await readSidecar(sidecarPath(installRoot));
     const owned = ownsMarketplaceFile(sidecar.managed, installRoot);
     const generated = sidecarPlugins(sidecar.managed);
-    const { listed, kept } = await listedPlugins(scopeRoot, installRoot, generated, input);
+    const { listed, kept } = await listedPlugins(scopeRoot, installRoot, input);
     const keptNames = kept.map((item) => item.capability);
     const leftover = generated.filter((name) => !listed.has(name) && !keptNames.includes(name));
-    const unused = listed.size === 0 && kept.length === 0 && leftover.length === 0;
+    // Selection, not ownership history, identifies plugins whose data must be retained.
+    const retained: ClaudeRootPlan["retained"] = [];
+    for (const selected of input.pluginless ?? []) {
+      if (selected.scope !== scopeRoot.scope) continue;
+      const declaresConfig = await declaresUserConfig(
+        pluginPackageDir(installRoot, selected.capability),
+      );
+      retained.push({ name: selected.capability, output: selected.output, declaresConfig });
+    }
+    const unused =
+      listed.size === 0 && kept.length === 0 && leftover.length === 0 && retained.length === 0;
     if (unused && !owned && sidecar.marketplace === undefined) continue;
 
     // The project root is the parent of the project's `.agents` directory.
@@ -116,15 +126,6 @@ export async function planClaudeMarketplaces(input: {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([plugin, version]) => ({ name: plugin, version }));
     const marketplaceDir = pluginMarketplaceDir(installRoot);
-    const retained: ClaudeRootPlan["retained"] = [];
-    for (const plugin of leftover) {
-      const selected = input.pluginless?.find(
-        (item) => item.scope === scopeRoot.scope && item.capability === plugin,
-      );
-      if (selected === undefined) continue;
-      const declaresConfig = await declaresUserConfig(pluginPackageDir(installRoot, plugin));
-      retained.push({ name: plugin, output: selected.output, declaresConfig });
-    }
     for (const held of input.held ?? []) {
       if (held.scope !== scopeRoot.scope || !listed.has(held.capability)) continue;
       diagnostics.push(pluginKeptDiagnostic(held, `${held.capability}@${name}`));
@@ -222,13 +223,12 @@ function manifestUnreadableDiagnostic(
  * The plugins the marketplace of `installRoot` lists. `listed`, by name with their version: those
  * the plan generates there, and the installed one of each capability a refusal blocks on Claude in
  * the scope or the plan holds there, read from its `plugin.json`. `kept`: those blocked or held
- * capabilities among the plugins caplet `generated` there before whose version cannot be read.
+ * capabilities whose version cannot be read, even if their ownership records were lost.
  * They keep their install all the same, because their capability is still selected.
  */
 async function listedPlugins(
   scopeRoot: ScopeRoot,
   installRoot: string,
-  generated: readonly string[],
   input: {
     plugins: readonly PlannedPlugin[];
     blocked: readonly BlockedCapability[];
@@ -256,7 +256,7 @@ async function listedPlugins(
     if (item.scope !== scopeRoot.scope || listed.has(item.capability)) continue;
     const version = await installedPluginVersion(pluginPackageDir(installRoot, item.capability));
     if (version !== undefined) listed.set(item.capability, version);
-    else if (generated.includes(item.capability)) kept.push(item);
+    else kept.push(item);
   }
   return { listed, kept };
 }
