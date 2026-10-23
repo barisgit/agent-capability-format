@@ -45,7 +45,7 @@ test("completion prints a script per shell and rejects unknown shells", async ()
     }
     const bad = await runCaplet(scope, ["completion", "powershell"]);
     expect(bad.exitCode).toBe(2);
-    expect(bad.stderr).toContain("unsupported shell");
+    expect(bad.stderr).toContain("Unsupported shell");
   } finally {
     await cleanup(scope);
   }

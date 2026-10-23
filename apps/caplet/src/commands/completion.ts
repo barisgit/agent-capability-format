@@ -1,5 +1,8 @@
 import { targetIds } from "@caplet/core";
 import { type ArgsDef, defineCommand } from "citty";
+import { validationError } from "../internal/args.js";
+import { runCommandSafely } from "../internal/command.js";
+import { printJson, readJson } from "../internal/json.js";
 import { commandNames, SCOPE_VALUES, specToCittyArgs } from "../internal/spec.js";
 
 const COMMANDS = [...commandNames(), "ls"].join(" ");
@@ -58,15 +61,14 @@ const SCRIPTS: Record<string, string> = { bash: BASH, zsh: ZSH, fish: FISH };
 export const completionCommand = defineCommand({
   meta: { name: "completion", description: "print shell completions (bash, zsh, fish)" },
   args: specToCittyArgs("completion") as ArgsDef,
-  run(context) {
-    const script = SCRIPTS[String(context.args.shell)];
-    if (script === undefined) {
-      process.stderr.write(
-        `unsupported shell: ${String(context.args.shell)} (expected bash, zsh, or fish)\n`,
-      );
-      process.exitCode = 2;
-      return;
-    }
-    process.stdout.write(script);
+  async run(context) {
+    await runCommandSafely("completion", context.args, async () => {
+      const shell = String(context.args.shell);
+      const script = SCRIPTS[shell];
+      if (script === undefined)
+        throw validationError(`unsupported shell: ${shell} (expected bash, zsh, or fish)`);
+      if (readJson(context.args)) printJson("completion", true, [], { shell, script });
+      else process.stdout.write(script);
+    });
   },
 });

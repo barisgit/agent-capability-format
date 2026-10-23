@@ -3272,7 +3272,12 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   instead of `clean` in JSON and a warning summary in human output.
 - `caplet doctor` — checks git availability, `.agents/` readability, the
   target registry, and lockfiles; each check reports pass/warn/fail.
-- `caplet completion <bash|zsh|fish>` — print shell completions.
+- `caplet completion <bash|zsh|fish>` — print shell completions, or an envelope
+  containing `shell` and `script` with `--json`. Unsupported shells use the
+  standard usage-error diagnostic and envelope.
+
+`caplet init --json` uses the same envelope as other commands, with `manifest`
+(the absolute manifest path) and `created` (false on repeated initialization).
 
 For a preview of what `apply` would change on disk, use
 `caplet apply --dry-run`.

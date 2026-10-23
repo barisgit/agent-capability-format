@@ -2754,6 +2754,10 @@ This section is informative. The reference CLI (`caplet`) provides:
 | `caplet doctor`     | Check git, `.agents/` access, target registry, and lockfiles.                             |
 | `caplet completion` | Print shell completions.                                                                  |
 
+Every command's `--json` output MUST use the standard envelope (`caplet`,
+`command`, `ok`, `diagnostics`), including `init` and `completion`. `init`
+reports `manifest` and `created`; `completion` reports `shell` and `script`.
+
 `caplet check` MUST NOT report clean or exit 0 when an error diagnostic is
 present: it exits 2 for invalid input, including lock errors, or 3 for stale
 locks under `--frozen`. Stale emitted outputs exit 1. Preserved edited stale

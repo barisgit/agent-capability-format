@@ -5,6 +5,7 @@ import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, validationError } from "../internal/args.js";
 import { runCommandSafely } from "../internal/command.js";
 import { exists } from "../internal/fs.js";
+import { printJson, readJson } from "../internal/json.js";
 import { reporter } from "../internal/output.js";
 import { specToCittyArgs } from "../internal/spec.js";
 
@@ -23,12 +24,19 @@ export const initCommand = defineCommand({
         );
       const manifestPath = path.join(agentsDir, "capabilities.yml");
       const out = reporter(context.args);
-      if (await exists(manifestPath)) {
+      const created = !(await exists(manifestPath));
+      if (created) {
+        await mkdir(agentsDir, { recursive: true });
+        await writeFile(manifestPath, TEMPLATE, "utf8");
+      }
+      if (readJson(context.args)) {
+        printJson("init", true, [], { manifest: manifestPath, created });
+        return;
+      }
+      if (!created) {
         out.done(`Already initialized: ${manifestPath}`);
         return;
       }
-      await mkdir(agentsDir, { recursive: true });
-      await writeFile(manifestPath, TEMPLATE, "utf8");
       out.done("Initialized project scope");
       out.details([["Manifest", manifestPath]]);
       out.hint("Add a capability: caplet add <source>");

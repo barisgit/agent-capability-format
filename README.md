@@ -233,6 +233,10 @@ lockfile is stale. `caplet check --frozen --strict` is the CI form.
 (including lock errors), or 3 for a stale lock under `--frozen`. Edited stale
 artifacts preserved for manual cleanup keep exit 0 but are not reported as clean.
 
+Every command accepts `--json` and writes one envelope with `caplet`, `command`,
+`ok` and `diagnostics`. `init` adds `manifest` and `created`; `completion`
+adds `shell` and `script` instead of printing raw shell code.
+
 Piping output to an early-closing reader (for example, `caplet check | head -1`)
 quietly drops further writes to that stream on `EPIPE`, for text and `--json`
 output on either stdout or stderr. The command continues through mutations,
