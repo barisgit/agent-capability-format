@@ -59,6 +59,21 @@ export async function withInstallerRollback(
   }
 }
 
+/** Restores via a sibling temporary file: output roots may live on another filesystem. */
+async function restoreOwnership(checkpoint: Checkpoint): Promise<void> {
+  const temporary = await mkdtemp(
+    path.join(path.dirname(checkpoint.destination), ".acf-ownership-rollback-"),
+  );
+  try {
+    const replacement = path.join(temporary, "sidecar");
+    await cp(checkpoint.backup, replacement, { preserveTimestamps: true });
+    // Keep the current sidecar intact until its replacement is ready on the same filesystem.
+    await rename(replacement, checkpoint.destination);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
 /** Leaves backups intact when recovery itself fails, naming them in the propagated error. */
 async function restoreCheckpoints(checkpoints: Checkpoint[], backupDir: string): Promise<void> {
   const failures: unknown[] = [];
@@ -70,6 +85,10 @@ async function restoreCheckpoints(checkpoints: Checkpoint[], backupDir: string):
         // A failed write may leave an unchanged sidecar in an unwritable root.
         if (before === null ? current === null : current !== null && before.equals(current))
           continue;
+        if (checkpoint.existed) {
+          await restoreOwnership(checkpoint);
+          continue;
+        }
       }
       await rm(checkpoint.destination, { recursive: true, force: true });
       if (checkpoint.existed) await rename(checkpoint.backup, checkpoint.destination);
