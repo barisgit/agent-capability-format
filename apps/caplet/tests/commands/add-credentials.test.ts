@@ -36,7 +36,7 @@ for (const source of [
     const result = await runCaplet(scope, [
       "add",
       source,
-      "--ref",
+      "--pin",
       "main",
       "--cwd",
       scope.cwd,

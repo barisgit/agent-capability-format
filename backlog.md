@@ -40,7 +40,7 @@ Plan-view tree (scope → destination → directory rollups) with action-count s
 
 ### Command Grammar v0.2
 
-Command surface: `init add remove update apply list show check doctor status completion`. `ls` is a supported alias of `list` with no deprecation notice. Deprecated aliases print a notice: `inspect`→`show`, `diff`→`apply --dry-run`, `emit`→`apply --offline`, `fetch`→`update --no-apply`. Self-applying `add`/`update` (`--no-apply` opt-out). Scope inference for mutations. Bare `caplet` = status. `check` exit codes 0/1/2/3 (`--frozen`, `--strict`). Shorts `-s -t -C -n -y -q -v`. Global `--json` envelope. Grouped root help, `-V`, `caplet completion bash|zsh|fish`.
+Command surface: `init add remove update apply list show check doctor status completion`. `ls` is a supported alias of `list` with no deprecation notice. Self-applying `add`/`update` (`--no-apply` opt-out). Scope inference for mutations. Bare `caplet` = status. `check` exit codes 0/1/2/3 (`--frozen`, `--strict`). Shorts `-s -t -C -n -y -q -v`. Global `--json` envelope. Grouped root help, `-V`, `caplet completion bash|zsh|fish`.
 
 ### Skills Migration (dogfood)
 

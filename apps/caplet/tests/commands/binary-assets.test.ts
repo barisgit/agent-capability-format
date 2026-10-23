@@ -57,16 +57,14 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
     );
 
     const applied = await runCaplet(scope, [
-      "apply",
+      "update",
       "--cwd",
       scope.cwd,
       "--scope",
       "user",
       "--target",
       "pi",
-      "--mode",
-      "force",
-      "--fail-on-lossy",
+      "--strict",
     ]);
     expect(applied.exitCode).toBe(0);
 
@@ -77,7 +75,8 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
     await expectAssetTree(path.join(scope.home, ".pi", "agent", "skills", "asset-demo"));
 
     const cleanDiff = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -98,7 +97,8 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
     );
     await chmod(canonicalScript, 0o644);
     const modeDiff = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -116,8 +116,7 @@ test("caplet apply preserves binary skill assets and executable modes for Pi", a
       "user",
       "--target",
       "pi",
-      "--mode",
-      "never",
+      "--offline",
     ]);
     expect(repaired.exitCode).toBe(0);
     expect((await stat(canonicalScript)).mode & 0o777).toBe(0o755);

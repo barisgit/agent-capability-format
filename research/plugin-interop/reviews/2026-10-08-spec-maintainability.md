@@ -30,7 +30,7 @@ Reviewed `a5699cf..9474c12`, branch `plugin-interop-foundation`, read-only. No f
 
 5. **Medium — Frozen force resolution can fetch a moving ref and rewrite the lock.**  
    `packages/installer/src/resolve.ts:303,479`.  
-   Force mode disables the branch that substitutes locked `resolvedSha`; matching intent therefore permits current upstream content under `--frozen --mode force`.  
+   Force mode disables the branch that substitutes locked `resolvedSha`; matching intent therefore permits current upstream content under a frozen installer resolution with internal fetch mode `force`.
    **Fix:** reject the combination or enforce locked provenance under frozen resolution.
 
 6. **Medium — Frozen resolution misses removed manifest sources.**  

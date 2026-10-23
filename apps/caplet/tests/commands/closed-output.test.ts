@@ -37,9 +37,9 @@ for (const args of [["check"], ["check", "--json"], ["list"], ["status"]]) {
 }
 
 test("Node caplet exits quietly when stderr's reader closes", async () => {
-  // The deprecated alias writes a notice before the asynchronous command runs.
-  const result = await runWithClosedReader(["diff"], "stderr");
-  expect(result.code).toBe(0);
+  // Usage failures write to stderr and retain their status when its reader closes.
+  const result = await runWithClosedReader(["unknown-command"], "stderr");
+  expect(result.code).toBe(2);
   expect(result.signal).toBeNull();
 });
 

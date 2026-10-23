@@ -80,7 +80,14 @@ export async function runCaplet(
 }
 
 export async function fetchProject(scope: TestScope): Promise<void> {
-  const result = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+  const result = await runCaplet(scope, [
+    "update",
+    "--no-apply",
+    "--cwd",
+    scope.cwd,
+    "--scope",
+    "project",
+  ]);
   expect(result.exitCode).toBe(0);
 }
 

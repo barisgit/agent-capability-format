@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   applyProject,
@@ -154,9 +154,7 @@ test("byte-identical ownership transfer updates the sidecar owner", async () => 
       skillBody,
     );
     const second = await runCaplet(scope, [
-      "apply",
-      "--mode",
-      "force",
+      "update",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -242,12 +240,21 @@ test("dry-run does not mutate the sidecar when a facet's source is deleted", asy
     expect(before).toContain("doomed");
 
     await rm(path.join(scope.sourceRoot, "alpha", "skills", "doomed"), { recursive: true });
+    // A changed source requires auto resolution, so dry-run previews a fresh snapshot.
+    const moved = path.join(scope.sourceRoot, "alpha-next");
+    await rename(path.join(scope.sourceRoot, "alpha"), moved);
+    const manifestPath = path.join(scope.agentsDir, "capabilities.yml");
+    await writeText(
+      manifestPath,
+      (await readText(manifestPath)).replace(
+        `path:${path.join(scope.sourceRoot, "alpha")}`,
+        `path:${moved}`,
+      ),
+    );
 
     const dry = await runCaplet(scope, [
       "apply",
       "--dry-run",
-      "--mode",
-      "force",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -269,9 +276,7 @@ test("dry-run does not mutate the sidecar when a facet's source is deleted", asy
     expect(await Bun.file(path.join(snapshotSkill, "SKILL.md")).exists()).toBe(true);
 
     const heal = await runCaplet(scope, [
-      "apply",
-      "--mode",
-      "force",
+      "update",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -325,9 +330,7 @@ test("synthesized skill deletion removes owned files but preserves unmanaged fil
 
     await rm(path.join(bare, "skills", "docs"), { recursive: true });
     const update = await runCaplet(scope, [
-      "apply",
-      "--mode",
-      "force",
+      "update",
       "--cwd",
       scope.cwd,
       "--scope",

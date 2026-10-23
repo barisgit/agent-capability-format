@@ -370,7 +370,14 @@ test("caplet remove narrows per-capability lock records with the names", async (
       );
     }
     await Bun.write(root.manifestPath, `acf: 1\ncapabilities:\n  - source: path:${collection}\n`);
-    const fetched = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const fetched = await runCaplet(scope, [
+      "update",
+      "--no-apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
     expect(fetched.exitCode).toBe(0);
     const before = (await readLockfile(root.lockPath))?.entries[0]?.resolvedCapabilities ?? [];
     const beta = before.find((record) => record.name === "beta-cap");

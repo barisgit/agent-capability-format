@@ -9,7 +9,7 @@ test("caplet add writes a source that fetch can resolve", async () => {
     const result = await runCaplet(scope, [
       "add",
       source,
-      "--rename",
+      "--as",
       "alpha-copy",
       "--cwd",
       scope.cwd,
@@ -24,7 +24,14 @@ test("caplet add writes a source that fetch can resolve", async () => {
     expect(manifest).toContain("alpha-copy");
     expect(manifest).toContain(scope.sourceRoot);
 
-    const fetched = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "user"]);
+    const fetched = await runCaplet(scope, [
+      "update",
+      "--no-apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "user",
+    ]);
     expect(fetched.exitCode).toBe(0);
     expect(
       await Bun.file(
@@ -130,7 +137,14 @@ test("caplet add --path resolves a capability below a source root", async () => 
     expect(manifest).toContain("path: alpha");
     expect(manifest).toContain("path: beta");
 
-    const fetched = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "user"]);
+    const fetched = await runCaplet(scope, [
+      "update",
+      "--no-apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "user",
+    ]);
     expect(fetched.exitCode).toBe(0);
     expect(
       await Bun.file(
@@ -154,7 +168,7 @@ test("caplet add --path resolves a capability below a source root", async () => 
   }
 });
 
-test("caplet add github source without --ref suggests --ref main", async () => {
+test("caplet add github source without --pin suggests --pin main", async () => {
   const scope = await makeScope();
   try {
     const result = await runCaplet(scope, [
@@ -166,8 +180,8 @@ test("caplet add github source without --ref suggests --ref main", async () => {
       "user",
     ]);
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("Git and github sources require --ref");
-    expect(result.stderr).toContain("try: caplet add github:owner/repo --ref main");
+    expect(result.stderr).toContain("Git and github sources require --pin");
+    expect(result.stderr).toContain("try: caplet add github:owner/repo --pin main");
   } finally {
     await cleanup(scope);
   }

@@ -10,7 +10,7 @@ import {
   settleEmptyPlan,
 } from "../internal/apply-flow.js";
 import { applyEmitPlan } from "../internal/apply-plan.js";
-import { readFetchMode, readQuiet, readVerbose, readYes } from "../internal/args.js";
+import { readQuiet, readVerbose, readYes } from "../internal/args.js";
 import { previewedDiffs } from "../internal/claude-gates.js";
 import { type ClaudeReport, previewClaude } from "../internal/claude-host-flow.js";
 import { confirm, runCommandSafely } from "../internal/command.js";
@@ -118,7 +118,7 @@ async function planApply(
   const fetched =
     dryRun && frozen
       ? { scopes: [], results: [], diagnostics: [] }
-      : await fetchScopes(args, readFetchMode(args), undefined, {
+      : await fetchScopes(args, args.offline === true ? "never" : "auto", undefined, {
           frozen,
           ...(simulate ? { updateLock: false } : {}),
         });

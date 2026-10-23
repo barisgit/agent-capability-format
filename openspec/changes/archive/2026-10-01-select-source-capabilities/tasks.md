@@ -30,6 +30,6 @@
 - Live-state backup: `~/.agents/backups/capability-selector-migration-20260711/`.
 - Live manifest: root `path:/Users/blaz/Programming_local/Capatibilities` with `capabilities: engineering-workflows`.
 - Source, snapshot, and lock hash: `sha256-6f2d0c1b44a7dc8363458d36d7cdbf099409116c9d4015a2b2c463e2f2ca192b`.
-- `bun run ci`, focused installer/Caplet tests, `openspec validate select-source-capabilities --strict`, `git diff --check`, live `caplet check --scope user`, and live `caplet diff --scope user` passed.
+- `bun run ci`, focused installer/Caplet tests, `openspec validate select-source-capabilities --strict`, `git diff --check`, live `caplet check --scope user`, and live `caplet apply --dry-run --scope user` passed.
 - Canonical and Claude sidecars each retain 48 entries owned by `engineering-workflows`; post-apply diff is empty.
 - Independent follow-up review approved with zero critical or important findings after cross-entry staging and ref-error reconciliation fixes.

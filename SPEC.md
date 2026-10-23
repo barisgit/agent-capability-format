@@ -2293,7 +2293,7 @@ Snapshots, `capabilityHash`, and the payload digest therefore describe the
 unfiltered package, and changing a selection never refetches. Changing
 `ref`, `path`, `capabilities`, `rename`, or `format` re-resolves the entry.
 
-`caplet add --as` (alias `--rename`) validates its slug before fetching or
+`caplet add --as` validates its slug before fetching or
 writing. A failed `add` MUST leave `capabilities.yml` unchanged, including
 when subsequent resolution or emission fails.
 
@@ -2554,8 +2554,7 @@ When `capabilities.yml` and `capabilities.lock` disagree:
   lock entry), and emission does not run. A lock entry whose source
   `capabilities.yml` no longer declares is a disagreement too.
 - A frozen apply (`--frozen`) MUST exit without writing when any lock
-  diagnostic is present. Every fetch it makes, including one `--mode force`
-  requests, MUST be a restore from the recorded `resolvedSha` (§19.4), so it
+  diagnostic is present. Every fetch it makes MUST be a restore from the recorded `resolvedSha` (§19.4), so it
   never installs content the lock does not describe.
 
 This guarantees emission never runs against a lockfile that does not
@@ -2753,10 +2752,6 @@ This section is informative. The reference CLI (`caplet`) provides:
 | `caplet check`      | Validate capabilities and `capabilities.yml` and detect stale outputs without writing.    |
 | `caplet doctor`     | Check git, `.agents/` access, target registry, and lockfiles.                             |
 | `caplet completion` | Print shell completions.                                                                  |
-
-Earlier command names remain as deprecated aliases: `inspect` runs `show`,
-`diff` runs `apply --dry-run` (a plan of emitted-file changes, not a lockfile
-diff), `emit` runs `apply --offline`, and `fetch` runs `update --no-apply`.
 
 When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
 caplet MUST quietly drop further output to that stream, including for `--json`,

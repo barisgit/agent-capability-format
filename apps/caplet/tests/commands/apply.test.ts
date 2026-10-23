@@ -63,7 +63,7 @@ test("a refusal blocks its capability for that target until the component is exc
       path.join(alpha, "skills", "background", "SKILL.md"),
       manualOnlySkill("except: [codex]\n"),
     );
-    const recovered = await runCaplet(scope, [...args, "--mode", "force"]);
+    const recovered = await runCaplet(scope, ["update", ...args.slice(1)]);
 
     expect(recovered.exitCode).toBe(0);
     expect(recovered.stdout).not.toContain("blocked");
@@ -187,7 +187,7 @@ test("a capability that gains a refused skill keeps its earlier output for that 
       path.join(alpha, "agents", "alpha-helper.md"),
       "---\nname: alpha-helper\ndescription: Helper alpha-cap\n---\nChanged help.\n",
     );
-    const blocked = await runCaplet(scope, [...args, "--mode", "force", "--yes"]);
+    const blocked = await runCaplet(scope, ["update", ...args.slice(1), "--yes"]);
 
     expect(blocked.exitCode).toBe(2);
     expect(blocked.stderr).toContain("acf.support.refused");
@@ -274,15 +274,13 @@ test("targeted apply preserves other targets in a shared-root inventory", async 
     );
 
     const claude = await runCaplet(scope, [
-      "apply",
+      "update",
       "--cwd",
       scope.cwd,
       "--scope",
       "project",
       "--target",
       "claude",
-      "--mode",
-      "force",
     ]);
 
     expect(claude.exitCode).toBe(0);
@@ -326,7 +324,8 @@ test("caplet detects and repairs management notice drift", async () => {
     await writeText(localNotice, "drifted local\n");
 
     const diff = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",

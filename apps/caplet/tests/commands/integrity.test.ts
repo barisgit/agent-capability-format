@@ -72,7 +72,7 @@ test("a frozen apply restores a missing snapshot at the locked commit after the 
   const added = await runCaplet(scope, [
     "add",
     `git:file://${repo}`,
-    "--ref",
+    "--pin",
     "main",
     "--yes",
     "--no-apply",

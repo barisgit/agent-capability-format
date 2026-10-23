@@ -32,8 +32,7 @@ if (rawArgs.includes("--version") || rawArgs.includes("-V")) {
 }
 const wantsHelp = rawArgs.includes("--help") || rawArgs.includes("-h");
 const base = hasCommand || wantsHelp ? rawArgs : ["status", ...rawArgs];
-const { argv, notice } = rewriteAlias(first === "help" ? rawArgs.slice(1).concat("--help") : base);
-if (notice !== undefined) process.stderr.write(`${notice}\n`);
+const argv = rewriteAlias(first === "help" ? rawArgs.slice(1).concat("--help") : base);
 const command = argv[0]?.startsWith("-") ? undefined : argv[0];
 if (argv.includes("--help") || argv.includes("-h")) {
   const help = command === undefined ? renderRootHelp() : renderCommandHelp(command);

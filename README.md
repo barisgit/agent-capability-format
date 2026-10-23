@@ -22,7 +22,7 @@ The `caplet` CLI needs Node.js 20 or later (and `git` for remote sources):
 ```bash
 npm install --global @caplet/cli
 caplet init
-caplet add github:owner/repo --ref main
+caplet add github:owner/repo --pin main
 ```
 
 ## Terminology in one minute
@@ -234,16 +234,6 @@ output on either stdout or stderr. The command continues through mutations,
 rollback and cleanup, and exits with its real status; closing a reader does not
 turn a failure into success. The other stream remains available. Other output
 errors remain failures.
-
-Older command names still work but print a deprecation notice and rewrite to
-the canonical command:
-
-| Deprecated       | Runs                         |
-| ---------------- | ---------------------------- |
-| `caplet inspect` | `caplet show`                |
-| `caplet diff`    | `caplet apply --dry-run`     |
-| `caplet emit`    | `caplet apply --offline`     |
-| `caplet fetch`   | `caplet update --no-apply`   |
 
 Emitted destinations contain visible `ACF-MANAGED.md` notices: one aggregate
 inventory at each install root and one local marker inside each fully-owned

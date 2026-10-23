@@ -12,7 +12,8 @@ test("default emission plans canonical skills once and only uses required native
     await fetchProject(scope);
 
     const result = await runCaplet(scope, [
-      "emit",
+      "apply",
+      "--offline",
       "--dry-run",
       "--cwd",
       scope.cwd,
@@ -42,7 +43,8 @@ test("caplet target config can disable canonical skill emission", async () => {
     );
     await fetchProject(scope);
     const result = await runCaplet(scope, [
-      "emit",
+      "apply",
+      "--offline",
       "--cwd",
       scope.cwd,
       "--scope",

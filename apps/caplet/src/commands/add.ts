@@ -156,16 +156,16 @@ type Added = {
   path?: string;
 };
 
-/** The manifest entry for the source with `--pin`/`--ref`, `--path` and `--as`/`--rename`. */
+/** The manifest entry for the source with `--pin`, `--path` and `--as`. */
 function manifestEntry(
   args: Record<string, unknown>,
   source: string,
   cwd: string,
 ): CapabilityEntry {
   const built = buildManifestEntry(source, {
-    ref: readOptionalString(args, "pin") ?? readOptionalString(args, "ref"),
+    ref: readOptionalString(args, "pin"),
     path: readOptionalString(args, "path"),
-    rename: readOptionalString(args, "as") ?? readOptionalString(args, "rename"),
+    rename: readOptionalString(args, "as"),
   });
   // A relative path typed on the command line means "relative to --cwd", not to the
   // manifest directory, so anchor it before it is fetched or written.

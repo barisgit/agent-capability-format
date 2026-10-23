@@ -63,7 +63,8 @@ test("a collection shaped like barisgit/capabilities applies to Claude, Codex an
     "pi",
   ];
   expect(
-    (await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"])).exitCode,
+    (await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]))
+      .exitCode,
   ).toBe(0);
 
   const planned = await runCaplet(scope, ["apply", "--dry-run", "--json", ...args]);

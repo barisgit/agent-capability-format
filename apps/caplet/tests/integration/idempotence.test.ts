@@ -11,7 +11,8 @@ test("apply is idempotent", async () => {
     expect(second.exitCode).toBe(0);
     expect(second.stdout + second.stderr).toContain("ok Everything up to date");
     const diff = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",

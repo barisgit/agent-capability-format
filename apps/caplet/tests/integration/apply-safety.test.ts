@@ -48,15 +48,13 @@ async function writeSkill(name: string, files: Record<string, string> = {}): Pro
 /** Applies after re-reading path sources, which plain `apply` serves from the locked snapshot. */
 async function reapply(): Promise<number> {
   const result = await runCaplet(scope, [
-    "apply",
+    "update",
     "--cwd",
     scope.cwd,
     "--scope",
     "project",
     "--target",
     "claude",
-    "--mode",
-    "force",
   ]);
   return result.exitCode;
 }
@@ -269,15 +267,13 @@ test("an owned file replaced by a symlink leaving the root fails Claude without 
   );
 
   const result = await runCaplet(scope, [
-    "apply",
+    "update",
     "--cwd",
     scope.cwd,
     "--scope",
     "project",
     "--target",
     "claude",
-    "--mode",
-    "force",
     "--json",
   ]);
 

@@ -2374,14 +2374,13 @@ Drift handling:
   `capabilities.yml` entry without a lock entry as `acf.lock.missing-entry`
   and a changed ref, capabilities selector, `rename`, requested `format`, or
   selection, or a lock entry `capabilities.yml` no longer declares, as
-  `acf.lock.drift`. Only `--mode never` (`--offline`) keeps it
+  `acf.lock.drift`. Only `--offline` keeps it
   as an error; other modes resolve it in the same run (a changed ref,
   selector, rename or format refetches through `sameResolution`, a changed
   selection rewrites the lock, a removed source leaves it). `caplet apply --frozen` resolves with
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
-  Every fetch a frozen resolution makes, including one `--mode force` asks
-  for, is such a restore at the locked `resolvedSha`.
+  Every fetch a frozen resolution makes is such a restore at the locked `resolvedSha`.
   `caplet check --frozen` exits 3 on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
@@ -2886,7 +2885,7 @@ Behavior is defined in `SPEC.md` §14.2. Implementation convention:
 - Unknown target ids in `only` / `except` produce `error`.
 - Loss of ordering, surface, or effect mapping produces `lossy`.
 - Unknown manifest top-level fields produce `info`.
-- The caplet `--strict` flag (hidden deprecated alias `--fail-on-lossy`)
+- The caplet `--strict` flag
   makes `lossy` diagnostics fail the command (§14.4). The caplet config
   field `diagnostics.failOnLossy` is parsed but not currently consulted by
   caplet's exit-code logic.
@@ -3195,16 +3194,8 @@ caught this and it lets agents fake-pass. A command that cannot do its job
 MUST emit a structured `error` diagnostic and exit non-zero; never silent
 exit 0.
 
-Aliases are rewritten before parsing (`rewriteAlias` in
-`apps/caplet/src/cli.ts`); they are not separate implementation paths:
-
-| Alias     | Rewrites to                | Notice on stderr |
-| --------- | -------------------------- | ---------------- |
-| `ls`      | `list`                     | none (supported) |
-| `inspect` | `show`                     | deprecated       |
-| `diff`    | `apply --dry-run`          | deprecated       |
-| `emit`    | `apply --offline` (keeps `--dry-run`) | deprecated |
-| `fetch`   | `update --no-apply` (drops `--mode`)  | deprecated |
+The supported `ls` alias is rewritten to `list` before parsing (`rewriteAlias`
+in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
 
 ### 14.1 Mutating commands
 
@@ -3279,7 +3270,7 @@ Aliases are rewritten before parsing (`rewriteAlias` in
 - `caplet completion <bash|zsh|fish>` — print shell completions.
 
 For a preview of what `apply` would change on disk, use
-`caplet apply --dry-run` (the old `diff` alias).
+`caplet apply --dry-run`.
 
 ### 14.4 Exit codes
 

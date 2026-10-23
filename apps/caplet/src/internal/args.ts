@@ -35,7 +35,7 @@ export function readCwd(args: Record<string, unknown>): string {
 }
 
 export function readStrict(args: Record<string, unknown>): boolean {
-  return args.strict === true || args["fail-on-lossy"] === true;
+  return args.strict === true;
 }
 
 export function readQuiet(args: Record<string, unknown>): boolean {
@@ -48,15 +48,6 @@ export function readVerbose(args: Record<string, unknown>): boolean {
 
 export function readYes(args: Record<string, unknown>): boolean {
   return args.yes === true;
-}
-
-export function readFetchMode(args: Record<string, unknown>): FetchMode {
-  if (args.offline === true) return "never";
-  const value = args.mode;
-  if (value === undefined || value === "auto" || value === "never" || value === "force") {
-    return value ?? "auto";
-  }
-  throw validationError(`invalid --mode: ${String(value)}`);
 }
 
 export function readOptionalString(args: Record<string, unknown>, key: string): string | undefined {

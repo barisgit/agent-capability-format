@@ -15,51 +15,30 @@ async function writeGamma(scope: { sourceRoot: string }): Promise<string> {
   return root;
 }
 
-test("diff alias matches apply --dry-run output and warns on stderr", async () => {
+test("removed command names and flags are unknown usage errors", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
-    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
-    const alias = await runCaplet(scope, ["diff", ...args]);
-    const canonical = await runCaplet(scope, ["apply", "--dry-run", ...args]);
-
-    expect(alias.exitCode).toBe(0);
-    expect(alias.stdout).toBe(canonical.stdout);
-    expect(alias.stderr).toContain("caplet diff is deprecated");
-    expect(canonical.stderr).not.toContain("deprecated");
-  } finally {
-    await cleanup(scope);
-  }
-});
-
-test("emit and inspect aliases warn and delegate", async () => {
-  const scope = await makeScope();
-  try {
-    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
-    const emit = await runCaplet(scope, [
-      "emit",
-      "--dry-run",
-      "--cwd",
-      scope.cwd,
-      "--scope",
-      "project",
-      "--target",
-      "claude",
-    ]);
-    expect(emit.exitCode).toBe(0);
-    expect(emit.stderr).toContain("caplet emit is deprecated");
-    expect(emit.stdout).toContain("Plan:");
-
-    const inspect = await runCaplet(scope, [
-      "inspect",
-      "alpha-cap",
-      "--cwd",
-      scope.cwd,
-      "--scope",
-      "project",
-    ]);
-    expect(inspect.exitCode).toBe(0);
-    expect(inspect.stderr).toContain("caplet inspect is deprecated");
+    const cases = [
+      ...["inspect", "diff", "emit", "fetch"].map((name) => ({
+        args: [name],
+        error: `unknown command: ${name}`,
+      })),
+      ...["--fail-on-lossy", "--mode", "--mode=force"].map((flag) => ({
+        args: ["apply", flag],
+        error: `unknown flag: ${flag.split("=")[0]}`,
+      })),
+      ...["--ref", "--rename"].map((flag) => ({
+        args: ["add", "github:owner/repo", flag, "main"],
+        error: `unknown flag: ${flag}`,
+      })),
+    ];
+    for (const entry of cases) {
+      const result = await runCaplet(scope, [...entry.args, "--cwd", scope.cwd]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(entry.error);
+      expect(result.stderr).not.toContain("deprecated");
+    }
   } finally {
     await cleanup(scope);
   }
@@ -144,7 +123,7 @@ test("add writes manifest and emitted files in one invocation", async () => {
 test("bare caplet prints a status summary", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, ["--cwd", scope.cwd, "--scope", "project"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("project");

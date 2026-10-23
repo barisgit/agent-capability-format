@@ -225,7 +225,7 @@ async function addGitAndReadClones(scope: TestScope, defaults: string): Promise<
   const result = await runCaplet(scope, [
     "add",
     url,
-    "--ref",
+    "--pin",
     "main",
     "--yes",
     "--no-apply",

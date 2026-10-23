@@ -76,13 +76,6 @@ export const GLOBAL_FLAGS: FlagSpec[] = [
     default: false,
     description: "treat lossy adapter warnings as failures",
   },
-  {
-    name: "fail-on-lossy",
-    type: "boolean",
-    default: false,
-    description: "deprecated alias for --strict",
-    hidden: true,
-  },
 ];
 
 export const TARGET_FLAG: FlagSpec = {
@@ -125,13 +118,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
         description: "pin a git ref (branch, tag, or commit)",
       },
       {
-        name: "ref",
-        arg: "<ref>",
-        type: "string",
-        description: "deprecated alias for --pin",
-        hidden: true,
-      },
-      {
         name: "path",
         arg: "<subdir>",
         type: "string",
@@ -142,13 +128,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
         arg: "<name>",
         type: "string",
         description: "install under a different capability name",
-      },
-      {
-        name: "rename",
-        arg: "<name>",
-        type: "string",
-        description: "deprecated alias for --as",
-        hidden: true,
       },
       {
         name: "apply",
@@ -220,13 +199,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
         type: "boolean",
         default: false,
         description: "fail (exit 3) if the lockfile is stale",
-      },
-      {
-        name: "mode",
-        arg: "<mode>",
-        type: "string",
-        description: "deprecated: use --offline (never) or caplet update (force)",
-        hidden: true,
       },
     ],
     globals: true,

@@ -3,13 +3,19 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyProject, cleanup, makeScope, runCaplet, writeText } from "../helpers";
 
-test("fetch presents a clear command header and result summary", async () => {
+test("update --no-apply presents a clear command header and result summary", async () => {
   const scope = await makeScope();
   try {
-    const result = await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    const result = await runCaplet(scope, [
+      "update",
+      "--no-apply",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+    ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toContain("caplet fetch is deprecated");
     expect(result.stdout).toContain("ok Updated 2 capabilities");
     expect(result.stdout).toContain("Resolved  2 capabilities");
   } finally {
@@ -17,12 +23,13 @@ test("fetch presents a clear command header and result summary", async () => {
   }
 });
 
-test("diff groups file changes and ends with a pending summary", async () => {
+test("apply --dry-run groups file changes and ends with a pending summary", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -45,7 +52,7 @@ test("diff groups file changes and ends with a pending summary", async () => {
 test("ls presents capabilities as a scoped, readable inventory", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, ["ls", "--cwd", scope.cwd, "--scope", "project"]);
 
     expect(result.exitCode).toBe(0);
@@ -75,9 +82,9 @@ test("ls gives an actionable empty state", async () => {
 test("diagnostics separate the code, message, and recovery context", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, [
-      "inspect",
+      "show",
       "missing-cap",
       "--cwd",
       scope.cwd,
@@ -97,7 +104,7 @@ test("diagnostics separate the code, message, and recovery context", async () =>
 test("diagnostics keep a leading target id or file name as written", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, [
       "apply",
       "-n",
@@ -117,7 +124,7 @@ test("diagnostics keep a leading target id or file name as written", async () =>
 test("a plan shows a file written outside its install root by its real path", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "opencode"];
     const result = await runCaplet(scope, ["apply", "-n", ...args]);
 
@@ -129,12 +136,13 @@ test("a plan shows a file written outside its install root by its real path", as
   }
 });
 
-test("emit dry-run uses the same change language without writing", async () => {
+test("apply --offline --dry-run uses the same change language without writing", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, [
-      "emit",
+      "apply",
+      "--offline",
       "--dry-run",
       "--cwd",
       scope.cwd,
@@ -267,7 +275,7 @@ test("add confirms the source and manifest it changed", async () => {
 test("update makes the refreshed capability explicit", async () => {
   const scope = await makeScope();
   try {
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
     const result = await runCaplet(scope, [
       "update",
       "alpha-cap",
@@ -330,7 +338,7 @@ test("doctor organizes checks by concern and summarizes health", async () => {
   }
 });
 
-test("diff has a calm empty state when output is current", async () => {
+test("apply --dry-run has a calm empty state when output is current", async () => {
   const scope = await makeScope();
   try {
     await runCaplet(scope, [
@@ -343,7 +351,8 @@ test("diff has a calm empty state when output is current", async () => {
       "claude",
     ]);
     const result = await runCaplet(scope, [
-      "diff",
+      "apply",
+      "--dry-run",
       "--cwd",
       scope.cwd,
       "--scope",
@@ -405,7 +414,7 @@ test("usage errors are concise, sentence-cased, and visible in quiet mode", asyn
   }
 });
 
-test("diff collapses many same-capability files and --verbose expands them", async () => {
+test("apply --dry-run collapses many same-capability files and --verbose expands them", async () => {
   const scope = await makeScope();
   try {
     for (let index = 0; index < 8; index += 1) {
@@ -414,8 +423,17 @@ test("diff collapses many same-capability files and --verbose expands them", asy
         `---\nname: bulk-${index}\ndescription: Bulk skill ${index}\n---\nBulk ${index}.\n`,
       );
     }
-    await runCaplet(scope, ["fetch", "--cwd", scope.cwd, "--scope", "project"]);
-    const args = ["diff", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+    await runCaplet(scope, ["update", "--no-apply", "--cwd", scope.cwd, "--scope", "project"]);
+    const args = [
+      "apply",
+      "--dry-run",
+      "--cwd",
+      scope.cwd,
+      "--scope",
+      "project",
+      "--target",
+      "claude",
+    ];
 
     const collapsed = await runCaplet(scope, args);
     expect(collapsed.exitCode).toBe(0);

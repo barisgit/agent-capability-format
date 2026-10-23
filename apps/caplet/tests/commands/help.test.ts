@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { targetIds } from "@caplet/core";
+import { commandNames } from "../../src/internal/spec";
 import { cleanup, makeScope, runCaplet } from "../helpers";
 
 test("root help groups commands and lists global flags", async () => {
@@ -39,6 +40,8 @@ test("completion prints a script per shell and rejects unknown shells", async ()
       const result = await runCaplet(scope, ["completion", shell]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(marker);
+      expect(result.stdout).not.toMatch(/\b(inspect|diff|emit|fetch)\b/);
+      expect(result.stdout).not.toMatch(/--(ref|rename|fail-on-lossy|mode)\b/);
     }
     const bad = await runCaplet(scope, ["completion", "powershell"]);
     expect(bad.exitCode).toBe(2);
@@ -51,19 +54,19 @@ test("completion prints a script per shell and rejects unknown shells", async ()
 test("per-command help shares root help formatting", async () => {
   const scope = await makeScope();
   try {
-    for (const command of ["add", "apply", "list", "completion"]) {
+    for (const command of commandNames()) {
       const result = await runCaplet(scope, [command, "--help"]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(`caplet ${command} \u2014 `);
       expect(result.stdout).toContain("USAGE");
       expect(result.stdout).toContain("EXAMPLES");
+      expect(result.stdout).not.toMatch(/--(ref|rename|fail-on-lossy|mode)\b/);
     }
     const add = await runCaplet(scope, ["add", "--help"]);
     expect(add.stdout).toContain("github:vercel-labs/skills@find-skills");
     const apply = await runCaplet(scope, ["apply", "--help"]);
     expect(apply.stdout).toContain("FLAGS");
     expect(apply.stdout).toContain("-n, --dry-run");
-    expect(apply.stdout).not.toContain("--mode");
     expect(apply.stdout).toContain("GLOBAL FLAGS");
   } finally {
     await cleanup(scope);

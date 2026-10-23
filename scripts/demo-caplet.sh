@@ -97,8 +97,8 @@ hdr "3. caplet doctor  (environment check)"
 HOME="$HOME_FAKE" $CAPLET doctor --cwd "$PROJ" || true
 pause 2
 
-hdr "4. caplet fetch  (resolve path: source -> capability tree + lockfile)"
-HOME="$HOME_FAKE" $CAPLET fetch --cwd "$PROJ" --scope project
+hdr "4. caplet update --no-apply  (resolve path: source -> capability tree + lockfile)"
+HOME="$HOME_FAKE" $CAPLET update --no-apply --cwd "$PROJ" --scope project
 echo
 echo "Capability tree under $PROJ/.agents/capabilities/:"
 find "$PROJ/.agents/capabilities" -maxdepth 4 -type f | sed "s|$PROJ/||"
@@ -144,16 +144,16 @@ if [ -f "$PROJ/.claude/settings.json" ]; then
 fi
 pause 3
 
-hdr "10. caplet diff  (re-emit: idempotent -> no pending diffs)"
-HOME="$HOME_FAKE" $CAPLET diff --cwd "$PROJ" --scope project --target claude || true
+hdr "10. caplet apply --dry-run  (re-emit: idempotent -> no pending diffs)"
+HOME="$HOME_FAKE" $CAPLET apply --dry-run --cwd "$PROJ" --scope project --target claude || true
 pause 2
 
 hdr "11. caplet ls  (resolved capabilities per scope)"
 HOME="$HOME_FAKE" $CAPLET ls --cwd "$PROJ" --scope project
 pause 2
 
-hdr "12. caplet inspect code-review"
-HOME="$HOME_FAKE" $CAPLET inspect code-review --cwd "$PROJ" --scope project | head -30
+hdr "12. caplet show code-review"
+HOME="$HOME_FAKE" $CAPLET show code-review --cwd "$PROJ" --scope project | head -30
 pause 3
 
 hdr "13. caplet remove code-review  (clean only ACF-owned regions)"

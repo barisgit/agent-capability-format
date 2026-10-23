@@ -69,7 +69,7 @@ export function buildManifestEntry(
   }
   if ((entry.source.kind === "git" || entry.source.kind === "github") && entry.ref === undefined) {
     throw validationError(
-      `git and github sources require --ref (try: caplet add ${source} --ref main)`,
+      `git and github sources require --pin (try: caplet add ${source} --pin main)`,
     );
   }
   if (opts.capabilities !== undefined) entry.capabilities = opts.capabilities;
