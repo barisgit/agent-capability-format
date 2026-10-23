@@ -1759,6 +1759,8 @@ For each `ScopeRoot`, the resolver:
 4. for each entry in `capabilities.yml`, fetches the selected source root if
    missing, out of date, or its `ref`, `capabilities` selectors, `rename`, or
    `format` changed (a selection change never refetches),
+   The selected `path` is checked lexically and by realpath against the source
+   root; symlink escapes report `acf.source.path-escape` without installing.
 5. detects each package's format (§7.7), discovers capability roots, applies
    collection selectors, and materializes selected capabilities into
    `capabilitiesDir/` as unfiltered snapshots,
@@ -2020,7 +2022,11 @@ Drift handling:
   written, and only missing snapshots are restored from their lock entries.
   Every fetch a frozen resolution makes is such a restore at the locked `resolvedSha`.
   `caplet check` never resolves lock drift: it exits 2 on lock errors, or 3
-  with `--frozen` on any non-info lock diagnostic.
+  with `--frozen` on any non-info lock drift diagnostic. Malformed JSON or schema
+  throws a core `LockfileError` carrying `acf.lock.invalid`; I/O failures other
+  than absence carry `acf.lock.unreadable`. CLI commands report these with the
+  lock path and exit 2 (also `check --frozen`, with result `invalid`), not an
+  internal error.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and
@@ -2454,8 +2460,11 @@ acf.source.format-not-found                  # format: names a format the source
 acf.source.manifest-invalid                  # recognized native manifest is invalid (error)
 acf.source.manifest-key-unknown              # unknown native manifest key, preserved (warn)
 acf.source.component-invalid                 # invalid foreign or bare imported skill, or foreign server (incl. a native value its host rejects), excluded (warn)
+acf.source.path-escape                       # selected path resolves outside its source root (error)
 acf.source.snapshot-rejected                 # symlink, special file, or path collision (error)
 acf.source.credential-in-url                 # source URL carries credentials (error)
+acf.lock.invalid                             # malformed lock JSON or schema (error)
+acf.lock.unreadable                          # lock cannot be read, including a directory at its path (error)
 acf.lock.digest-mismatch                     # snapshot no longer matches its payloadDigest (error)
 acf.lock.snapshot-missing                    # locked snapshot absent, unreadable or unusable (error)
 
@@ -2855,8 +2864,14 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   mutates `capabilities.yml`, resolves, and
   applies by default. Before committing installer state, it validates the entire
   emission plan against disposable snapshots, including facet and unowned-path
-  conflicts. A later apply failure restores the exact prior manifest, lock and
-  snapshots. Native output and host operations are not rolled back across roots;
+  conflicts. A later apply failure restores the exact prior manifest, lock,
+  snapshots and ownership sidecars, including relinquishing adopted files.
+  Unchanged sidecars are left alone; changed sidecars are restored atomically
+  through sibling temporary files so configured output roots can span filesystems.
+  If directory permissions prevent creating a sibling but emission overwrote an
+  existing writable sidecar, recovery restores that file in place without unlinking it.
+  Recovery attempts every checkpoint and retains backups if any restore fails.
+  Native output bytes and host operations are not rolled back across roots;
   this is in-process recovery, not a crash-safe journal. `github:owner/repo@name` is an add-only exact capability
   selector; the persisted source omits the suffix. An unqualified interactive
   multi-capability source uses a numbered picker, while non-TTY and `--yes`

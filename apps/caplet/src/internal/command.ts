@@ -1,8 +1,8 @@
 import { createInterface } from "node:readline";
-import type { Diagnostic } from "@caplet/core";
+import { type Diagnostic, LockfileError } from "@caplet/core";
 import { readCwd } from "./args.js";
 import { printJson, readJson } from "./json.js";
-import { reporter } from "./output.js";
+import { printDiagnostics, reporter } from "./output.js";
 
 /** Diagnostic code of a command invoked wrongly: bad flag values, unknown names, missing input. */
 export const USAGE_ERROR_CODE = "acf.cli.usage";
@@ -28,6 +28,12 @@ export async function runCommandSafely(
     args.cwd = readCwd(args);
     await fn();
   } catch (error) {
+    if (error instanceof LockfileError) {
+      if (readJson(args)) printJson(command, false, [error.diagnostic], {});
+      else printDiagnostics([error.diagnostic], args);
+      process.exitCode = 2;
+      return;
+    }
     if (isCommandError(error)) {
       reportCommandFailure(command, args, error.message, error.code);
       process.exitCode = error.exitCode;

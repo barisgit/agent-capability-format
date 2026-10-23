@@ -1,5 +1,10 @@
 import path from "node:path";
-import { type Diagnostic, resolveScopeCapabilities } from "@caplet/core";
+import {
+  type CapabilitiesLock,
+  type Diagnostic,
+  LockfileError,
+  resolveScopeCapabilities,
+} from "@caplet/core";
 import { detectLockDrift, readCapabilitiesYml, readLockfile } from "@caplet/installer";
 import { type ArgsDef, defineCommand } from "citty";
 import { readCwd, readScope } from "../internal/args.js";
@@ -35,7 +40,14 @@ async function checkScopes(args: Record<string, unknown>): Promise<void> {
   for (const scopeRoot of scopeRoots) {
     const manifest = await readCapabilitiesYml(scopeRoot.manifestPath);
     diagnostics.push(...manifest.diagnostics);
-    const lock = await readLockfile(scopeRoot.lockPath);
+    let lock: CapabilitiesLock | null;
+    try {
+      lock = await readLockfile(scopeRoot.lockPath);
+    } catch (error) {
+      if (!(error instanceof LockfileError)) throw error;
+      diagnostics.push(error.diagnostic);
+      continue;
+    }
     lockDiagnostics.push(
       ...detectLockDrift(manifest.value, lock, path.dirname(scopeRoot.manifestPath)),
     );

@@ -10,7 +10,12 @@ import {
 } from "@caplet/core";
 import { readCapabilitiesYml } from "./capabilities-yml.js";
 import { detectLockDrift, sameResolution, sameSelection } from "./drift.js";
-import { type FetchedCapability, type FetchOptions, fetchCapability } from "./fetch.js";
+import {
+  type FetchedCapability,
+  type FetchOptions,
+  fetchCapability,
+  SourcePathError,
+} from "./fetch.js";
 import { inspectSource, type SourceInventory } from "./inventory.js";
 import {
   type CapabilitiesLock,
@@ -109,6 +114,7 @@ export async function resolveCapabilities(opts: ResolveOptions): Promise<Resolve
       stagingDir,
       manifest,
       existingLock,
+      opts.scopeRoot.capabilitiesDir,
     );
     return preview === undefined ? result : { ...result, preview };
   } catch (error) {
@@ -170,6 +176,7 @@ async function resolveCapabilitiesStaged(
   stagingDir: string,
   manifest: Awaited<ReturnType<typeof readCapabilitiesYml>>,
   existingLock: Awaited<ReturnType<typeof readLockfile>>,
+  reportedCapabilitiesDir: string,
 ): Promise<ResolveResult> {
   const diagnostics: Diagnostic[] = [...manifest.diagnostics];
   const yml = normalizeCapabilitiesYml(manifest.value, path.dirname(opts.scopeRoot.manifestPath));
@@ -227,6 +234,7 @@ async function resolveCapabilitiesStaged(
     records,
     usableLock,
     opts.scopeRoot.capabilitiesDir,
+    reportedCapabilitiesDir,
   );
   diagnostics.push(...unowned);
   failed ||= unowned.length > 0;
@@ -284,7 +292,7 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
       code: "acf.lock.snapshot-missing",
       capability: { name },
       path: capabilityPath(capabilitiesDir, name),
-      message: `capability ${name}: locked snapshot is missing, unreadable or unusable; delete an unusable snapshot and run apply without --offline to restore it; existing outputs are preserved`,
+      message: `capability ${name}: locked snapshot is missing, unreadable or unusable; delete an unusable snapshot and run \`caplet apply\` to restore it; existing outputs are preserved`,
     }));
     return {
       records: locked === undefined ? [] : recordsFromLock(entry, locked, capabilitiesDir),
@@ -294,7 +302,20 @@ async function resolveEntry(context: ResolveContext, paired: PairedEntry): Promi
       failed: diagnostics.length > 0,
     };
   }
-  return await fetchEntry(context, paired);
+  try {
+    return await fetchEntry(context, paired);
+  } catch (error) {
+    if (!(error instanceof SourcePathError)) throw error;
+    return {
+      records: [],
+      lockEntry: locked,
+      diagnostics: [
+        { severity: "error", code: error.code, message: error.message, path: error.path },
+      ],
+      fetched: false,
+      failed: true,
+    };
+  }
 }
 
 /**

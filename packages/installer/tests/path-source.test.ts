@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { access, cp, readFile, rm } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeContentHash } from "@caplet/core/hash";
@@ -266,6 +266,58 @@ test("capability paths cannot escape their source root", async () => {
       { cacheDir: path.join(fixture, ".cache") },
     ),
   ).rejects.toThrow("capability path escapes source root");
+});
+
+for (const selected of ["missing", "file/child"]) {
+  test(`unavailable selected path remains a source diagnostic (${selected})`, async () => {
+    const dir = await tempDir();
+    try {
+      const repo = path.join(dir, "repo");
+      const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
+      await cp(fixture, repo, { recursive: true });
+      await writeText(path.join(repo, "file"), "not a directory\n");
+      await writeText(
+        scopeRoot.manifestPath,
+        `acf: 1\ncapabilities:\n  - source: path:${repo}\n    path: ${selected}\n`,
+      );
+      const result = await resolveCapabilities({ scopeRoot, mode: "force" });
+      expect(errors(result)).toContainEqual(
+        expect.objectContaining({
+          code: "acf.resolve.no-capabilities",
+          path: path.join(repo, selected),
+        }),
+      );
+      expect(await Bun.file(scopeRoot.lockPath).exists()).toBe(false);
+    } finally {
+      await cleanup(dir);
+    }
+  });
+}
+
+test("selected symlink paths cannot escape the source root", async () => {
+  const dir = await tempDir();
+  try {
+    const repo = path.join(dir, "repo");
+    const outside = path.join(dir, "outside");
+    const scopeRoot = testScopeRoot("project", path.join(dir, ".agents"));
+    await mkdir(repo);
+    await cp(fixture, outside, { recursive: true });
+    await symlink(outside, path.join(repo, "escape"));
+    await writeText(
+      scopeRoot.manifestPath,
+      `acf: 1\ncapabilities:\n  - source: path:${repo}\n    path: escape\n`,
+    );
+    const result = await resolveCapabilities({ scopeRoot, mode: "force" });
+    expect(errors(result)).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        message: expect.stringContaining("capability path escapes source root"),
+      }),
+    ]);
+    expect(await Bun.file(scopeRoot.lockPath).exists()).toBe(false);
+  } finally {
+    await cleanup(dir);
+  }
 });
 
 test("bare skills resolve as independent synthesized snapshots of their skill directory", async () => {

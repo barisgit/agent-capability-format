@@ -44,6 +44,31 @@ test("removed command names and flags are unknown usage errors", async () => {
   }
 });
 
+test("removed syntax names its replacement in human and JSON usage errors", async () => {
+  const scope = await makeScope();
+  try {
+    for (const [args, replacement] of [
+      [["inspect"], "caplet show"],
+      [["diff"], "caplet apply --dry-run"],
+      [["emit"], "caplet apply"],
+      [["fetch"], "caplet update --no-apply"],
+      [["add", "github:owner/repo", "--ref=main"], "--pin"],
+      [["add", "github:owner/repo", "--rename", "new"], "--as"],
+      [["apply", "--fail-on-lossy"], "--strict"],
+    ] as const) {
+      for (const json of [false, true]) {
+        const result = await runCaplet(scope, [...args, ...(json ? ["--json"] : [])]);
+        expect(result.exitCode).toBe(2);
+        const message = json ? JSON.parse(result.stdout).diagnostics[0].message : result.stderr;
+        expect(message).toContain(`use ${replacement} instead`);
+        expect(message).not.toContain("--yes");
+      }
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
 test("ls alias is permanent and silent", async () => {
   const scope = await makeScope();
   try {

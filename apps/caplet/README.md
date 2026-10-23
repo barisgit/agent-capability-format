@@ -6,6 +6,7 @@
 ## Install
 
 Requires Node.js 20 or later and `git` for remote sources.
+macOS and Linux are supported; Windows is untested.
 
 ```bash
 npm install --global @caplet/cli
@@ -75,8 +76,14 @@ hooks backlog item.
 Local `path:` sources can name a capability, a collection's parent, or its
 `acf/` directory directly. Collection selectors are relative to `acf/`.
 
-`add` preflights the full plan and restores the prior manifest, lock and snapshots
-on failure. Native output and host operations are not rolled back across roots.
+`add` preflights the full plan and restores the prior manifest, lock, snapshots
+and ownership sidecars on failure, relinquishing any files it adopted. Native
+output and host operations are not rolled back across roots.
+Run only one caplet mutation at a time per scope.
+
+Generated outputs and fetched snapshots in `capabilities/` are replaced on
+update/apply. Edit the declared source instead, then run `caplet update` for
+source changes or `caplet apply` for output reconciliation.
 
 Unowned files and capability directories are never replaced or deleted. Identical
 content may be adopted; otherwise `acf.apply.unowned` names the path to move or

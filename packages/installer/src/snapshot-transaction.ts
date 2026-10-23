@@ -73,6 +73,7 @@ export async function unownedSnapshotDiagnostics(
   records: CapabilityRecord[],
   previous: CapabilitiesLock | null,
   capabilitiesDir: string,
+  reportedCapabilitiesDir: string = capabilitiesDir,
 ): Promise<Diagnostic[]> {
   const owned = new Set(previous?.entries.flatMap((entry) => entry.capabilityNames) ?? []);
   const diagnostics: Diagnostic[] = [];
@@ -93,14 +94,17 @@ export async function unownedSnapshotDiagnostics(
     } catch {
       identical = false;
     }
-    if (!identical)
+    if (!identical) {
+      // A preview checks disposable copies, but recovery must name the user's actual path.
+      const reportedPath = capabilityPath(reportedCapabilitiesDir, record.name);
       diagnostics.push({
         severity: "error",
         code: "acf.apply.unowned",
-        path: destination,
+        path: reportedPath,
         capability: { name: record.name },
-        message: `refusing to replace unowned capability directory ${destination}; move or delete it, then retry (or restore its lock record from backup)`,
+        message: `refusing to replace unowned capability directory ${reportedPath}; move or delete it, then retry (or restore its lock record from backup)`,
       });
+    }
   }
   return diagnostics;
 }

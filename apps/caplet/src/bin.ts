@@ -53,7 +53,15 @@ function usageFailure(message: string, hint: string): never {
 }
 
 if (command !== undefined && commandSpec(command) === undefined) {
-  usageFailure(`unknown command: ${command}`, "See caplet --help for available commands.");
+  const replacements: Readonly<Record<string, string>> = {
+    inspect: "caplet show",
+    diff: "caplet apply --dry-run",
+    emit: "caplet apply",
+    fetch: "caplet update --no-apply",
+  };
+  const replacement = replacements[command];
+  const hint = replacement === undefined ? "" : ` — use ${replacement} instead`;
+  usageFailure(`unknown command: ${command}${hint}`, "See caplet --help for available commands.");
 }
 const flagError = unknownFlagError(command, commandArgs);
 if (flagError !== undefined) usageFailure(flagError, `See ${helpTarget} for available flags.`);

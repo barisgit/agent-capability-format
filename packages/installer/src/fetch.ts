@@ -1,7 +1,9 @@
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   type CapabilityEntry,
   CREDENTIAL_IN_URL,
+  isErrno,
   type SourceSpec,
   sourceUrlCredentialProblem,
 } from "@caplet/core";
@@ -46,7 +48,7 @@ export async function fetchCapability(
   const id = entrySourceId(normalized);
   switch (normalized.source.kind) {
     case "path": {
-      const root = resolveEntryPath(normalized.source.location, entry.path);
+      const root = await resolveEntryPath(normalized.source.location, entry.path);
       return { root, commit: null, sourceId: id };
     }
     case "github":
@@ -94,10 +96,25 @@ async function fetchGitCapability(
   });
   const commit = await revParseHead(destination);
   return {
-    root: resolveEntryPath(destination, entry.path),
+    root: await resolveEntryPath(destination, entry.path),
     commit,
     sourceId: id,
   };
+}
+
+/** Invalid selected source path: absent, not traversable, or outside its source boundary. */
+export class SourcePathError extends Error {
+  readonly exitCode = 2;
+
+  constructor(
+    message: string,
+    readonly code:
+      | "acf.source.path-escape"
+      | "acf.resolve.no-capabilities" = "acf.source.path-escape",
+    readonly path?: string,
+  ) {
+    super(message);
+  }
 }
 
 function gitUrl(source: Extract<SourceSpec, { kind: "github" | "git" }>): string {
@@ -117,15 +134,36 @@ function githubAuthHeader(
   return `Authorization: Basic ${credential}`;
 }
 
-function resolveEntryPath(root: string, entryPath: string | undefined): string {
+async function resolveEntryPath(root: string, entryPath: string | undefined): Promise<string> {
   if (entryPath === undefined) return root;
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, entryPath);
   const relative = path.relative(resolvedRoot, resolved);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error(`capability path escapes source root: ${entryPath}`);
+    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
   }
-  return resolved;
+  // Lexical containment alone does not constrain a selected symlink's destination.
+  let realRoot: string;
+  let realSelected: string;
+  try {
+    [realRoot, realSelected] = await Promise.all([realpath(resolvedRoot), realpath(resolved)]);
+  } catch (error) {
+    if (!isErrno(error, "ENOENT") && !isErrno(error, "ENOTDIR")) throw error;
+    throw new SourcePathError(
+      `no capabilities at selected source path ${resolved}: path is missing or not a directory`,
+      "acf.resolve.no-capabilities",
+      resolved,
+    );
+  }
+  const realRelative = path.relative(realRoot, realSelected);
+  if (
+    realRelative === ".." ||
+    realRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(realRelative)
+  ) {
+    throw new SourcePathError(`capability path escapes source root: ${entryPath}`);
+  }
+  return realSelected;
 }
 
 async function retry(retries: number, fn: () => Promise<void>): Promise<void> {

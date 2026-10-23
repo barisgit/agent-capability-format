@@ -2295,6 +2295,9 @@ Snapshots, `capabilityHash`, and the payload digest therefore describe the
 unfiltered package, and changing a selection never refetches. Changing
 `ref`, `path`, `capabilities`, `rename`, or `format` re-resolves the entry.
 
+An entry's `path` MUST remain inside its source root after resolving symlinks.
+An escape is an error (`acf.source.path-escape`) and MUST NOT install snapshots.
+
 `caplet add --as` validates its slug before fetching or
 writing. A failed `add` MUST leave `capabilities.yml` unchanged, including
 when subsequent resolution or emission fails.
@@ -2782,7 +2785,10 @@ reports `manifest` and `created`; `completion` reports `shell` and `script`.
 present: it exits 2 for invalid input, including lock errors, or 3 for stale
 locks under `--frozen`. Stale emitted outputs exit 1. Preserved edited stale
 artifacts that need manual cleanup keep exit 0 in the absence of errors, but
-MUST be reported as needing cleanup rather than clean.
+MUST be reported as needing cleanup rather than clean. Malformed lock JSON or
+schema reports `acf.lock.invalid`; an unreadable lock (including a directory at
+its path) reports `acf.lock.unreadable`. Both name the lock path and exit 2,
+including `check --frozen`; neither is lock staleness or an internal error.
 
 When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
 caplet MUST quietly drop further output to that stream, including for `--json`,
@@ -2962,6 +2968,8 @@ definition is normative in `IMPLEMENTATION.md` §4.2):
   otherwise planning MUST report `acf.apply.unowned`, mark the path as a conflict
   rather than an update, and write nothing for that capability. Recovery is to
   move or delete the path, or restore the missing ownership record from backup.
+  If a failed add rolls back its declaration and snapshots, it MUST also revert
+  ownership it recorded, so previously unowned adopted files remain unowned.
   Shared native configuration retains region-level ownership.
   Ownership is either whole-file or
   a structural pointer (JSON pointer, YAML pointer, TOML pointer, or a
