@@ -2381,7 +2381,8 @@ Drift handling:
   `frozen`: any drift is an error found before anything is fetched or
   written, and only missing snapshots are restored from their lock entries.
   Every fetch a frozen resolution makes is such a restore at the locked `resolvedSha`.
-  `caplet check --frozen` exits 3 on any non-info lock diagnostic.
+  `caplet check` never resolves lock drift: it exits 2 on lock errors, or 3
+  with `--frozen` on any non-info lock diagnostic.
 - An edited snapshot fails its payload digest (above).
 - Overwrite protection for drifted capabilities (`--force`) and an explicit
   `--prune` flag are not part of the current CLI. `caplet update` and
@@ -3263,8 +3264,10 @@ in `apps/caplet/src/cli.ts`); it is not a separate implementation path.
   behavior, else `yes`.
 - `caplet check [--target …] [--frozen]` — validate without writing. Exits
   1 when emitted outputs are stale, 2 on validation errors or an `error`
-  the plan reports (such as a component apply refuses), and 3 with
-  `--frozen` when the lockfile is stale.
+  the plan reports (including missing or stale lock entries), and 3 with
+  `--frozen` when the lockfile is stale. With no pending writes, edited stale
+  artifacts left for manual cleanup keep exit 0 but report `manual-cleanup`
+  instead of `clean` in JSON and a warning summary in human output.
 - `caplet doctor` — checks git availability, `.agents/` readability, the
   target registry, and lockfiles; each check reports pass/warn/fail.
 - `caplet completion <bash|zsh|fish>` — print shell completions.

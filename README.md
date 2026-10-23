@@ -227,6 +227,9 @@ and `show` derives each capability's support from that scope's results.
 Useful `apply` flags: `-n`/`--dry-run` previews the plan, `--offline` never
 fetches and uses the lockfile as-is, and `--frozen` fails with exit 3 when the
 lockfile is stale. `caplet check --frozen --strict` is the CI form.
+`check` exits 0 with no errors, 1 for stale outputs, 2 for invalid input
+(including lock errors), or 3 for a stale lock under `--frozen`. Edited stale
+artifacts preserved for manual cleanup keep exit 0 but are not reported as clean.
 
 Piping output to an early-closing reader (for example, `caplet check | head -1`)
 quietly drops further writes to that stream on `EPIPE`, for text and `--json`

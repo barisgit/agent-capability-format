@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
+import { applyProject, cleanup, fetchProject, makeScope, runCaplet, writeText } from "../helpers";
 
 test("caplet check validates resolved capabilities", async () => {
   const scope = await makeScope();
@@ -42,6 +42,59 @@ test("caplet check fails on a component apply refuses, with the plan diagnostic"
     expect(parsed.ok).toBe(false);
     expect(parsed.result).toBe("invalid");
     expect(parsed.diagnostics.map((item) => item.code)).toContain("acf.support.refused");
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("check never reports a missing lock entry as clean, with frozen taking exit 3", async () => {
+  const scope = await makeScope();
+  try {
+    const args = ["--cwd", scope.cwd, "--scope", "project", "--target", "codex"];
+    for (const frozen of [false, true]) {
+      const result = await runCaplet(scope, [
+        "check",
+        ...args,
+        "--json",
+        ...(frozen ? ["--frozen"] : []),
+      ]);
+      expect(result.exitCode).toBe(frozen ? 3 : 2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: false,
+        result: frozen ? "lock-stale" : "invalid",
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ severity: "error", code: "acf.lock.missing-entry" }),
+        ]),
+      });
+    }
+  } finally {
+    await cleanup(scope);
+  }
+});
+
+test("check reports edited stale output as manual cleanup, not clean", async () => {
+  const scope = await makeScope();
+  try {
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    await writeText(path.join(scope.cwd, ".claude", "agents", "beta-helper.md"), "User edits\n");
+    await writeText(
+      path.join(scope.agentsDir, "capabilities.yml"),
+      `acf: 1\ncapabilities:\n  - source: path:${path.join(scope.sourceRoot, "alpha")}\n`,
+    );
+    expect((await applyProject(scope)).exitCode).toBe(0);
+    const args = ["check", "--cwd", scope.cwd, "--scope", "project", "--target", "claude"];
+    const json = await runCaplet(scope, [...args, "--json"]);
+    expect(json.exitCode).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      ok: true,
+      result: "manual-cleanup",
+      pending: 0,
+    });
+    expect(json.stdout).toContain("acf.apply.drift");
+    const human = await runCaplet(scope, args);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain("manual cleanup remains");
+    expect(human.stdout).not.toContain("Validation passed");
   } finally {
     await cleanup(scope);
   }

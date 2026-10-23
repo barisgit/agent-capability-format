@@ -2753,6 +2753,12 @@ This section is informative. The reference CLI (`caplet`) provides:
 | `caplet doctor`     | Check git, `.agents/` access, target registry, and lockfiles.                             |
 | `caplet completion` | Print shell completions.                                                                  |
 
+`caplet check` MUST NOT report clean or exit 0 when an error diagnostic is
+present: it exits 2 for invalid input, including lock errors, or 3 for stale
+locks under `--frozen`. Stale emitted outputs exit 1. Preserved edited stale
+artifacts that need manual cleanup keep exit 0 in the absence of errors, but
+MUST be reported as needing cleanup rather than clean.
+
 When stdout or stderr closes early with `EPIPE` (for example, `caplet check | head -1`),
 caplet MUST quietly drop further output to that stream, including for `--json`,
 without interrupting the command, rollback or cleanup. The other stream remains

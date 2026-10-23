@@ -25,6 +25,10 @@ caplet                                        # status summary
 caplet check --frozen --strict                # CI: fail on stale or lossy output
 ```
 
+`check` exits 0 with no errors, 1 for stale outputs, 2 for errors (including
+missing lock entries), or 3 for stale locks with `--frozen`. Preserved edited
+artifacts needing manual cleanup keep exit 0, with a warning rather than a clean result.
+
 Claude receives each capability as a plugin. Deselecting a capability or `caplet remove`
 uninstalls it and, like `claude plugin uninstall`, deletes the data and options Claude saved for
 it. When a still-selected capability no longer needs its plugin but Claude would delete saved
