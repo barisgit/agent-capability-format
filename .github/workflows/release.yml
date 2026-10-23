@@ -2,52 +2,139 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: npm-production
+  cancel-in-progress: false
+
 jobs:
-  version:
+  gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+      version: ${{ steps.gate.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - run: bun scripts/packages.ts check-version "$GITHUB_REF_NAME"
+      - run: bun install --frozen-lockfile
+      - name: Check shared version and exact registry versions
+        id: gate
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: bun scripts/release-gate.ts "$BEFORE"
 
-  ci:
-    needs: version
-    uses: ./.github/workflows/ci.yml
+  build:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - run: bun install --frozen-lockfile
+      - run: bun run ci
+      - run: bun run build
+      - run: bun scripts/packages.ts pack .packs
+      - name: Checksum exact archives
+        working-directory: .packs
+        run: sha256sum ./*.tgz > SHA256SUMS
+      - run: bun scripts/packages.ts smoke .packs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: caplet-${{ github.sha }}
+          path: .packs/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
-    needs: ci
+    needs: [gate, build]
+    if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm-production
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      # Trusted publishing (OIDC, no token) needs npm 11.5.1 or later and id-token: write.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-      - run: npm install -g npm@^11.5.1
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: bun scripts/packages.ts pack "$RUNNER_TEMP/packs"
-      - run: bun scripts/packages.ts publish "$RUNNER_TEMP/packs"
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # A rerun after a partial failure skips published packages and an existing release.
+      - run: npm install --global npm@11.5.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: caplet-${{ github.sha }}
+          path: .packs
+      - name: Verify transferred archives
+        working-directory: .packs
+        run: sha256sum --check SHA256SUMS
+      - name: Repeat registry preflight and publish exact archives in dependency order
+        run: bun scripts/packages.ts publish .packs
+
+  github-release:
+    needs: [gate, publish]
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+      RELEASE_TAG: v${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: caplet-${{ github.sha }}
+          path: .packs
+      - name: Verify transferred archives
+        working-directory: .packs
+        run: sha256sum --check SHA256SUMS
+      - name: Create or verify tag at published commit
+        shell: bash
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then exit 0; fi
-          prerelease=""
-          case "$GITHUB_REF_NAME" in v0.*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes $prerelease
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA"
+          fi
+      - name: Create or refresh GitHub Release
+        shell: bash
+        run: |
+          prerelease=false
+          if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then prerelease=true; fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --prerelease="$prerelease"
+            gh release upload "$RELEASE_TAG" .packs/*.tgz .packs/SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" .packs/*.tgz .packs/SHA256SUMS \
+              --verify-tag --title "$RELEASE_TAG" --generate-notes --prerelease="$prerelease"
+          fi

@@ -202,6 +202,7 @@ produced inconsistent and lower-quality results.
 | Typecheck | `tsgo --noEmit` (10× faster than tsc; production-ready) |
 | Build (dev) | None: `tsconfig.base.json` `paths` map `@caplet/*` to source, and Bun honors them at runtime |
 | Build (publish) | `tsc -p tsconfig.build.json` per package → ESM + `.d.ts` in `dist/`; `exports` point only at `dist/` |
+| Release | Shared canonical SemVer bumps on `main`; CI, allowlisted pack, checksums and Node smoke precede OIDC publication in `npm-production`. Exact archive integrity gates retries; publication precedes automatic tags and GitHub Releases. Stable 0.x uses `latest`, prereleases use `next`. See [npm releases](docs/release/npm.md). |
 | Schema validation | Zod v4 |
 | CLI framework | `citty` |
 | Test runner | `bun test`, started by each package's `bun run test` under a throwaway HOME (`scripts/test-home.ts`; Bun fixes `os.homedir()` at process start, and a direct `bun test` fails) |

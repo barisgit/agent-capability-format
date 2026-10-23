@@ -13,7 +13,7 @@
     "test": "turbo run test --force",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ci": "bun run lint && tsc --noEmit -p scripts && turbo run check-types test build --force",
+    "ci": "bun run lint && tsc --noEmit -p scripts && bun scripts/test-home.ts scripts/release-gate.test.ts && turbo run check-types test build --force",
     "caplet": "bun run --silent --cwd apps/caplet caplet",
     "caplet:link": "bun run --filter @caplet/cli link",
     "smoke:packages": "turbo run build && bun scripts/packages.ts pack .packs && bun scripts/packages.ts smoke .packs"
@@ -27,6 +27,7 @@
     "@types/node": "22.10.0",
     "@types/picomatch": "4.0.2",
     "@types/semver": "7.7.0",
+    "semver": "7.6.3",
     "turbo": "2.6.1",
     "typescript": "5.9.3"
   }
