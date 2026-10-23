@@ -129,20 +129,23 @@ that the complete package smoke journey leaves the caller's profile unchanged.
 
 **Priority**: High (blocks all external adoption)
 **Estimate**: 2-3 days
-**Status**: Packaging and release automation implemented. The README records
-`@caplet/*` 0.1.0 as published; clean-machine acceptance below remains to be verified.
-The tag workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`.
+**Status**: Packaging and main-push release automation implemented. First
+`@caplet/*` 0.1.0 publication and per-package trusted-publisher setup are pending.
+The release workflow uses npm trusted publishing (OIDC), not `NPM_TOKEN`;
+0.x versions without a SemVer prerelease part are stable (`latest`).
 
 **Remaining**: manually publish the first version, configure npm trusted publishing
 for each package, then verify the public install and add journey on clean macOS
-and Linux machines.
+and Linux machines. A read-only check found no protection rules or deployment
+branch policy on the existing `npm-production` GitHub environment; the integrator
+must choose/configure that policy separately (settings changes are outside this lane).
 
 **Implementation**:
 
 - npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
 - The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
-- First publish: `bun run build`, `bun scripts/packages.ts pack .packs`, `npm login`, then `bun scripts/packages.ts publish .packs` (see README.md).
-- Once each package exists on npm, configure its trusted publisher for repository `barisgit/agent-capability-format` and workflow `release.yml`. Later `vX.Y.Z` tag releases publish through OIDC with automatic provenance; no `NPM_TOKEN` secret is needed.
+- First publish and per-package trusted-publisher setup: follow [npm release bootstrap](docs/release/npm.md#bootstrap-first-publication-and-publisher-setup).
+- Later shared version bumps on `main` run CI, pack and smoke exact checksum-verified archives, and publish through OIDC in environment `npm-production`. Published retries must match archive integrity; successful publication creates the tag and GitHub Release. No manual tags or `NPM_TOKEN` are needed.
 - README quickstart rewritten around the npx onramp
 
 **Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills` works on a clean machine (macOS + Linux)

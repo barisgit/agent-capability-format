@@ -10,6 +10,7 @@
         "@types/node": "22.10.0",
         "@types/picomatch": "4.0.2",
         "@types/semver": "7.7.0",
+        "semver": "7.6.3",
         "turbo": "2.6.1",
         "typescript": "5.9.3",
       },

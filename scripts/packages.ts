@@ -6,12 +6,12 @@
  * its internal dependencies. Nothing else lists the packages.
  *
  *   bun scripts/packages.ts list                 print package dirs in publish order
- *   bun scripts/packages.ts check-version <tag>  fail unless every version equals the tag (v-prefix optional)
  *   bun scripts/packages.ts pack <outDir>        pack built packages into <outDir> and check their contents
  *   bun scripts/packages.ts smoke <outDir>       install the tarballs with npm and exercise them under Node
- *   bun scripts/packages.ts publish <outDir>     npm publish the tarballs in order, skipping published versions
+ *   bun scripts/packages.ts publish <outDir>     publish in order, accepting only identical published archives
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -22,6 +22,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { compare } from "semver";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKSPACE_PARENTS = ["apps", "packages"];
@@ -41,7 +43,7 @@ function readManifest(file: string): Manifest {
 }
 
 /** Publishable workspace packages, each after the workspace packages it depends on. */
-function publishOrder(): WorkspacePackage[] {
+export function publishOrder(): WorkspacePackage[] {
   const byName = new Map<string, WorkspacePackage>();
   for (const parent of WORKSPACE_PARENTS) {
     for (const entry of readdirSync(path.join(ROOT, parent))) {
@@ -67,13 +69,15 @@ function publishOrder(): WorkspacePackage[] {
   return ordered;
 }
 
-function tarballName(manifest: Manifest): string {
+/** Stable archive filename shared by preparation and publication. */
+export function tarballName(manifest: Manifest): string {
   return `${manifest.name.replace(/^@/, "").replace("/", "-")}-${manifest.version}.tgz`;
 }
 
-function run(command: string, args: string[], cwd: string): string {
+function run(command: string, args: string[], cwd: string, env = process.env): string {
   return execFileSync(command, args, {
     cwd,
+    env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -82,19 +86,6 @@ function run(command: string, args: string[], cwd: string): string {
 function fail(message: string): never {
   console.error(`error: ${message}`);
   process.exit(1);
-}
-
-function checkVersion(tag: string | undefined): void {
-  if (tag === undefined) fail("usage: check-version <tag>");
-  const expected = tag.replace(/^v/, "");
-  const mismatched = publishOrder().filter((pkg) => pkg.manifest.version !== expected);
-  for (const pkg of mismatched) {
-    console.error(
-      `${pkg.manifest.name} is ${pkg.manifest.version}, tag ${tag} expects ${expected}`,
-    );
-  }
-  if (mismatched.length > 0) process.exit(1);
-  console.log(`all packages are at ${expected}`);
 }
 
 /** Tarball entries must be dist output plus the manifest, README, and LICENSE. */
@@ -140,12 +131,22 @@ function smoke(outDir: string | undefined): void {
   const version = packages[0]?.manifest.version ?? fail("no publishable packages");
   const home = mkdtempSync(path.join(tmpdir(), "caplet-smoke-"));
   const project = path.join(home, "project");
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+    XDG_CONFIG_HOME: path.join(home, ".config"),
+    XDG_CACHE_HOME: path.join(home, ".cache"),
+    XDG_DATA_HOME: path.join(home, ".local", "share"),
+    XDG_STATE_HOME: path.join(home, ".local", "state"),
+  };
+  const execute = (command: string, args: string[]): string => run(command, args, home, env);
   console.log(`smoke directory: ${home}`);
   writeFileSync(path.join(home, "package.json"), '{ "private": true, "type": "module" }\n');
-  run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", ...tarballs], home);
+  execute("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", ...tarballs]);
 
-  const caplet = (...args: string[]): string =>
-    run("npx", ["--no-install", "caplet", ...args], home);
+  const caplet = (...args: string[]): string => execute("npx", ["--no-install", "caplet", ...args]);
   const reported = caplet("-V").trim();
   if (reported !== version) fail(`caplet -V printed ${reported}, expected ${version}`);
   if (!caplet("--help").includes("USAGE")) fail("caplet --help did not print usage");
@@ -170,67 +171,150 @@ function smoke(outDir: string | undefined): void {
       files: ["smoke.ts"],
     }),
   );
-  run("node", [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"], home);
-  const output = run("node", ["out/smoke.js"], home).trim();
-  const node = run("node", ["--version"], home).trim();
+  execute("node", [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"]);
+  const output = execute("node", ["out/smoke.js"]).trim();
+  const node = execute("node", ["--version"]).trim();
   console.log(`node ${node}: caplet -V ${reported}; library import printed: ${output}`);
 }
 
 /**
- * Whether the registry has `name@version`. npm reports a missing package or version as
- * E404; any other npm failure (network, auth) aborts the publish.
+ * Exact published archive integrity, or undefined only for npm E404.
+ * Registry/network/auth failures and malformed metadata abort publication.
  */
-function isPublished(spec: string, version: string): boolean {
+export function publishedIntegrity(spec: string): string | undefined {
+  const integrity = registryField(spec, "dist.integrity");
+  if (integrity === undefined) return undefined;
+  if (typeof integrity !== "string" || !integrity.startsWith("sha512-")) {
+    throw new Error(`${spec}: npm did not return a SHA-512 integrity`);
+  }
+  return integrity;
+}
+
+function registryField(spec: string, field: string): unknown {
   try {
-    const output = execFileSync("npm", ["view", spec, "version"], {
-      cwd: ROOT,
-      encoding: "utf8",
-      stdio: "pipe",
-    });
-    return output.trim() === version;
+    const output = execFileSync(
+      "npm",
+      ["view", spec, field, "--json", "--registry=https://registry.npmjs.org"],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+      },
+    );
+    return JSON.parse(output) as unknown;
   } catch (error) {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    if (typeof stderr === "string" && stderr.includes("E404")) return false;
+    const stdout = (error as { stdout?: unknown }).stdout;
+    // npm --json exposes the error code separately from human-readable diagnostics.
+    // Never mistake an E404 mentioned in another error's text for a missing version.
+    if (typeof stdout === "string") {
+      let response: unknown;
+      try {
+        response = JSON.parse(stdout);
+      } catch {
+        throw error;
+      }
+      if (
+        typeof response === "object" &&
+        response !== null &&
+        "error" in response &&
+        typeof response.error === "object" &&
+        response.error !== null &&
+        "code" in response.error &&
+        response.error.code === "E404"
+      )
+        return undefined;
+    }
     throw error;
   }
 }
 
-function publish(outDir: string | undefined): void {
-  if (outDir === undefined) fail("usage: publish <outDir>");
+/** Stable releases, including 0.x, use latest; SemVer prereleases use next. */
+export function releaseTag(version: string): "next" | "latest" {
+  return version.split("+")[0]!.includes("-") ? "next" : "latest";
+}
+
+/** Existing versions are safe to skip only when npm has these exact bytes. */
+export function assertIntegrity(spec: string, published: string, prepared: string): void {
+  if (published !== prepared)
+    throw new Error(`${spec}: published integrity differs from prepared tarball`);
+}
+
+function preflight(outDir: string): Set<string> {
+  const existing = new Set<string>();
   for (const { manifest } of publishOrder()) {
     const spec = `${manifest.name}@${manifest.version}`;
-    if (isPublished(spec, manifest.version)) {
+    const bytes = readFileSync(path.resolve(outDir, tarballName(manifest)));
+    const prepared = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
+    const published = publishedIntegrity(spec);
+    if (published !== undefined) {
+      assertIntegrity(spec, published, prepared);
+      existing.add(spec);
+    } else {
+      const tags = registryField(manifest.name, "dist-tags");
+      if (tags === undefined) continue; // New package: npm returned E404.
+      if (typeof tags !== "object" || tags === null) {
+        throw new Error(`${spec}: npm did not return dist-tags`);
+      }
+      const tag = releaseTag(manifest.version);
+      const destination = (tags as Record<string, unknown>)[tag];
+      if (destination === undefined) continue; // No destination tag exists yet.
+      if (typeof destination !== "string" || compare(manifest.version, destination) < 0) {
+        throw new Error(`${spec}: refusing to regress npm ${tag} from ${String(destination)}`);
+      }
+    }
+  }
+  return existing;
+}
+
+function publish(outDir: string | undefined): void {
+  if (outDir === undefined) fail("usage: publish <outDir>");
+  const existing = preflight(outDir);
+  for (const { manifest } of publishOrder()) {
+    const spec = `${manifest.name}@${manifest.version}`;
+    if (existing.has(spec)) {
       console.log(`${spec} is already published; skipping`);
       continue;
     }
     // In the release workflow npm authenticates through trusted publishing (OIDC) and
     // attaches provenance itself. A local run uses the `npm login` session, so npm
     // gets the terminal to run its two-factor prompt or browser confirmation.
-    execFileSync("npm", ["publish", path.resolve(outDir, tarballName(manifest))], {
-      cwd: ROOT,
-      stdio: "inherit",
-    });
+    execFileSync(
+      "npm",
+      [
+        "publish",
+        path.resolve(outDir, tarballName(manifest)),
+        "--tag",
+        releaseTag(manifest.version),
+        "--registry=https://registry.npmjs.org",
+      ],
+      {
+        cwd: ROOT,
+        stdio: "inherit",
+      },
+    );
     console.log(`published ${spec}`);
   }
 }
 
-const [command, arg] = process.argv.slice(2);
-switch (command) {
-  case "list":
-    for (const pkg of publishOrder()) console.log(pkg.dir);
-    break;
-  case "check-version":
-    checkVersion(arg);
-    break;
-  case "pack":
-    pack(arg);
-    break;
-  case "smoke":
-    smoke(arg);
-    break;
-  case "publish":
-    publish(arg);
-    break;
-  default:
-    fail("usage: bun scripts/packages.ts <list|check-version|pack|smoke|publish> [arg]");
+if (
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  const [command, arg] = process.argv.slice(2);
+  switch (command) {
+    case "list":
+      for (const pkg of publishOrder()) console.log(pkg.dir);
+      break;
+    case "pack":
+      pack(arg);
+      break;
+    case "smoke":
+      smoke(arg);
+      break;
+    case "publish":
+      publish(arg);
+      break;
+    default:
+      fail("usage: bun scripts/packages.ts <list|pack|smoke|publish> [arg]");
+  }
 }
