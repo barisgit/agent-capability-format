@@ -52,6 +52,16 @@ Single `COMMAND_SPECS` table renders root help, per-command help, and completion
 
 ---
 
+## Tooling follow-ups
+
+### Package smoke home isolation
+
+`scripts/packages.ts` creates a temporary working directory but its subprocesses
+inherit the caller's HOME and XDG directories. npm can therefore write caches or
+logs into the real profile. Run it with an isolated HOME until the smoke runner
+sets HOME, USERPROFILE, Claude configuration and XDG paths itself; acceptance is
+that the complete package smoke journey leaves the caller's profile unchanged.
+
 ## Phase 1: Consume the Ecosystem
 
 ### Spec A1: Implicit Capability Import (bare skill repos)
