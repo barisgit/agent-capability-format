@@ -8,6 +8,21 @@ Feature backlog and priorities for caplet, the ACF capability manager. Format fo
 
 ## Completed
 
+### Spec B1: npm Distribution
+
+Bootstrap completed and verified by the integrator on 2026-10-24: all six
+`@caplet/*` packages are public at `0.1.0` on `latest`, npm archive integrities
+match the local tarballs, and a clean `npx @caplet/cli@latest` install works.
+Each package has a trusted publisher for `release.yml`, repository
+`barisgit/agent-capability-format`, environment `npm-production`, with `publish`
+and `stage publish` permissions. The workflow uses direct publication only;
+the environment permits deployments only from `main`.
+
+Later shared version bumps on `main` publish verified archives through OIDC,
+then create the tag and GitHub Release. New packages still need a manual first
+publish and publisher setup. See [npm releases](docs/release/npm.md) for the
+process and the verification scope.
+
 ### Scope-qualified compatibility outcomes
 
 Plans retain outcomes by scope, capability, target, family and component;
@@ -120,28 +135,6 @@ test runner.
 ---
 
 ## Phase 2: Publish
-
-### Spec B1: npm Distribution
-
-**Priority**: High (blocks all external adoption)
-**Estimate**: 2-3 days
-**Status**: Packaging and main-push release automation implemented. First
-`@caplet/*` 0.1.0 publication and per-package trusted-publisher setup are pending.
-Release policy and recovery steps live in [npm releases](docs/release/npm.md).
-
-**Remaining**: manually publish the first version, configure npm trusted publishing
-for each package, then verify the public install and add journey on clean macOS
-and Linux machines. The `npm-production` GitHub environment now permits only
-`main` via a custom deployment-branch policy, with no required reviewers.
-
-**Implementation**:
-
-- npm packages first (Node-compatible `dist/`, runs under Bun too); single-file compiled binaries later
-- The unscoped npm name `caplet` is taken (2.0.0, 2022) and the `@acf` scope belongs to someone else, so the packages publish as `@caplet/*` with the CLI in `@caplet/cli` (bin `caplet`)
-- First publish and per-package trusted-publisher setup: follow [npm release bootstrap](docs/release/npm.md#bootstrap-first-publication-and-publisher-setup).
-- Later shared version bumps on `main` publish verified archives through OIDC, then create the tag and GitHub Release. No manual tags or `NPM_TOKEN` are needed.
-
-**Acceptance**: `npx @caplet/cli@latest add github:vercel-labs/skills --pin main` works on a clean machine (macOS + Linux)
 
 ### Spec B2: Registry-Style Docs & Onboarding Surface
 

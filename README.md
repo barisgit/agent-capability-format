@@ -351,7 +351,7 @@ plugin, enabled or disabled, and leaves any you edited in place with an
 ## Project status
 
 ACF and `caplet` are a draft specification plus a working reference
-implementation (`caplet` 0.1.0, prepared for first npm publication as `@caplet/*`).
+implementation (`caplet` 0.1.0, published to npm as `@caplet/*`).
 It supports bare skill imports, Claude plugin and Agent Plugins sources,
 Claude plugin output, source capability selection, and
 managed-artifact notices. Planned work lives in [backlog.md](./backlog.md);
@@ -491,8 +491,9 @@ ships besides `package.json`, `README.md`, and `LICENSE`.
 
 `bun run smoke:packages` builds, packs and smoke-installs the six tarballs under
 Node; CI uses Node 20. Shared version bumps on `main` release automatically;
-0.x versions are stable. See [npm releases](docs/release/npm.md) for the release process,
-first-publication bootstrap, and trusted-publisher setup.
+0.x versions are stable. The initial `0.1.0` publication and trusted-publisher
+setup were verified complete on 2026-10-24. See [npm releases](docs/release/npm.md)
+for the release process and first-publication setup required for new packages.
 
 ## License
 

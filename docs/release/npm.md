@@ -6,7 +6,7 @@ in dependency order; private workspaces such as `@caplet/golden` are excluded.
 
 ## Normal releases
 
-After bootstrap, do not publish manually or create tags. Bump the shared version
+For existing packages, do not publish manually or create tags. Bump the shared version
 in the root and six public manifests, run `bun install` to refresh the lockfile,
 commit, and merge to `main`. `.github/workflows/release.yml` serializes releases
 in concurrency group `npm-production`, without cancelling an active release.
@@ -49,7 +49,7 @@ without rebuilding the archives.
 
 ## Trusted publishing
 
-Configure a trusted publisher on **each** of the six npm packages:
+All six npm packages have a trusted publisher, verified on 2026-10-24:
 
 | Setting | Value |
 |---|---|
@@ -58,7 +58,10 @@ Configure a trusted publisher on **each** of the six npm packages:
 | Repository | `agent-capability-format` |
 | Workflow filename | `release.yml` |
 | Environment | `npm-production` |
-| Allowed actions | `npm publish` |
+| Allowed actions | `publish`, `stage publish` |
+
+npm added `stage publish` alongside the requested `publish` permission. The
+release workflow uses only direct publication; it does not use staged publishing.
 
 The `npm-production` GitHub environment restricts deployments to `main` through
 a custom deployment-branch policy. It has no required reviewers: eligible
@@ -68,11 +71,20 @@ workflow configuration.
 
 ## Bootstrap: first publication and publisher setup
 
-Pending: mark these steps done only after they happen. npm requires a package
-to exist before its trusted publisher can be configured.
+Completed and verified by the integrator on **2026-10-24**:
 
-1. Under an authorized maintainer npm session, check that the root and six public
-   manifests are `0.1.0`, then prepare and inspect the exact archives:
+- All six `@caplet/*` packages are public at `0.1.0` on `latest`.
+- Every npm `dist.integrity` matches the corresponding local tarball.
+- A clean `npx @caplet/cli@latest` install works.
+- `npm trust list` confirms each package's publisher matches the settings above.
+  The `npm-production` environment permits deployments only from `main`.
+
+npm requires a package to exist before its trusted publisher can be configured.
+When adding a new public workspace package, its first publication and trusted
+publisher setup are still manual. Use this preparation and setup sequence:
+
+1. Under an authorized maintainer npm session, check that the root and all public
+   manifests share the intended version, then prepare and inspect the exact archives:
 
    ```sh
    bun install --frozen-lockfile
@@ -89,11 +101,15 @@ to exist before its trusted publisher can be configured.
    exchanges the OIDC token during publication. npm inherits the terminal for
    2FA/browser confirmation. This command uses the
    same dependency order, integrity checks, and `latest`/`next` rules as CI;
-   only E404 means unpublished. The first `0.1.0` release goes to `latest`.
-3. Configure the six per-package trusted publishers with the records above.
-4. Verify `npx @caplet/cli@latest add github:vercel-labs/skills --pin main` on clean macOS
-   and Linux machines using disposable HOME, `CLAUDE_CONFIG_DIR`, and XDG base
-   directories. Mark bootstrap complete here and update backlog B1.
+   only E404 from registry reads means unpublished. Existing matching versions
+   are skipped; new stable versions go to `latest` and prereleases to `next`.
+3. Configure the new package's trusted publisher with the settings above.
+4. Verify the new package's public install using disposable HOME and npm cache.
+   For CLI changes, also exercise
+   `npx @caplet/cli@latest add github:vercel-labs/skills --pin main` on clean macOS
+   and Linux machines with disposable `CLAUDE_CONFIG_DIR` and XDG base directories.
+   The bootstrap verification above records a clean install, not this full
+   platform-specific add journey.
 
 The bootstrap does not create a manual tag. Subsequent version bumps on `main`
 create their tags and GitHub Releases automatically.
