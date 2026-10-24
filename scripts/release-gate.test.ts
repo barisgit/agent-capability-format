@@ -127,6 +127,17 @@ test("publish preflights all packages, fails closed, and preserves dependency or
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.CALL_LOG, JSON.stringify(args) + "\\n");
+if (args[0] === "whoami") {
+  if (process.env.NPM_SESSION === "expired") {
+    console.error("npm error code ENEEDAUTH");
+    process.exit(1);
+  }
+  console.log("maintainer");
+}
+if (args[0] === "publish" && process.env.NPM_SESSION === "expired" && process.env.GITHUB_ACTIONS !== "true") {
+  console.error("npm error E404 Not Found - PUT");
+  process.exit(1);
+}
 if (args[0] === "view") {
   if (args[2] === "dist-tags") {
     console.log(JSON.stringify({ latest: process.env.REGISTRY === "superseded" ? "99.0.0" : "0.0.1" }));
@@ -145,14 +156,16 @@ if (args[0] === "view") {
 `,
       { mode: 0o755 },
     );
-    for (const registry of [
-      "absent",
-      "matching",
-      "mixed",
-      "different",
-      "different-last",
-      "network",
-      "superseded",
+    for (const [registry, session, githubActions] of [
+      ["absent", "expired", ""],
+      ["absent", "valid", ""],
+      ["matching", "valid", ""],
+      ["mixed", "valid", ""],
+      ["different", "valid", ""],
+      ["different-last", "valid", ""],
+      ["network", "valid", ""],
+      ["superseded", "valid", ""],
+      ["absent", "expired", "true"],
     ]) {
       writeFileSync(log, "");
       const result = spawnSync(
@@ -165,6 +178,8 @@ if (args[0] === "view") {
             PATH: `${directory}:${process.env.PATH}`,
             CALL_LOG: log,
             REGISTRY: registry,
+            NPM_SESSION: session,
+            GITHUB_ACTIONS: githubActions,
             INTEGRITIES: JSON.stringify(integrities),
           },
         },
@@ -175,9 +190,23 @@ if (args[0] === "view") {
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[]);
       const publishes = calls.filter((args) => args[0] === "publish");
-      if (registry === "absent" || registry === "mixed") {
+      if (session === "expired" && githubActions !== "true") {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("Unable to verify npm authentication. Run `npm login`");
+        expect(result.stderr).not.toContain("E404 Not Found - PUT");
+        expect(publishes).toHaveLength(0);
+        expect(calls[0]).toEqual(["whoami", "--registry=https://registry.npmjs.org"]);
+      } else if (registry === "absent" || registry === "mixed") {
         expect(result.status).toBe(0);
-        expect(calls.slice(0, packages.length).every((args) => args[0] === "view")).toBe(true);
+        if (githubActions === "true") {
+          expect(calls.some((args) => args[0] === "whoami")).toBe(false);
+        } else {
+          expect(calls[0]?.[0]).toBe("whoami");
+        }
+        const registryCalls = calls.filter((args) => args[0] !== "whoami");
+        expect(registryCalls.slice(0, packages.length).every((args) => args[0] === "view")).toBe(
+          true,
+        );
         expect(publishes.map((args) => path.basename(args[1] ?? ""))).toEqual(
           (registry === "mixed" ? packages.slice(-1) : packages).map(({ manifest }) =>
             tarballName(manifest),

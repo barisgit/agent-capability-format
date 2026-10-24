@@ -83,7 +83,11 @@ to exist before its trusted publisher can be configured.
    ```
 
 2. Log in with `npm login`, then run `bun scripts/packages.ts publish .packs`.
-   npm inherits the terminal for 2FA/browser confirmation. This command uses the
+   Local publishing first runs `npm whoami` against npmjs.org and stops with an
+   `npm login` hint if authentication cannot be verified, before any upload.
+   This check is skipped in GitHub Actions (`GITHUB_ACTIONS=true`), where npm
+   exchanges the OIDC token during publication. npm inherits the terminal for
+   2FA/browser confirmation. This command uses the
    same dependency order, integrity checks, and `latest`/`next` rules as CI;
    only E404 means unpublished. The first `0.1.0` release goes to `latest`.
 3. Configure the six per-package trusted publishers with the records above.

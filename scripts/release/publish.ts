@@ -69,8 +69,20 @@ function preflight(outDir: string): Set<string> {
   return existing;
 }
 
-/** Publishes only missing versions after every archive passes preflight; never overwrites npm bytes. */
+/** Publishes only missing versions after auth and archive preflight; never overwrites npm bytes. */
 export function publish(outDir: string): void {
+  // Actions exchanges its OIDC token during npm publish, so whoami cannot validate it.
+  // Local scoped writes can return a misleading E404 when the login has expired.
+  if (process.env.GITHUB_ACTIONS !== "true") {
+    try {
+      execFileSync("npm", ["whoami", "--registry=https://registry.npmjs.org"], {
+        cwd: REPOSITORY_ROOT,
+        stdio: "pipe",
+      });
+    } catch {
+      throw new Error("Unable to verify npm authentication. Run `npm login` and retry publishing.");
+    }
+  }
   const existing = preflight(outDir);
   for (const { manifest } of publishOrder()) {
     const spec = `${manifest.name}@${manifest.version}`;
